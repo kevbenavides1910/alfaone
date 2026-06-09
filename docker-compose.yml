@@ -24,8 +24,9 @@ services:
       dockerfile: Dockerfile
     container_name: alfa_one_app
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    # Nginx ya expone al exterior; app solo necesita red interna.
+    # ports:
+    #   - "3000:3000"
     # Crea un archivo .env junto a este YAML: NEXTAUTH_URL debe ser la URL pública (ej. http://66.94.96.57:3000).
     # Docker Compose lee .env del directorio del proyecto para sustituir ${...} abajo.
     environment:
@@ -41,10 +42,12 @@ services:
     volumes:
       # Disco grande del servidor (HDD en /mnt/storage) — ver docs/STORAGE.md
       - ${APP_DATA_HOST:-/mnt/storage/apps/alfa-one}:/data
+      # Build output montado directo para deploys rápidos (sin rebuildear imagen)
+      - /mnt/data/projects/alfa-one/code/presupuestos-alfa/.next/standalone/.next:/app/.next
+      - /mnt/data/projects/alfa-one/code/presupuestos-alfa/.next/standalone/server.js:/app/server.js
     depends_on:
       postgres:
         condition: service_healthy
 
 volumes:
   postgres_data:
-
