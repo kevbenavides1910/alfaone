@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: alfa_one_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=alfa_one
+    # Solo localhost — no exponer PostgreSQL a toda la red
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: alfa_one_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    # Crea un archivo .env junto a este YAML: NEXTAUTH_URL debe ser la URL pública (ej. http://66.94.96.57:3000).
+    # Docker Compose lee .env del directorio del proyecto para sustituir ${...} abajo.
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/alfa_one?schema=public}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      # Obligatorio en .env: openssl rand -base64 32
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Defina NEXTAUTH_SECRET en .env (mín. 32 caracteres)}
+      SYNTRA_DEVICE_SECRET: ${SYNTRA_DEVICE_SECRET:?Defina SYNTRA_DEVICE_SECRET en .env}.
+      APP_DATA_ROOT: /data
+      EXPENSE_UPLOAD_DIR: /data/expense-uploads
+      BRANDING_UPLOAD_DIR: /data/branding
+      PATROL_UPLOAD_DIR: /data/patrol-uploads
+    volumes:
+      # Disco grande del servidor (HDD en /mnt/storage) — ver docs/STORAGE.md
+      - ${APP_DATA_HOST:-/mnt/storage/apps/alfa-one}:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+

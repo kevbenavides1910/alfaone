@@ -1,0 +1,45 @@
+# Imagen base: Node 20 LTS sobre Alpine (ligera; compatible con Prisma si hay OpenSSL).
+# Alternativa si falla el motor de Prisma: cambiar a `node:20-bookworm-slim` en base y runner.
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN apk add --no-cache libc6-compat openssl
+
+FROM base AS deps
+COPY package.json package-lock.json* ./
+# Redes lentas o inestables (p. ej. VPS): más reintentos antes de fallar el build.
+RUN npm config set fetch-retries 15 \
+  && npm config set fetch-retry-mintimeout 20000 \
+  && npm config set fetch-retry-maxtimeout 300000 \
+  && npm ci
+
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npx prisma generate
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXTAUTH_URL=http://localhost:3000
+ENV NEXTAUTH_SECRET=ci-build-placeholder-secret-min-32-characters!!
+RUN npm run build
+
+FROM base AS runner
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-spa tesseract-ocr-data-eng poppler-utils
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/prisma ./prisma
+# Prisma no siempre queda trazado en standalone; aseguramos cliente y motores
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+# Para prisma/reset-admin-password.js (no siempre incluido en el trace de standalone)
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/bcryptjs ./node_modules/bcryptjs
+USER root
+# CLI de Prisma para aplicar migraciones al arrancar (tabla companies, FKs, etc.)
+RUN npm install -g prisma@5.22.0
+USER nextjs
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+CMD ["sh", "-c", "prisma migrate deploy && exec node server.js"]

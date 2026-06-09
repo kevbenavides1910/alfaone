@@ -1,0 +1,37 @@
+
+/// Marca NFC o reloj desde app SYNTRA.
+model PatrolMark {
+  id            String   @id @default(cuid())
+  deviceId      String?
+  imei          String
+  employeeCode  String?
+  nfcTagCode    String?
+  markType      String   @default("NFC")
+  markedAt      DateTime
+  latitude      Decimal? @db.Decimal(10, 7)
+  longitude     Decimal? @db.Decimal(10, 7)
+  serialNumber  String?
+  incorrectTime Boolean  @default(false)
+  positionCode  String?
+  appVersion    String?
+  createdAt     DateTime @default(now())
+
+  @@index([imei, markedAt])
+  @@index([nfcTagCode])
+  @@map("patrol_marks")
+}
+
+/// Punto GPS enviado desde app SYNTRA.
+model PatrolGpsTrack {
+  id           String   @id @default(cuid())
+  deviceId     String?
+  imei         String?
+  employeeCode String?
+  latitude     Decimal  @db.Decimal(10, 7)
+  longitude    Decimal  @db.Decimal(10, 7)
+  recordedAt   DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([imei, recordedAt])
+  @@map("patrol_gps_tracks")
+}
