@@ -19,6 +19,8 @@ declare module "next-auth" {
       company: string | null;
       permissions: PermissionMap;
       mustChangePassword: boolean;
+      impersonatorId?: string | null;
+      impersonatorName?: string | null;
     };
   }
   interface User {
@@ -28,6 +30,8 @@ declare module "next-auth" {
     company: string | null;
     permissions: PermissionMap;
     mustChangePassword: boolean;
+    impersonatorId?: string | null;
+    impersonatorName?: string | null;
   }
 }
 
@@ -40,6 +44,8 @@ declare module "next-auth/jwt" {
     company: string | null;
     permissions: PermissionMap;
     mustChangePassword: boolean;
+    impersonatorId?: string | null;
+    impersonatorName?: string | null;
   }
 }
 
@@ -129,6 +135,8 @@ export const authOptions: NextAuthOptions = {
         token.company = user.company;
         token.permissions = user.permissions;
         token.mustChangePassword = user.mustChangePassword;
+        token.impersonatorId = user.impersonatorId ?? null;
+        token.impersonatorName = user.impersonatorName ?? null;
       } else if (token.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
@@ -156,6 +164,10 @@ export const authOptions: NextAuthOptions = {
         session.user.company = token.company ?? null;
         session.user.permissions = token.permissions ?? {};
         session.user.mustChangePassword = Boolean(token.mustChangePassword);
+        session.user.impersonatorId =
+          typeof token.impersonatorId === "string" ? token.impersonatorId : null;
+        session.user.impersonatorName =
+          typeof token.impersonatorName === "string" ? token.impersonatorName : null;
       }
       return session;
     },
