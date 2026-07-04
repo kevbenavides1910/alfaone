@@ -16,6 +16,14 @@ export function storagePathForRequisito(
   return path.join(facturaId, requisitoId, storedFileName);
 }
 
+export function facturaReturnRequestEvidenceDir(facturaId: string) {
+  return path.join(FACTURACION_UPLOAD_ROOT, facturaId, "return-request-evidence");
+}
+
+export function storagePathForReturnRequestEvidence(facturaId: string, storedFileName: string) {
+  return path.join(facturaId, "return-request-evidence", storedFileName);
+}
+
 export const ALLOWED_FACTURACION_MIMES = new Set([
   "application/pdf",
   "image/jpeg",

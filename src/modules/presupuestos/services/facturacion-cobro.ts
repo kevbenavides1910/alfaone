@@ -4,11 +4,19 @@ import {
   FACTURA_CLOSED_STATUSES,
   getDemandBillingForPeriod,
 } from "@/modules/presupuestos/business/demandBilling";
+import { resolveAdministrationBillingPeriod } from "@/modules/presupuestos/business/administration-billing-period";
 
 type Db = Pick<
   PrismaClient,
-  "contract" | "facturaMensual" | "facturaRequisito" | "billingHistory" | "contractDemandBilling"
+  | "contract"
+  | "facturaMensual"
+  | "facturaRequisito"
+  | "billingHistory"
+  | "contractDemandBilling"
+  | "facturaMensualEmision"
 >;
+
+export type { Db };
 
 function toNum(v: { toString(): string } | number): number {
   return typeof v === "number" ? v : parseFloat(v.toString());
@@ -40,7 +48,7 @@ export function defaultDueDateFromIssue(issueDate: Date): Date {
   );
 }
 
-function calendarDayUtc(d: Date): number {
+export function calendarDayUtc(d: Date): number {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
@@ -91,6 +99,98 @@ function contractActiveInPeriod(
 
 function isClosedStatus(status: string): boolean {
   return (FACTURA_CLOSED_STATUSES as readonly string[]).includes(status);
+}
+
+/** Sincroniza emisiones por administración en facturas abiertas del contrato. */
+export async function syncOpenFacturaEmisionesForContract(
+  db: Pick<
+    PrismaClient,
+    "contract" | "facturaMensual" | "facturaMensualEmision" | "facturaRequisito"
+  >,
+  contractId: string
+): Promise<void> {
+  const contract = await db.contract.findUnique({
+    where: { id: contractId },
+    include: {
+      administrations: {
+        orderBy: { sortOrder: "asc" },
+        include: { zone: { select: { name: true } } },
+      },
+      billingRequirements: { orderBy: { sortOrder: "asc" } },
+    },
+  });
+  if (!contract) return;
+
+  const openFacturas = await db.facturaMensual.findMany({
+    where: {
+      contractId,
+      status: { notIn: ["FACTURADO", "COBRADO"] },
+    },
+    include: { emisiones: { orderBy: { sortOrder: "asc" } } },
+  });
+
+  for (const factura of openFacturas) {
+    const adminIds = new Set(contract.administrations.map((a) => a.id));
+    const orphanIds = factura.emisiones
+      .filter(
+        (e) => e.contractAdministrationId && !adminIds.has(e.contractAdministrationId)
+      )
+      .map((e) => e.id);
+    if (orphanIds.length > 0) {
+      await db.facturaMensualEmision.deleteMany({ where: { id: { in: orphanIds } } });
+    }
+
+    for (let i = 0; i < contract.administrations.length; i++) {
+      const admin = contract.administrations[i];
+      const period = resolveAdministrationBillingPeriod(admin, contract);
+      const existing = factura.emisiones.find(
+        (e) => e.contractAdministrationId === admin.id
+      );
+      const emisionData = {
+        sortOrder: i,
+        contractAdministrationId: admin.id,
+        administrationNameCopied: admin.name,
+        managerNameCopied: admin.managerName,
+        zoneNameCopied: admin.zone?.name ?? null,
+        billingPeriodFromDayCopied: period.fromDay,
+        billingPeriodToDayCopied: period.toDay,
+      };
+
+      const emisionId = existing
+        ? (
+            await db.facturaMensualEmision.update({
+              where: { id: existing.id },
+              data: emisionData,
+            })
+          ).id
+        : (
+            await db.facturaMensualEmision.create({
+              data: { facturaMensualId: factura.id, ...emisionData },
+            })
+          ).id;
+
+      const existingReqs = await db.facturaRequisito.findMany({
+        where: { facturaMensualId: factura.id, facturaMensualEmisionId: emisionId },
+        select: { requirementName: true },
+      });
+      const existingNames = new Set(existingReqs.map((r) => r.requirementName));
+      const toCreate = contract.billingRequirements.filter(
+        (req) => !existingNames.has(req.description)
+      );
+      if (toCreate.length > 0) {
+        await db.facturaRequisito.createMany({
+          data: toCreate.map((req, index) => ({
+            facturaMensualId: factura.id,
+            facturaMensualEmisionId: emisionId,
+            requirementName: req.description,
+            sortOrder: req.sortOrder ?? index,
+            status: "PENDIENTE" as const,
+            requiresEvidenceCopied: req.requiresEvidence,
+          })),
+        });
+      }
+    }
+  }
 }
 
 type BillingRequirementRow = { description: string; sortOrder: number };
@@ -165,7 +265,7 @@ function resolveSubtotalForContract(
   }
   return getEffectiveMonthlyBilling(
     toNum(contract.monthlyBilling),
-    contract.billingHistory as { periodMonth: Date; monthlyBilling: { toString(): string } }[],
+    contract.billingHistory as Parameters<typeof getEffectiveMonthlyBilling>[1],
     asOf
   );
 }
@@ -375,6 +475,102 @@ export async function closeFacturaMensual(
   return { ok: true, facturaId };
 }
 
+export type ReturnFacturaResult =
+  | { ok: true; facturaId: string }
+  | {
+      ok: false;
+      code: "NOT_FOUND" | "NOT_FACTURADO" | "ALREADY_COBRADO";
+      message: string;
+    };
+
+export async function returnFacturaMensual(
+  db: Db,
+  facturaId: string,
+  reason: string,
+  returnedById: string,
+  correctionType: "DOCUMENTATION" | "AMOUNT"
+): Promise<ReturnFacturaResult> {
+  const factura = await db.facturaMensual.findUnique({
+    where: { id: facturaId },
+    select: {
+      status: true,
+      observationLog: true,
+      subtotalCopied: true,
+    },
+  });
+
+  if (!factura) {
+    return { ok: false, code: "NOT_FOUND", message: "Factura mensual no encontrada" };
+  }
+  if (factura.status === "COBRADO") {
+    return {
+      ok: false,
+      code: "ALREADY_COBRADO",
+      message: "No se puede regresar una factura ya cobrada",
+    };
+  }
+  if (factura.status !== "FACTURADO") {
+    return {
+      ok: false,
+      code: "NOT_FACTURADO",
+      message: "Solo se puede regresar una factura en estado Facturado",
+    };
+  }
+
+  const now = new Date();
+  const logLine = `[${now.toLocaleDateString("es-CR")}] Regresada para corrección (${correctionType}): ${reason}`;
+
+  await db.facturaMensual.update({
+    where: { id: facturaId },
+    data: {
+      status: "EN_PROCESO",
+      closedAt: null,
+      correctionReturnCount: { increment: 1 },
+      lastCorrectionReason: reason,
+      lastCorrectionReturnedAt: now,
+      lastCorrectionReturnedById: returnedById,
+      lastCorrectionType: correctionType,
+      activeCorrectionType: correctionType,
+      ...(correctionType === "AMOUNT"
+        ? { lastCorrectionPreviousSubtotal: factura.subtotalCopied }
+        : {}),
+      observationLog: factura.observationLog ? `${factura.observationLog}\n${logLine}` : logLine,
+    },
+  });
+
+  return { ok: true, facturaId };
+}
+
+export async function applyApprovedAmountChange(
+  db: Db,
+  facturaId: string,
+  requestedSubtotal: number,
+  _reviewerId: string
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const factura = await db.facturaMensual.findUnique({
+    where: { id: facturaId },
+    select: { ivaPctCopied: true },
+  });
+  if (!factura) {
+    return { ok: false, message: "Factura mensual no encontrada" };
+  }
+
+  const ivaPct = toNum(factura.ivaPctCopied);
+  const total = calculateInvoiceTotal(requestedSubtotal, ivaPct);
+
+  await db.facturaMensual.update({
+    where: { id: facturaId },
+    data: {
+      subtotalCopied: requestedSubtotal,
+      totalCalculated: total,
+      status: "FACTURADO",
+      closedAt: new Date(),
+    },
+  });
+
+  return { ok: true };
+}
+
 export function serializeFacturaMensual(
   row: {
     id: string;
@@ -408,6 +604,20 @@ export function serializeFacturaMensual(
       sortOrder: number;
       uploadedAt: Date | null;
     }[];
+    emisiones?: {
+      id: string;
+      administrationNameCopied: string | null;
+      managerNameCopied: string | null;
+      zoneNameCopied: string | null;
+      sortOrder: number;
+    }[];
+    correctionReturnCount?: number;
+    returnRequestStatus?: string | null;
+    returnRequestType?: string | null;
+    returnRequestRequestedSubtotal?: { toString(): string } | number | null;
+    lastCorrectionType?: string | null;
+    lastCorrectionPreviousSubtotal?: { toString(): string } | number | null;
+    lastCorrectionReason?: string | null;
     contract?: { licitacionNo?: string; client?: string; company?: string; hiringType?: string };
   }
 ) {
@@ -455,5 +665,25 @@ export function serializeFacturaMensual(
       uploadedAt: r.uploadedAt?.toISOString() ?? null,
       downloadUrl: r.filePath ? `/api/facturacion/${row.id}/requisitos/${r.id}/archivo` : null,
     })),
+    emisiones: (row.emisiones ?? []).map((e) => ({
+      id: e.id,
+      administrationName: e.administrationNameCopied,
+      managerName: e.managerNameCopied,
+      zoneName: e.zoneNameCopied,
+      sortOrder: e.sortOrder,
+    })),
+    returnRequestStatus: (row.returnRequestStatus as "PENDING" | "APPROVED" | "REJECTED" | null) ?? null,
+    returnRequestType: (row.returnRequestType as "DOCUMENTATION" | "AMOUNT" | null) ?? null,
+    returnRequestRequestedSubtotal:
+      row.returnRequestRequestedSubtotal != null
+        ? toNum(row.returnRequestRequestedSubtotal)
+        : null,
+    lastCorrectionType: (row.lastCorrectionType as "DOCUMENTATION" | "AMOUNT" | null) ?? null,
+    lastCorrectionPreviousSubtotal:
+      row.lastCorrectionPreviousSubtotal != null
+        ? toNum(row.lastCorrectionPreviousSubtotal)
+        : null,
+    lastCorrectionReason: row.lastCorrectionReason ?? null,
+    isModifiedAfterBilling: (row.correctionReturnCount ?? 0) > 0,
   };
 }

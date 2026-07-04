@@ -32,6 +32,10 @@ export type OmisionPdfInput = {
   brandingLogoFile?: { bytes: Uint8Array; path: string } | null;
   /** Firma/sello fijo desde Ajustes → Documento (PNG/JPEG en PDF; WebP subir como PNG). */
   signatureImageFile?: { bytes: Uint8Array; path: string } | null;
+  /** Firma dibujada del oficial en «Recibido por». */
+  recibidoSignatureImageFile?: { bytes: Uint8Array; path: string } | null;
+  /** Fecha en que el oficial firmó (bloque Recibido por). */
+  firmaRecibidoAt?: Date | null;
 };
 
 const PAGE_W = 612;
@@ -154,6 +158,10 @@ function drawPartySignatureBlock(
   prefilledName: string | null,
   font: PDFFont,
   bold: PDFFont,
+  opts?: {
+    signatureImage?: PDFImage | null;
+    signedAt?: Date | null;
+  },
 ): number {
   const xEnd = x + colWidth;
   page.drawText(heading, { x, y: yTop, size: 10, font: bold, color: TEXT });
@@ -177,21 +185,42 @@ function drawPartySignatureBlock(
   }
 
   page.drawText("Firma:", { x, y: y + 10, size: 9, font, color: MUTED });
-  page.drawLine({
-    start: { x, y },
-    end: { x: xEnd, y },
-    thickness: 0.6,
-    color: BORDER,
-  });
-  y -= 24;
+  if (opts?.signatureImage) {
+    const sigH = 52;
+    const sigW = colWidth * 0.92;
+    const scale = Math.min(sigW / opts.signatureImage.width, sigH / opts.signatureImage.height);
+    const sw = opts.signatureImage.width * scale;
+    const sh = opts.signatureImage.height * scale;
+    page.drawImage(opts.signatureImage, {
+      x: x + (colWidth - sw) / 2,
+      y: y - sh + 4,
+      width: sw,
+      height: sh,
+    });
+    y -= sh + 8;
+  } else {
+    page.drawLine({
+      start: { x, y },
+      end: { x: xEnd, y },
+      thickness: 0.6,
+      color: BORDER,
+    });
+    y -= 24;
+  }
 
   page.drawText("Fecha:", { x, y: y + 10, size: 9, font, color: MUTED });
-  page.drawLine({
-    start: { x, y },
-    end: { x: x + colWidth * 0.55, y },
-    thickness: 0.5,
-    color: MUTED,
-  });
+  if (opts?.signedAt) {
+    page.drawText(fmtDate(opts.signedAt), { x, y, size: 9, font, color: TEXT });
+    y -= 16;
+  } else {
+    page.drawLine({
+      start: { x, y },
+      end: { x: x + colWidth * 0.55, y },
+      thickness: 0.5,
+      color: MUTED,
+    });
+    y -= 16;
+  }
   return y - 8;
 }
 
@@ -209,6 +238,10 @@ export async function buildOmisionPdfBytes(rawInput: OmisionPdfInput): Promise<U
   const signatureImage: PDFImage | null = await embedDisciplinarySignatureImage(
     pdf,
     input.signatureImageFile ?? null,
+  );
+  const recibidoSignatureImage: PDFImage | null = await embedDisciplinarySignatureImage(
+    pdf,
+    input.recibidoSignatureImageFile ?? null,
   );
 
   const headerH = 92;
@@ -465,6 +498,10 @@ export async function buildOmisionPdfBytes(rawInput: OmisionPdfInput): Promise<U
     input.nombreEmpleado,
     font,
     bold,
+    {
+      signatureImage: recibidoSignatureImage,
+      signedAt: input.firmaRecibidoAt ?? null,
+    },
   );
   const rightBottom = drawPartySignatureBlock(
     page,

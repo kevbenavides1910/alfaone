@@ -18,7 +18,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   /** Requerido para Docker (multi-stage) — genera .next/standalone */
   output: "standalone",
-  serverExternalPackages: ["@prisma/client", "pdf-parse", "mammoth"],
+  serverExternalPackages: ["@prisma/client", "pdf-parse", "mammoth", "pdfjs-dist", "oracledb"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

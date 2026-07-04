@@ -14,31 +14,12 @@ import { updateCxcObservationsSchema } from "@/modules/presupuestos/validations/
 import {
   serializeCuentaPorCobrar,
   updateCxcObservations,
+  cxcDocumentInclude,
 } from "@/modules/presupuestos/services/cuentas-por-cobrar";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-const facturaInclude = {
-  contract: {
-    select: {
-      licitacionNo: true,
-      hiringType: true,
-      clientContacts: {
-        orderBy: { sortOrder: "asc" as const },
-        select: {
-          name: true,
-          jobTitle: true,
-          phone: true,
-          phone2: true,
-          email: true,
-          isBillingContact: true,
-          sortOrder: true,
-        },
-      },
-    },
-  },
-  requisitos: { orderBy: { sortOrder: "asc" as const } },
-};
+const facturaInclude = cxcDocumentInclude;
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const session = await getSession();
@@ -58,7 +39,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       return badRequest(result.message);
     }
 
-    const updated = await prisma.facturaMensual.findUniqueOrThrow({
+    const updated = await prisma.cxcDocumento.findUniqueOrThrow({
       where: { id },
       include: facturaInclude,
     });

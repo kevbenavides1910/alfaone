@@ -78,6 +78,8 @@ export async function GET(req: NextRequest) {
 
         requisitos: { orderBy: { sortOrder: "asc" } },
 
+        emisiones: { orderBy: { sortOrder: "asc" } },
+
       },
 
     });

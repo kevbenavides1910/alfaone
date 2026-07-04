@@ -22,6 +22,9 @@ export const STORAGE_DIRS = {
   branding: "branding",
   sigDocuments: "sig-documents",
   facturacion: "facturacion-uploads",
+  feElectronica: "fe-electronica",
+  disciplinaryEvidence: "disciplinary-evidence",
+  ticketsTi: "tickets-ti",
   /** Exportaciones / temporales generados (futuro) */
   exports: "exports",
 } as const;
@@ -42,6 +45,18 @@ export function sigDocumentsRoot(): string {
   const explicit = process.env.SIG_DOCUMENTS_DIR?.trim();
   if (explicit) return path.resolve(explicit);
   return path.join(appDataRoot(), STORAGE_DIRS.sigDocuments);
+}
+
+export function disciplinaryEvidenceUploadRoot(): string {
+  const explicit = process.env.DISCIPLINARY_EVIDENCE_DIR?.trim();
+  if (explicit) return path.resolve(explicit);
+  return path.join(appDataRoot(), STORAGE_DIRS.disciplinaryEvidence);
+}
+
+export function ticketsTiUploadRoot(): string {
+  const explicit = process.env.TICKETS_TI_UPLOAD_DIR?.trim();
+  if (explicit) return path.resolve(explicit);
+  return path.join(appDataRoot(), STORAGE_DIRS.ticketsTi);
 }
 
 /** Ruta dentro del contenedor cuando se monta APP_DATA_HOST → /data */

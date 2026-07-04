@@ -137,6 +137,114 @@ export async function createSigDocument(input: CreateSigDocumentInput, actorId: 
   });
 }
 
+export type CreateSigDocumentApprovedInput = Omit<
+  CreateSigDocumentInput,
+  "assignedApproverId"
+>;
+
+export async function createSigDocumentApproved(
+  input: CreateSigDocumentApprovedInput,
+  actorId: string
+) {
+  const code = normalizeCode(input.code);
+  if (!code) throw new Error("Código de documento requerido");
+
+  const existing = await prisma.sigDocument.findUnique({ where: { code } });
+  if (existing) throw new Error(`Ya existe un documento con código ${code}`);
+
+  if (input.file.size > MAX_SIG_DOCUMENT_BYTES) {
+    throw new Error("Archivo demasiado grande (máximo 50 MB)");
+  }
+  if (!ALLOWED_SIG_DOCUMENT_MIMES.has(input.file.mimeType)) {
+    throw new Error("Tipo de archivo no permitido");
+  }
+
+  const checksum = createHash("sha256").update(input.file.buffer).digest("hex");
+  const versionLabel = (input.versionLabel?.trim() || "1").slice(0, 40);
+  const storedName = `v1_${Date.now()}_${input.file.fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100)}`;
+  const now = new Date();
+
+  return prisma.$transaction(async (tx) => {
+    const doc = await tx.sigDocument.create({
+      data: {
+        code,
+        title: input.title.trim().slice(0, 500),
+        documentTypeId: input.documentTypeId,
+        processId: input.processId || null,
+        company: input.company || null,
+        status: "APPROVED",
+        revisionIntervalDays: input.revisionIntervalDays ?? null,
+        createdById: actorId,
+      },
+    });
+
+    const dir = sigDocumentDir(doc.id);
+    await mkdir(dir, { recursive: true });
+    const rel = storagePathForSigFile(doc.id, storedName);
+    await writeFile(path.join(dir, path.basename(storedName)), input.file.buffer);
+
+    const version = await tx.sigDocumentVersion.create({
+      data: {
+        documentId: doc.id,
+        versionNumber: 1,
+        versionLabel,
+        fileName: input.file.fileName.slice(0, 255),
+        mimeType: input.file.mimeType,
+        storagePath: rel,
+        fileSizeBytes: input.file.size,
+        checksum,
+        revisionDate: input.revisionDate,
+        effectiveFrom: input.effectiveFrom,
+        effectiveUntil: input.effectiveUntil ?? null,
+        changeSummary: input.changeSummary?.trim().slice(0, 4000) ?? null,
+        status: "APPROVED",
+        uploadedById: actorId,
+        assignedApproverId: actorId,
+        approvedById: actorId,
+        approvedAt: now,
+      },
+    });
+
+    await tx.sigDocument.update({
+      where: { id: doc.id },
+      data: { currentVersionId: version.id },
+    });
+
+    await writeSigAuditLog(tx, {
+      documentId: doc.id,
+      versionId: version.id,
+      action: "CREATED",
+      actorId,
+      notes: input.changeSummary ?? "Documento creado (carga masiva)",
+      metadata: { code, versionLabel, bulkImport: true },
+    });
+
+    await writeSigAuditLog(tx, {
+      documentId: doc.id,
+      versionId: version.id,
+      action: "APPROVED",
+      actorId,
+      notes: "Aprobado automáticamente en carga masiva",
+      metadata: { versionNumber: 1, versionLabel },
+    });
+
+    return tx.sigDocument.findUniqueOrThrow({
+      where: { id: doc.id },
+      include: {
+        documentType: true,
+        process: true,
+        currentVersion: true,
+        createdBy: { select: { id: true, name: true } },
+      },
+    });
+  }).then((created) => {
+    if (created.currentVersion?.id) {
+      scheduleSigVersionTextIndex(created.currentVersion.id);
+    }
+    return created;
+  });
+}
+
 export async function getSigDocumentDetail(documentId: string) {
   return prisma.sigDocument.findUnique({
     where: { id: documentId },

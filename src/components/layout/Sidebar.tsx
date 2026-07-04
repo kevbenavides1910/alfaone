@@ -17,7 +17,12 @@ import { SIDEBAR_NAV_ITEMS } from "@/lib/modules/navigation";
 import { canAccessModule } from "@/lib/modules/access";
 import { hasPermission } from "@/lib/permissions/check";
 
-export function Sidebar() {
+type SidebarProps = {
+  collapsed?: boolean;
+  onNavigate?: () => void;
+};
+
+export function Sidebar({ collapsed: _collapsed = false, onNavigate: _onNavigate }: SidebarProps = {}) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const role = session?.user?.role;

@@ -4,7 +4,7 @@ El servidor usa una **Deploy Key** SSH (solo este repositorio).
 
 ## 1. Registrar la clave en GitHub (una vez)
 
-1. Abra: https://github.com/kevbenavides1910/Presupuestos-Alfa/settings/keys  
+1. Abra: https://github.com/kevbenavides1910/alfaone/settings/keys  
 2. **Add deploy key**
 3. Title: `servidor-10.1.1.222`
 4. Key: pegue el contenido de:
@@ -19,7 +19,7 @@ cat ~/.ssh/id_ed25519_github.pub
 
 ```bash
 ssh -T git@github.com
-# Debe responder: Hi kevbenavides1910/Presupuestos-Alfa! ...
+# Debe responder: Hi kevbenavides1910/alfaone! ...
 
 cd ~/presupuestos-alfa
 git push origin main
@@ -33,4 +33,4 @@ git push origin main
 | `~/.ssh/id_ed25519_github.pub` | Clave pública (va en GitHub) |
 | `~/.ssh/config` | Usa esa clave solo para `github.com` |
 
-Remote del repo: `git@github.com:kevbenavides1910/Presupuestos-Alfa.git`
+Remote del repo: `git@github.com:kevbenavides1910/alfaone.git`

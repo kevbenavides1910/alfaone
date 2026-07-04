@@ -279,6 +279,7 @@ model User {
   ticketNotificationsReceived TicketNotification[] @relation("TicketNotificationUser")
   ticketAuditsPerformed       TicketAudit[]        @relation("TicketAuditUser")
   ticketWorkLogs              TicketWorkLog[]      @relation("TicketWorkLogTechnician")
+  ticketTechnicianProfile     TicketTechnician?
 
   @@map("users")
 }
@@ -1359,6 +1360,11 @@ model DisciplinaryApercibimiento {
   cliente             String?
   /// True cuando el cliente fue editado manualmente desde la web; protege re-imports incrementales.
   clienteSetManual    Boolean @default(false)
+
+  /// Firma dibujada del oficial en «Recibido por» (ruta relativa bajo evidencia disciplinaria).
+  firmaRecibidoPath      String?
+  firmaRecibidoAt        DateTime?
+  correoFirmadoEnviadoAt DateTime?
 
   importBatchId String?
   importBatch   DisciplinaryImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
@@ -3875,11 +3881,24 @@ model TicketCloseReason {
   @@map("ticket_close_reasons")
 }
 
+model TicketTechnician {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ticket_technicians")
+}
+
 model Ticket {
   id               String             @id @default(cuid())
   ticketNumber     String             @unique
   title            String
   description      String             @db.Text
+  categoryDetail   String?            @db.Text
   categoryId       String
   category         TicketCategory     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   priorityId       String

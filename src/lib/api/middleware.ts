@@ -11,6 +11,21 @@ function isSessionLike(v: unknown): v is Session {
   return typeof v === "object" && v !== null && "user" in v;
 }
 
+export function requirePermission(
+  session: Session | null | undefined,
+  key: PermissionKey,
+  level: PermissionLevelId = "view"
+): boolean {
+  return hasPermission(session ?? null, key, level);
+}
+
+export {
+  canViewContractTab,
+  canEditContractTab,
+  canAdminContractTab,
+  canViewContractPositions,
+} from "@/lib/permissions/contract-tabs";
+
 export function canModifyContracts(
   roleOrSession: UserRole | Session | null | undefined
 ): boolean {

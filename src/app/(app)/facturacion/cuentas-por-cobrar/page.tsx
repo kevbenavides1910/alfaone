@@ -36,7 +36,7 @@ export type CuentaPorCobrarRow = {
   expectedIssueDate: string;
   closedAt: string | null;
   dueDate: string;
-  daysUntilDue: number;
+  daysUntilDue: number | null;
   dueDateUrgency: DueDateUrgency;
   status: "FACTURADO" | "COBRADO";
   paymentPending: boolean;
@@ -45,6 +45,25 @@ export type CuentaPorCobrarRow = {
   collectionEmailCount: number;
   lastCollectionEmailAt: string | null;
   cxcObservations: string | null;
+  netAmountExpected?: number | null;
+  totalRebajos?: number;
+  totalAbonos?: number;
+  adjustedCollectible?: number | null;
+  remainingBalance?: number | null;
+  provisionalPaymentAmount?: number | null;
+  abonos?: {
+    id: string;
+    receiptNumber: string | null;
+    amount: number;
+    paidAt: string | null;
+    sortOrder: number;
+  }[];
+  rebajos?: {
+    id: string;
+    description: string;
+    amount: number;
+    sortOrder: number;
+  }[];
 };
 
 const FILTER_LABELS = {
@@ -262,7 +281,7 @@ export default function CuentasPorCobrarPage() {
                         <DueDateCell
                           dueDate={row.dueDate}
                           urgency={row.dueDateUrgency}
-                          daysUntilDue={row.daysUntilDue}
+                          daysUntilDue={row.daysUntilDue ?? 0}
                         />
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">

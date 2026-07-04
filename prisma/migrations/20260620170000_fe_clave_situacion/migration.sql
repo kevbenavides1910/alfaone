@@ -1,0 +1,1 @@
+ALTER TABLE "fe_empresas" ADD COLUMN IF NOT EXISTS "claveSituacion" VARCHAR(1) DEFAULT '1';

@@ -16,9 +16,11 @@ import {
 
 interface TopbarProps {
   title?: string;
+  showCollapseToggle?: boolean;
+  sidebarCollapsed?: boolean;
 }
 
-export function Topbar({ title }: TopbarProps) {
+export function Topbar({ title, showCollapseToggle: _showCollapseToggle, sidebarCollapsed: _sidebarCollapsed }: TopbarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const onHome = pathname === "/home";

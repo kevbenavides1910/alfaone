@@ -1613,7 +1613,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                       </div>
                     )}
                     {filteredContracts.length === 0 && !(contractRemoteSearchLoading && remoteContractQuery.length >= 2) ? (
-                      <div className="p-3 text-sm text-slate-400">Sin resultados para "{contractSearch}"</div>
+                      <div className="p-3 text-sm text-slate-400">Sin resultados para «{contractSearch}»</div>
                     ) : filteredContracts.map(c => (
                       <button
                         key={c.id} type="button"

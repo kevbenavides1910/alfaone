@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Search, FileSpreadsheet, BarChart3, Upload, AlertTriangle, FileText, Eye, Users, Download, Plus, Trash2, Repeat,
+  Search, FileSpreadsheet, BarChart3, Upload, AlertTriangle, FileText, Eye, Users, Download, Plus, Trash2, Repeat, PenLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import { ApercibimientoStatusDialog } from "@/components/disciplinary/StatusDial
 import { CambiarResponsableDialog } from "@/components/disciplinary/CambiarResponsableDialog";
 import { ContractClientDialog } from "@/components/disciplinary/ContractClientDialog";
 import { ManualApercibimientoDialog } from "@/components/disciplinary/ManualApercibimientoDialog";
+import { FirmaApercibimientoDialog } from "@/components/disciplinary/FirmaApercibimientoDialog";
 import {
   Dialog,
   DialogContent,
@@ -75,6 +76,8 @@ interface ApercibimientoRow {
   clienteSetManual: boolean;
   pdfDisponible: boolean;
   evidenciaDisponible: boolean;
+  firmado?: boolean;
+  firmaRecibidoAt?: string | null;
   omisiones?: { id: string; fecha: string; hora: string | null }[];
 }
 
@@ -107,6 +110,13 @@ export default function DisciplinarioListPage() {
     numero: string;
     codigoEmpleado: string;
     nombreEmpleado: string;
+  } | null>(null);
+
+  const [firmaTarget, setFirmaTarget] = useState<{
+    id: string;
+    numero: string;
+    nombreEmpleado: string;
+    firmado?: boolean;
   } | null>(null);
 
   const [filters, setFilters] = useState({
@@ -559,6 +569,23 @@ export default function DisciplinarioListPage() {
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="inline-flex items-center gap-2">
+                          {canManage && r.estado !== "ANULADO" && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFirmaTarget({
+                                    id: r.id,
+                                    numero: r.numero,
+                                    nombreEmpleado: r.nombreEmpleado,
+                                    firmado: r.firmado,
+                                  })
+                                }
+                                className="inline-flex items-center text-slate-500 hover:text-emerald-700 text-xs gap-1"
+                                title={r.firmado ? "Volver a firmar y reenviar PDF" : "Firmar y enviar PDF firmado"}
+                              >
+                                <PenLine className="h-3.5 w-3.5" /> {r.firmado ? "Re-firmar" : "Firmar"}
+                              </button>
+                            )}
                           {canManage && (
                             <>
                               <button
@@ -638,6 +665,13 @@ export default function DisciplinarioListPage() {
         />
 
         <ManualApercibimientoDialog open={manualDialogOpen} onOpenChange={setManualDialogOpen} />
+
+        <FirmaApercibimientoDialog
+          open={!!firmaTarget}
+          onOpenChange={(o) => !o && setFirmaTarget(null)}
+          apercibimiento={firmaTarget}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: ["disciplinary-list"] })}
+        />
 
         <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
           <DialogContent>

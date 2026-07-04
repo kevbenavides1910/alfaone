@@ -13,6 +13,7 @@ import { hasPermission } from "@/lib/permissions/check";
 import { confirmPaymentSchema } from "@/modules/presupuestos/validations/cuentas-por-cobrar.schema";
 import {
   confirmFacturaPayment,
+  cxcDocumentInclude,
   serializeCuentaPorCobrar,
 } from "@/modules/presupuestos/services/cuentas-por-cobrar";
 
@@ -35,29 +36,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       return badRequest(result.message);
     }
 
-    const updated = await prisma.facturaMensual.findUniqueOrThrow({
+    const updated = await prisma.cxcDocumento.findUniqueOrThrow({
       where: { id },
-      include: {
-        contract: {
-          select: {
-            licitacionNo: true,
-            hiringType: true,
-            clientContacts: {
-              orderBy: { sortOrder: "asc" },
-              select: {
-                name: true,
-                jobTitle: true,
-                phone: true,
-                phone2: true,
-                email: true,
-                isBillingContact: true,
-                sortOrder: true,
-              },
-            },
-          },
-        },
-        requisitos: { orderBy: { sortOrder: "asc" } },
-      },
+      include: cxcDocumentInclude,
     });
 
     return ok(serializeCuentaPorCobrar(updated));

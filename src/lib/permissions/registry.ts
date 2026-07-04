@@ -51,6 +51,80 @@ export const PERMISSION_REGISTRY = {
           admin: "Eliminar e importar masivo",
         },
       },
+      contracts_overview: {
+        label: "Contrato — Resumen",
+        uiRoutes: ["/contracts"],
+        actions: { view: "Ver resumen", edit: "Editar resumen" },
+      },
+      contracts_locations: {
+        label: "Contrato — Ubicaciones",
+        uiRoutes: ["/contracts"],
+        actions: { view: "Ver ubicaciones", edit: "Gestionar ubicaciones" },
+      },
+      contracts_assets: {
+        label: "Contrato — Activos",
+        uiRoutes: ["/contracts"],
+        actions: { view: "Ver activos", edit: "Gestionar activos" },
+      },
+      contracts_billing: {
+        label: "Contrato — Registro de venta",
+        uiRoutes: ["/contracts"],
+        actions: { view: "Ver registro de venta", edit: "Editar registro de venta" },
+      },
+      contracts_demand_billing: {
+        label: "Contrato — Facturación por demanda",
+        uiRoutes: ["/contracts"],
+        actions: { view: "Ver facturación por demanda", edit: "Gestionar facturación por demanda" },
+      },
+      contracts_billing_requirements: {
+        label: "Contrato — Requisitos de facturación",
+        uiRoutes: ["/contracts"],
+        actions: { view: "Ver requisitos", edit: "Editar requisitos" },
+      },
+      contracts_administrations: {
+        label: "Contrato — Administraciones",
+        uiRoutes: ["/contracts"],
+        actions: { view: "Ver administraciones", edit: "Gestionar administraciones" },
+      },
+      contracts_client_contacts: {
+        label: "Contrato — Contacto del cliente",
+        uiRoutes: ["/contracts"],
+        actions: { view: "Ver contactos", edit: "Editar contactos" },
+      },
+      contracts_periods: {
+        label: "Contrato — Prórrogas",
+        uiRoutes: ["/contracts"],
+        actions: { view: "Ver prórrogas", edit: "Gestionar prórrogas" },
+      },
+      contracts_expenses: {
+        label: "Contrato — Todos los gastos",
+        uiRoutes: ["/contracts"],
+        actions: { view: "Ver gastos del contrato", edit: "Gestionar gastos del contrato" },
+      },
+    },
+  },
+  ventas: {
+    label: "Ventas",
+    moduleId: "ventas" as const,
+    screens: {
+      presupuestos: {
+        label: "Presupuestos",
+        uiRoutes: ["/ventas/presupuestos"],
+        apiPrefixes: ["/api/ventas/presupuestos"],
+        actions: {
+          view: "Ver presupuestos",
+          edit: "Crear y editar presupuestos",
+        },
+      },
+      oportunidades: {
+        label: "Oportunidades",
+        uiRoutes: ["/ventas/oportunidades"],
+        apiPrefixes: ["/api/ventas/oportunidades"],
+        actions: {
+          view: "Ver oportunidades",
+          edit: "Gestionar oportunidades",
+        },
+      },
     },
   },
   facturacion: {
@@ -73,6 +147,96 @@ export const PERMISSION_REGISTRY = {
         actions: {
           view: "Ver cuentas por cobrar",
           edit: "Confirmar pagos, enviar correos y configurar plantilla",
+        },
+      },
+      dashboard: {
+        label: "Dashboard de facturación",
+        uiRoutes: ["/facturacion/dashboard"],
+        apiPrefixes: ["/api/facturacion/dashboard"],
+        actions: { view: "Ver indicadores de facturación" },
+      },
+      documentos_naf: {
+        label: "Documentos NAF",
+        uiRoutes: ["/facturacion/documentos-naf"],
+        apiPrefixes: ["/api/facturacion/documentos-naf"],
+        actions: { view: "Consultar y descargar documentos NAF" },
+      },
+      informe_ccss_ins: {
+        label: "Informe CCSS/INS",
+        uiRoutes: ["/facturacion/informe-ccss-ins"],
+        apiPrefixes: ["/api/facturacion/informe-ccss-ins"],
+        actions: { view: "Generar informe CCSS/INS" },
+      },
+      config: {
+        label: "Configuración de cobro",
+        uiRoutes: ["/facturacion/configuracion"],
+        apiPrefixes: ["/api/admin/facturacion/cobro-settings"],
+        actions: { view: "Ver configuración", edit: "Editar plantillas y SMTP de cobro" },
+      },
+    },
+  },
+  facturacionElectronica: {
+    label: "Facturación electrónica",
+    moduleId: "facturacionElectronica" as const,
+    screens: {
+      facturas: {
+        label: "Comprobantes electrónicos",
+        uiRoutes: ["/facturacion-electronica"],
+        apiPrefixes: ["/api/fe/facturas"],
+        actions: {
+          view: "Ver comprobantes",
+          edit: "Emitir y enviar comprobantes",
+        },
+      },
+      compras: {
+        label: "Factura de compra",
+        uiRoutes: ["/facturacion-electronica/compra"],
+        apiPrefixes: ["/api/fe/facturas-compra"],
+        actions: {
+          view: "Ver facturas de compra",
+          edit: "Registrar y enviar facturas de compra",
+        },
+      },
+      recibos_pago: {
+        label: "Recibos de pago",
+        uiRoutes: ["/facturacion-electronica/recibo-pago"],
+        apiPrefixes: ["/api/fe/recibos-pago"],
+        actions: {
+          view: "Ver recibos de pago",
+          edit: "Emitir recibos de pago",
+        },
+      },
+      recibidos: {
+        label: "Comprobantes recibidos",
+        uiRoutes: ["/facturacion-electronica/recibidos"],
+        apiPrefixes: ["/api/fe/comprobantes-recibidos", "/api/fe/proveedores-confianza"],
+        actions: {
+          view: "Ver comprobantes recibidos",
+          edit: "Gestionar recibidos y proveedores de confianza",
+        },
+      },
+      gastos: {
+        label: "Gastos electrónicos",
+        uiRoutes: ["/facturacion-electronica/gastos"],
+        apiPrefixes: ["/api/fe/gastos"],
+        actions: { view: "Ver gastos vinculados a FE" },
+      },
+      mensajes_receptor: {
+        label: "Mensajes receptor",
+        uiRoutes: ["/facturacion-electronica/mensajes-receptor"],
+        apiPrefixes: ["/api/fe/mensajes-receptor"],
+        actions: {
+          view: "Ver mensajes receptor",
+          edit: "Gestionar mensajes receptor",
+        },
+      },
+      config: {
+        label: "Configuración emisor",
+        uiRoutes: ["/facturacion-electronica/configuracion"],
+        apiPrefixes: ["/api/fe/config"],
+        actions: {
+          view: "Ver configuración del emisor",
+          edit: "Configurar empresa, certificado, IMAP y puntos de venta",
         },
       },
     },
@@ -218,6 +382,24 @@ export const PERMISSION_REGISTRY = {
       },
     },
   },
+  empleadosNaf: {
+    label: "Empleados NAF",
+    moduleId: "empleadosNaf" as const,
+    screens: {
+      list: {
+        label: "Directorio NAF",
+        uiRoutes: ["/empleados-naf"],
+        apiPrefixes: ["/api/empleados-naf"],
+        actions: { view: "Ver empleados NAF" },
+      },
+      sync: {
+        label: "Sincronización NAF",
+        uiRoutes: ["/empleados-naf"],
+        apiPrefixes: ["/api/empleados-naf/sync", "/api/empleados-naf/sync-status"],
+        actions: { edit: "Ejecutar sincronización desde Oracle NAF" },
+      },
+    },
+  },
   sig: {
     label: "Sistema Integrado de Gestión",
     moduleId: "sig" as const,
@@ -318,6 +500,113 @@ export const PERMISSION_REGISTRY = {
       },
     },
   },
+  ticketsTi: {
+    label: "Tickets TI",
+    moduleId: "ticketsTi" as const,
+    screens: {
+      centro: {
+        label: "Centro de operaciones",
+        uiRoutes: ["/tickets-ti"],
+        apiPrefixes: ["/api/tickets-ti/dashboard", "/api/tickets-ti/reports", "/api/tickets-ti/search"],
+        actions: {
+          view: "Ver centro de operaciones",
+          edit: "Gestionar tickets del centro",
+        },
+      },
+      tickets: {
+        label: "Tickets",
+        uiRoutes: ["/tickets-ti/mis-tickets", "/tickets-ti/nuevo"],
+        apiPrefixes: ["/api/tickets-ti"],
+        actions: {
+          view: "Ver tickets",
+          edit: "Crear y gestionar tickets",
+          admin: "Administrar todos los tickets",
+        },
+      },
+      admin: {
+        label: "Administración",
+        uiRoutes: ["/tickets-ti/admin"],
+        apiPrefixes: ["/api/tickets-ti/catalogs"],
+        actions: {
+          view: "Ver catálogos",
+          admin: "Administrar catálogos de tickets",
+        },
+      },
+      attachments: {
+        label: "Adjuntos",
+        uiRoutes: ["/tickets-ti"],
+        apiPrefixes: ["/api/tickets-ti"],
+        actions: { view: "Ver adjuntos de tickets" },
+      },
+    },
+  },
+  formularios: {
+    label: "Formularios",
+    moduleId: "formularios" as const,
+    screens: {
+      editor: {
+        label: "Editor de formularios",
+        uiRoutes: ["/formularios/nuevo"],
+        apiPrefixes: ["/api/formularios"],
+        actions: {
+          view: "Ver formularios en edición",
+          edit: "Crear y editar formularios",
+          admin: "Eliminar formularios",
+        },
+      },
+      resultados: {
+        label: "Resultados",
+        uiRoutes: ["/formularios"],
+        apiPrefixes: ["/api/formularios"],
+        actions: { view: "Ver respuestas enviadas" },
+      },
+      catalogo: {
+        label: "Catálogo y respuesta",
+        uiRoutes: ["/formularios"],
+        apiPrefixes: ["/api/formularios"],
+        actions: { view: "Ver catálogo y responder formularios" },
+      },
+    },
+  },
+  bandeco: {
+    label: "Bandeco",
+    moduleId: "bandeco" as const,
+    screens: {
+      consulta: {
+        label: "Consulta de códigos",
+        uiRoutes: ["/bandeco"],
+        apiPrefixes: ["/api/bandeco/consulta"],
+        actions: { view: "Consultar códigos de alarma" },
+      },
+      operacion: {
+        label: "Operación",
+        uiRoutes: [
+          "/bandeco/activaciones",
+          "/bandeco/aperturas-cierres",
+          "/bandeco/eventos",
+          "/bandeco/pilas",
+        ],
+        apiPrefixes: ["/api/bandeco/activaciones", "/api/bandeco/aperturas-cierres", "/api/bandeco/eventos"],
+        actions: { view: "Ver operaciones", edit: "Registrar operaciones" },
+      },
+      registros: {
+        label: "Registros e informes",
+        uiRoutes: ["/bandeco/registro", "/bandeco/informe-semanal"],
+        apiPrefixes: ["/api/bandeco/informe-semanal"],
+        actions: { view: "Consultar registros e informe semanal" },
+      },
+      mantenimientos: {
+        label: "Mantenimientos",
+        uiRoutes: ["/bandeco/mantenimientos"],
+        apiPrefixes: ["/api/bandeco"],
+        actions: {
+          view: "Ver catálogos Bandeco",
+          edit: "Editar catálogos",
+          admin: "Importar y eliminar registros",
+        },
+      },
+    },
+  },
   plataforma: {
     label: "Mantenimiento",
     moduleId: "plataforma" as const,
@@ -403,11 +692,11 @@ export function getPermissionDef(key: PermissionKey): {
   if (dot < 0) return null;
   const moduleKey = key.slice(0, dot);
   const screenKey = key.slice(dot + 1);
-  const module = PERMISSION_REGISTRY[moduleKey as keyof typeof PERMISSION_REGISTRY];
-  if (!module) return null;
-  const screen = module.screens[screenKey as keyof typeof module.screens];
+  const moduleEntry = PERMISSION_REGISTRY[moduleKey as keyof typeof PERMISSION_REGISTRY];
+  if (!moduleEntry) return null;
+  const screen = moduleEntry.screens[screenKey as keyof typeof moduleEntry.screens];
   if (!screen) return null;
-  return { moduleKey, screenKey, module, screen };
+  return { moduleKey, screenKey, module: moduleEntry, screen };
 }
 
 /** Resuelve la clave de permiso desde una ruta UI (pathname sin query). */

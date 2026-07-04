@@ -230,6 +230,8 @@ export async function GET(req: NextRequest) {
         contrato: true,
         cliente: true,
         clienteSetManual: true,
+        firmaRecibidoPath: true,
+        firmaRecibidoAt: true,
         // Booleanos para indicar disponibilidad sin exponer la ruta interna
         rutaPdf: true,
         evidenciaAnulacion: true,
@@ -249,8 +251,11 @@ export async function GET(req: NextRequest) {
     ...r,
     rutaPdf: undefined,
     evidenciaAnulacion: undefined,
+    firmaRecibidoPath: undefined,
     pdfDisponible: !!r.rutaPdf,
     evidenciaDisponible: !!r.evidenciaAnulacion,
+    firmado: !!r.firmaRecibidoPath,
+    firmaRecibidoAt: r.firmaRecibidoAt?.toISOString() ?? null,
   }));
 
   return ok(data, { total, page, limit });

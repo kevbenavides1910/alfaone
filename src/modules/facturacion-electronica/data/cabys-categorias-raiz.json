@@ -1,0 +1,42 @@
+[
+  {
+    "nombre": "Productos de la agricultura, silvicultura y pesca",
+    "searchHints": ["agricultura", "cultivo", "pesca", "silvicultura"]
+  },
+  {
+    "nombre": "Productos alimenticios, bebidas y tabaco; textiles, prendas de vestir y productos de cuero",
+    "searchHints": ["alimenticios", "bebidas", "textiles", "carnes"]
+  },
+  {
+    "nombre": "Bienes transportables, excepto productos metálicos, maquinaria y equipo, n.c.p.",
+    "searchHints": ["madera", "papel", "plastico", "muebles"]
+  },
+  {
+    "nombre": "Productos metálicos, maquinaria y equipo",
+    "searchHints": ["maquinaria", "equipo", "metal", "vehiculos"]
+  },
+  {
+    "nombre": "Minerales; electricidad, gas y agua",
+    "searchHints": ["minerales", "electricidad", "gas", "petroleo"]
+  },
+  {
+    "nombre": "Construcciones y servicios de construcción",
+    "searchHints": ["construccion", "construcciones", "edificacion"]
+  },
+  {
+    "nombre": "Servicios de venta y distribución; alojamiento; servicios de suministro de comidas y bebidas; servicios de transporte; servicios de distribución de electricidad, gas y agua",
+    "searchHints": ["transporte", "alojamiento", "venta", "restaurante"]
+  },
+  {
+    "nombre": "Servicios financieros y servicios conexos; servicios inmobiliarios; servicios de arrendamiento financiero (leasing)",
+    "searchHints": ["financieros", "seguros", "inmobiliarios", "bancarios"]
+  },
+  {
+    "nombre": "Servicios prestados a las empresas y servicios de producción",
+    "searchHints": ["empresas", "consultoria", "seguridad", "investigacion"]
+  },
+  {
+    "nombre": "Servicios para la comunidad, sociales y personales",
+    "searchHints": ["salud", "educacion", "comunidad", "personales"]
+  }
+]

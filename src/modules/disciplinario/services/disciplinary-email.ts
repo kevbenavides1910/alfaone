@@ -37,6 +37,16 @@ export function mergeDisciplinaryCc(
   return addrs.length > 0 ? addrs.join(", ") : undefined;
 }
 
+/** Igual que mergeDisciplinaryCc pero devuelve lista de direcciones (p. ej. facturación electrónica). */
+export function mergeDisciplinaryCcList(
+  to: string,
+  fixedCcRaw?: string | null,
+  extraCcRaw?: string | null,
+): string[] {
+  const cc = mergeDisciplinaryCc(to, fixedCcRaw, extraCcRaw);
+  return cc ? parseEmailAddressList(cc) : [];
+}
+
 export async function sendDisciplinaryOmisionEmail(opts: {
   transport: Transporter;
   from: string;

@@ -155,6 +155,86 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     ],
   },
 
+  empleadosNaf: {
+    id: "empleadosNaf",
+    label: "Empleados NAF",
+    description: "Directorio NAF y sincronización desde Oracle.",
+    uiRoutePrefixes: ["/empleados-naf"],
+    apiRoutePrefixes: ["/api/empleados-naf"],
+    codePaths: [
+      "src/app/(app)/empleados-naf",
+      "src/modules/empleados-naf",
+    ],
+    prismaModels: ["EmpleadoNaf"],
+  },
+
+  ventas: {
+    id: "ventas",
+    label: "Ventas",
+    description: "Presupuestos comerciales y oportunidades.",
+    uiRoutePrefixes: ["/ventas"],
+    apiRoutePrefixes: ["/api/ventas"],
+    codePaths: [
+      "src/app/(app)/ventas",
+      "src/components/ventas",
+    ],
+    prismaModels: [],
+  },
+
+  facturacionElectronica: {
+    id: "facturacionElectronica",
+    label: "Facturación electrónica",
+    description: "Emisión FE, compras, recibidos y configuración Hacienda.",
+    uiRoutePrefixes: ["/facturacion-electronica"],
+    apiRoutePrefixes: ["/api/fe"],
+    codePaths: [
+      "src/app/(app)/facturacion-electronica",
+      "src/components/facturacion-electronica",
+    ],
+    prismaModels: [],
+  },
+
+  ticketsTi: {
+    id: "ticketsTi",
+    label: "Tickets TI",
+    description: "Mesa de ayuda, centro de operaciones y catálogos.",
+    uiRoutePrefixes: ["/tickets-ti"],
+    apiRoutePrefixes: ["/api/tickets-ti"],
+    codePaths: [
+      "src/app/(app)/tickets-ti",
+      "src/components/tickets-ti",
+      "src/modules/tickets-ti",
+    ],
+    prismaModels: [],
+  },
+
+  formularios: {
+    id: "formularios",
+    label: "Formularios",
+    description: "Encuestas dinámicas, respuestas y resultados.",
+    uiRoutePrefixes: ["/formularios"],
+    apiRoutePrefixes: ["/api/formularios"],
+    codePaths: [
+      "src/app/(app)/formularios",
+      "src/components/formularios",
+    ],
+    prismaModels: [],
+  },
+
+  bandeco: {
+    id: "bandeco",
+    label: "Bandeco",
+    description: "Monitoreo de alarmas, operaciones y catálogos.",
+    uiRoutePrefixes: ["/bandeco"],
+    apiRoutePrefixes: ["/api/bandeco"],
+    codePaths: [
+      "src/app/(app)/bandeco",
+      "src/components/bandeco",
+      "src/modules/bandeco",
+    ],
+    prismaModels: [],
+  },
+
   sig: {
     id: "sig",
     label: "Sistema Integrado de Gestión",
@@ -222,8 +302,14 @@ export function resolveModuleFromPath(pathname: string): AppModuleId {
   const order: AppModuleId[] = [
     "disciplinario",
     "empleados",
+    "empleadosNaf",
     "sig",
     "recorridos",
+    "ticketsTi",
+    "formularios",
+    "bandeco",
+    "facturacionElectronica",
+    "ventas",
     "facturacion",
     "plataforma",
     "inventario",

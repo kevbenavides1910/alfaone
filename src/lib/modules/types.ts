@@ -2,13 +2,19 @@
 export type AppModuleId =
   | "core"
   | "presupuestos"
+  | "ventas"
   | "facturacion"
+  | "facturacionElectronica"
   | "reportes"
   | "inventario"
   | "disciplinario"
   | "empleados"
+  | "empleadosNaf"
   | "sig"
   | "recorridos"
+  | "ticketsTi"
+  | "formularios"
+  | "bandeco"
   | "plataforma";
 
 export type AppModuleMeta = {

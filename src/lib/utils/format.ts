@@ -10,6 +10,16 @@ export function formatCurrency(amount: number | string | null | undefined): stri
   }).format(num);
 }
 
+export function formatCurrencyPrecise(amount: number | string | null | undefined): string {
+  const num = typeof amount === "string" ? parseFloat(amount) : (amount ?? 0);
+  return new Intl.NumberFormat("es-CR", {
+    style: "currency",
+    currency: "CRC",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num);
+}
+
 export function formatPct(value: number | string | null | undefined): string {
   const num = typeof value === "string" ? parseFloat(value) : (value ?? 0);
   return `${(num * 100).toFixed(2)}%`;
@@ -33,6 +43,37 @@ export function calendarDateInputValue(date: Date | string | null | undefined): 
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/** Muestra dd/mm/aaaa para el input de calendario (valor interno YYYY-MM-DD o ISO). */
+export function formatCalendarDateForInput(
+  value: string | Date | null | undefined
+): string {
+  if (!value) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split("-");
+    return `${d}/${m}/${y}`;
+  }
+  return formatDate(value);
+}
+
+/** Parsea dd/mm/aaaa o dd-mm-aaaa → YYYY-MM-DD; null si la fecha es inválida. */
+export function parseCalendarDateFromDisplay(text: string): string | null {
+  const match = text.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (!match) return null;
+  const day = Number.parseInt(match[1], 10);
+  const month = Number.parseInt(match[2], 10);
+  const year = Number.parseInt(match[3], 10);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (
+    probe.getUTCFullYear() !== year ||
+    probe.getUTCMonth() !== month - 1 ||
+    probe.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 export function formatDateTime(date: Date | string | null | undefined): string {

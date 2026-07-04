@@ -127,3 +127,35 @@ export const clientContactSchema = clientContactBaseSchema;
 export const clientContactUpdateSchema = clientContactBaseSchema.partial();
 
 export type ClientContactInput = z.infer<typeof clientContactSchema>;
+
+export const contractBillingLineSchema = z.object({
+  lineCode: z.string().min(1, "Código requerido").max(40),
+  description: z.string().min(1, "Descripción requerida").max(500),
+  monthlyAmount: z.number().positive().optional().nullable(),
+  sortOrder: z.coerce.number().int().optional(),
+});
+
+export const contractBillingLineUpdateSchema = contractBillingLineSchema.partial();
+
+export type ContractBillingLineInput = z.infer<typeof contractBillingLineSchema>;
+
+export const contractAdministrationSchema = z.object({
+  name: z.string().min(1, "Nombre requerido").max(200),
+  managerName: z.string().min(1, "Encargado requerido").max(200),
+  managerEmail: z
+    .string()
+    .email("Correo inválido")
+    .optional()
+    .nullable()
+    .or(z.literal("")),
+  managerPhone: z.string().optional().nullable(),
+  zoneId: z.string().nullable().optional(),
+  billingLineIds: z.array(z.string()).default([]),
+  billingPeriodFromDay: z.number().int().min(1).max(31).nullable().optional(),
+  billingPeriodToDay: z.number().int().min(1).max(31).nullable().optional(),
+  sortOrder: z.coerce.number().int().optional(),
+});
+
+export const contractAdministrationUpdateSchema = contractAdministrationSchema.partial();
+
+export type ContractAdministrationInput = z.infer<typeof contractAdministrationSchema>;

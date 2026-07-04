@@ -60,6 +60,20 @@ export type FacturaMensualRow = {
   companyCodeCopied: string;
   licitacionNo?: string;
   requisitos: FacturaRequisitoRow[];
+  emisiones?: {
+    id: string;
+    administrationName?: string | null;
+    managerName?: string | null;
+    zoneName?: string | null;
+    sortOrder?: number;
+  }[];
+  returnRequestStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  returnRequestType?: "DOCUMENTATION" | "AMOUNT" | null;
+  returnRequestRequestedSubtotal?: number | null;
+  lastCorrectionType?: "DOCUMENTATION" | "AMOUNT" | null;
+  lastCorrectionPreviousSubtotal?: number | null;
+  lastCorrectionReason?: string | null;
+  isModifiedAfterBilling?: boolean;
 };
 
 interface Props {
