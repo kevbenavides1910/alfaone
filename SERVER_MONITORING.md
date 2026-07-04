@@ -10,9 +10,8 @@ This project includes a lightweight watchdog script to capture diagnostics when 
 ## 1) Deploy the latest code on the VPS
 
 ```bash
-cd ~/Presupuestos-Alfa
-git pull
-docker compose -f docker-compose.prod.yml up -d --build
+cd /mnt/data/projects/presupuestos-alfa/code/presupuestos-alfa
+bash scripts/deploy-safe-production.sh
 ```
 
 ## 2) Make watchdog executable

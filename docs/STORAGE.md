@@ -75,6 +75,6 @@ Rutas en código: [`src/lib/storage/paths.ts`](../src/lib/storage/paths.ts).
 ```bash
 df -h /mnt/data
 ls -la /mnt/data/projects/presupuestos-alfa/app
-docker exec security_contracts_app ls -la /data
+docker exec alfa_one_app ls -la /data
 ls -la /mnt/data/backups/postgres/
 ```

@@ -1,5 +1,5 @@
 ---
-description: Rutas de archivos en disco grande del servidor (/mnt/storage)
+description: Rutas de archivos en disco grande del servidor (/mnt/data en 10.1.1.229)
 globs:
   - "**/*"
 alwaysApply: false
@@ -7,11 +7,11 @@ alwaysApply: false
 
 # Almacenamiento de archivos
 
-En el servidor **10.1.1.222**, los binarios (PDF, imágenes, Word, Excel, video, etc.) van al **HDD** montado en `/mnt/storage`, no al SSD del sistema.
+En el servidor **10.1.1.229**, los binarios (PDF, imágenes, Word, Excel, video, etc.) y PostgreSQL van al **HDD** montado en `/mnt/data`, no al SSD del sistema (`/`).
 
 - Documentación: `docs/STORAGE.md`
-- Setup: `bash scripts/setup-storage.sh`
+- Setup: `bash scripts/setup-storage.sh --root /mnt/data/projects/presupuestos-alfa/app`
 - Código: `src/lib/storage/paths.ts` — usar `expenseUploadRoot()`, `brandingUploadRoot()`, `appDataRoot()`
 - Docker: volumen `${APP_DATA_HOST}:/data` con `EXPENSE_UPLOAD_DIR=/data/expense-uploads` y `BRANDING_UPLOAD_DIR=/data/branding`
-- **No** guardar archivos persistentes en `process.cwd()/uploads` ni en volúmenes Docker sin bind a `/mnt/storage`
-- PostgreSQL permanece en SSD (volumen `postgres_data`)
+- **No** guardar archivos persistentes en `process.cwd()/uploads` ni en volúmenes Docker sin bind a `/mnt/data`
+- PostgreSQL: volumen en `/mnt/data/volumes/postgres/` (ver `docker-compose.prod.yml`)

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Despliegue seguro en producción — sin borrar datos.
-# Uso (en el VPS, dentro del repo):
+# Despliegue seguro en producción (VPS 10.1.1.229) — sin borrar datos.
+# Uso (en el servidor, dentro del repo):
+#   cd /mnt/data/projects/presupuestos-alfa/code/presupuestos-alfa
 #   bash scripts/deploy-safe-production.sh
 #
 # Garantías:

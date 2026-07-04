@@ -1,11 +1,11 @@
 ---
-description: Proteger datos de PostgreSQL en producción (VPS 10.1.1.222)
+description: Proteger datos de PostgreSQL en producción (VPS 10.1.1.229)
 alwaysApply: true
 ---
 
 # Producción — protección de base de datos
 
-Este entorno es **producción real**: Next.js + Prisma + PostgreSQL en el VPS **10.1.1.222**. Cualquier cambio puede afectar datos vivos. Prioridad absoluta: **no perder ni corromper datos**.
+Este entorno es **producción real**: Next.js + Prisma + PostgreSQL en el VPS **10.1.1.229**. Cualquier cambio puede afectar datos vivos. Prioridad absoluta: **no perder ni corromper datos**.
 
 ## Comandos prohibidos (nunca sugerir ni ejecutar sin confirmación explícita del usuario)
 

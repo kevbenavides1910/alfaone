@@ -1,13 +1,23 @@
-# Operaciones en producción (VPS)
+# Operaciones en producción (VPS 10.1.1.229)
 
 ## Despliegue
 
 ```bash
 cd /mnt/data/projects/presupuestos-alfa/code/presupuestos-alfa
-docker compose -f docker-compose.prod.yml up -d --build
+bash scripts/deploy-safe-production.sh
 ```
 
-- **App** (`security_contracts_app`): solo red interna Docker, puerto 3000 no publicado al host.
+El script hace respaldo `pg_dump`, `git pull`, rebuild de app/nginx y verifica conteos de tablas críticas.
+
+Despliegue manual (equivalente, sin verificaciones extra):
+
+```bash
+cd /mnt/data/projects/presupuestos-alfa/code/presupuestos-alfa
+git pull --ff-only origin main
+docker compose -f docker-compose.prod.yml up -d --build app nginx
+```
+
+- **App** (`alfa_one_app`): solo red interna Docker, puerto 3000 no publicado al host.
 - **Nginx** (`security_contracts_nginx`): publica `80` y `3000` → proxy a la app.
 - Secretos: solo en `.env.production` (permisos `600`). No duplicar `DATABASE_URL` en `environment:` del compose.
 
