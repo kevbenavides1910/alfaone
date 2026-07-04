@@ -16,6 +16,7 @@ function isSyntraDeviceRoute(pathname: string): boolean {
 function isNextAuthPublicRoute(pathname: string): boolean {
   if (!pathname.startsWith("/api/auth/")) return false;
   if (pathname === "/api/auth/change-password") return false;
+  if (pathname === "/api/auth/stop-impersonate") return false;
   return true;
 }
 

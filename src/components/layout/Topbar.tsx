@@ -4,8 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { useQuery } from "@tanstack/react-query";
-import { Bell, LayoutGrid, LogOut, Shield, Menu } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Bell, LayoutGrid, LogOut, Shield, Menu, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 import { loginCallbackUrl } from "@/lib/auth/logout";
@@ -22,6 +22,25 @@ export function Topbar({ title }: TopbarProps) {
   const { data: session } = useSession();
   const onHome = pathname === "/home";
   const [mobileOpen, setMobileOpen] = useState(false);
+  const impersonating = Boolean(session?.user?.impersonatorId);
+
+  const stopImpersonation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/auth/stop-impersonate", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const text = await r.text();
+      const body = text.trim() ? JSON.parse(text) : {};
+      if (!r.ok) {
+        throw new Error(body?.error?.message ?? `Error ${r.status}`);
+      }
+      return body as { data?: { redirectTo?: string } };
+    },
+    onSuccess: (res) => {
+      window.location.assign(res.data?.redirectTo ?? "/admin/users");
+    },
+  });
 
   const { data: brand } = useQuery({
     queryKey: APP_BRANDING_QUERY_KEY,
@@ -39,6 +58,29 @@ export function Topbar({ title }: TopbarProps) {
 
   return (
     <>
+      {impersonating && (
+        <div className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          <div className="flex items-center gap-2 min-w-0">
+            <UserRound className="h-4 w-4 shrink-0" />
+            <span className="truncate">
+              Ingresó como <strong>{session?.user?.name}</strong>
+              {session?.user?.impersonatorName ? (
+                <> · administrador: {session.user.impersonatorName}</>
+              ) : null}
+            </span>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0 border-amber-300 bg-white hover:bg-amber-100"
+            disabled={stopImpersonation.isPending}
+            onClick={() => stopImpersonation.mutate()}
+          >
+            Volver a mi cuenta
+          </Button>
+        </div>
+      )}
       {/* Mobile sidebar overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 md:hidden" onClick={() => setMobileOpen(false)} />

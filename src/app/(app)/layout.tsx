@@ -7,7 +7,9 @@ import { SidebarPane } from "@/components/layout/SidebarPane";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
-  if (session.user.mustChangePassword) redirect("/change-password");
+  if (session.user.mustChangePassword && !session.user.impersonatorId) {
+    redirect("/change-password");
+  }
 
   return (
     <div className="flex min-h-screen bg-background">

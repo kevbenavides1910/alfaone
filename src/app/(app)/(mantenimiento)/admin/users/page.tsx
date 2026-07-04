@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
-import { Plus, Pencil, UserX, UserCheck, KeyRound, X, FileSpreadsheet } from "lucide-react";
+import { Plus, Pencil, UserX, UserCheck, KeyRound, X, FileSpreadsheet, LogIn } from "lucide-react";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import { Topbar } from "@/components/layout/Topbar";
 import { Button } from "@/components/ui/button";
@@ -221,6 +221,20 @@ export default function UsersPage() {
     onError: (e: Error) => toast.error(e.message || "Error al restablecer contraseña"),
   });
 
+  const impersonateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/users/${id}/impersonate`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      return parseJsonRes<{ data: { url: string; targetName: string } }>(r);
+    },
+    onSuccess: (res) => {
+      window.location.assign(res.data.url);
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo ingresar como ese usuario"),
+  });
+
   const toggleMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
       const r = await fetch(`/api/users/${id}`, {
@@ -393,6 +407,26 @@ export default function UsersPage() {
                             <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
+                            {u.isActive && u.id !== session?.user.id && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Ingresar como este usuario"
+                                disabled={impersonateMutation.isPending}
+                                onClick={() => {
+                                  if (
+                                    !window.confirm(
+                                      `¿Ingresar al sistema como ${u.name}?\n\nVerá la aplicación con los permisos de ese usuario. Podrá volver a su cuenta desde la barra superior.`,
+                                    )
+                                  ) {
+                                    return;
+                                  }
+                                  impersonateMutation.mutate(u.id);
+                                }}
+                              >
+                                <LogIn className="h-3.5 w-3.5 text-blue-600" />
+                              </Button>
+                            )}
                             {u.isActive && u.id !== session?.user.id && (
                               <Button
                                 variant="ghost"
