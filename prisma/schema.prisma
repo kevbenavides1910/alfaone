@@ -1,0 +1,4057 @@
+// Esquema multi-módulo (monolito). Fronteras y convenciones: docs/ARCHITECTURE.md
+// - core: Company, User, auth
+// - presupuestos: Contract, Expense, ...
+// - inventario: Asset*
+// - disciplinario: Disciplinary*
+// - plataforma: catálogos, AppBranding, AppDisciplinarySettings
+// - sig: SigDocument*, procesos y tipos documentales (DMS)
+// - formularios: FormDefinition*, quizzes y encuestas editables
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  COMPRAS
+  COMMERCIAL
+  CONSULTA
+}
+
+enum PermissionLevel {
+  NONE
+  VIEW
+  EDIT
+  ADMIN
+}
+
+enum ClientType {
+  PUBLIC
+  PRIVATE
+}
+
+enum ContractHiringType {
+  FIXED
+  ON_DEMAND
+}
+
+enum ContractStatus {
+  ACTIVE
+  PROLONGATION
+  SUSPENDED
+  FINISHED
+  CANCELLED
+}
+
+enum FacturaMensualStatus {
+  PENDIENTE_DEFINIR
+  PENDIENTE
+  EN_PROCESO
+  FACTURADO
+  COBRADO
+}
+
+enum FacturaReturnRequestStatus {
+  PENDING
+  REJECTED
+}
+
+enum FacturaCorrectionType {
+  DOCUMENTATION
+  AMOUNT
+}
+
+enum FacturaRequisitoStatus {
+  PENDIENTE
+  COMPLETADO
+}
+
+enum CxcDocumentoStatus {
+  PENDIENTE
+  COBRADO
+}
+
+enum ExpenseCategory {
+  UNIFORMS
+  AUDIT_FINDINGS
+  DEFERRED
+  ADMIN
+  TRANSPORT
+  FUEL
+  PHONES
+  OTHER
+}
+
+enum ExpenseType {
+  APERTURA
+  UNIFORMS
+  AUDIT
+  ADMIN
+  TRANSPORT
+  FUEL
+  PHONES
+  PLANILLA
+  OTHER
+}
+
+/// Partida presupuestaria del gasto (distribución del contrato)
+enum ExpenseBudgetLine {
+  LABOR // Mano de obra
+  SUPPLIES // Insumos
+  ADMIN // Gasto administrativo
+  PROFIT // Utilidad
+}
+
+enum ExpenseApprovalStatus {
+  PENDING_APPROVAL
+  PARTIALLY_APPROVED
+  APPROVED
+  REJECTED
+}
+
+enum ExpenseApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+enum AssetStatus {
+  IN_STOCK
+  ASSIGNED
+  PENDING_RETURN
+  RETIRED
+}
+
+enum AssetMovementType {
+  INTAKE
+  ISSUE
+  ASSIGN
+  RETURN
+}
+
+enum AssetIntakeReason {
+  PURCHASE
+  RETURN
+  INITIAL
+  OTHER
+}
+
+enum AssetIssueReason {
+  LOST
+  DAMAGED
+  DISPOSED
+  OTHER
+}
+
+// ─── Módulo disciplinario ──────────────────────────────────────────────────────
+
+/// Estado registral del apercibimiento (lo que reporta la app de escritorio).
+enum DisciplinaryStatus {
+  EMITIDO
+  ENTREGADO
+  FIRMADO
+  ANULADO
+}
+
+/// Vigencia recalculada por el servidor para asegurar consistencia entre clientes.
+enum DisciplinaryVigencia {
+  VIGENTE
+  VENCIDO
+  PRESCRITO
+  FINALIZADO
+  ANULADO
+}
+
+/// Acción registrada en un ciclo cerrado de tratamiento.
+enum DisciplinaryCycleAccion {
+  COBRADO
+  DADO_DE_BAJA
+  OTRO
+}
+
+// ─── Catálogo de empresas (código estable en mayúsculas, ej. ALFA) ─────────────
+
+model Company {
+  code      String   @id
+  name      String
+  /// Código numérico del sistema de planilla RRHH (ej. 01 = Alfa, 04 = Bena).
+  sapCode   String?  @unique
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users              User[]
+  contracts          Contract[]
+  deferredExpenses   DeferredExpense[]
+  adminExpenses      AdminExpense[]
+  expenses           Expense[]
+  employees          Employee[]
+  employeePlacements EmployeePlacement[]
+  sigDocuments       SigDocument[]
+  feEmpresa          FeEmpresa?
+
+  @@map("companies")
+}
+
+// ─── Auth (NextAuth) ──────────────────────────────────────────────────────────
+
+model Role {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model RolePermission {
+  id            String          @id @default(cuid())
+  roleId        String
+  permissionKey String
+  level         PermissionLevel @default(NONE)
+  role          Role            @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionKey])
+  @@index([permissionKey])
+  @@map("role_permissions")
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  name               String
+  email              String    @unique
+  emailVerified      DateTime?
+  image              String?
+  passwordHash       String?
+  role               UserRole  @default(CONSULTA)
+  roleId             String?
+  roleEntity         Role?     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  company            String?
+  companyEntity      Company?  @relation(fields: [company], references: [code])
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  accounts  Account[]
+  sessions  Session[]
+  auditLogs AuditLog[]
+  expenses  Expense[]  @relation("ExpenseCreatedBy")
+
+  expenseTypeApprovalSteps               ExpenseTypeApprovalStep[]     @relation("ExpenseTypeApprovalApprover")
+  expenseApprovals                       ExpenseApproval[]             @relation("ExpenseApprovalApprover")
+  expenseAttachments                     ExpenseAttachment[]           @relation("ExpenseAttachmentUploader")
+  disciplinaryBatches                    DisciplinaryImportBatch[]     @relation("DisciplinaryBatchUploader")
+  employeeImportBatches                  EmployeeImportBatch[]         @relation("EmployeeBatchUploader")
+  sigDocumentsCreated                    SigDocument[]                 @relation("SigDocumentCreator")
+  sigVersionsUploaded                    SigDocumentVersion[]          @relation("SigVersionUploader")
+  sigVersionsApproved                    SigDocumentVersion[]          @relation("SigVersionApprover")
+  sigVersionsAssigned                    SigDocumentVersion[]          @relation("SigVersionAssignedApprover")
+  sigAuditLogs                           SigDocumentAuditLog[]         @relation("SigAuditActor")
+  ventasOportunidadesDecididas           VentasOportunidad[]           @relation("VentasOportunidadDecidedBy")
+  ventasPresupuestosCreados              VentasPresupuesto[]           @relation("VentasPresupuestoCreatedBy")
+  facturasMensualesReturnedForCorrection FacturaMensual[]              @relation("FacturaReturnedForCorrection")
+  facturaReturnRequestsSubmitted         FacturaMensual[]              @relation("FacturaReturnRequestedBy")
+  facturaReturnRequestsReviewed          FacturaMensual[]              @relation("FacturaReturnReviewedBy")
+  facturacionInvoiceModificationSettings AppFacturacionCobroSettings[] @relation("FacturacionInvoiceModifier")
+  formsCreated                           FormDefinition[]              @relation("FormCreator")
+  formSubmissions                        FormSubmission[]              @relation("FormSubmissionUser")
+
+  ticketsRequested            Ticket[]             @relation("TicketRequester")
+  ticketsAssigned             Ticket[]             @relation("TicketAssignee")
+  ticketCommentsAuthored      TicketComment[]      @relation("TicketCommentAuthor")
+  ticketAttachmentsUploaded   TicketAttachment[]   @relation("TicketAttachmentUploader")
+  ticketHistoriesChanged      TicketHistory[]      @relation("TicketHistoryChanger")
+  ticketNotificationsReceived TicketNotification[] @relation("TicketNotificationUser")
+  ticketAuditsPerformed       TicketAudit[]        @relation("TicketAuditUser")
+  ticketWorkLogs              TicketWorkLog[]      @relation("TicketWorkLogTechnician")
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ─── Contracts ────────────────────────────────────────────────────────────────
+
+model Contract {
+  id                   String             @id @default(cuid())
+  licitacionNo         String             @unique
+  company              String
+  companyEntity        Company            @relation(fields: [company], references: [code])
+  client               String
+  clientType           ClientType         @default(PUBLIC)
+  /// Contratación fija (servicio continuo) o por demanda.
+  hiringType           ContractHiringType @default(FIXED)
+  officersCount        Int                @default(0)
+  positionsCount       Int                @default(0)
+  startDate            DateTime
+  endDate              DateTime
+  monthlyBilling       Decimal            @db.Decimal(15, 2)
+  suppliesBudgetPct    Decimal            @db.Decimal(6, 4)
+  equivalencePct       Decimal            @default(0) @db.Decimal(10, 8)
+  // Budget distribution (% of monthlyBilling, should sum to ~1.0)
+  laborPct             Decimal            @default(0) @db.Decimal(6, 4)
+  suppliesPct          Decimal            @default(0) @db.Decimal(6, 4)
+  adminPct             Decimal            @default(0) @db.Decimal(6, 4)
+  profitPct            Decimal            @default(0) @db.Decimal(6, 4)
+  /// Porcentaje de IVA aplicable (ej. 13.00 = 13 % en Costa Rica).
+  ivaPct               Decimal            @default(13) @db.Decimal(5, 2)
+  /// Día del mes (1–31) en que se espera emitir la factura.
+  billingDay           Int                @default(1)
+  /// Día de inicio del periodo de servicio que se factura (ej. 14 → del 14…).
+  billingPeriodFromDay Int                @default(1)
+  /// Día de cierre del periodo facturado; si es menor que fromDay, cae en el mes siguiente (ej. 1 → …al 1).
+  billingPeriodToDay   Int                @default(31)
+  /// Cantidad de facturas/documentos a emitir por mes en facturación.
+  monthlyInvoicesCount Int                @default(1)
+  /// Cantidad de administraciones del cliente que facturan por separado en este contrato.
+  administrationsCount Int                @default(1)
+  status               ContractStatus     @default(ACTIVE)
+  notes                String?            @db.Text
+  deletedAt            DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  createdById          String?
+  updatedById          String?
+
+  periods               ContractPeriod[]
+  billingHistory        BillingHistory[]
+  billingRequirements   ContractBillingRequirement[]
+  specialServices       ContractSpecialService[]
+  clientContacts        ContractClientContact[]
+  uniformExpenses       UniformExpense[]
+  auditFindings         AuditFinding[]
+  deferredDistributions DeferredDistribution[]
+  adminDistributions    AdminDistribution[]
+  auditLogs             AuditLog[]
+  expenses              Expense[]
+  expenseDistributions  ExpenseDistribution[]        @relation("ExpenseDistributions")
+  locations             ContractLocation[]
+  employeePlacements    EmployeePlacement[]
+  employeeContractLinks EmployeeContractLink[]
+  patrolRoutes          PatrolRoute[]
+  demandBilling         ContractDemandBilling[]
+  facturasMensuales     FacturaMensual[]
+  cxcDocumentos         CxcDocumento[]
+  billingLines          ContractBillingLine[]
+  administrations       ContractAdministration[]
+
+  @@index([company])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([endDate])
+  @@map("contracts")
+}
+
+model BillingHistory {
+  id             String   @id @default(cuid())
+  contractId     String
+  periodMonth    DateTime
+  monthlyBilling Decimal  @db.Decimal(15, 2)
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdById    String?
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, periodMonth])
+  @@index([contractId])
+  @@index([periodMonth])
+  @@map("billing_history")
+}
+
+/// Monto a facturar por mes en contratos por demanda (solo ese mes, sin arrastre).
+model ContractDemandBilling {
+  id             String   @id @default(cuid())
+  contractId     String
+  periodYear     Int
+  periodMonth    Int
+  monthlyBilling Decimal  @db.Decimal(15, 2)
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdById    String?
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, periodYear, periodMonth])
+  @@index([contractId])
+  @@index([periodYear, periodMonth])
+  @@map("contract_demand_billing")
+}
+
+/// Requisitos documentales u operativos para facturar un contrato.
+model ContractBillingRequirement {
+  id               String   @id @default(cuid())
+  contractId       String
+  description      String
+  notes            String?  @db.Text
+  /// Si es true, en facturación debe adjuntarse un archivo; si es false, basta marcar cumplido.
+  requiresEvidence Boolean  @default(true)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdById      String?
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@map("contract_billing_requirements")
+}
+
+/// Instantánea mensual de facturación por contrato (inmutable respecto al contrato vivo).
+model FacturaMensual {
+  id                             String                      @id @default(cuid())
+  contractId                     String
+  periodMonth                    Int
+  periodYear                     Int
+  expectedIssueDate              DateTime
+  /// Fecha de vencimiento de la factura (editable; por defecto un mes después de la emisión).
+  dueDate                        DateTime
+  /// Última actualización del precio del contrato al momento de generar la factura.
+  lastPriceUpdateCopied          DateTime
+  status                         FacturaMensualStatus        @default(PENDIENTE)
+  /// Fecha y hora en que se cerró la facturación (estado FACTURADO).
+  closedAt                       DateTime?
+  /// Fecha en que se confirmó recepción del pago (estado COBRADO).
+  paidAt                         DateTime?
+  /// Última vez que se registró revisión de pago (recibido o pendiente).
+  lastPaymentReviewAt            DateTime?
+  /// Último envío de correo de recordatorio por vencer (manual o automático).
+  lastDueReminderEmailAt         DateTime?
+  /// Último envío de correo de cobro por vencimiento (manual o automático).
+  lastCollectionEmailAt          DateTime?
+  /// Cantidad de correos de cobro enviados (solo tipo collection).
+  collectionEmailCount           Int                         @default(0)
+  /// Observaciones de gestión en cuentas por cobrar.
+  cxcObservations                String?                     @db.Text
+  /// Fecha esperada de pago acordada con el cliente (cuentas por cobrar).
+  cxcExpectedPaymentDate         DateTime?
+  /// Número o referencia del recibo provisional de pago parcial.
+  provisionalReceiptNumber       String?
+  /// Monto registrado en el recibo provisional (abono parcial).
+  provisionalPaymentAmount       Decimal?                    @db.Decimal(15, 2)
+  /// Número fiscal de la factura emitida al cliente.
+  invoiceNumber                  String?
+  /// Número de documento asociado a la factura (referencia interna o del cliente).
+  documentNumber                 String?
+  /// Día de inicio del periodo de servicio copiado del contrato al generar la factura.
+  billingPeriodFromDayCopied     Int                         @default(1)
+  /// Día de cierre del periodo de servicio copiado del contrato al generar la factura.
+  billingPeriodToDayCopied       Int                         @default(31)
+  /// Inicio del periodo de servicio facturado (editable; si es null se calcula del contrato).
+  servicePeriodFromDate          DateTime?
+  /// Fin del periodo de servicio facturado (editable; si es null se calcula del contrato).
+  servicePeriodToDate            DateTime?
+  /// Fecha en que se recibió la factura por parte del cliente o área de cobro.
+  invoiceReceivedAt              DateTime?
+  finalNotes                     String?                     @db.Text
+  observationLog                 String?                     @db.Text
+  /// Subtotal (facturación mensual efectiva) copiado al generar.
+  subtotalCopied                 Decimal                     @db.Decimal(15, 2)
+  ivaPctCopied                   Decimal                     @db.Decimal(5, 2)
+  totalCalculated                Decimal                     @db.Decimal(15, 2)
+  clientNameCopied               String
+  companyCodeCopied              String
+  billingDayCopied               Int
+  hiringTypeCopied               ContractHiringType          @default(FIXED)
+  /// Cantidad de facturas/documentos copiada del contrato al generar la factura mensual.
+  monthlyInvoicesCountCopied     Int                         @default(1)
+  /// Veces regresada para corrección tras cierre (indica factura modificada).
+  correctionReturnCount          Int                         @default(0)
+  /// Última justificación al regresar la factura para corrección.
+  lastCorrectionReason           String?                     @db.Text
+  lastCorrectionReturnedAt       DateTime?
+  lastCorrectionReturnedById     String?
+  /// Subtotal antes del último cambio de monto aprobado.
+  lastCorrectionPreviousSubtotal Decimal?                    @db.Decimal(15, 2)
+  returnRequestStatus            FacturaReturnRequestStatus?
+  returnRequestReason            String?                     @db.Text
+  returnRequestRequestedAt       DateTime?
+  returnRequestRequestedById     String?
+  returnRequestReviewedAt        DateTime?
+  returnRequestReviewedById      String?
+  returnRequestReviewNote        String?                     @db.Text
+  returnRequestType              FacturaCorrectionType?
+  /// Subtotal solicitado en la solicitud de cambio de monto.
+  returnRequestRequestedSubtotal Decimal?                    @db.Decimal(15, 2)
+  returnRequestEvidencePath      String?
+  returnRequestEvidenceFileName  String?
+  returnRequestEvidenceMimeType  String?
+  activeCorrectionType           FacturaCorrectionType?
+  lastCorrectionType             FacturaCorrectionType?
+  createdAt                      DateTime                    @default(now())
+  updatedAt                      DateTime                    @updatedAt
+  createdById                    String?
+
+  contract                 Contract                @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  requisitos               FacturaRequisito[]
+  emisiones                FacturaMensualEmision[]
+  cxcDocumentos            CxcDocumento[]
+  /// Vínculo opcional con facturas electrónicas (integración manual/futura).
+  feFacturas               FeFactura[]
+  lastCorrectionReturnedBy User?                   @relation("FacturaReturnedForCorrection", fields: [lastCorrectionReturnedById], references: [id], onDelete: SetNull)
+  returnRequestRequestedBy User?                   @relation("FacturaReturnRequestedBy", fields: [returnRequestRequestedById], references: [id], onDelete: SetNull)
+  returnRequestReviewedBy  User?                   @relation("FacturaReturnReviewedBy", fields: [returnRequestReviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([contractId, periodYear, periodMonth])
+  @@index([periodYear, periodMonth])
+  @@index([status])
+  @@index([contractId])
+  @@map("facturas_mensuales")
+}
+
+/// Emisión/documento fiscal asociado a una factura mensual (una por administración del contrato).
+model FacturaMensualEmision {
+  id                         String    @id @default(cuid())
+  facturaMensualId           String
+  sortOrder                  Int       @default(0)
+  contractAdministrationId   String?
+  administrationNameCopied   String?
+  managerNameCopied          String?
+  zoneNameCopied             String?
+  /// Día de inicio del periodo facturado copiado de la administración/contrato.
+  billingPeriodFromDayCopied Int?
+  /// Día de cierre del periodo facturado copiado de la administración/contrato.
+  billingPeriodToDayCopied   Int?
+  invoiceNumber              String?
+  documentNumber             String?
+  invoiceReceivedAt          DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  facturaMensual         FacturaMensual          @relation(fields: [facturaMensualId], references: [id], onDelete: Cascade)
+  contractAdministration ContractAdministration? @relation(fields: [contractAdministrationId], references: [id], onDelete: SetNull)
+  requisitos             FacturaRequisito[]
+
+  @@unique([facturaMensualId, sortOrder])
+  @@index([facturaMensualId])
+  @@index([contractAdministrationId])
+  @@map("factura_mensual_emisiones")
+}
+
+/// Documento de cuentas por cobrar importado desde SAP (una fila por FC/FM).
+model CxcDocumento {
+  id                       String             @id @default(cuid())
+  contractId               String?
+  facturaMensualId         String?
+  companySapCode           String
+  companyCode              String?
+  documentNumber           String
+  invoiceNumber            String?
+  repeats                  String?
+  docType                  String
+  documentDate             DateTime?
+  /// Fecha en que el cliente recibió conforme la factura.
+  invoiceReceivedAt        DateTime?
+  servicePeriodDate        DateTime?
+  montoOriginal            Decimal?           @db.Decimal(15, 2)
+  saldo                    Decimal            @db.Decimal(15, 2)
+  clientSapCode            String?
+  clientName               String
+  plazoDays                Int?
+  diasVencido              Int?
+  diasParaVencer           Int?
+  montoVencido             Decimal?           @db.Decimal(15, 2)
+  revisarDias              Int?
+  dueDate                  DateTime?
+  cxcExpectedPaymentDate   DateTime?
+  provisionalReceiptNumber String?
+  provisionalPaymentAmount Decimal?           @db.Decimal(15, 2)
+  cxcObservations          String?            @db.Text
+  status                   CxcDocumentoStatus @default(PENDIENTE)
+  paidAt                   DateTime?
+  lastPaymentReviewAt      DateTime?
+  lastDueReminderEmailAt   DateTime?
+  lastCollectionEmailAt    DateTime?
+  collectionEmailCount     Int                @default(0)
+  isReajuste               Boolean            @default(false)
+  importSheet              String?
+  importSheetRow           Int?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+
+  contract       Contract?       @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  facturaMensual FacturaMensual? @relation(fields: [facturaMensualId], references: [id], onDelete: SetNull)
+  rebajos        CxcRebajo[]
+  abonos         CxcAbono[]
+
+  @@unique([companySapCode, documentNumber])
+  @@index([status])
+  @@index([contractId])
+  @@index([docType])
+  @@map("cxc_documentos")
+}
+
+/// Rebajo o deducción manual en CxC (multas, ajustes del cliente, etc.).
+model CxcRebajo {
+  id             String   @id @default(cuid())
+  cxcDocumentoId String
+  description    String   @db.VarChar(500)
+  amount         Decimal  @db.Decimal(15, 2)
+  sortOrder      Int      @default(0)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  cxcDocumento CxcDocumento @relation(fields: [cxcDocumentoId], references: [id], onDelete: Cascade)
+
+  @@index([cxcDocumentoId])
+  @@map("cxc_rebajos")
+}
+
+/// Abono parcial recibido en CxC (puede haber varios por documento).
+model CxcAbono {
+  id             String    @id @default(cuid())
+  cxcDocumentoId String
+  receiptNumber  String?   @db.VarChar(100)
+  amount         Decimal   @db.Decimal(15, 2)
+  paidAt         DateTime?
+  sortOrder      Int       @default(0)
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  cxcDocumento CxcDocumento @relation(fields: [cxcDocumentoId], references: [id], onDelete: Cascade)
+
+  @@index([cxcDocumentoId])
+  @@map("cxc_abonos")
+}
+
+/// Requisito de entregable heredado del contrato para una factura mensual (por administración/emisión).
+model FacturaRequisito {
+  id                      String                 @id @default(cuid())
+  facturaMensualId        String
+  facturaMensualEmisionId String?
+  requirementName         String
+  status                  FacturaRequisitoStatus @default(PENDIENTE)
+  /// Copiado del contrato: si requiere archivo adjunto o solo confirmación.
+  requiresEvidenceCopied  Boolean                @default(true)
+  filePath                String?
+  fileName                String?
+  mimeType                String?
+  sortOrder               Int                    @default(0)
+  uploadedAt              DateTime?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+
+  facturaMensual FacturaMensual         @relation(fields: [facturaMensualId], references: [id], onDelete: Cascade)
+  emision        FacturaMensualEmision? @relation(fields: [facturaMensualEmisionId], references: [id], onDelete: Cascade)
+
+  @@index([facturaMensualId])
+  @@index([facturaMensualEmisionId])
+  @@map("factura_requisitos")
+}
+
+/// Servicios especiales facturados fuera de la facturación mensual base.
+model ContractSpecialService {
+  id          String   @id @default(cuid())
+  contractId  String
+  periodMonth DateTime
+  description String
+  amount      Decimal  @db.Decimal(15, 2)
+  startDate   DateTime
+  endDate     DateTime
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@index([contractId, periodMonth])
+  @@map("contract_special_services")
+}
+
+/// Contactos del cliente asociados a un contrato.
+model ContractClientContact {
+  id               String   @id @default(cuid())
+  contractId       String
+  name             String
+  jobTitle         String?
+  isBillingContact Boolean  @default(false)
+  isContractAdmin  Boolean  @default(false)
+  phone            String
+  phone2           String?
+  email            String
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdById      String?
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@map("contract_client_contacts")
+}
+
+/// Línea de facturación del contrato (código de partida / detalle presupuestario).
+model ContractBillingLine {
+  id            String   @id @default(cuid())
+  contractId    String
+  lineCode      String
+  description   String
+  monthlyAmount Decimal? @db.Decimal(15, 2)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdById   String?
+
+  contract            Contract                            @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  administrationLinks ContractAdministrationBillingLine[]
+
+  @@unique([contractId, lineCode])
+  @@index([contractId])
+  @@map("contract_billing_lines")
+}
+
+/// Unidad administrativa del cliente dentro de un contrato (encargado, zona, líneas).
+model ContractAdministration {
+  id                   String   @id @default(cuid())
+  contractId           String
+  name                 String
+  managerName          String   @default("")
+  managerEmail         String?
+  managerPhone         String?
+  zoneId               String?
+  /// Si es null, hereda billingPeriodFromDay del contrato.
+  billingPeriodFromDay Int?
+  /// Si es null, hereda billingPeriodToDay del contrato.
+  billingPeriodToDay   Int?
+  sortOrder            Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  createdById          String?
+
+  contract         Contract                            @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  zone             Zone?                               @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  billingLines     ContractAdministrationBillingLine[]
+  facturaEmisiones FacturaMensualEmision[]
+
+  @@index([contractId])
+  @@index([zoneId])
+  @@map("contract_administrations")
+}
+
+/// Asignación de líneas de facturación a una administración.
+model ContractAdministrationBillingLine {
+  administrationId String
+  billingLineId    String
+
+  administration ContractAdministration @relation(fields: [administrationId], references: [id], onDelete: Cascade)
+  billingLine    ContractBillingLine    @relation(fields: [billingLineId], references: [id], onDelete: Cascade)
+
+  @@id([administrationId, billingLineId])
+  @@index([billingLineId])
+  @@map("contract_administration_billing_lines")
+}
+
+model ContractPeriod {
+  id             String   @id @default(cuid())
+  contractId     String
+  periodNumber   Int
+  startDate      DateTime
+  endDate        DateTime
+  monthlyBilling Decimal  @db.Decimal(15, 2)
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, periodNumber])
+  @@index([contractId])
+  @@map("contract_periods")
+}
+
+// ─── Uniform Expenses ─────────────────────────────────────────────────────────
+
+model UniformExpense {
+  id          String   @id @default(cuid())
+  contractId  String
+  periodMonth DateTime
+
+  shirtQty  Int     @default(0)
+  shirtCost Decimal @default(0) @db.Decimal(12, 2)
+  pantsQty  Int     @default(0)
+  pantsCost Decimal @default(0) @db.Decimal(12, 2)
+  shoesQty  Int     @default(0)
+  shoesCost Decimal @default(0) @db.Decimal(12, 2)
+  capQty    Int     @default(0)
+  capCost   Decimal @default(0) @db.Decimal(12, 2)
+  vestQty   Int     @default(0)
+  vestCost  Decimal @default(0) @db.Decimal(12, 2)
+  beltQty   Int     @default(0)
+  beltCost  Decimal @default(0) @db.Decimal(12, 2)
+  bootsQty  Int     @default(0)
+  bootsCost Decimal @default(0) @db.Decimal(12, 2)
+  otherQty  Int     @default(0)
+  otherCost Decimal @default(0) @db.Decimal(12, 2)
+  otherDesc String?
+
+  totalCost   Decimal  @default(0) @db.Decimal(15, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, periodMonth])
+  @@index([contractId])
+  @@index([periodMonth])
+  @@map("uniform_expenses")
+}
+
+// ─── Audit Findings ───────────────────────────────────────────────────────────
+
+model AuditFinding {
+  id          String   @id @default(cuid())
+  contractId  String
+  postName    String
+  findingDate DateTime @default(now())
+
+  radioQty       Int     @default(0)
+  radioCost      Decimal @default(0) @db.Decimal(12, 2)
+  handcuffsQty   Int     @default(0)
+  handcuffsCost  Decimal @default(0) @db.Decimal(12, 2)
+  umbrellaQty    Int     @default(0)
+  umbrellaCost   Decimal @default(0) @db.Decimal(12, 2)
+  blackjackQty   Int     @default(0)
+  blackjackCost  Decimal @default(0) @db.Decimal(12, 2)
+  flashlightQty  Int     @default(0)
+  flashlightCost Decimal @default(0) @db.Decimal(12, 2)
+  otherQty       Int     @default(0)
+  otherCost      Decimal @default(0) @db.Decimal(12, 2)
+  otherDesc      String?
+
+  totalCost   Decimal   @default(0) @db.Decimal(15, 2)
+  status      String    @default("PENDING")
+  resolvedAt  DateTime?
+  notes       String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdById String?
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@index([findingDate])
+  @@map("audit_findings")
+}
+
+// ─── Deferred Expenses ────────────────────────────────────────────────────────
+
+model DeferredExpense {
+  id            String          @id @default(cuid())
+  company       String
+  companyEntity Company         @relation(fields: [company], references: [code])
+  description   String
+  category      ExpenseCategory @default(OTHER)
+  totalAmount   Decimal         @db.Decimal(15, 2)
+  periodMonth   DateTime
+  isDistributed Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  createdById   String?
+
+  distributions DeferredDistribution[]
+
+  @@index([company])
+  @@map("deferred_expenses")
+}
+
+model DeferredDistribution {
+  id                String   @id @default(cuid())
+  deferredExpenseId String
+  contractId        String
+  equivalencePct    Decimal  @db.Decimal(5, 4)
+  allocatedAmount   Decimal  @db.Decimal(15, 2)
+  createdAt         DateTime @default(now())
+
+  deferredExpense DeferredExpense @relation(fields: [deferredExpenseId], references: [id], onDelete: Cascade)
+  contract        Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([deferredExpenseId, contractId])
+  @@index([contractId])
+  @@map("deferred_distributions")
+}
+
+// ─── Admin Expenses ───────────────────────────────────────────────────────────
+
+model AdminExpense {
+  id            String   @id @default(cuid())
+  company       String
+  companyEntity Company  @relation(fields: [company], references: [code])
+  periodMonth   DateTime
+  transport     Decimal  @default(0) @db.Decimal(15, 2)
+  adminCosts    Decimal  @default(0) @db.Decimal(15, 2)
+  phones        Decimal  @default(0) @db.Decimal(15, 2)
+  phoneLines    Decimal  @default(0) @db.Decimal(15, 2)
+  fuel          Decimal  @default(0) @db.Decimal(15, 2)
+  otherAmount   Decimal  @default(0) @db.Decimal(15, 2)
+  otherDesc     String?
+  totalAmount   Decimal  @default(0) @db.Decimal(15, 2)
+  isDistributed Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdById   String?
+
+  distributions AdminDistribution[]
+
+  @@unique([company, periodMonth])
+  @@index([company])
+  @@map("admin_expenses")
+}
+
+model AdminDistribution {
+  id              String   @id @default(cuid())
+  adminExpenseId  String
+  contractId      String
+  equivalencePct  Decimal  @db.Decimal(5, 4)
+  allocatedAmount Decimal  @db.Decimal(15, 2)
+  createdAt       DateTime @default(now())
+
+  adminExpense AdminExpense @relation(fields: [adminExpenseId], references: [id], onDelete: Cascade)
+  contract     Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([adminExpenseId, contractId])
+  @@index([contractId])
+  @@map("admin_distributions")
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String
+  contractId   String?
+  entityType   String
+  entityId     String
+  action       String
+  previousData String?  @db.Text
+  newData      String?  @db.Text
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id])
+  contract Contract? @relation(fields: [contractId], references: [id])
+
+  @@index([userId])
+  @@index([contractId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─── Unified Expenses ─────────────────────────────────────────────────────────
+
+/// Zona geográfica/operativa que agrupa ubicaciones (ej. Pacífico, GAM, Caribe).
+model Zone {
+  id                             String                   @id @default(cuid())
+  name                           String                   @unique
+  description                    String?
+  isActive                       Boolean                  @default(true)
+  sortOrder                      Int                      @default(0)
+  /// Administrador disciplinario por zona (misma lógica que zonas_admin del escritorio).
+  disciplinaryAdministrator      String?
+  disciplinaryAdministratorEmail String?
+  createdAt                      DateTime                 @default(now())
+  updatedAt                      DateTime                 @updatedAt
+  locations                      ContractLocation[]
+  administrations                ContractAdministration[]
+
+  @@map("zones")
+}
+
+/// Ubicación física u operativa del contrato (contiene uno o más puestos).
+model ContractLocation {
+  id           String        @id @default(cuid())
+  contractId   String
+  contract     Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  zoneId       String?
+  zone         Zone?         @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  name         String
+  description  String?
+  sortOrder    Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  positions    Position[]
+  patrolRoutes PatrolRoute[]
+
+  @@index([contractId])
+  @@index([zoneId])
+  @@map("contract_locations")
+}
+
+/// Puesto de vigilancia / guardia dentro de una ubicación.
+model Position {
+  id                 String             @id @default(cuid())
+  locationId         String
+  location           ContractLocation   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name               String
+  description        String?
+  /// Línea telefónica fija del puesto (independiente del celular físico asignado)
+  phoneLine          String?
+  /// Código NFC del punto de marca (legacy COD_PUNTO / TAG).
+  nfcTagCode         String?            @unique
+  latitude           Decimal?           @db.Decimal(10, 7)
+  longitude          Decimal?           @db.Decimal(10, 7)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  expenses           Expense[]
+  shifts             PositionShift[]
+  assets             Asset[]            @relation("PositionAssets")
+  assetMovementsFrom AssetMovement[]    @relation("AssetMovementFrom")
+  assetMovementsTo   AssetMovement[]    @relation("AssetMovementTo")
+  patrolRoutePoints  PatrolRoutePoint[]
+  patrolRoutes       PatrolRoute[]
+
+  @@index([locationId])
+  @@map("positions")
+}
+
+/// Turno asociado a un puesto (horas distintas por turno).
+model PositionShift {
+  id         String   @id @default(cuid())
+  positionId String
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  label      String?
+  hours      Decimal  @db.Decimal(6, 2)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([positionId])
+  @@map("position_shifts")
+}
+
+model ExpenseTypeConfig {
+  id        String      @id @default(cuid())
+  type      ExpenseType @unique
+  label     String
+  color     String      @default("bg-gray-100 text-gray-700")
+  isActive  Boolean     @default(true)
+  sortOrder Int         @default(0)
+  updatedAt DateTime    @updatedAt
+
+  @@map("expense_type_configs")
+}
+
+/// Cadena de aprobación por tipo de gasto (paso 1, luego 2, …). Usuarios concretos.
+model ExpenseTypeApprovalStep {
+  id             String      @id @default(cuid())
+  expenseType    ExpenseType
+  stepOrder      Int
+  approverUserId String
+  approver       User        @relation("ExpenseTypeApprovalApprover", fields: [approverUserId], references: [id], onDelete: Restrict)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([expenseType, stepOrder])
+  @@index([expenseType])
+  @@index([approverUserId])
+  @@map("expense_type_approval_steps")
+}
+
+model ExpenseApproval {
+  id             String                  @id @default(cuid())
+  expenseId      String
+  expense        Expense                 @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  stepOrder      Int
+  approverUserId String
+  approver       User                    @relation("ExpenseApprovalApprover", fields: [approverUserId], references: [id], onDelete: Restrict)
+  decision       ExpenseApprovalDecision
+  comment        String?                 @db.Text
+  decidedAt      DateTime                @default(now())
+
+  @@index([expenseId])
+  @@index([approverUserId])
+  @@map("expense_approvals")
+}
+
+model ExpenseAttachment {
+  id           String   @id @default(cuid())
+  expenseId    String
+  expense      Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  uploadedById String
+  uploadedBy   User     @relation("ExpenseAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  fileName     String
+  mimeType     String
+  storagePath  String
+  note         String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([expenseId])
+  @@index([uploadedById])
+  @@map("expense_attachments")
+}
+
+model ExpenseOrigin {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  expenses Expense[]
+
+  @@map("expense_origins")
+}
+
+model Expense {
+  id                         String                @id @default(cuid())
+  /// Consecutivo autoincremental único por gasto registrado
+  sequentialNo               Int                   @unique @default(autoincrement())
+  type                       ExpenseType
+  budgetLine                 ExpenseBudgetLine?
+  description                String
+  amount                     Decimal               @db.Decimal(15, 2)
+  periodMonth                DateTime
+  contractId                 String?
+  contract                   Contract?             @relation(fields: [contractId], references: [id])
+  positionId                 String?
+  position                   Position?             @relation(fields: [positionId], references: [id])
+  originId                   String?
+  origin                     ExpenseOrigin?        @relation(fields: [originId], references: [id])
+  referenceNumber            String?
+  company                    String?
+  companyEntity              Company?              @relation(fields: [company], references: [code])
+  isDeferred                 Boolean               @default(false)
+  isDistributed              Boolean               @default(false)
+  /// Contratos que reciben el reparto del diferido. Vacío = todos los ACTIVE/PROLONGATION.
+  deferredIncludeContractIds String[]              @default([])
+  /// Si true, el reparto usa `deferredManualAllocations` (montos fijos por contrato), no proporcional a insumos.
+  deferredManualDistribution Boolean               @default(false)
+  /// JSON: [{ "contractId": "…", "amount": 123.45 }, …]. Suma debe coincidir con `amount` del gasto.
+  deferredManualAllocations  Json?
+  notes                      String?
+  /// Registro contable / CXP (texto libre)
+  registroCxp                String?               @db.Text
+  /// Registro TR (texto libre)
+  registroTr                 String?               @db.Text
+  approvalStatus             ExpenseApprovalStatus @default(APPROVED)
+  /// Siguiente paso a aprobar (1-based), null si no aplica o flujo terminado
+  currentApprovalStep        Int?
+  requiredApprovalSteps      Int                   @default(0)
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
+  createdById                String
+  createdBy                  User                  @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  distributions              ExpenseDistribution[]
+  approvals                  ExpenseApproval[]
+  attachments                ExpenseAttachment[]
+  assetsAcquired             Asset[]               @relation("AssetAcquisitionExpense")
+  assetMovements             AssetMovement[]       @relation("AssetMovementExpense")
+
+  @@index([contractId])
+  @@index([positionId])
+  @@index([originId])
+  @@index([company])
+  @@index([approvalStatus])
+  @@map("expenses")
+}
+
+model ExpenseDistribution {
+  id              String   @id @default(cuid())
+  expenseId       String
+  expense         Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  contractId      String
+  contract        Contract @relation("ExpenseDistributions", fields: [contractId], references: [id], onDelete: Cascade)
+  equivalencePct  Decimal  @db.Decimal(10, 8)
+  allocatedAmount Decimal  @db.Decimal(15, 2)
+  createdAt       DateTime @default(now())
+
+  @@unique([expenseId, contractId])
+  @@index([contractId])
+  @@map("expense_distributions")
+}
+
+// ─── Assets / Inventario ──────────────────────────────────────────────────────
+
+/// Catálogo editable de tipos de activos (celular, arma, radio, …).
+/// Cada tipo declara qué campos extra se piden a los activos de ese tipo.
+model AssetType {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  /// JSON: array de { key, label, type: "string"|"number"|"date"|"boolean", required }
+  fields    Json     @default("[]")
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assets Asset[]
+
+  @@map("asset_types")
+}
+
+/// Activo individual (cada unidad física identificable).
+model Asset {
+  id                   String      @id @default(cuid())
+  typeId               String
+  type                 AssetType   @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  /// Identificador único dentro del tipo (ej. serial, código interno).
+  code                 String
+  name                 String?
+  brand                String?
+  model                String?
+  /// Valores para los campos declarados en AssetType.fields (ej. { imei, numero, calibre }).
+  attributes           Json        @default("{}")
+  status               AssetStatus @default(IN_STOCK)
+  currentPositionId    String?
+  currentPosition      Position?   @relation("PositionAssets", fields: [currentPositionId], references: [id], onDelete: SetNull)
+  acquisitionExpenseId String?
+  acquisitionExpense   Expense?    @relation("AssetAcquisitionExpense", fields: [acquisitionExpenseId], references: [id], onDelete: SetNull)
+  acquisitionDate      DateTime?
+  notes                String?     @db.Text
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  movements AssetMovement[]
+
+  @@unique([typeId, code])
+  @@index([status])
+  @@index([currentPositionId])
+  @@index([typeId])
+  @@map("assets")
+}
+
+/// Historial de movimientos de un activo.
+model AssetMovement {
+  id             String             @id @default(cuid())
+  assetId        String
+  asset          Asset              @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  type           AssetMovementType
+  fromPositionId String?
+  fromPosition   Position?          @relation("AssetMovementFrom", fields: [fromPositionId], references: [id], onDelete: SetNull)
+  toPositionId   String?
+  toPosition     Position?          @relation("AssetMovementTo", fields: [toPositionId], references: [id], onDelete: SetNull)
+  expenseId      String?
+  expense        Expense?           @relation("AssetMovementExpense", fields: [expenseId], references: [id], onDelete: SetNull)
+  intakeReason   AssetIntakeReason?
+  issueReason    AssetIssueReason?
+  notes          String?            @db.Text
+  createdById    String?
+  createdAt      DateTime           @default(now())
+
+  @@index([assetId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("asset_movements")
+}
+
+// ─── Módulo disciplinario ──────────────────────────────────────────────────────
+
+/// Lote de importación de Excel (auditoría: quién subió, cuántas filas).
+model DisciplinaryImportBatch {
+  id              String   @id @default(cuid())
+  filename        String
+  /// SHA-256 del contenido del archivo subido. Se usa para detectar archivos
+  /// repetidos (byte a byte) y rechazarlos sin reprocesarlos. Unique.
+  checksum        String?  @unique
+  uploadedById    String
+  uploadedBy      User     @relation("DisciplinaryBatchUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  rowsHistorial   Int      @default(0)
+  rowsTratamiento Int      @default(0)
+  rowsInserted    Int      @default(0)
+  rowsUpdated     Int      @default(0)
+  rowsSkipped     Int      @default(0)
+  errorsJson      Json?
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  apercibimientos DisciplinaryApercibimiento[]
+  tratamientos    DisciplinaryTreatment[]
+
+  @@index([createdAt])
+  @@map("disciplinary_import_batches")
+}
+
+/// Una fila por apercibimiento emitido (importado desde el Excel de la app de escritorio).
+model DisciplinaryApercibimiento {
+  id                 String               @id @default(cuid())
+  /// N° de apercibimiento (texto, único por sistema).
+  numero             String               @unique
+  fechaEmision       DateTime
+  /// Código del empleado normalizado (trim + sin ceros a la izquierda si es numérico).
+  codigoEmpleado     String
+  /// Código tal cual vino en el Excel original (para trazabilidad).
+  codigoEmpleadoRaw  String?
+  nombreEmpleado     String
+  zona               String?
+  sucursal           String?
+  cantidadOmisiones  Int                  @default(0)
+  administrador      String?
+  /// Correo al que se envió el apercibimiento. Sensible: no exponer en UI normal.
+  correoEnviadoA     String?
+  /// Ruta interna al PDF en el equipo de la app de escritorio. Sensible: no exponer.
+  rutaPdf            String?
+  estado             DisciplinaryStatus   @default(EMITIDO)
+  /// Vigencia recalculada en el servidor según fechaEmision + estado.
+  vigencia           DisciplinaryVigencia @default(VIGENTE)
+  batchExterno       String?
+  plantilla          String?
+  planoOrigen        String?
+  motivoAnulacion    String?              @db.Text
+  /// Texto/ruta de la evidencia de anulación. Sensible.
+  evidenciaAnulacion String?              @db.Text
+
+  /// Contrato/Licitación tal cual vino en el Excel (para trazabilidad).
+  contrato            String?
+  /// Versión normalizada (uppercase, sin espacios extra) usada para emparejar con `Contract.licitacionNo`.
+  contratoNormalizado String?
+  /// Cliente resuelto a partir del contrato (o editado a mano en la web).
+  cliente             String?
+  /// True cuando el cliente fue editado manualmente desde la web; protege re-imports incrementales.
+  clienteSetManual    Boolean @default(false)
+
+  importBatchId String?
+  importBatch   DisciplinaryImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Fechas de las omisiones de marca que generaron este apercibimiento.
+  /// Una sola celda del Excel puede traer varias fechas (separadas por , ; | o saltos de línea).
+  omisiones DisciplinaryOmission[]
+
+  @@index([codigoEmpleado, fechaEmision])
+  @@index([fechaEmision])
+  @@index([administrador])
+  @@index([estado])
+  @@index([vigencia])
+  @@index([contratoNormalizado])
+  @@map("disciplinary_apercibimientos")
+}
+
+/// Cada omisión de marca individual asociada a un apercibimiento. N filas por apercibimiento.
+/// Importante: un mismo día puede tener varias omisiones (ej.: entrada y salida no marcadas),
+/// por lo que NO se deduplica por (apercibimiento, fecha). Cada ítem reportado en la celda
+/// "Fecha de Omisión" del Excel se guarda como una fila independiente preservando la cardinalidad.
+/// Se usa para el reporte de omisiones por periodo, independiente de la `fechaEmision`.
+model DisciplinaryOmission {
+  id               String                     @id @default(cuid())
+  apercibimientoId String
+  apercibimiento   DisciplinaryApercibimiento @relation(fields: [apercibimientoId], references: [id], onDelete: Cascade)
+  fecha            DateTime
+  /// Hora de la omisión en formato "HH:mm" o "HH:mm:ss" (texto, sin timezone).
+  /// Permite distinguir varias omisiones del mismo día (ej.: entrada vs salida)
+  /// sin riesgos de conversión horaria. Puede venir vacío si el Excel solo trae fecha.
+  hora             String?
+  /// Lugar / dispositivo / punto de marca omitido (columna del Excel de importación).
+  puntoOmitido     String?                    @db.VarChar(500)
+  /// Posición ordinal dentro de la celda original (para mantener orden y distinguir duplicados del mismo día).
+  secuencia        Int                        @default(0)
+  createdAt        DateTime                   @default(now())
+
+  @@index([apercibimientoId, fecha])
+  @@index([fecha])
+  @@map("disciplinary_omisiones")
+}
+
+/// Maestro de empleados para disciplinario (CSV RRHH u otros; correo para envío de apercibimientos).
+model DisciplinaryEmployeeMaster {
+  id                 String   @id @default(cuid())
+  codigoEmpleado     String   @unique
+  codigoEmpleadoRaw  String?
+  nombre             String?
+  /// Número de cédula / identificación (para PDF y reportes).
+  cedula             String?
+  email              String?
+  zona               String?
+  telefono           String?
+  cuentaBancaria     String?  @db.Text
+  extra              Json?
+  lastSourceFilename String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([updatedAt])
+  @@map("disciplinary_employee_master")
+}
+
+/// Estado vigente de tratamiento por empleado (1 fila por código).
+model DisciplinaryTreatment {
+  id                    String    @id @default(cuid())
+  codigoEmpleado        String    @unique
+  codigoEmpleadoRaw     String?
+  nombre                String?
+  zona                  String?
+  fechaConvocatoria     DateTime?
+  /// Hora local de la convocatoria (HH:MM, 24 h).
+  horaConvocatoria      String?
+  accion                String?
+  cobradoDate           DateTime?
+  convocatoriaEnviadaAt DateTime?
+
+  importBatchId String?
+  importBatch   DisciplinaryImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  closedCycles DisciplinaryClosedCycle[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([codigoEmpleado])
+  @@map("disciplinary_treatments")
+}
+
+/// Ciclos cerrados (parsing del closed_cycles_json del Excel).
+model DisciplinaryClosedCycle {
+  id                String                  @id @default(cuid())
+  treatmentId       String
+  treatment         DisciplinaryTreatment   @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  cerradoEl         DateTime?
+  accion            DisciplinaryCycleAccion @default(OTRO)
+  accionRaw         String?
+  monto             Decimal?                @db.Decimal(14, 2)
+  count             Int?
+  omissions         Int?
+  lastDate          DateTime?
+  fechaConvocatoria DateTime?
+  nombre            String?
+  zona              String?
+  raw               Json
+
+  @@index([treatmentId])
+  @@index([cerradoEl])
+  @@index([accion])
+  @@map("disciplinary_closed_cycles")
+}
+
+// ─── Módulo empleados (RRHH) ───────────────────────────────────────────────────
+
+/// Lote de importación CSV de empleados (auditoría).
+model EmployeeImportBatch {
+  id                   String   @id @default(cuid())
+  filename             String
+  checksum             String?  @unique
+  uploadedById         String
+  uploadedBy           User     @relation("EmployeeBatchUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  rowsProcessed        Int      @default(0)
+  employeesUpserted    Int      @default(0)
+  placementsUpserted   Int      @default(0)
+  rowsSkipped          Int      @default(0)
+  employeesDeactivated Int      @default(0)
+  errorsJson           Json?
+  createdAt            DateTime @default(now())
+
+  employees  Employee[]
+  placements EmployeePlacement[]
+
+  @@index([createdAt])
+  @@map("employee_import_batches")
+}
+
+/// Maestro de empleados (datos personales, bancarios y nómina).
+model Employee {
+  id                 String               @id @default(cuid())
+  codigoEmpleado     String               @unique
+  codigoEmpleadoRaw  String?
+  nombre             String?
+  cedula             String?
+  /// Cédula normalizada (solo dígitos) para cruce en importaciones.
+  cedulaNormalizada  String?
+  aseguradora        String?
+  email              String?
+  telefono           String?
+  fechaNacimiento    DateTime?
+  direccion          String?              @db.Text
+  sexo               String?
+  oficial            Boolean              @default(false)
+  /// Estado del CSV (ej. A = activo).
+  estado             String?
+  formaPago          String?
+  tipoCuenta         String?
+  numeroCuenta       String?
+  tituloCode         String?
+  tituloNombre       String?
+  clase              String?
+  nominaCode         String?
+  nominaNombre       String?
+  fechaIngreso       DateTime?
+  centroCosto        String?
+  categoria          String?
+  zona               String?
+  /// Código numérico de compañía del sistema de planilla (ej. 04, 06).
+  companySapCode     String?
+  /// Código del catálogo de empresas (ej. ALFA, BENA) vinculado vía sapCode.
+  company            String?
+  companyEntity      Company?             @relation(fields: [company], references: [code])
+  lastImportBatchId  String?
+  lastImportBatch    EmployeeImportBatch? @relation(fields: [lastImportBatchId], references: [id], onDelete: SetNull)
+  lastSourceFilename String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  placements EmployeePlacement[]
+
+  @@index([nombre])
+  @@index([cedula])
+  @@index([cedulaNormalizada])
+  @@index([zona])
+  @@index([estado])
+  @@index([companySapCode])
+  @@index([company])
+  @@map("employees")
+}
+
+/// Asignación de empleado a contrato / ubicación / puesto (una fila del CSV).
+model EmployeePlacement {
+  id                  String               @id @default(cuid())
+  employeeId          String
+  employee            Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  companySapCode      String?
+  company             String?
+  companyEntity       Company?             @relation(fields: [company], references: [code])
+  contrato            String?
+  contratoNormalizado String?
+  contractId          String?
+  contract            Contract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  ubicacionCode       String?
+  ubicacionNombre     String?
+  puestoNombre        String?
+  noRol               String?
+  zona                String?
+  importBatchId       String?
+  importBatch         EmployeeImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@unique([employeeId, contratoNormalizado, ubicacionCode, noRol])
+  @@index([employeeId])
+  @@index([contractId])
+  @@index([contratoNormalizado])
+  @@index([ubicacionCode])
+  @@map("employee_placements")
+}
+
+/// Vínculo persistente entre número de contrato del RRHH y contrato del módulo presupuestos.
+model EmployeeContractLink {
+  id           String   @id @default(cuid())
+  /// Clave normalizada del CSV/planilla (ej. 2024LY-000004-0001300001-A).
+  contratoRrhh String   @unique
+  contratoRaw  String?
+  contractId   String
+  contract     Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  notes        String?  @db.Text
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([contractId])
+  @@map("employee_contract_links")
+}
+
+/// Marca / apariencia (fila única id = default): logo en disco y colores hex para UI.
+model AppBranding {
+  id         String   @id @default("default")
+  logoPath   String?
+  primaryHex String   @default("#2563eb")
+  sidebarHex String   @default("#0f172a")
+  updatedAt  DateTime @updatedAt
+
+  @@map("app_branding")
+}
+
+/// Ajustes disciplinarios (fila única id = default): documento y salida de correo.
+model AppDisciplinarySettings {
+  id                            String   @id @default("default")
+  documentTitle                 String   @default("APERCIBIMIENTO — OMISION DE MARCA")
+  documentLegalText             String   @default("Se registra apercibimiento por omisiones de marca segun normativa interna vigente.")
+  documentFooter                String   @default("Documento generado desde Alfa One.")
+  /// Encabezado tipo formulario (similar a F-RH del escritorio).
+  documentFormCode              String   @default("F-RH-30")
+  documentFormRevision          String   @default("05/07/2021")
+  documentFormVersion           String   @default("2")
+  documentFormSubtitle          String   @default("Apercibimiento por omisión de marca")
+  /// Párrafo tras «Estimado(a) Señor(a):». Placeholders: {{numero}}, {{fecha_emision}}, {{omisiones_count}}, {{nombre}}, {{codigo}}, {{cedula}}
+  documentIntroTemplate         String   @default("Por medio de la presente se le notifica el apercibimiento N° {{numero}}, registrado con fecha de emisión {{fecha_emision}}, por {{omisiones_count}} omisión(es) de marca. Los datos del funcionario y el detalle de las omisiones registradas son los siguientes:") @db.Text
+  /// Imagen de firma/sello para el PDF (PNG/JPEG/WebP bajo uploads/branding).
+  documentSignaturePath         String?
+  /// Año del último consecutivo asignado (reinicia el contador al cambiar de año civil).
+  apercibimientoConsecutiveYear Int?
+  /// Último número asignado en `apercibimientoConsecutiveYear` (OM-AAAA-NNNNNN).
+  apercibimientoConsecutiveLast Int      @default(0)
+  /// Copia fija en todos los correos de apercibimiento (varias direcciones separadas por coma o punto y coma).
+  emailFixedCc                  String?  @db.Text
+  emailSubjectTemplate          String   @default("Apercibimiento {{numero}} — omision de marca")
+  emailBodyTemplate             String   @default("Estimado/a {{nombre}}:\\n\\nSe registra el apercibimiento {{numero}} por {{omisiones_count}} omision(es) de marca. Adjuntamos la constancia en PDF.\\n\\nEste mensaje fue enviado automaticamente desde Alfa One.")
+  mailProvider                  String   @default("CUSTOM_SMTP")
+  smtpHost                      String?
+  smtpPort                      Int?
+  smtpSecure                    Boolean?
+  smtpUser                      String?
+  smtpPass                      String?
+  smtpFrom                      String?
+  updatedAt                     DateTime @updatedAt
+
+  @@map("app_disciplinary_settings")
+}
+
+/// Ajustes de correo de cobro (fila única id = default): plantillas y SMTP.
+model AppFacturacionCobroSettings {
+  id                                  String    @id @default("default")
+  /// Copia fija en todos los correos de cobro (coma o punto y coma).
+  emailFixedCc                        String?   @db.Text
+  emailSubjectTemplate                String    @default("Recordatorio de pago — {{cliente}} — {{numero_factura}}")
+  emailBodyTemplate                   String    @default("Estimado/a {{contacto_nombre}}:\n\nPor medio de la presente le recordamos que la factura {{numero_factura}} correspondiente al periodo {{periodo}} por un monto de {{total}} se encuentra pendiente de pago.\n\nFecha de vencimiento: {{fecha_vencimiento}}\nDias vencidos: {{dias_vencidos}}\n\nAgradecemos gestionar el pago a la brevedad posible.\n\nEste mensaje fue enviado automaticamente desde Alfa One.") @db.Text
+  /// Días antes del vencimiento para gestionar recordatorios preventivos (referencia en UI).
+  dueReminderDaysBefore               Int       @default(7)
+  dueReminderSubjectTemplate          String    @default("Aviso: factura {{numero_factura}} vence en {{dias_hasta_vencimiento}} dias — {{cliente}}")
+  dueReminderBodyTemplate             String    @default("Estimado/a {{contacto_nombre}}:\n\nLe informamos que la factura {{numero_factura}} correspondiente al periodo {{periodo}} por un monto de {{total}} vence el {{fecha_vencimiento}} (faltan {{dias_hasta_vencimiento}} dia(s) para el vencimiento).\n\nAgradecemos adelantar las gestiones de pago correspondientes para evitar retrasos.\n\nEste mensaje fue enviado automaticamente desde Alfa One.") @db.Text
+  /// Envío automático de recordatorios por vencer (cron; respeta intervalo de días).
+  autoDueReminderEnabled              Boolean   @default(true)
+  /// Envío automático periódico de cobro tras vencimiento.
+  autoCollectionEnabled               Boolean   @default(true)
+  /// Días entre cada correo automático (por vencer y cobro vencido).
+  collectionEmailIntervalDays         Int       @default(7)
+  /// Última ejecución del job automático de correos.
+  lastAutoEmailRunAt                  DateTime?
+  mailProvider                        String    @default("CUSTOM_SMTP")
+  smtpHost                            String?
+  smtpPort                            Int?
+  smtpSecure                          Boolean?
+  smtpUser                            String?
+  smtpPass                            String?
+  smtpFrom                            String?
+  /// Usuario autorizado para regresar facturas cerradas a corrección.
+  invoiceModificationAuthorizedUserId String?
+  updatedAt                           DateTime  @updatedAt
+
+  invoiceModificationAuthorizedUser User? @relation("FacturacionInvoiceModifier", fields: [invoiceModificationAuthorizedUserId], references: [id], onDelete: SetNull)
+
+  @@map("app_facturacion_cobro_settings")
+}
+
+// ─── SIG — Sistema Integrado de Gestión (DMS) ───────────────────────────────
+
+enum SigDocumentStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  SUPERSEDED
+  OBSOLETE
+}
+
+enum SigAuditAction {
+  CREATED
+  UPDATED
+  SUBMITTED_FOR_APPROVAL
+  APPROVED
+  REJECTED
+  REVISION_DATE_UPDATED
+  NEW_VERSION
+  SAME_VERSION_UPDATED
+  OBSOLETED
+}
+
+/// Catálogo extensible de tipos documentales (procedimiento, formulario, etc.).
+model SigDocumentType {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?  @db.Text
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  documents SigDocument[]
+
+  @@map("sig_document_types")
+}
+
+/// Procesos de negocio vinculables a documentos.
+model SigProcess {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  description String?      @db.Text
+  parentId    String?
+  parent      SigProcess?  @relation("SigProcessTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    SigProcess[] @relation("SigProcessTree")
+  isActive    Boolean      @default(true)
+  sortOrder   Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  documents SigDocument[]
+
+  @@index([parentId])
+  @@map("sig_processes")
+}
+
+/// Documento lógico con control de versiones.
+model SigDocument {
+  id                   String              @id @default(cuid())
+  code                 String              @unique
+  title                String
+  documentTypeId       String
+  documentType         SigDocumentType     @relation(fields: [documentTypeId], references: [id], onDelete: Restrict)
+  processId            String?
+  process              SigProcess?         @relation(fields: [processId], references: [id], onDelete: SetNull)
+  company              String?
+  companyEntity        Company?            @relation(fields: [company], references: [code])
+  status               SigDocumentStatus   @default(PENDING_APPROVAL)
+  currentVersionId     String?             @unique
+  currentVersion       SigDocumentVersion? @relation("SigCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  /// Días entre revisiones esperadas (recordatorio).
+  revisionIntervalDays Int?
+  createdById          String
+  createdBy            User                @relation("SigDocumentCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  versions  SigDocumentVersion[]  @relation("SigDocumentVersions")
+  auditLogs SigDocumentAuditLog[]
+
+  @@index([documentTypeId])
+  @@index([processId])
+  @@index([status])
+  @@index([company])
+  @@map("sig_documents")
+}
+
+/// Versión física del documento (archivo en disco bajo sig-documents/).
+model SigDocumentVersion {
+  id                 String             @id @default(cuid())
+  documentId         String
+  document           SigDocument        @relation("SigDocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  versionNumber      Int
+  versionLabel       String
+  fileName           String
+  mimeType           String
+  storagePath        String
+  fileSizeBytes      Int
+  checksum           String?
+  revisionDate       DateTime
+  effectiveFrom      DateTime
+  effectiveUntil     DateTime?
+  changeSummary      String?            @db.Text
+  status             SigDocumentStatus  @default(PENDING_APPROVAL)
+  uploadedById       String
+  uploadedBy         User               @relation("SigVersionUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  assignedApproverId String?
+  assignedApprover   User?              @relation("SigVersionAssignedApprover", fields: [assignedApproverId], references: [id], onDelete: SetNull)
+  approvedById       String?
+  approvedBy         User?              @relation("SigVersionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt         DateTime?
+  rejectionNote      String?            @db.Text
+  /// Texto extraído (PDF nativo, Office, OCR) para búsqueda por contenido.
+  extractedText      String?            @db.Text
+  textIndexStatus    SigTextIndexStatus @default(PENDING)
+  textIndexedAt      DateTime?
+  createdAt          DateTime           @default(now())
+
+  currentFor SigDocument?          @relation("SigCurrentVersion")
+  auditLogs  SigDocumentAuditLog[]
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId])
+  @@index([status])
+  @@index([assignedApproverId])
+  @@map("sig_document_versions")
+}
+
+enum SigTextIndexStatus {
+  PENDING
+  DONE
+  FAILED
+  SKIPPED
+}
+
+/// Bitácora de aprobaciones y cambios del módulo SIG.
+model SigDocumentAuditLog {
+  id           String              @id @default(cuid())
+  documentId   String
+  document     SigDocument         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  versionId    String?
+  version      SigDocumentVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  action       SigAuditAction
+  actorId      String
+  actor        User                @relation("SigAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+  notes        String?             @db.Text
+  metadataJson String?             @db.Text
+  createdAt    DateTime            @default(now())
+
+  @@index([documentId])
+  @@index([versionId])
+  @@index([createdAt])
+  @@map("sig_document_audit_logs")
+}
+
+// ─── Alfa One — App móvil recorridos NFC ─────────────────────────────────────
+
+/// Ajustes remotos para la app móvil Alfa One (fila única id = default).
+model AppSyntraSettings {
+  id                 String   @id @default("default")
+  enableGeofences    Boolean  @default(false)
+  enableGpsTrack     Boolean  @default(false)
+  geofenceRadiusM    Int      @default(100)
+  routesSyncMinutes  Int      @default(360)
+  reportsSyncMinutes Int      @default(30)
+  updatedAt          DateTime @updatedAt
+
+  @@map("app_syntra_settings")
+}
+
+/// Dispositivo móvil Alfa One (IMEI + empleado asignado).
+model PatrolDevice {
+  id               String    @id @default(cuid())
+  imei             String    @unique
+  employeeCode     String
+  passwordHash     String
+  label            String?
+  locationDesc     String?
+  positionId       String?
+  assetId          String?
+  isActive         Boolean   @default(true)
+  lastLoginAt      DateTime?
+  lastGpsLatitude  Decimal?  @db.Decimal(10, 7)
+  lastGpsLongitude Decimal?  @db.Decimal(10, 7)
+  lastGpsAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  assignments PatrolAssignment[]
+
+  @@index([employeeCode])
+  @@map("patrol_devices")
+}
+
+/// Ruta de recorrido configurable desde presupuestos.
+model PatrolRoute {
+  id                      String            @id @default(cuid())
+  code                    String            @unique
+  name                    String
+  description             String?
+  contractId              String?
+  contract                Contract?         @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  locationId              String?
+  location                ContractLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  positionId              String?
+  position                Position?         @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  isActive                Boolean           @default(true)
+  openSchedule            Boolean           @default(false)
+  scheduleDurationMinutes Int?
+  sameScheduleEveryDay    Boolean           @default(true)
+  samePointsEveryDay      Boolean           @default(true)
+  randomizePointOrder     Boolean           @default(false)
+  welfareEnabled          Boolean           @default(false)
+  welfareIntervalMinutes  Int               @default(60)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  points           PatrolRoutePoint[]
+  pointDays        PatrolRoutePointDay[]
+  assignments      PatrolAssignment[]
+  authorizedPhones PatrolRoutePhone[]
+  schedules        PatrolRouteSchedule[]
+  welfareChecks    PatrolWelfareCheck[]
+
+  @@map("patrol_routes")
+}
+
+/// Celular autorizado para ejecutar una ruta (principal o adicional).
+model PatrolRoutePhone {
+  id        String      @id @default(cuid())
+  routeId   String
+  route     PatrolRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  assetId   String
+  isPrimary Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([routeId, assetId])
+  @@index([routeId])
+  @@map("patrol_route_phones")
+}
+
+/// Franja horaria de una ruta por día de la semana (0=domingo … 6=sábado).
+model PatrolRouteSchedule {
+  id        String      @id @default(cuid())
+  routeId   String
+  route     PatrolRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  sortOrder Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([routeId])
+  @@index([routeId, dayOfWeek])
+  @@map("patrol_route_schedules")
+}
+
+/// Registro de alerta de hombre vivo (programada o manual).
+model PatrolWelfareCheck {
+  id             String      @id @default(cuid())
+  routeId        String
+  route          PatrolRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  deviceId       String?
+  imei           String
+  source         String      @default("MANUAL")
+  status         String      @default("PENDING")
+  scheduledAt    DateTime    @default(now())
+  triggeredAt    DateTime?
+  acknowledgedAt DateTime?
+  ackLatitude    Decimal?    @db.Decimal(10, 7)
+  ackLongitude   Decimal?    @db.Decimal(10, 7)
+  createdAt      DateTime    @default(now())
+
+  @@index([routeId])
+  @@index([imei, status])
+  @@map("patrol_welfare_checks")
+}
+
+/// Punto de marca dentro de una ruta (NFC, coords, ventana horaria).
+model PatrolRoutePoint {
+  id          String      @id @default(cuid())
+  routeId     String
+  route       PatrolRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  sortOrder   Int         @default(0)
+  code        String
+  name        String
+  nfcTagCode  String?
+  latitude    Decimal?    @db.Decimal(10, 7)
+  longitude   Decimal?    @db.Decimal(10, 7)
+  radiusM     Int         @default(100)
+  windowStart String?
+  windowEnd   String?
+  positionId  String?
+  position    Position?   @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  pointDays PatrolRoutePointDay[]
+
+  @@index([routeId])
+  @@index([nfcTagCode])
+  @@map("patrol_route_points")
+}
+
+/// Punto de marca activo en un día de la semana (0=domingo … 6=sábado).
+model PatrolRoutePointDay {
+  id        String           @id @default(cuid())
+  routeId   String
+  route     PatrolRoute      @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  pointId   String
+  point     PatrolRoutePoint @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  dayOfWeek Int
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([pointId, dayOfWeek])
+  @@index([routeId])
+  @@index([routeId, dayOfWeek])
+  @@map("patrol_route_point_days")
+}
+
+/// Asignación dispositivo ↔ ruta por fecha.
+model PatrolAssignment {
+  id         String       @id @default(cuid())
+  deviceId   String
+  device     PatrolDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  routeId    String
+  route      PatrolRoute  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  validFrom  DateTime     @db.Date
+  validUntil DateTime?    @db.Date
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@unique([deviceId, routeId, validFrom])
+  @@index([deviceId])
+  @@index([routeId])
+  @@map("patrol_assignments")
+}
+
+/// Entrada de bitácora digital (app o web).
+model PatrolBitacoraEntry {
+  id                String   @id @default(cuid())
+  deviceId          String?
+  imei              String
+  employeeCode      String
+  description       String   @db.Text
+  routeCode         String?
+  incidentAt        DateTime
+  imageMimeType     String?
+  imageFileName     String?
+  imagePath         String?
+  source            String   @default("APP")
+  linkedOmissionKey String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  justification PatrolOmissionJustification?
+
+  @@index([imei])
+  @@index([incidentAt])
+  @@index([linkedOmissionKey])
+  @@map("patrol_bitacora_entries")
+}
+
+/// Justificación de una omisión de marca NFC.
+model PatrolOmissionJustification {
+  id              String               @id @default(cuid())
+  omissionKey     String               @unique
+  fecha           String
+  deviceId        String
+  routeId         String
+  routePointId    String
+  routeCode       String
+  pointLabel      String
+  nfcTagCode      String
+  description     String               @db.Text
+  imageMimeType   String?
+  imageFileName   String?
+  imagePath       String?
+  source          String               @default("WEB")
+  bitacoraEntryId String?              @unique
+  bitacoraEntry   PatrolBitacoraEntry? @relation(fields: [bitacoraEntryId], references: [id], onDelete: SetNull)
+  createdById     String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([fecha])
+  @@index([deviceId])
+  @@map("patrol_omission_justifications")
+}
+
+/// Marca NFC o reloj desde app Alfa One.
+model PatrolMark {
+  id            String   @id @default(cuid())
+  deviceId      String?
+  imei          String
+  employeeCode  String?
+  nfcTagCode    String?
+  markType      String   @default("NFC")
+  markedAt      DateTime
+  latitude      Decimal? @db.Decimal(10, 7)
+  longitude     Decimal? @db.Decimal(10, 7)
+  serialNumber  String?
+  incorrectTime Boolean  @default(false)
+  positionCode  String?
+  appVersion    String?
+  createdAt     DateTime @default(now())
+
+  @@index([imei, markedAt])
+  @@index([nfcTagCode])
+  @@map("patrol_marks")
+}
+
+/// Snapshot de marcas pendientes reportadas por la app (auditoria IMEI).
+model PatrolDevicePendingSnapshot {
+  id           String   @id @default(cuid())
+  deviceId     String?
+  imei         String
+  employeeCode String?
+  pendingCount Int      @default(0)
+  staleCount   Int      @default(0)
+  appVersion   String?
+  payload      Json
+  createdAt    DateTime @default(now())
+
+  @@index([imei, createdAt])
+  @@map("patrol_device_pending_snapshots")
+}
+
+/// Punto GPS enviado desde app Alfa One.
+model PatrolGpsTrack {
+  id           String   @id @default(cuid())
+  deviceId     String?
+  imei         String?
+  employeeCode String?
+  latitude     Decimal  @db.Decimal(10, 7)
+  longitude    Decimal  @db.Decimal(10, 7)
+  recordedAt   DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([imei, recordedAt])
+  @@map("patrol_gps_tracks")
+}
+
+// ─── Módulo Bandeco (monitoreo de alarmas) ────────────────────────────────────
+
+/// Catálogo principal: código de alarma → finca, zona, motorizado, contactos.
+model BandecoAlarmCode {
+  id              String   @id @default(cuid())
+  alarmNumber     Int      @unique
+  finca           String
+  zona            String
+  motorizado      String
+  bodycam         String?
+  grupoWsp        String?
+  encargado       String?
+  numeroEncargado String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  pantalla         BandecoPantalla?
+  activaciones     BandecoActivacion[]
+  aperturasCierres BandecoAperturaCierre[]
+
+  @@index([finca])
+  @@map("bandeco_alarm_codes")
+}
+
+/// Mapeo pantalla/cámara por código de alarma (hoja PANTALLAS).
+model BandecoPantalla {
+  id          String           @id @default(cuid())
+  alarmCodeId String           @unique
+  alarmCode   BandecoAlarmCode @relation(fields: [alarmCodeId], references: [id], onDelete: Cascade)
+  finca       String
+  zona        String
+  pantalla    Int?
+  camara      Int?
+  zonaExterna String?
+  pantalla2   Int?
+  camara2     Int?
+
+  @@map("bandeco_pantallas")
+}
+
+/// Puestos / motorizados (hoja PUESTOS).
+model BandecoPuesto {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("bandeco_puestos")
+}
+
+/// Descripción de cámaras por pantalla (hoja CAMARAS).
+model BandecoCamara {
+  id          String @id @default(cuid())
+  pantallaNum Int
+  camaraNum   Int
+  descripcion String
+
+  @@unique([pantallaNum, camaraNum])
+  @@map("bandeco_camaras")
+}
+
+/// Cuentas de apertura por finca (hoja APERTURAS).
+model BandecoAperturaCuenta {
+  id           String @id @default(cuid())
+  finca        String
+  cuentaNum    Int
+  nombreCuenta String
+
+  @@index([finca])
+  @@index([cuentaNum])
+  @@map("bandeco_apertura_cuentas")
+}
+
+/// Configuración de reporte de pilas por finca (hoja PILAS).
+model BandecoPilaFinca {
+  id             String  @id @default(cuid())
+  finca          String  @unique
+  desmane        String?
+  paneo          String?
+  zonaMotorizado String?
+  observaciones  String?
+
+  @@map("bandeco_pila_fincas")
+}
+
+/// Registro de activaciones (hoja REGISTRO).
+model BandecoActivacion {
+  id              String            @id @default(cuid())
+  activatedAt     DateTime          @default(now())
+  alarmNumber     Int
+  alarmCodeId     String?
+  alarmCode       BandecoAlarmCode? @relation(fields: [alarmCodeId], references: [id], onDelete: SetNull)
+  finca           String
+  zona            String
+  motorizado      String?
+  bodycam         String?
+  grupoWsp        String?
+  encargado       String?
+  numeroEncargado String?
+  operadorName    String
+  operadorId      String?
+  estado          String?
+  informe         String?           @db.Text
+  mensaje         String?           @db.Text
+  tipoActivacion  String?
+
+  @@index([activatedAt])
+  @@index([alarmNumber])
+  @@map("bandeco_activaciones")
+}
+
+/// Aperturas y cierres (hoja APEYCE).
+model BandecoAperturaCierre {
+  id           String            @id @default(cuid())
+  finca        String
+  codigo       Int
+  alarmCodeId  String?
+  alarmCode    BandecoAlarmCode? @relation(fields: [alarmCodeId], references: [id], onDelete: SetNull)
+  ubicacion    String
+  dia          String?
+  fecha        DateTime
+  horaApertura String?
+  horaCierre   String?
+  operadorName String
+  estado       String?
+
+  @@index([fecha])
+  @@index([codigo])
+  @@map("bandeco_aperturas_cierres")
+}
+
+/// Informes de eventos (hoja EVENTOS).
+model BandecoEvento {
+  id           String   @id @default(cuid())
+  fecha        DateTime
+  hora         String?
+  finca        String
+  motivo       String?
+  informe      String   @db.Text
+  operadorName String
+  createdAt    DateTime @default(now())
+
+  @@index([fecha])
+  @@map("bandeco_eventos")
+}
+
+// ─── Módulo Empleados NAF (réplica local Oracle NAF5.EMPLEADOS_NEW) ───────────
+
+/// Ejecución de sincronización desde Oracle NAF.
+model NafEmployeeSyncRun {
+  id           String    @id @default(cuid())
+  status       String
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  rowsFetched  Int       @default(0)
+  rowsUpserted Int       @default(0)
+  errorMessage String?   @db.Text
+  triggeredBy  String?
+
+  @@index([startedAt])
+  @@map("naf_employee_sync_runs")
+}
+
+/// Empleado replicado del maestro NAF (NAF5.EMPLEADOS_NEW).
+model NafEmployee {
+  id                String    @id @default(cuid())
+  /// Clave compuesta NO_CIA + NO_EMPLE (normalizada).
+  sourceKey         String    @unique
+  noCia             String
+  noEmple           String
+  nombre            String?
+  nombrePila        String?
+  apePat            String?
+  apeMat            String?
+  estado            String?
+  cedula            String?
+  telefono          String?
+  correoElectronico String?
+  area              String?
+  depto             String?
+  puesto            String?
+  sexo              String?
+  formaPago         String?
+  numCuenta         String?
+  tipoCuenta        String?
+  banco             String?
+  tipoEmp           String?
+  contrato          String?
+  ubicacionCode     String?
+  ubicacionNombre   String?
+  asegu             String?
+  noRol             String?
+  tituloCode        String?
+  tituloNombre      String?
+  categoria         String?
+  clase             String?
+  nominaCode        String?
+  nominaNombre      String?
+  indOficial        String?
+  fIngreso          DateTime?
+  fEgreso           DateTime?
+  fNacimi           DateTime?
+  direccion         String?   @db.Text
+  zonaCode          String?
+  zona              String?
+  eCivil            String?
+  jornada           String?
+  nacion            String?
+  salBas            Decimal?  @db.Decimal(14, 2)
+  /// Fila completa de Oracle (84 columnas) en JSON.
+  payload           Json
+  syncedAt          DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([nombre])
+  @@index([cedula])
+  @@index([estado])
+  @@index([noCia])
+  @@index([syncedAt])
+  @@map("naf_employees")
+}
+
+// ─── Módulo Ventas (pipeline de licitaciones) ─────────────────────────────────
+
+enum VentasOportunidadEstado {
+  PENDIENTE_DECIDIR
+  PARTICIPAR
+  NO_PARTICIPAR
+}
+
+/// Oportunidad de licitación detectada (p. ej. por automatización n8n) antes de convertirse en contrato.
+model VentasOportunidad {
+  id                 String                  @id @default(cuid())
+  /// Número de licitación normalizado (único en el pipeline).
+  licitacionNo       String                  @unique
+  cliente            String
+  descripcion        String                  @db.Text
+  fechaPresentacion  DateTime
+  enlace             String?
+  /// Fecha/hora de inicio de recepción de ofertas (desde SICOP).
+  inicioRecepcion    DateTime?
+  /// Fecha/hora de cierre de recepción de ofertas (desde SICOP).
+  cierreRecepcion    DateTime?
+  /// Monto total estimado de la contratación en colones (desde SICOP).
+  montoContratacion  Decimal?                @db.Decimal(18, 2)
+  /// Moneda del monto de contratación (ej. CRC, USD).
+  monedaContratacion String?
+  /// Fecha/hora límite de recepción de aclaraciones (desde SICOP).
+  fechaAclaracion    DateTime?
+  /// Fecha/hora límite de recepción de objeciones (desde SICOP).
+  fechaObjeciones    DateTime?
+  /// Fecha de última actualización desde SICOP.
+  sicopUpdatedAt     DateTime?
+  estado             VentasOportunidadEstado @default(PENDIENTE_DECIDIR)
+  /// Origen del registro (ej. "n8n").
+  source             String?
+  decidedAt          DateTime?
+  decidedById        String?
+  decidedBy          User?                   @relation("VentasOportunidadDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  presupuesto        VentasPresupuesto?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([estado])
+  @@index([fechaPresentacion])
+  @@index([cliente])
+  @@map("ventas_oportunidades")
+}
+
+enum VentasSalarioTipo {
+  MENSUAL
+  HORARIO
+}
+
+enum VentasEquipamiento {
+  AF
+  ANL
+  SA
+  L
+}
+
+enum VentasJornadaCodigo {
+  MO1
+  MO2
+  MO3
+  MO4
+  MO5
+}
+
+enum VentasPresupuestoEstado {
+  BORRADOR
+  EN_REVISION
+  FINALIZADO
+}
+
+/// Catálogo de categorías salariales (hoja SALARIOS).
+model VentasSalarioCategoria {
+  id             String            @id @default(cuid())
+  codigo         String            @unique
+  descripcion    String
+  tipo           VentasSalarioTipo
+  siglas         String?
+  valoresPorAnio Json
+  aumentosPct    Json?
+  adicionales    Json?
+  sortOrder      Int               @default(0)
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@map("ventas_salario_categorias")
+}
+
+/// Esquemas de jornada MO1–MO5.
+model VentasJornadaTipo {
+  id                     String              @id @default(cuid())
+  codigo                 VentasJornadaCodigo @unique
+  nombre                 String
+  descripcion            String?
+  horasConfig            Json
+  salarioCategoriaCodigo String?
+  costoHoraOrdinaria     Decimal?            @db.Decimal(14, 4)
+  costoHoraExtra         Decimal?            @db.Decimal(14, 4)
+  salarioBaseMensual     Decimal?            @db.Decimal(15, 2)
+  /// Costo MO mensual de referencia (celda E46 de hoja MO, calibrado desde Excel).
+  costoMoReferencia      Decimal?            @db.Decimal(15, 2)
+  sortOrder              Int                 @default(0)
+  isActive               Boolean             @default(true)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  @@map("ventas_jornada_tipos")
+}
+
+/// Componentes de cargas sociales (46.24% total).
+model VentasCargaSocial {
+  id         String   @id @default(cuid())
+  codigo     String   @unique
+  nombre     String
+  porcentaje Decimal  @db.Decimal(8, 4)
+  grupo      String
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("ventas_cargas_sociales")
+}
+
+/// Pagos extras (feriados, vacaciones, cubre comidas, etc.).
+model VentasPagoExtra {
+  id          String   @id @default(cuid())
+  codigo      String   @unique
+  nombre      String
+  tipo        String
+  valor       Decimal  @db.Decimal(15, 4)
+  descripcion String?  @db.Text
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("ventas_pagos_extras")
+}
+
+/// Insumos operativos por oficial.
+model VentasInsumoItem {
+  id                String               @id @default(cuid())
+  codigo            String               @unique
+  nombre            String
+  categoria         String
+  equipamientos     VentasEquipamiento[]
+  costoUnitario     Decimal              @db.Decimal(15, 2)
+  depreciacionMeses Int                  @default(12)
+  sortOrder         Int                  @default(0)
+  isActive          Boolean              @default(true)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@map("ventas_insumo_items")
+}
+
+/// Variante de insumos por hoja Excel (ej. 3,89AF, 1ANL) según factor de oficiales y equipamiento.
+model VentasInsumoVariante {
+  id              String             @id @default(cuid())
+  codigoHoja      String             @unique
+  equipamiento    VentasEquipamiento
+  factorOficiales Decimal            @db.Decimal(8, 4)
+  montoMensual    Decimal            @db.Decimal(15, 2)
+  descripcion     String?
+  sortOrder       Int                @default(0)
+  isActive        Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([equipamiento, factorOficiales])
+  @@map("ventas_insumo_variantes")
+}
+
+/// Gastos administrativos (hoja GA).
+model VentasGastoAdmin {
+  id           String   @id @default(cuid())
+  codigo       String   @unique
+  nombre       String
+  montoMensual Decimal  @db.Decimal(15, 2)
+  notas        String?  @db.Text
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("ventas_gastos_admin")
+}
+
+/// Índices de actualización (MTSS, IPPI, IPC).
+model VentasIndiceActualizacion {
+  id        String   @id @default(cuid())
+  codigo    String   @unique
+  nombre    String
+  valor     Decimal? @db.Decimal(12, 6)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("ventas_indices_actualizacion")
+}
+
+/// Presupuesto de licitación vinculado a una oportunidad.
+model VentasPresupuesto {
+  id                String                       @id @default(cuid())
+  oportunidadId     String?                      @unique
+  oportunidad       VentasOportunidad?           @relation(fields: [oportunidadId], references: [id], onDelete: SetNull)
+  licitacionNo      String
+  compania          String
+  nombre            String?
+  anioBase          Int                          @default(2026)
+  polizaInsPct      Decimal                      @default(5.75) @db.Decimal(8, 4)
+  ivaPct            Decimal                      @default(13) @db.Decimal(8, 4)
+  margenUtilidadPct Decimal                      @default(7) @db.Decimal(8, 4)
+  imprevistosPct    Decimal                      @default(0.01) @db.Decimal(8, 4)
+  estado            VentasPresupuestoEstado      @default(BORRADOR)
+  totalMensual      Decimal?                     @db.Decimal(15, 2)
+  totalAnual        Decimal?                     @db.Decimal(15, 2)
+  totalConIva       Decimal?                     @db.Decimal(15, 2)
+  estructuraResumen Json?
+  /// Valores del catálogo modificados solo en este presupuesto (vs. parametrización general).
+  catalogOverrides  Json?
+  createdById       String?
+  createdBy         User?                        @relation("VentasPresupuestoCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  lineas            VentasPresupuestoLinea[]
+  tolerancia        VentasPresupuestoTolerancia?
+
+  @@index([licitacionNo])
+  @@index([estado])
+  @@map("ventas_presupuestos")
+}
+
+/// Línea de detalle de presupuesto (hoja DETALLE).
+model VentasPresupuestoLinea {
+  id               String              @id @default(cuid())
+  presupuestoId    String
+  presupuesto      VentasPresupuesto   @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+  numeroLinea      String
+  descripcion      String
+  jornadaCodigo    VentasJornadaCodigo
+  equipamiento     VentasEquipamiento
+  cantidadPuestos  Int
+  factorOficiales  Decimal             @default(1) @db.Decimal(8, 4)
+  /// Hoja Excel de insumos (ej. 3,89AF-L) cuando varias variantes comparten eq+factor.
+  codigoHojaInsumo String?
+  costoMo          Decimal?            @db.Decimal(15, 2)
+  costoGa          Decimal?            @db.Decimal(15, 2)
+  costoInDirecto   Decimal?            @db.Decimal(15, 2)
+  costoInIndirecto Decimal?            @db.Decimal(15, 2)
+  imprevistos      Decimal?            @db.Decimal(15, 2)
+  margenUtilidad   Decimal?            @db.Decimal(15, 2)
+  precioMensual    Decimal?            @db.Decimal(15, 2)
+  precioAnual      Decimal?            @db.Decimal(15, 2)
+  precioConIva     Decimal?            @db.Decimal(15, 2)
+  desglose         Json?
+  sortOrder        Int                 @default(0)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([presupuestoId])
+  @@map("ventas_presupuesto_lineas")
+}
+
+/// Comparativo de tolerancia (oferta propia vs competencia).
+model VentasPresupuestoTolerancia {
+  id                String            @id @default(cuid())
+  presupuestoId     String            @unique
+  presupuesto       VentasPresupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+  ofertaPropia      Decimal?          @db.Decimal(15, 2)
+  ofertaCompetencia Decimal?          @db.Decimal(15, 2)
+  ofertaCliente     Decimal?          @db.Decimal(15, 2)
+  observaciones     String?           @db.Text
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@map("ventas_presupuesto_tolerancia")
+}
+
+
+
+/// Parametrización general de presupuestos (valores por defecto para nuevos presupuestos).
+model VentasPresupuestoConfig {
+  id                String   @id @default("default")
+  compania          String   @default("SEGURIDAD TANGO S.A")
+  anioBase          Int      @default(2026)
+  polizaInsPct      Decimal  @default(5.75) @db.Decimal(8, 4)
+  ivaPct            Decimal  @default(13) @db.Decimal(8, 4)
+  margenUtilidadPct Decimal  @default(7.523687797366793) @db.Decimal(12, 8)
+  imprevistosPct    Decimal  @default(0.01) @db.Decimal(8, 4)
+  updatedAt         DateTime @updatedAt
+  createdAt         DateTime @default(now())
+
+  @@map("ventas_presupuesto_config")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Módulo: Facturación Electrónica Costa Rica (FE)
+// 1 FeEmpresa ↔ 1 Company. Tablas fe_*. Ver src/modules/facturacion-electronica/
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum FeAmbiente {
+  STAGING
+  PRODUCCION
+}
+
+enum FeFacturaEstado {
+  BORRADOR
+  PENDIENTE_ENVIO
+  ENVIADA
+  ACEPTADA
+  ACEPTADA_PARCIALMENTE
+  RECHAZADA
+  ERROR
+  ANULADA
+}
+
+enum FeComprobanteTipo {
+  FACTURA_ELECTRONICA
+  NOTA_DEBITO
+  NOTA_CREDITO
+  TIQUETE_ELECTRONICO
+  MENSAJE_RECEPTOR
+  FACTURA_ELECTRONICA_EXPORTACION
+  FACTURA_ELECTRONICA_COMPRA
+  RECIBO_ELECTRONICO_PAGO
+}
+
+enum FeEstadoHaciendaCodigo {
+  PENDIENTE
+  RECIBIDO
+  PROCESANDO
+  ACEPTADO
+  ACEPTADO_PARCIALMENTE
+  RECHAZADO
+  ERROR
+}
+
+enum FeCondicionVenta {
+  CONTADO
+  CREDITO
+  CONSIGNACION
+  APARTADO
+  ARRENDAMIENTO_OPCION_COMPRA
+  ARRENDAMIENTO_FUNCION_FINANCIERA
+  VENTA_MERCANCIA_NO_NACIONALIZADA
+  VENTA_BIENES_USADOS
+  ARRENDAMIENTO_OPERATIVO
+  ARRENDAMIENTO_FINANCIERO
+  PAGO_SERVICIOS_ESTADO
+  VENTA_CREDITO_IVA_90_DIAS
+  PAGO_VENTA_PARCELADO
+  PAGO_VENTA_CREDITO
+  OTROS
+}
+
+enum FeMedioPago {
+  EFECTIVO
+  TARJETA
+  CHEQUE
+  TRANSFERENCIA_DEPOSITO
+  RECAUDADO_TERCEROS
+  SINPE_MOVIL
+  PLATAFORMA_DIGITAL
+  OTROS
+}
+
+enum FeMoneda {
+  CRC
+  USD
+  EUR
+}
+
+enum FeIdentificacionTipo {
+  FISICA
+  JURIDICA
+  DIMEX
+  NITE
+  EXTRANJERO
+  NO_CONTRIBUYENTE
+}
+
+enum FeHistorialEnvioOperacion {
+  GENERAR_XML
+  FIRMAR_XML
+  OBTENER_TOKEN
+  ENVIAR_COMPROBANTE
+  CONSULTAR_ESTADO
+  REENVIAR_CORREO
+  GENERAR_PDF
+  ERROR
+}
+
+enum FeHistorialEnvioResultado {
+  EXITO
+  ERROR
+  REINTENTO
+}
+
+enum FeAdjuntoOrigen {
+  GENERADO
+  RESPUESTA_HACIENDA
+  IMPORTADO
+}
+
+enum FeAuditoriaAccion {
+  CREATE
+  UPDATE
+  DELETE
+  SOFT_DELETE
+  RESTORE
+  ENVIAR
+  ANULAR
+}
+
+enum FeJobTipo {
+  REINTENTO_ENVIO
+  CONSULTA_ESTADO
+  REENVIO_CORREO
+  LIMPIEZA_ERRORES
+  GENERACION_LOGS
+  PROCESAR_CORREO_ENTRANTE
+}
+
+enum FeComprobanteRecibidoEstado {
+  PENDIENTE
+  SIN_XML
+  AUTO_ACEPTADO
+  ACEPTADO
+  ACEPTADO_PARCIAL
+  RECHAZADO
+  ERROR
+}
+
+enum FeComprobanteRecibidoOrigen {
+  IMAP
+  MANUAL
+}
+
+/// Configuración FE del emisor — relación 1:1 con Company del ERP.
+model FeEmpresa {
+  id          String  @id @default(uuid()) @db.Uuid
+  companyCode String  @unique
+  company     Company @relation(fields: [companyCode], references: [code])
+
+  nombreComercial    String
+  razonSocial        String
+  tipoIdentificacion FeIdentificacionTipo @default(JURIDICA)
+  cedulaJuridica     String
+  actividadEconomica String?
+
+  /// Cédula del proveedor de sistemas (v4.4). Si vacío, se usa la cédula del emisor.
+  proveedorSistemas String? @db.VarChar(20)
+  /// Situación en clave numérica: 1=normal, 2=contingencia, 3=sin internet. Tribu usa 2.
+  claveSituacion    String? @default("1") @db.VarChar(1)
+
+  /// Si true, exige provincia/cantón/distrito del receptor al emitir.
+  exigirUbicacionReceptor Boolean @default(true)
+
+  ambiente FeAmbiente @default(STAGING)
+
+  // ── Credenciales PRODUCCIÓN ────────────────────────────────────────────────
+  certificadoPath        String?
+  certificadoFileName    String?
+  certificadoExpiresAt   DateTime?
+  certificadoPasswordEnc String?   @db.Text
+
+  /// Usuario ATV Hacienda producción.
+  atvUsuario     String?
+  atvPasswordEnc String? @db.Text
+
+  // ── Credenciales STAGING (pruebas) ────────────────────────────────────────
+  certificadoPathStg        String?
+  certificadoFileNameStg    String?
+  certificadoExpiresAtStg   DateTime?
+  certificadoPasswordEncStg String?   @db.Text
+
+  /// Usuario ATV Hacienda pruebas (ej. cpf-…@stag.comprobanteselectronicos.go.cr).
+  atvUsuarioStg     String?
+  atvPasswordEncStg String? @db.Text
+
+  correoRemitente String?
+  correoNombre    String?
+  /// CC fijo en todos los correos de comprobantes (coma o punto y coma).
+  correoCopiaFija String? @db.Text
+
+  mailProvider String   @default("CUSTOM_SMTP") @db.VarChar(20)
+  smtpHost     String?
+  smtpPort     Int?
+  smtpSecure   Boolean?
+  smtpUser     String?
+  smtpPass     String?
+  smtpFrom     String?
+
+  /// Buzón IMAP para facturas de proveedores (uno por empresa).
+  imapEnabled      Boolean  @default(false)
+  imapHost         String?
+  imapPort         Int?     @default(993)
+  imapSecure       Boolean? @default(true)
+  imapUser         String?
+  imapPass         String?
+  imapFolder       String?  @default("INBOX")
+  imapLastUid      Int?
+  imapPuntoVentaId String?  @db.Uuid
+
+  logoPath String?
+
+  telefono           String?
+  email              String?
+  direccionProvincia String?
+  direccionCanton    String?
+  direccionDistrito  String?
+  direccionBarrio    String?
+  direccionOtras     String? @db.Text
+
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+  updatedById String?
+
+  sucursales            FeSucursal[]
+  clientes              FeCliente[]
+  comprobantes          FeComprobanteElectronico[]
+  facturas              FeFactura[]
+  facturasCompra        FeFacturaCompra[]
+  recibosPago           FeReciboPago[]
+  mensajesReceptor      FeMensajeReceptor[]
+  comprobantesRecibidos FeComprobanteRecibido[]
+  gastosProveedor       FeGastoProveedor[]
+  proveedoresConfianza  FeProveedorConfianza[]
+  cabysFavoritos        FeCabysFavorito[]
+  imapPuntoVenta        FePuntoVenta?              @relation("FeEmpresaImapPuntoVenta", fields: [imapPuntoVentaId], references: [id], onDelete: SetNull)
+  auditorias            FeAuditoria[]
+  jobs                  FeJobQueue[]
+
+  @@index([deletedAt])
+  @@index([ambiente])
+  @@index([imapPuntoVentaId])
+  @@map("fe_empresas")
+}
+
+model FeSucursal {
+  id          String    @id @default(uuid()) @db.Uuid
+  empresaId   String    @db.Uuid
+  codigo      String    @db.VarChar(3)
+  nombre      String
+  telefono    String?
+  direccion   String?   @db.Text
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+  updatedById String?
+
+  empresa     FeEmpresa      @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  puntosVenta FePuntoVenta[]
+
+  @@unique([empresaId, codigo])
+  @@index([empresaId])
+  @@index([deletedAt])
+  @@map("fe_sucursales")
+}
+
+model FePuntoVenta {
+  id          String    @id @default(uuid()) @db.Uuid
+  sucursalId  String    @db.Uuid
+  codigo      String    @db.VarChar(5)
+  nombre      String
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+  updatedById String?
+
+  sucursal         FeSucursal                 @relation(fields: [sucursalId], references: [id], onDelete: Restrict)
+  consecutivos     FeConsecutivo[]
+  comprobantes     FeComprobanteElectronico[]
+  facturas         FeFactura[]
+  facturasCompra   FeFacturaCompra[]
+  recibosPago      FeReciboPago[]
+  mensajesReceptor FeMensajeReceptor[]
+  empresasImap     FeEmpresa[]                @relation("FeEmpresaImapPuntoVenta")
+
+  @@index([sucursalId])
+  @@index([deletedAt])
+  @@map("fe_puntos_venta")
+}
+
+model FeConsecutivo {
+  id              String            @id @default(uuid()) @db.Uuid
+  puntoVentaId    String            @db.Uuid
+  tipoComprobante FeComprobanteTipo
+  ultimoNumero    BigInt            @default(0)
+  version         Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+
+  puntoVenta FePuntoVenta @relation(fields: [puntoVentaId], references: [id], onDelete: Restrict)
+
+  @@unique([puntoVentaId, tipoComprobante])
+  @@index([puntoVentaId])
+  @@map("fe_consecutivos")
+}
+
+model FeCliente {
+  id                 String               @id @default(uuid()) @db.Uuid
+  empresaId          String               @db.Uuid
+  tipoIdentificacion FeIdentificacionTipo
+  identificacion     String
+  nombre             String
+  nombreComercial    String?
+  actividadEconomica String?              @db.VarChar(20)
+  email              String?
+  emailCopia         String?
+  telefono           String?
+  direccionProvincia String?
+  direccionCanton    String?
+  direccionDistrito  String?
+  direccionBarrio    String?
+  direccionOtras     String?              @db.Text
+  externalRef        String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+  updatedById String?
+
+  empresa  FeEmpresa   @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  facturas FeFactura[]
+
+  @@unique([empresaId, identificacion])
+  @@index([empresaId])
+  @@index([deletedAt])
+  @@map("fe_clientes")
+}
+
+model FeComprobanteElectronico {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  empresaId            String                 @db.Uuid
+  puntoVentaId         String                 @db.Uuid
+  tipo                 FeComprobanteTipo
+  claveNumerica        String                 @unique @db.VarChar(50)
+  consecutivo          String                 @db.VarChar(20)
+  fechaEmision         DateTime
+  estadoHaciendaActual FeEstadoHaciendaCodigo @default(PENDIENTE)
+  mensajeHacienda      String?                @db.Text
+  detalleHacienda      String?                @db.Text
+  xmlSinFirmaPath      String?
+  xmlFirmadoPath       String?
+  xmlRespuestaPath     String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  deletedAt            DateTime?
+  createdById          String?
+  updatedById          String?
+
+  empresa         FeEmpresa          @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  puntoVenta      FePuntoVenta       @relation(fields: [puntoVentaId], references: [id], onDelete: Restrict)
+  factura         FeFactura?
+  notaCredito     FeNotaCredito?
+  notaDebito      FeNotaDebito?
+  mensajeReceptor FeMensajeReceptor?
+  facturaCompra   FeFacturaCompra?
+  reciboPago      FeReciboPago?
+  estadosHacienda FeEstadoHacienda[]
+  historialEnvios FeHistorialEnvio[]
+  adjuntosXml     FeAdjuntoXML[]
+  adjuntosPdf     FeAdjuntoPDF[]
+  jobs            FeJobQueue[]
+
+  @@index([empresaId, fechaEmision])
+  @@index([empresaId, estadoHaciendaActual])
+  @@index([puntoVentaId])
+  @@index([deletedAt])
+  @@map("fe_comprobantes_electronicos")
+}
+
+model FeFactura {
+  id                 String            @id @default(uuid()) @db.Uuid
+  empresaId          String            @db.Uuid
+  puntoVentaId       String            @db.Uuid
+  clienteId          String?           @db.Uuid
+  comprobanteId      String?           @unique @db.Uuid
+  tipoDocumento      FeComprobanteTipo @default(FACTURA_ELECTRONICA)
+  fecha              DateTime
+  moneda             FeMoneda          @default(CRC)
+  tipoCambio         Decimal           @default(1) @db.Decimal(18, 5)
+  condicionVenta     FeCondicionVenta
+  condicionVentaOtro String?           @db.VarChar(100)
+  medioPago          FeMedioPago
+  medioPagoOtro      String?           @db.VarChar(100)
+  mediosPago         Json?
+  otrosCargos        Json?
+  plazoCredito       Int?
+  observaciones      String?           @db.Text
+  subtotal           Decimal           @db.Decimal(18, 5)
+  totalDescuentos    Decimal           @default(0) @db.Decimal(18, 5)
+  totalImpuestos     Decimal           @default(0) @db.Decimal(18, 5)
+  totalOtrosCargos   Decimal           @default(0) @db.Decimal(18, 5)
+  totalIvaDevuelto   Decimal           @default(0) @db.Decimal(18, 5)
+  total              Decimal           @db.Decimal(18, 5)
+  estado             FeFacturaEstado   @default(BORRADOR)
+  asientoContableRef String?
+  contabilizadoAt    DateTime?
+  /// Integración futura con facturación mensual del ERP (sin automatizar aún).
+  facturaMensualId   String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  deletedAt          DateTime?
+  createdById        String?
+  updatedById        String?
+
+  empresa        FeEmpresa                 @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  puntoVenta     FePuntoVenta              @relation(fields: [puntoVentaId], references: [id], onDelete: Restrict)
+  cliente        FeCliente?                @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  comprobante    FeComprobanteElectronico? @relation(fields: [comprobanteId], references: [id], onDelete: Restrict)
+  facturaMensual FacturaMensual?           @relation(fields: [facturaMensualId], references: [id], onDelete: SetNull)
+  detalles       FeFacturaDetalle[]
+  notasCredito   FeNotaCredito[]
+  notasDebito    FeNotaDebito[]
+  recibosPago    FeReciboPago[]
+
+  @@index([empresaId, fecha])
+  @@index([empresaId, tipoDocumento])
+  @@index([empresaId, estado])
+  @@index([clienteId])
+  @@index([facturaMensualId])
+  @@index([deletedAt])
+  @@map("fe_facturas")
+}
+
+model FeFacturaDetalle {
+  id                       String    @id @default(uuid()) @db.Uuid
+  facturaId                String    @db.Uuid
+  numeroLinea              Int
+  codigo                   String?
+  codigoCabys              String?   @db.VarChar(13)
+  descripcion              String    @db.Text
+  cantidad                 Decimal   @db.Decimal(18, 5)
+  unidadMedida             String    @db.VarChar(10)
+  precioUnitario           Decimal   @db.Decimal(18, 5)
+  montoDescuento           Decimal   @default(0) @db.Decimal(18, 5)
+  codigoDescuento          String?   @db.VarChar(2)
+  naturalezaDescuento      String?   @db.VarChar(80)
+  exonTipoDocumento        String?   @db.VarChar(2)
+  exonNumeroDocumento      String?   @db.VarChar(40)
+  exonNombreInstitucion    String?   @db.VarChar(160)
+  exonFechaEmision         DateTime?
+  exonPorcentaje           Decimal?  @db.Decimal(5, 2)
+  exonMonto                Decimal?  @db.Decimal(18, 5)
+  ivaCobradoFabrica        String?   @db.VarChar(2)
+  impuestoAsumidoFabrica   Decimal   @default(0) @db.Decimal(18, 5)
+  partidaArancelaria       String?   @db.VarChar(12)
+  montoImpuestoExportacion Decimal?  @db.Decimal(18, 5)
+  codigoImpuesto           String    @default("08") @db.VarChar(2)
+  tarifaImpuesto           Decimal   @default(13) @db.Decimal(5, 2)
+  montoImpuesto            Decimal   @default(0) @db.Decimal(18, 5)
+  totalLinea               Decimal   @db.Decimal(18, 5)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  deletedAt                DateTime?
+
+  factura FeFactura @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+
+  @@unique([facturaId, numeroLinea])
+  @@index([facturaId])
+  @@map("fe_factura_detalles")
+}
+
+enum FeNotaReferenciaTipo {
+  FACTURA_VENTA
+  FACTURA_COMPRA
+  RECIBO_PAGO
+}
+
+model FeNotaCredito {
+  id                        String               @id @default(uuid()) @db.Uuid
+  comprobanteId             String?              @unique @db.Uuid
+  referenciaTipo            FeNotaReferenciaTipo @default(FACTURA_VENTA)
+  facturaReferenciaId       String?              @db.Uuid
+  facturaCompraReferenciaId String?              @db.Uuid
+  reciboPagoReferenciaId    String?              @db.Uuid
+  claveReferencia           String               @db.VarChar(50)
+  tipoDocReferencia         String               @default("01") @db.VarChar(2)
+  codigoReferencia          String               @default("01") @db.VarChar(2)
+  razon                     String               @db.Text
+  subtotal                  Decimal              @db.Decimal(18, 5)
+  totalDescuentos           Decimal              @default(0) @db.Decimal(18, 5)
+  totalImpuestos            Decimal              @default(0) @db.Decimal(18, 5)
+  total                     Decimal              @db.Decimal(18, 5)
+  estado                    FeFacturaEstado      @default(BORRADOR)
+  asientoContableRef        String?
+  contabilizadoAt           DateTime?
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+  deletedAt                 DateTime?
+  createdById               String?
+  updatedById               String?
+
+  comprobante             FeComprobanteElectronico? @relation(fields: [comprobanteId], references: [id], onDelete: Restrict)
+  facturaReferencia       FeFactura?                @relation(fields: [facturaReferenciaId], references: [id], onDelete: Restrict)
+  facturaCompraReferencia FeFacturaCompra?          @relation(fields: [facturaCompraReferenciaId], references: [id], onDelete: Restrict)
+  reciboPagoReferencia    FeReciboPago?             @relation(fields: [reciboPagoReferenciaId], references: [id], onDelete: Restrict)
+  detalles                FeNotaCreditoDetalle[]
+
+  @@index([facturaReferenciaId])
+  @@index([facturaCompraReferenciaId])
+  @@index([reciboPagoReferenciaId])
+  @@index([deletedAt])
+  @@map("fe_notas_credito")
+}
+
+model FeNotaCreditoDetalle {
+  id             String    @id @default(uuid()) @db.Uuid
+  notaCreditoId  String    @db.Uuid
+  numeroLinea    Int
+  codigo         String?
+  codigoCabys    String?   @db.VarChar(13)
+  descripcion    String    @db.Text
+  cantidad       Decimal   @db.Decimal(18, 5)
+  unidadMedida   String    @db.VarChar(10)
+  precioUnitario Decimal   @db.Decimal(18, 5)
+  montoDescuento Decimal   @default(0) @db.Decimal(18, 5)
+  codigoImpuesto String    @default("08") @db.VarChar(2)
+  tarifaImpuesto Decimal   @default(13) @db.Decimal(5, 2)
+  montoImpuesto  Decimal   @default(0) @db.Decimal(18, 5)
+  totalLinea     Decimal   @db.Decimal(18, 5)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  notaCredito FeNotaCredito @relation(fields: [notaCreditoId], references: [id], onDelete: Cascade)
+
+  @@unique([notaCreditoId, numeroLinea])
+  @@index([notaCreditoId])
+  @@map("fe_nota_credito_detalles")
+}
+
+model FeNotaDebito {
+  id                        String               @id @default(uuid()) @db.Uuid
+  comprobanteId             String?              @unique @db.Uuid
+  referenciaTipo            FeNotaReferenciaTipo @default(FACTURA_VENTA)
+  facturaReferenciaId       String?              @db.Uuid
+  facturaCompraReferenciaId String?              @db.Uuid
+  reciboPagoReferenciaId    String?              @db.Uuid
+  claveReferencia           String               @db.VarChar(50)
+  tipoDocReferencia         String               @default("01") @db.VarChar(2)
+  codigoReferencia          String               @default("01") @db.VarChar(2)
+  razon                     String               @db.Text
+  subtotal                  Decimal              @db.Decimal(18, 5)
+  totalDescuentos           Decimal              @default(0) @db.Decimal(18, 5)
+  totalImpuestos            Decimal              @default(0) @db.Decimal(18, 5)
+  total                     Decimal              @db.Decimal(18, 5)
+  estado                    FeFacturaEstado      @default(BORRADOR)
+  asientoContableRef        String?
+  contabilizadoAt           DateTime?
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+  deletedAt                 DateTime?
+  createdById               String?
+  updatedById               String?
+
+  comprobante             FeComprobanteElectronico? @relation(fields: [comprobanteId], references: [id], onDelete: Restrict)
+  facturaReferencia       FeFactura?                @relation(fields: [facturaReferenciaId], references: [id], onDelete: Restrict)
+  facturaCompraReferencia FeFacturaCompra?          @relation(fields: [facturaCompraReferenciaId], references: [id], onDelete: Restrict)
+  reciboPagoReferencia    FeReciboPago?             @relation(fields: [reciboPagoReferenciaId], references: [id], onDelete: Restrict)
+  detalles                FeNotaDebitoDetalle[]
+
+  @@index([facturaReferenciaId])
+  @@index([facturaCompraReferenciaId])
+  @@index([reciboPagoReferenciaId])
+  @@index([deletedAt])
+  @@map("fe_notas_debito")
+}
+
+model FeNotaDebitoDetalle {
+  id             String    @id @default(uuid()) @db.Uuid
+  notaDebitoId   String    @db.Uuid
+  numeroLinea    Int
+  codigo         String?
+  codigoCabys    String?   @db.VarChar(13)
+  descripcion    String    @db.Text
+  cantidad       Decimal   @db.Decimal(18, 5)
+  unidadMedida   String    @db.VarChar(10)
+  precioUnitario Decimal   @db.Decimal(18, 5)
+  montoDescuento Decimal   @default(0) @db.Decimal(18, 5)
+  codigoImpuesto String    @default("08") @db.VarChar(2)
+  tarifaImpuesto Decimal   @default(13) @db.Decimal(5, 2)
+  montoImpuesto  Decimal   @default(0) @db.Decimal(18, 5)
+  totalLinea     Decimal   @db.Decimal(18, 5)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  notaDebito FeNotaDebito @relation(fields: [notaDebitoId], references: [id], onDelete: Cascade)
+
+  @@unique([notaDebitoId, numeroLinea])
+  @@index([notaDebitoId])
+  @@map("fe_nota_debito_detalles")
+}
+
+model FeMensajeReceptor {
+  id                    String          @id @default(uuid()) @db.Uuid
+  empresaId             String          @db.Uuid
+  puntoVentaId          String          @db.Uuid
+  comprobanteId         String?         @unique @db.Uuid
+  comprobanteRecibidoId String?         @unique @db.Uuid
+  claveComprobante      String          @db.VarChar(50)
+  cedulaEmisor          String
+  tipoMensaje           String          @db.VarChar(1)
+  detalleMensaje        String?         @db.Text
+  montoTotalImpuesto    Decimal?        @db.Decimal(18, 5)
+  montoTotal            Decimal?        @db.Decimal(18, 5)
+  estado                FeFacturaEstado @default(BORRADOR)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  deletedAt             DateTime?
+  createdById           String?
+  updatedById           String?
+
+  empresa             FeEmpresa                 @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  puntoVenta          FePuntoVenta              @relation(fields: [puntoVentaId], references: [id], onDelete: Restrict)
+  comprobante         FeComprobanteElectronico? @relation(fields: [comprobanteId], references: [id], onDelete: Restrict)
+  comprobanteRecibido FeComprobanteRecibido?    @relation(fields: [comprobanteRecibidoId], references: [id], onDelete: SetNull)
+
+  @@index([empresaId])
+  @@index([claveComprobante])
+  @@index([deletedAt])
+  @@map("fe_mensajes_receptor")
+}
+
+model FeProveedorConfianza {
+  id          String    @id @default(uuid()) @db.Uuid
+  empresaId   String    @db.Uuid
+  cedula      String    @db.VarChar(20)
+  nombre      String?
+  autoAceptar Boolean   @default(true)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+  updatedById String?
+
+  empresa FeEmpresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@unique([empresaId, cedula])
+  @@index([empresaId])
+  @@index([deletedAt])
+  @@map("fe_proveedores_confianza")
+}
+
+model FeCabysFavorito {
+  id          String    @id @default(uuid()) @db.Uuid
+  empresaId   String    @db.Uuid
+  codigo      String    @db.VarChar(13)
+  descripcion String    @db.VarChar(200)
+  impuesto    Decimal?  @db.Decimal(5, 2)
+  orden       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+  updatedById String?
+
+  empresa FeEmpresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@unique([empresaId, codigo])
+  @@index([empresaId])
+  @@index([deletedAt])
+  @@map("fe_cabys_favoritos")
+}
+
+model FeComprobanteRecibido {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  empresaId          String                      @db.Uuid
+  estado             FeComprobanteRecibidoEstado @default(PENDIENTE)
+  origen             FeComprobanteRecibidoOrigen @default(IMAP)
+  clave              String?                     @db.VarChar(50)
+  cedulaEmisor       String?
+  nombreEmisor       String?
+  consecutivoEmisor  String?                     @db.VarChar(20)
+  fechaEmision       DateTime?
+  montoTotal         Decimal?                    @db.Decimal(18, 5)
+  montoTotalImpuesto Decimal?                    @db.Decimal(18, 5)
+  emailMessageId     String?                     @db.VarChar(500)
+  emailUid           Int?
+  emailSubject       String?                     @db.Text
+  emailFrom          String?                     @db.Text
+  emailReceivedAt    DateTime?
+  xmlPath            String?
+  pdfPath            String?
+  parsedJson         Json?
+  detalleError       String?                     @db.Text
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  deletedAt          DateTime?
+  createdById        String?
+  updatedById        String?
+
+  empresa         FeEmpresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  mensajeReceptor FeMensajeReceptor?
+  gasto           FeGastoProveedor?
+
+  @@unique([empresaId, clave])
+  @@unique([empresaId, emailMessageId])
+  @@index([empresaId, estado])
+  @@index([deletedAt])
+  @@map("fe_comprobantes_recibidos")
+}
+
+model FeGastoProveedor {
+  id                    String                      @id @default(uuid()) @db.Uuid
+  empresaId             String                      @db.Uuid
+  comprobanteRecibidoId String                      @unique @db.Uuid
+  clave                 String                      @db.VarChar(50)
+  fechaEmision          DateTime
+  cedulaEmisor          String
+  nombreEmisor          String?
+  tipoComprobante       String?                     @db.VarChar(64)
+  moneda                FeMoneda                    @default(CRC)
+  tipoCambio            Decimal                     @default(1) @db.Decimal(18, 5)
+  subtotal              Decimal                     @db.Decimal(18, 5)
+  totalDescuentos       Decimal                     @default(0) @db.Decimal(18, 5)
+  totalImpuestos        Decimal                     @default(0) @db.Decimal(18, 5)
+  total                 Decimal                     @db.Decimal(18, 5)
+  estadoRecibo          FeComprobanteRecibidoEstado
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  deletedAt             DateTime?
+  createdById           String?
+  updatedById           String?
+
+  empresa             FeEmpresa                  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  comprobanteRecibido FeComprobanteRecibido      @relation(fields: [comprobanteRecibidoId], references: [id], onDelete: Cascade)
+  impuestos           FeGastoProveedorImpuesto[]
+
+  @@index([empresaId, fechaEmision])
+  @@index([deletedAt])
+  @@map("fe_gastos_proveedor")
+}
+
+model FeGastoProveedorImpuesto {
+  id              String   @id @default(uuid()) @db.Uuid
+  gastoId         String   @db.Uuid
+  codigoImpuesto  String   @default("01") @db.VarChar(2)
+  codigoTarifaIVA String   @db.VarChar(2)
+  tarifaPercent   Decimal  @db.Decimal(5, 2)
+  montoImpuesto   Decimal  @db.Decimal(18, 5)
+  createdAt       DateTime @default(now())
+
+  gasto FeGastoProveedor @relation(fields: [gastoId], references: [id], onDelete: Cascade)
+
+  @@index([gastoId])
+  @@map("fe_gasto_proveedor_impuestos")
+}
+
+model FeFacturaCompra {
+  id                            String               @id @default(uuid()) @db.Uuid
+  empresaId                     String               @db.Uuid
+  puntoVentaId                  String               @db.Uuid
+  comprobanteId                 String?              @unique @db.Uuid
+  fecha                         DateTime
+  moneda                        FeMoneda             @default(CRC)
+  tipoCambio                    Decimal              @default(1) @db.Decimal(18, 5)
+  condicionVenta                FeCondicionVenta     @default(CONTADO)
+  proveedorTipoIdentificacion   FeIdentificacionTipo
+  proveedorIdentificacion       String
+  proveedorNombre               String
+  proveedorOtrasSenasExtranjero String?              @db.VarChar(300)
+  claveReferencia               String?              @db.VarChar(50)
+  codigoReferencia              String               @default("16") @db.VarChar(2)
+  subtotal                      Decimal              @db.Decimal(18, 5)
+  totalDescuentos               Decimal              @default(0) @db.Decimal(18, 5)
+  totalImpuestos                Decimal              @default(0) @db.Decimal(18, 5)
+  total                         Decimal              @db.Decimal(18, 5)
+  observaciones                 String?              @db.Text
+  estado                        FeFacturaEstado      @default(BORRADOR)
+  createdAt                     DateTime             @default(now())
+  updatedAt                     DateTime             @updatedAt
+  deletedAt                     DateTime?
+  createdById                   String?
+  updatedById                   String?
+
+  empresa      FeEmpresa                 @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  puntoVenta   FePuntoVenta              @relation(fields: [puntoVentaId], references: [id], onDelete: Restrict)
+  comprobante  FeComprobanteElectronico? @relation(fields: [comprobanteId], references: [id], onDelete: Restrict)
+  detalles     FeFacturaCompraDetalle[]
+  notasCredito FeNotaCredito[]
+  notasDebito  FeNotaDebito[]
+
+  @@index([empresaId, fecha])
+  @@index([empresaId, estado])
+  @@index([deletedAt])
+  @@map("fe_facturas_compra")
+}
+
+model FeFacturaCompraDetalle {
+  id              String    @id @default(uuid()) @db.Uuid
+  facturaCompraId String    @db.Uuid
+  numeroLinea     Int
+  codigoCabys     String?   @db.VarChar(13)
+  descripcion     String    @db.Text
+  cantidad        Decimal   @db.Decimal(18, 5)
+  unidadMedida    String    @db.VarChar(10)
+  precioUnitario  Decimal   @db.Decimal(18, 5)
+  montoDescuento  Decimal   @default(0) @db.Decimal(18, 5)
+  codigoImpuesto  String    @default("08") @db.VarChar(2)
+  tarifaImpuesto  Decimal   @default(13) @db.Decimal(5, 2)
+  montoImpuesto   Decimal   @default(0) @db.Decimal(18, 5)
+  totalLinea      Decimal   @db.Decimal(18, 5)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  facturaCompra FeFacturaCompra @relation(fields: [facturaCompraId], references: [id], onDelete: Cascade)
+
+  @@unique([facturaCompraId, numeroLinea])
+  @@index([facturaCompraId])
+  @@map("fe_factura_compra_detalles")
+}
+
+model FeReciboPago {
+  id                  String           @id @default(uuid()) @db.Uuid
+  empresaId           String           @db.Uuid
+  puntoVentaId        String           @db.Uuid
+  comprobanteId       String?          @unique @db.Uuid
+  facturaReferenciaId String?          @db.Uuid
+  claveReferencia     String           @db.VarChar(50)
+  codigoReferencia    String           @default("01") @db.VarChar(2)
+  tipoDocReferencia   String           @default("01") @db.VarChar(2)
+  fechaReferencia     DateTime?
+  razon               String?          @db.Text
+  condicionVenta      FeCondicionVenta
+  medioPago           FeMedioPago
+  medioPagoOtro       String?          @db.VarChar(100)
+  subtotal            Decimal          @db.Decimal(18, 5)
+  totalImpuestos      Decimal          @default(0) @db.Decimal(18, 5)
+  total               Decimal          @db.Decimal(18, 5)
+  estado              FeFacturaEstado  @default(BORRADOR)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  deletedAt           DateTime?
+  createdById         String?
+  updatedById         String?
+
+  empresa           FeEmpresa                 @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  puntoVenta        FePuntoVenta              @relation(fields: [puntoVentaId], references: [id], onDelete: Restrict)
+  facturaReferencia FeFactura?                @relation(fields: [facturaReferenciaId], references: [id], onDelete: SetNull)
+  comprobante       FeComprobanteElectronico? @relation(fields: [comprobanteId], references: [id], onDelete: Restrict)
+  detalles          FeReciboPagoDetalle[]
+  notasCredito      FeNotaCredito[]
+  notasDebito       FeNotaDebito[]
+
+  @@index([empresaId, estado])
+  @@index([facturaReferenciaId])
+  @@index([deletedAt])
+  @@map("fe_recibos_pago")
+}
+
+model FeReciboPagoDetalle {
+  id             String    @id @default(uuid()) @db.Uuid
+  reciboPagoId   String    @db.Uuid
+  numeroLinea    Int
+  descripcion    String    @db.Text
+  subTotal       Decimal   @db.Decimal(18, 5)
+  tarifaImpuesto Decimal   @default(13) @db.Decimal(5, 2)
+  montoImpuesto  Decimal   @default(0) @db.Decimal(18, 5)
+  totalLinea     Decimal   @db.Decimal(18, 5)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  reciboPago FeReciboPago @relation(fields: [reciboPagoId], references: [id], onDelete: Cascade)
+
+  @@unique([reciboPagoId, numeroLinea])
+  @@index([reciboPagoId])
+  @@map("fe_recibo_pago_detalles")
+}
+
+model FeEstadoHacienda {
+  id              String                 @id @default(uuid()) @db.Uuid
+  comprobanteId   String                 @db.Uuid
+  estado          FeEstadoHaciendaCodigo
+  codigoRespuesta String?
+  mensaje         String?                @db.Text
+  detalle         String?                @db.Text
+  consultadoAt    DateTime               @default(now())
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  deletedAt       DateTime?
+
+  comprobante FeComprobanteElectronico @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+
+  @@index([comprobanteId, consultadoAt])
+  @@index([estado])
+  @@map("fe_estados_hacienda")
+}
+
+model FeHistorialEnvio {
+  id            String                    @id @default(uuid()) @db.Uuid
+  comprobanteId String                    @db.Uuid
+  operacion     FeHistorialEnvioOperacion
+  resultado     FeHistorialEnvioResultado
+  intento       Int                       @default(1)
+  httpStatus    Int?
+  duracionMs    Int?
+  requestMeta   String?                   @db.Text
+  responseMeta  String?                   @db.Text
+  errorCode     String?
+  errorMessage  String?                   @db.Text
+  correlationId String?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  deletedAt     DateTime?
+
+  comprobante FeComprobanteElectronico @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+
+  @@index([comprobanteId, createdAt])
+  @@index([operacion, resultado])
+  @@map("fe_historial_envios")
+}
+
+model FeAdjuntoXML {
+  id            String          @id @default(uuid()) @db.Uuid
+  comprobanteId String          @db.Uuid
+  origen        FeAdjuntoOrigen
+  storagePath   String
+  fileName      String
+  mimeType      String          @default("application/xml")
+  sha256        String?         @db.VarChar(64)
+  sizeBytes     Int?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  deletedAt     DateTime?
+
+  comprobante FeComprobanteElectronico @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+
+  @@index([comprobanteId])
+  @@map("fe_adjuntos_xml")
+}
+
+model FeAdjuntoPDF {
+  id            String          @id @default(uuid()) @db.Uuid
+  comprobanteId String          @db.Uuid
+  origen        FeAdjuntoOrigen @default(GENERADO)
+  storagePath   String
+  fileName      String
+  mimeType      String          @default("application/pdf")
+  sha256        String?         @db.VarChar(64)
+  sizeBytes     Int?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  deletedAt     DateTime?
+
+  comprobante FeComprobanteElectronico @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+
+  @@index([comprobanteId])
+  @@map("fe_adjuntos_pdf")
+}
+
+model FeAuditoria {
+  id           String            @id @default(uuid()) @db.Uuid
+  empresaId    String?           @db.Uuid
+  entidad      String
+  entidadId    String            @db.Uuid
+  accion       FeAuditoriaAccion
+  userId       String?
+  previousData String?           @db.Text
+  newData      String?           @db.Text
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  deletedAt    DateTime?
+
+  empresa FeEmpresa? @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+
+  @@index([entidad, entidadId])
+  @@index([empresaId, createdAt])
+  @@map("fe_auditorias")
+}
+
+model FeJobQueue {
+  id            String    @id @default(uuid()) @db.Uuid
+  empresaId     String?   @db.Uuid
+  comprobanteId String?   @db.Uuid
+  jobType       FeJobTipo
+  payload       String    @db.Text
+  runAt         DateTime
+  attempts      Int       @default(0)
+  maxAttempts   Int       @default(5)
+  lastError     String?   @db.Text
+  lockedAt      DateTime?
+  lockedBy      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  empresa     FeEmpresa?                @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+  comprobante FeComprobanteElectronico? @relation(fields: [comprobanteId], references: [id], onDelete: SetNull)
+
+  @@index([runAt, jobType])
+  @@index([comprobanteId])
+  @@index([deletedAt])
+  @@map("fe_job_queue")
+}
+
+// ─── Formularios — quizzes y encuestas editables ─────────────────────────────
+
+enum FormQuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  TEXT
+}
+
+model FormDefinition {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  title            String
+  description      String?  @db.Text
+  passScorePercent Int      @default(80)
+  isActive         Boolean  @default(true)
+  createdById      String?
+  createdBy        User?    @relation("FormCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  questions   FormQuestion[]
+  submissions FormSubmission[]
+
+  @@map("form_definitions")
+}
+
+model FormQuestion {
+  id               String           @id @default(cuid())
+  formId           String
+  form             FormDefinition   @relation(fields: [formId], references: [id], onDelete: Cascade)
+  sortOrder        Int              @default(0)
+  type             FormQuestionType
+  text             String           @db.Text
+  /// Para TRUE_FALSE: true = Verdadero es la respuesta correcta.
+  correctTrueFalse Boolean?
+  points           Int              @default(1)
+  /// Si es crítica, fallarla impide aprobar aunque el puntaje global alcance el mínimo.
+  isCritical       Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  options FormQuestionOption[]
+  answers FormSubmissionAnswer[]
+
+  @@index([formId, sortOrder])
+  @@map("form_questions")
+}
+
+model FormQuestionOption {
+  id         String       @id @default(cuid())
+  questionId String
+  question   FormQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  sortOrder  Int          @default(0)
+  label      String       @db.Text
+  isCorrect  Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([questionId, sortOrder])
+  @@map("form_question_options")
+}
+
+model FormSubmission {
+  id           String         @id @default(cuid())
+  formId       String
+  form         FormDefinition @relation(fields: [formId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User           @relation("FormSubmissionUser", fields: [userId], references: [id], onDelete: Restrict)
+  scorePercent Int?
+  passed       Boolean?
+  submittedAt  DateTime       @default(now())
+
+  answers FormSubmissionAnswer[]
+
+  @@index([formId, submittedAt])
+  @@index([userId])
+  @@map("form_submissions")
+}
+
+model FormSubmissionAnswer {
+  id           String         @id @default(cuid())
+  submissionId String
+  submission   FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId   String
+  question     FormQuestion   @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  /// { selectedOptionIds?: string[], trueFalse?: boolean, text?: string }
+  answerJson   Json
+  isCorrect    Boolean?
+
+  @@index([submissionId])
+  @@map("form_submission_answers")
+}
+
+// ─── Módulo Tickets TI (Help Desk / ITSM) ───────────────────────────────────
+
+enum TicketSlaRecordStatus {
+  ACTIVE
+  PAUSED
+  MET
+  BREACHED
+  CANCELLED
+}
+
+model TicketSequence {
+  year       Int      @unique
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@map("ticket_sequences")
+}
+
+model TicketCategory {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?  @db.Text
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tickets Ticket[]
+
+  @@map("ticket_categories")
+}
+
+model TicketPriority {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  name       String
+  colorToken String   @default("blue")
+  sortOrder  Int      @default(0)
+  slaMinutes Int      @default(480)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tickets Ticket[]
+  slas    TicketSla[]
+
+  @@map("ticket_priorities")
+}
+
+model TicketStatus {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  name       String
+  colorToken String   @default("slate")
+  sortOrder  Int      @default(0)
+  isTerminal Boolean  @default(false)
+  pausesSla  Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tickets Ticket[]
+
+  @@map("ticket_statuses")
+}
+
+model TicketType {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tickets Ticket[]
+
+  @@map("ticket_types")
+}
+
+model TicketDepartment {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tickets Ticket[]
+
+  @@map("ticket_departments")
+}
+
+
+model TicketCloseReason {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tickets Ticket[]
+
+  @@map("ticket_close_reasons")
+}
+
+model Ticket {
+  id               String             @id @default(cuid())
+  ticketNumber     String             @unique
+  title            String
+  description      String             @db.Text
+  categoryId       String
+  category         TicketCategory     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  priorityId       String
+  priority         TicketPriority     @relation(fields: [priorityId], references: [id], onDelete: Restrict)
+  statusId         String
+  status           TicketStatus       @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  typeId           String
+  type             TicketType         @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  departmentId     String?
+  department       TicketDepartment?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  closeReasonId    String?
+  closeReason      TicketCloseReason? @relation(fields: [closeReasonId], references: [id], onDelete: SetNull)
+  requesterId      String
+  requester        User               @relation("TicketRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  assignedToId     String?
+  assignedTo       User?              @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  solution         String?            @db.Text
+  totalWorkMinutes Int                @default(0)
+  openedAt         DateTime           @default(now())
+  assignedAt       DateTime?
+  resolvedAt       DateTime?
+  closedAt         DateTime?
+  lastActivityAt   DateTime           @default(now())
+  isLocked         Boolean            @default(false)
+  lockReason       String?            @db.Text
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  deletedAt        DateTime?
+
+  comments      TicketComment[]
+  attachments   TicketAttachment[]
+  histories     TicketHistory[]
+  notifications TicketNotification[]
+  audits        TicketAudit[]
+  slas          TicketSla[]
+  workLogs      TicketWorkLog[]
+
+  @@index([statusId])
+  @@index([requesterId])
+  @@index([assignedToId])
+  @@index([priorityId])
+  @@index([lastActivityAt])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation("TicketCommentAuthor", fields: [userId], references: [id], onDelete: Restrict)
+  comment    String   @db.Text
+  isInternal Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  attachments TicketAttachment[]
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_comments")
+}
+
+model TicketAttachment {
+  id           String         @id @default(cuid())
+  ticketId     String
+  ticket       Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  commentId    String?
+  comment      TicketComment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  uploadedById String
+  uploadedBy   User           @relation("TicketAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  originalName String
+  storedName   String
+  mimeType     String
+  extension    String
+  fileSize     Int
+  disk         String         @default("local")
+  path         String
+  hash         String?
+  createdAt    DateTime       @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_attachments")
+}
+
+model TicketHistory {
+  id          String   @id @default(cuid())
+  ticketId    String
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  changedById String
+  changedBy   User     @relation("TicketHistoryChanger", fields: [changedById], references: [id], onDelete: Restrict)
+  field       String
+  oldValue    String?  @db.Text
+  newValue    String?  @db.Text
+  reason      String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_histories")
+}
+
+model TicketNotification {
+  id        String    @id @default(cuid())
+  ticketId  String
+  ticket    Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation("TicketNotificationUser", fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String    @db.Text
+  type      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([ticketId])
+  @@map("ticket_notifications")
+}
+
+model TicketAudit {
+  id        String   @id @default(cuid())
+  ticketId  String?
+  ticket    Ticket?  @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  userId    String?
+  user      User?    @relation("TicketAuditUser", fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  tableName String?
+  recordId  String?
+  oldValues Json?
+  newValues Json?
+  ip        String?
+  browser   String?
+  device    String?
+  createdAt DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([userId, createdAt])
+  @@map("ticket_audits")
+}
+
+model TicketSla {
+  id               String                @id @default(cuid())
+  ticketId         String
+  ticket           Ticket                @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  priorityId       String
+  priority         TicketPriority        @relation(fields: [priorityId], references: [id], onDelete: Restrict)
+  targetMinutes    Int
+  elapsedMinutes   Int                   @default(0)
+  pausedMinutes    Int                   @default(0)
+  remainingMinutes Int
+  status           TicketSlaRecordStatus @default(ACTIVE)
+  startedAt        DateTime              @default(now())
+  pausedAt         DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([ticketId])
+  @@map("ticket_slas")
+}
+
+model TicketWorkLog {
+  id           String    @id @default(cuid())
+  ticketId     String
+  ticket       Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  technicianId String
+  technician   User      @relation("TicketWorkLogTechnician", fields: [technicianId], references: [id], onDelete: Restrict)
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  minutes      Int       @default(0)
+  description  String?   @db.Text
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([ticketId])
+  @@map("ticket_work_logs")
+}

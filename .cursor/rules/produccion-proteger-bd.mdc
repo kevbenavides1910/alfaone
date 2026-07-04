@@ -1,0 +1,62 @@
+---
+description: Proteger datos de PostgreSQL en producción (VPS 10.1.1.222)
+alwaysApply: true
+---
+
+# Producción — protección de base de datos
+
+Este entorno es **producción real**: Next.js + Prisma + PostgreSQL en el VPS **10.1.1.222**. Cualquier cambio puede afectar datos vivos. Prioridad absoluta: **no perder ni corromper datos**.
+
+## Comandos prohibidos (nunca sugerir ni ejecutar sin confirmación explícita del usuario)
+
+- `prisma migrate reset`, `npm run db:reset`
+- `prisma db push --force-reset` o `db push` que altere/esquema destructivo sin plan de respaldo
+- `DROP`, `TRUNCATE`, `DELETE` sin `WHERE` acotado
+- `prisma db seed` en producción
+- Scripts de importación masiva (`prisma/import-*.ts`, imports XLSX) salvo que el usuario lo pida y entienda el impacto
+
+## Migraciones y esquema
+
+- En prod usar **`npx prisma migrate deploy`** (aplicar migraciones ya versionadas), no `db push` salvo emergencia acordada.
+- Antes de cualquier cambio de esquema: indicar **backup** (`pg_dump` del volumen `postgres_data` o snapshot acordado).
+- Migraciones deben ser **aditivas** cuando sea posible (nuevas columnas nullable, valores por defecto). Evitar `DROP COLUMN` / renombrados destructivos en un solo paso.
+- No ejecutar migraciones ni comandos Prisma contra la BD sin verificar que `DATABASE_URL` apunta al entorno esperado.
+
+## Código Prisma y API
+
+- **Prohibido**: `$queryRawUnsafe`, `$executeRawUnsafe` con strings interpolados por entrada de usuario.
+- **Evitar** `deleteMany` / `updateMany` sin `where` restrictivo (por `id`, `importBatchId`, etc.). Revisar `onDelete: Cascade` antes de borrar padres.
+- Borrados masivos (import batches, catálogos): exigir permiso admin + `where` por identificador; preferir transacciones `prisma.$transaction`.
+- Updates masivos: usar `where` + `data` mínimo; no sobrescribir registros completos si solo cambia un campo.
+- Nuevos endpoints de escritura: validar sesión + RBAC (`withPermission` / `withPlatformAdmin`), igual que el resto de la app.
+- Imports y jobs: idempotencia o dry-run cuando exista; no duplicar filas por re-ejecución accidental.
+
+## Despliegue y operaciones
+
+- Reinicios de contenedores: no implican pérdida de datos, pero **no** recrear volúmenes Docker (`postgres_data`) sin backup.
+- Archivos en disco van a `/mnt/storage`; la BD permanece en SSD — no confundir limpieza de uploads con operaciones SQL.
+
+## Flujo obligatorio del agente
+
+1. Si la tarea puede **borrar, truncar, resetear o reescribir** datos → detenerse, explicar riesgo y pedir confirmación explícita.
+2. Preferir cambios **solo lectura** o consultas acotadas (`findUnique`, `findMany` con `take`) para diagnosticar.
+3. Para fixes de datos: proponer script **reversible** o UPDATE con `WHERE id = …` documentado, nunca “arreglar todo” en bloque.
+4. Tras cambios que toquen escritura en BD: mencionar cómo verificar (conteo antes/después, registro de prueba) sin asumir que el usuario ya hizo backup.
+
+## Ejemplos
+
+```typescript
+// ❌ MAL — borra todo el catálogo
+await prisma.expenseTypeConfig.deleteMany();
+
+// ✅ BIEN — acotado por clave
+await prisma.expenseTypeConfig.deleteMany({ where: { type: expenseType } });
+```
+
+```bash
+# ❌ MAL en producción
+npm run db:reset
+
+# ✅ BIEN — aplicar migraciones versionadas
+npx prisma migrate deploy
+```

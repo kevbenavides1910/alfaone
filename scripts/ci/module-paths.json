@@ -1,0 +1,76 @@
+{
+  "$comment": "Sincronizar con src/lib/modules/registry.ts y .github/workflows/ci.yml",
+  "shared": [
+    "prisma/**",
+    "package.json",
+    "package-lock.json",
+    "Dockerfile",
+    "docker-compose.yml",
+    ".dockerignore",
+    "next.config.ts",
+    "tsconfig.json",
+    "tailwind.config.ts",
+    "postcss.config.js",
+    "src/lib/**",
+    "src/app/layout.tsx",
+    "src/app/globals.css",
+    "src/app/page.tsx",
+    "src/components/layout/**",
+    "src/components/ui/**",
+    "src/components/branding/**",
+    "src/providers/**"
+  ],
+  "modules": {
+    "core": [
+      "src/modules/core/**",
+      "src/app/(auth)/**",
+      "src/app/(app)/dashboard/**",
+      "src/app/api/auth/**",
+      "src/app/api/companies/**",
+      "src/app/api/branding/**"
+    ],
+    "presupuestos": [
+      "src/modules/presupuestos/**",
+      "src/app/(app)/contracts/**",
+      "src/app/(app)/expenses/**",
+      "src/app/api/contracts/**",
+      "src/app/api/expenses/**",
+      "src/app/api/import/**",
+      "src/app/api/positions/**",
+      "src/components/contracts/**",
+      "src/components/expenses/**",
+      "src/components/shared/**"
+    ],
+    "reportes": [
+      "src/app/(app)/reports/**",
+      "src/app/api/reports/**",
+      "src/components/reports/**"
+    ],
+    "inventario": [
+      "src/modules/inventario/**",
+      "src/app/(app)/inventory/**",
+      "src/app/api/assets/**",
+      "src/app/api/asset-movements/**",
+      "src/app/api/contracts/**/assets/**",
+      "src/app/api/admin/catalogs/asset-types/**",
+      "src/components/contracts/AssetsTab.tsx",
+      "src/components/admin/AssetTypesTab.tsx"
+    ],
+    "disciplinario": [
+      "src/modules/disciplinario/**",
+      "src/app/(app)/disciplinario/**",
+      "src/app/api/disciplinary/**",
+      "src/app/api/admin/disciplinary/**",
+      "src/components/disciplinary/**",
+      "prisma/migrations/*disciplinary*",
+      "prisma/clear-disciplinary-data.ts"
+    ],
+    "plataforma": [
+      "src/modules/plataforma/**",
+      "src/app/(app)/admin/**",
+      "src/app/api/admin/**",
+      "src/app/api/users/**",
+      "src/components/admin/**"
+    ]
+  }
+}

@@ -1,0 +1,190 @@
+# CI modular — Syntra Dynamics
+# Path filters: scripts/ci/module-paths.json (mantener alineado con registry)
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: Detectar módulos afectados
+    runs-on: ubuntu-latest
+    outputs:
+      run-ci: ${{ steps.paths.outputs.run-ci }}
+      shared: ${{ steps.paths.outputs.shared }}
+      modules: ${{ steps.paths.outputs.modules }}
+      core: ${{ steps.paths.outputs.core }}
+      presupuestos: ${{ steps.paths.outputs.presupuestos }}
+      reportes: ${{ steps.paths.outputs.reportes }}
+      inventario: ${{ steps.paths.outputs.inventario }}
+      disciplinario: ${{ steps.paths.outputs.disciplinario }}
+      plataforma: ${{ steps.paths.outputs.plataforma }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v3
+        id: paths
+        with:
+          filters: |
+            run-ci:
+              - 'prisma/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'Dockerfile'
+              - 'docker-compose.yml'
+              - 'next.config.ts'
+              - 'tsconfig.json'
+              - 'src/**'
+              - '.github/workflows/**'
+            shared:
+              - 'prisma/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'Dockerfile'
+              - 'docker-compose.yml'
+              - 'next.config.ts'
+              - 'tsconfig.json'
+              - 'src/lib/**'
+              - 'src/app/layout.tsx'
+              - 'src/app/globals.css'
+              - 'src/app/page.tsx'
+              - 'src/components/layout/**'
+              - 'src/components/ui/**'
+              - 'src/components/branding/**'
+              - 'src/providers/**'
+            core:
+              - 'src/modules/core/**'
+              - 'src/app/(auth)/**'
+              - 'src/app/(app)/dashboard/**'
+              - 'src/app/api/auth/**'
+              - 'src/app/api/companies/**'
+              - 'src/app/api/branding/**'
+            presupuestos:
+              - 'src/modules/presupuestos/**'
+              - 'src/app/(app)/contracts/**'
+              - 'src/app/(app)/expenses/**'
+              - 'src/app/api/contracts/**'
+              - 'src/app/api/expenses/**'
+              - 'src/app/api/import/**'
+              - 'src/app/api/positions/**'
+              - 'src/components/contracts/**'
+              - 'src/components/expenses/**'
+              - 'src/components/shared/**'
+            reportes:
+              - 'src/app/(app)/reports/**'
+              - 'src/app/api/reports/**'
+              - 'src/components/reports/**'
+            inventario:
+              - 'src/modules/inventario/**'
+              - 'src/app/(app)/inventory/**'
+              - 'src/app/api/assets/**'
+              - 'src/app/api/asset-movements/**'
+              - 'src/app/api/admin/catalogs/asset-types/**'
+              - 'src/components/contracts/AssetsTab.tsx'
+              - 'src/components/admin/AssetTypesTab.tsx'
+            disciplinario:
+              - 'src/modules/disciplinario/**'
+              - 'src/app/(app)/disciplinario/**'
+              - 'src/app/api/disciplinary/**'
+              - 'src/app/api/admin/disciplinary/**'
+              - 'src/components/disciplinary/**'
+              - 'prisma/migrations/*disciplinary*'
+            plataforma:
+              - 'src/modules/plataforma/**'
+              - 'src/app/(app)/admin/**'
+              - 'src/app/api/admin/**'
+              - 'src/app/api/users/**'
+              - 'src/components/admin/**'
+
+      - name: Resumen de módulos
+        run: |
+          {
+            echo "## Módulos en este cambio"
+            echo ""
+            echo "| Módulo | Afectado |"
+            echo "|--------|----------|"
+            echo "| core | ${{ steps.paths.outputs.core }} |"
+            echo "| presupuestos | ${{ steps.paths.outputs.presupuestos }} |"
+            echo "| reportes | ${{ steps.paths.outputs.reportes }} |"
+            echo "| inventario | ${{ steps.paths.outputs.inventario }} |"
+            echo "| disciplinario | ${{ steps.paths.outputs.disciplinario }} |"
+            echo "| plataforma | ${{ steps.paths.outputs.plataforma }} |"
+            echo ""
+            echo "Infra compartida: **${{ steps.paths.outputs.shared }}**"
+            echo ""
+            echo "> El build valida la app completa (monolito). Los filtros orientan revisión y futuros jobs por módulo."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  lint-and-build:
+    name: Lint y build
+    needs: detect
+    if: needs.detect.outputs.run-ci == 'true'
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/security_contracts?schema=public
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ci-secret-minimum-32-characters-long!!
+      NEXT_TELEMETRY_DISABLED: 1
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: security_contracts
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Prisma generate
+        run: npm run db:generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Auditoría de dependencias
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Verificar permisos API (no usar session.user.role en checks)
+        run: |
+          if rg 'can(Manage|Modify|Import|View|Admin)\(session\.user\.role\)' src/app/api; then
+            echo "Encontrado session.user.role en checks de permiso — use session completo"
+            exit 1
+          fi
+
+      - name: Build producción
+        run: npm run build
+
+  docs-only:
+    name: Sin cambios de aplicación
+    needs: detect
+    if: needs.detect.outputs.run-ci != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "No hay cambios en src/, prisma/ ni dependencias — se omitió lint y build."
+          echo "Si esperaba CI, verifique que los archivos estén commiteados."
