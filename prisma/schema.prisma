@@ -243,10 +243,12 @@ model User {
   roleEntity         Role?     @relation(fields: [roleId], references: [id], onDelete: Restrict)
   company            String?
   companyEntity      Company?  @relation(fields: [company], references: [code])
-  isActive           Boolean   @default(true)
-  mustChangePassword Boolean   @default(false)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  isActive               Boolean   @default(true)
+  mustChangePassword     Boolean   @default(false)
+  passwordResetToken     String?
+  passwordResetExpiresAt DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   accounts  Account[]
   sessions  Session[]
@@ -1649,6 +1651,23 @@ model AppDisciplinarySettings {
   updatedAt                     DateTime @updatedAt
 
   @@map("app_disciplinary_settings")
+}
+
+/// Configuración global de plataforma (fila única id = default).
+model AppPlatformSettings {
+  id                String    @id @default("default")
+  /// Correo receptor de notificaciones generales del sistema (alertas, avisos, reportes).
+  notificationEmail String?
+  /// SMTP para envíos de plataforma: reset de contraseña, alertas, etc.
+  smtpHost          String?
+  smtpPort          Int?
+  smtpSecure        Boolean?
+  smtpUser          String?
+  smtpPass          String?
+  smtpFrom          String?
+  updatedAt         DateTime  @updatedAt
+
+  @@map("app_platform_settings")
 }
 
 /// Ajustes de correo de cobro (fila única id = default): plantillas y SMTP.

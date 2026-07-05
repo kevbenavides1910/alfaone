@@ -20,6 +20,7 @@ import { BrandingAppearanceTab } from "@/components/admin/BrandingAppearanceTab"
 import { AssetTypesTab } from "@/components/admin/AssetTypesTab";
 import { ZonesTab } from "@/components/admin/ZonesTab";
 import { LocationsTab } from "@/components/admin/LocationsTab";
+import { PlatformNotificationsTab } from "@/components/admin/PlatformNotificationsTab";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ExpenseTypeConfig {
@@ -845,7 +846,8 @@ type TabKey =
   | "asset-types"
   | "zones"
   | "locations"
-  | "branding";
+  | "branding"
+  | "notifications";
 
 const VALID_TABS: TabKey[] = [
   "types",
@@ -856,6 +858,7 @@ const VALID_TABS: TabKey[] = [
   "zones",
   "locations",
   "branding",
+  "notifications",
 ];
 
 function parseTabParam(value: string | null): TabKey {
@@ -882,7 +885,7 @@ function CatalogsPageContent() {
 
   return (
     <>
-      <Topbar title={tab === "approvals" ? "Aprobaciones" : "Mantenimientos"} />
+      <Topbar title={tab === "approvals" ? "Aprobaciones" : tab === "notifications" ? "Notificaciones" : "Mantenimientos"} />
       <div className="p-6 space-y-4">
         {readOnly && (
           <Card className="border-amber-200 bg-amber-50">
@@ -901,7 +904,8 @@ function CatalogsPageContent() {
             { key: "asset-types", label: "Tipos de Activos" },
             { key: "zones", label: "Zonas" },
             { key: "locations", label: "Ubicaciones" },
-            { key: "branding", label: "Marca y colores" },
+            { key: "branding",       label: "Marca y colores" },
+            { key: "notifications",   label: "Notificaciones" },
           ].map((t) => (
             <button
               key={t.key}
@@ -936,7 +940,9 @@ function CatalogsPageContent() {
                           ? "Zonas"
                           : tab === "locations"
                             ? "Ubicaciones"
-                            : "Marca y colores"}
+                            : tab === "notifications"
+                              ? "Notificaciones"
+                              : "Marca y colores"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -954,6 +960,8 @@ function CatalogsPageContent() {
               <ZonesTab readOnly={readOnly} />
             ) : tab === "locations" ? (
               <LocationsTab readOnly={readOnly} />
+            ) : tab === "notifications" ? (
+              <PlatformNotificationsTab readOnly={readOnly} />
             ) : (
               <BrandingAppearanceTab readOnly={readOnly} />
             )}
