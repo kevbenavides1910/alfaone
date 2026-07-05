@@ -218,7 +218,7 @@ export default function PresupuestoParametrosPage() {
         {sectionFooter("salarios")}
       </PresupuestoModuloPanel>
 
-      <PresupuestoModuloPanel title="Mano de obra (MO1–MO5)">
+      <PresupuestoModuloPanel title="Mano de obra" description="Esquemas de jornada (MO). Clic para editar; agregar o eliminar líneas afecta presupuestos nuevos.">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-slate-50">
@@ -226,6 +226,7 @@ export default function PresupuestoParametrosPage() {
               <th className="px-2 py-1 text-left">Jornada</th>
               <th className="px-2 py-1 text-right">Salario base</th>
               <th className="px-2 py-1 text-right">Costo MO ref.</th>
+              {canEdit && <th className="px-2 py-1 w-10" />}
             </tr>
           </thead>
           <tbody>
@@ -247,10 +248,19 @@ export default function PresupuestoParametrosPage() {
                     saveCatalog.mutateAsync({ section: "jornadas", codigo: j.codigo, field: "costoMoReferencia", value: v })
                   }
                 />
+                {canEdit && (
+                  <td className="px-2 py-1">
+                    <CatalogDeleteButton
+                      canEdit={canEdit}
+                      onDelete={async () => deleteLine.mutateAsync({ section: "jornadas", codigo: j.codigo })}
+                    />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
+        {sectionFooter("jornadas")}
       </PresupuestoModuloPanel>
 
       <PresupuestoModuloPanel title="Cargas sociales" description="El total de % se refleja en la estructura de costos.">

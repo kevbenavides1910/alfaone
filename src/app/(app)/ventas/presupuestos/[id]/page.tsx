@@ -380,9 +380,9 @@ export default function PresupuestoDetailPage({ params }: PageProps) {
       )}
 
       {modulo === "manoObra" && (
-        <PresupuestoModuloPanel title="Mano de obra (MO1–MO5)" description="Esquemas de jornada fijos. Clic para override en este presupuesto (no se pueden agregar ni eliminar jornadas).">
+        <PresupuestoModuloPanel title="Mano de obra" description="Esquemas de jornada. Amarillo = distinto a parametrización; verde = agregado en este presupuesto. Agregar o eliminar recalcula el presupuesto.">
           <table className="w-full text-sm">
-            <thead><tr className="border-b bg-slate-50"><th className="px-2 py-1">Código</th><th className="px-2 py-1 text-left">Jornada</th><th className="px-2 py-1 text-right">Salario base</th><th className="px-2 py-1 text-right">Costo MO ref.</th></tr></thead>
+            <thead><tr className="border-b bg-slate-50"><th className="px-2 py-1">Código</th><th className="px-2 py-1 text-left">Jornada</th><th className="px-2 py-1 text-right">Salario base</th><th className="px-2 py-1 text-right">Costo MO ref.</th>{canEdit && <th className="px-2 py-1 w-10" />}</tr></thead>
             <tbody>
               {(catalog.jornadas ?? []).map((j) => {
                 const flags = catalogRowFlags("jornadas", j.codigo, modCat);
@@ -393,6 +393,7 @@ export default function PresupuestoDetailPage({ params }: PageProps) {
                   <PresupuestoEditableCell
                     value={dec(j.salarioBaseMensual)}
                     modified={flags.modified}
+                    added={flags.added}
                     canEdit={canEdit}
                     onSave={async (v) =>
                       updateCatalogOverride.mutateAsync({ section: "jornadas", codigo: j.codigo, field: "salarioBaseMensual", value: v })
@@ -401,15 +402,25 @@ export default function PresupuestoDetailPage({ params }: PageProps) {
                   <PresupuestoEditableCell
                     value={dec(j.costoMoReferencia)}
                     modified={flags.modified}
+                    added={flags.added}
                     canEdit={canEdit}
                     onSave={async (v) =>
                       updateCatalogOverride.mutateAsync({ section: "jornadas", codigo: j.codigo, field: "costoMoReferencia", value: v })
                     }
                   />
+                  {canEdit && (
+                    <td className="px-2 py-1">
+                      <CatalogDeleteButton
+                        canEdit={canEdit}
+                        onDelete={async () => deleteCatalogLine.mutateAsync({ section: "jornadas", codigo: j.codigo })}
+                      />
+                    </td>
+                  )}
                 </tr>
               );})}
             </tbody>
           </table>
+          {sectionFooter("jornadas")}
         </PresupuestoModuloPanel>
       )}
 
@@ -586,7 +597,14 @@ export default function PresupuestoDetailPage({ params }: PageProps) {
                 <Input placeholder="Nº línea (1.1)" value={lineForm.numeroLinea} onChange={(e) => setLineForm((f) => ({ ...f, numeroLinea: e.target.value }))} />
                 <Input placeholder="Descripción del puesto" value={lineForm.descripcion} onChange={(e) => setLineForm((f) => ({ ...f, descripcion: e.target.value }))} className="sm:col-span-2" />
                 <select className="h-9 border rounded-md px-2 text-sm" value={lineForm.jornadaCodigo} onChange={(e) => setLineForm((f) => ({ ...f, jornadaCodigo: e.target.value }))}>
-                  {VENTAS_JORNADA_CODIGOS.map((c) => <option key={c} value={c}>{VENTAS_JORNADA_LABELS[c]}</option>)}
+                  {(catalog.jornadas ?? []).length === 0 && VENTAS_JORNADA_CODIGOS.map((c) => (
+                    <option key={c} value={c}>{VENTAS_JORNADA_LABELS[c]}</option>
+                  ))}
+                  {(catalog.jornadas ?? []).map((j) => (
+                    <option key={j.codigo} value={j.codigo}>
+                      {VENTAS_JORNADA_LABELS[j.codigo] ?? j.nombre ?? j.codigo}
+                    </option>
+                  ))}
                 </select>
                 <select className="h-9 border rounded-md px-2 text-sm" value={lineForm.equipamiento} onChange={(e) => setLineForm((f) => ({ ...f, equipamiento: e.target.value }))}>
                   {VENTAS_EQUIPAMIENTOS.map((c) => <option key={c} value={c}>{VENTAS_EQUIPAMIENTO_LABELS[c]}</option>)}

@@ -2439,14 +2439,6 @@ enum VentasEquipamiento {
   L
 }
 
-enum VentasJornadaCodigo {
-  MO1
-  MO2
-  MO3
-  MO4
-  MO5
-}
-
 enum VentasPresupuestoEstado {
   BORRADOR
   EN_REVISION
@@ -2471,10 +2463,10 @@ model VentasSalarioCategoria {
   @@map("ventas_salario_categorias")
 }
 
-/// Esquemas de jornada MO1–MO5.
+/// Esquemas de jornada (MO1, MO2, … y personalizados).
 model VentasJornadaTipo {
   id                     String              @id @default(cuid())
-  codigo                 VentasJornadaCodigo @unique
+  codigo                 String              @unique
   nombre                 String
   descripcion            String?
   horasConfig            Json
@@ -2623,7 +2615,7 @@ model VentasPresupuestoLinea {
   presupuesto      VentasPresupuesto   @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
   numeroLinea      String
   descripcion      String
-  jornadaCodigo    VentasJornadaCodigo
+  jornadaCodigo    String
   equipamiento     VentasEquipamiento
   cantidadPuestos  Int
   factorOficiales  Decimal             @default(1) @db.Decimal(8, 4)

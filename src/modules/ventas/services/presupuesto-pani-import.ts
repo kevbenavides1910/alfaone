@@ -4,7 +4,6 @@ import {
   Prisma,
   type PrismaClient,
   type VentasEquipamiento,
-  type VentasJornadaCodigo,
 } from "@prisma/client";
 import * as XLSX from "xlsx";
 import {
@@ -41,7 +40,7 @@ export type PaniImportStats = {
 type ParsedLinea = {
   numeroLinea: string;
   descripcion: string;
-  jornadaCodigo: VentasJornadaCodigo;
+  jornadaCodigo: string;
   equipamiento: VentasEquipamiento;
   cantidadPuestos: number;
   factorOficiales: number;
@@ -222,7 +221,7 @@ async function syncCatalogFromWorkbook(wb: XLSX.WorkBook, prisma: PrismaClient) 
     variantes += 1;
   }
 
-  const moRefs: { codigo: VentasJornadaCodigo; cell: string }[] = [
+  const moRefs: { codigo: string; cell: string }[] = [
     { codigo: "MO1", cell: "E46" },
     { codigo: "MO2", cell: "E46" },
     { codigo: "MO3", cell: "E46" },

@@ -129,6 +129,12 @@ export const CATALOG_ADD_FIELDS: Partial<Record<CatalogSection, NewFieldDef[]>> 
     { key: "descripcion", label: "Descripción", type: "text" },
     { key: "valor", label: "Salario año base", type: "number" },
   ],
+  jornadas: [
+    { key: "codigo", label: "Código", type: "text", placeholder: "MO6" },
+    { key: "nombre", label: "Nombre jornada", type: "text" },
+    { key: "salarioBaseMensual", label: "Salario base", type: "number" },
+    { key: "costoMoReferencia", label: "Costo MO ref.", type: "number" },
+  ],
   cargasSociales: [
     { key: "nombre", label: "Concepto", type: "text" },
     { key: "grupo", label: "Grupo", type: "text", placeholder: "OTROS" },
@@ -156,7 +162,7 @@ export const CATALOG_ADD_FIELDS: Partial<Record<CatalogSection, NewFieldDef[]>> 
 
 export const CATALOG_ALLOW_ADD: Partial<Record<CatalogSection, boolean>> = {
   salarios: true,
-  jornadas: false,
+  jornadas: true,
   cargasSociales: true,
   pagosExtras: true,
   insumos: true,

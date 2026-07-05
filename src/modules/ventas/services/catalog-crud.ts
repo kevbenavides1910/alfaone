@@ -99,8 +99,28 @@ export async function createGlobalCatalogItem(input: CatalogItemCreateInput) {
         },
       });
       break;
-    case "jornadas":
-      throw new Error("Las jornadas MO1–MO5 son fijas; edite valores existentes.");
+    case "jornadas": {
+      const code = String(item.codigo ?? codigo)
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "");
+      if (!code) throw new Error("Código de jornada requerido");
+      await prisma.ventasJornadaTipo.create({
+        data: {
+          codigo: code,
+          nombre: String(item.nombre ?? code),
+          horasConfig: (item.horasConfig as object) ?? {},
+          salarioBaseMensual:
+            item.salarioBaseMensual != null ? n(Number(item.salarioBaseMensual)) : null,
+          costoMoReferencia:
+            item.costoMoReferencia != null ? n(Number(item.costoMoReferencia)) : null,
+          costoHoraOrdinaria:
+            item.costoHoraOrdinaria != null ? n(Number(item.costoHoraOrdinaria)) : null,
+          sortOrder,
+        },
+      });
+      break;
+    }
     default:
       return null;
   }
@@ -109,10 +129,6 @@ export async function createGlobalCatalogItem(input: CatalogItemCreateInput) {
 }
 
 export async function deleteGlobalCatalogItem(section: CatalogSection, codigo: string) {
-  if (section === "jornadas") {
-    throw new Error("No se pueden eliminar jornadas MO1–MO5.");
-  }
-
   const deactivate = { isActive: false };
   switch (section) {
     case "salarios":
@@ -133,6 +149,9 @@ export async function deleteGlobalCatalogItem(section: CatalogSection, codigo: s
     case "indices":
       await prisma.ventasIndiceActualizacion.delete({ where: { codigo } });
       break;
+    case "jornadas":
+      await prisma.ventasJornadaTipo.update({ where: { codigo }, data: deactivate });
+      break;
     default:
       return false;
   }
@@ -151,9 +170,6 @@ export async function addPresupuestoCatalogLine(
   if (!presupuesto) return null;
 
   const { section, item } = input;
-  if (section === "jornadas") {
-    throw new Error("Las jornadas MO1–MO5 son fijas.");
-  }
 
   const current = readCustomization(presupuesto.catalogOverrides);
   const codigo = (item.codigo as string)?.trim() || generateCatalogCodigo(section);

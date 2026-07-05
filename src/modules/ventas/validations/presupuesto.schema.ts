@@ -33,7 +33,7 @@ export const presupuestoUpdateSchema = presupuestoCreateSchema
 export const presupuestoLineaSchema = z.object({
   numeroLinea: z.string().min(1),
   descripcion: z.string().min(1),
-  jornadaCodigo: z.enum(VENTAS_JORNADA_CODIGOS),
+  jornadaCodigo: z.string().min(1).max(32),
   equipamiento: z.enum(VENTAS_EQUIPAMIENTOS),
   cantidadPuestos: z.coerce.number().int().min(1),
   factorOficiales: z.coerce.number().min(0.01).default(1),

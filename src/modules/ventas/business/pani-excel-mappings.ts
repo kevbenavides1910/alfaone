@@ -1,7 +1,7 @@
-import type { VentasEquipamiento, VentasJornadaCodigo } from "@prisma/client";
+import type { VentasEquipamiento } from "@prisma/client";
 
 /** Horario en hoja DETALLE → código MO (fórmula H = 'MOx'!$E$46). */
-export const PANI_HORARIO_TO_JORNADA: Record<string, VentasJornadaCodigo> = {
+export const PANI_HORARIO_TO_JORNADA: Record<string, string> = {
   "L-D (24hrs)": "MO1",
   "L-V (07:00 a 16:30)": "MO2",
   "L-V (06:30 a 16:30)": "MO3",
@@ -38,10 +38,10 @@ export function parseInsumoHojaFromFormula(formula: string | undefined): string 
 }
 
 /** Fórmula MO en columna H → código jornada. */
-export function parseJornadaFromMoFormula(formula: string | undefined): VentasJornadaCodigo | null {
+export function parseJornadaFromMoFormula(formula: string | undefined): string | null {
   if (!formula) return null;
   const m = formula.match(/'MO(\d)'!/i);
   if (!m) return null;
-  const code = `MO${m[1]}` as VentasJornadaCodigo;
-  return ["MO1", "MO2", "MO3", "MO4", "MO5"].includes(code) ? code : null;
+  const code = `MO${m[1]}`;
+  return code.startsWith("MO") ? code : null;
 }

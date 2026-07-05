@@ -98,7 +98,7 @@ export async function updateCatalogItemGlobal(input: CatalogItemUpdateInput) {
       if (field === "salarioBaseMensual") data.salarioBaseMensual = n(value as number);
       if (field === "costoHoraOrdinaria") data.costoHoraOrdinaria = n(value as number);
       if (field === "costoMoReferencia") data.costoMoReferencia = n(value as number);
-      await prisma.ventasJornadaTipo.update({ where: { codigo: codigo as never }, data });
+      await prisma.ventasJornadaTipo.update({ where: { codigo }, data });
       break;
     }
     case "cargasSociales":

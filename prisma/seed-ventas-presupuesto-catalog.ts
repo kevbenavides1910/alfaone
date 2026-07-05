@@ -5,7 +5,6 @@
 import {
   PrismaClient,
   VentasSalarioTipo,
-  VentasJornadaCodigo,
   VentasEquipamiento,
 } from "@prisma/client";
 
@@ -53,7 +52,7 @@ async function seedSalarios() {
 async function seedJornadas() {
   const items = [
     {
-      codigo: VentasJornadaCodigo.MO1,
+      codigo: "MO1",
       nombre: "L-D 24hrs (3 turnos)",
       descripcion: "Diurna 06-14, mixta 14-22, nocturna 22-06",
       horasConfig: { diurna: 48, mixta: 42, nocturna: 30 },
@@ -64,7 +63,7 @@ async function seedJornadas() {
       costoHoraExtra: 2535.691875,
     },
     {
-      codigo: VentasJornadaCodigo.MO2,
+      codigo: "MO2",
       nombre: "L-V 07:00 a 16:30",
       horasConfig: { horasSemanales: 47.5 },
       salarioCategoriaCodigo: "TOSCG",
@@ -74,7 +73,7 @@ async function seedJornadas() {
       costoHoraExtra: 2535.691875,
     },
     {
-      codigo: VentasJornadaCodigo.MO3,
+      codigo: "MO3",
       nombre: "L-V 06:30 a 16:30",
       horasConfig: { horasSemanales: 50 },
       salarioCategoriaCodigo: "TOSCG",
@@ -84,7 +83,7 @@ async function seedJornadas() {
       costoHoraExtra: 2535.691875,
     },
     {
-      codigo: VentasJornadaCodigo.MO4,
+      codigo: "MO4",
       nombre: "Solo jornada nocturna",
       horasConfig: { horasSemanales: 30 },
       salarioCategoriaCodigo: "TOSCG",
@@ -94,7 +93,7 @@ async function seedJornadas() {
       costoHoraExtra: 3380.9225,
     },
     {
-      codigo: VentasJornadaCodigo.MO5,
+      codigo: "MO5",
       nombre: "L-V 12 horas",
       horasConfig: { horasSemanales: 60 },
       salarioCategoriaCodigo: "TOSCG",

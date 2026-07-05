@@ -1,4 +1,4 @@
-import type { VentasEquipamiento, VentasJornadaCodigo } from "@prisma/client";
+import type { VentasEquipamiento } from "@prisma/client";
 import type { VentasInsumoVariante } from "@prisma/client";
 import { PANI_EXCEL_2026 } from "./pani-excel-reference";
 
@@ -13,7 +13,7 @@ export type PresupuestoConfig = {
 export type LineaInput = {
   numeroLinea: string;
   descripcion: string;
-  jornadaCodigo: VentasJornadaCodigo;
+  jornadaCodigo: string;
   equipamiento: VentasEquipamiento;
   cantidadPuestos: number;
   factorOficiales: number;
@@ -34,7 +34,7 @@ export type LineaCalculo = {
 };
 
 export type JornadaMoRef = {
-  codigo: VentasJornadaCodigo;
+  codigo: string;
   costoMoReferencia: unknown;
 };
 
@@ -57,15 +57,12 @@ function round2(v: number): number {
   return Math.round(v * 100) / 100;
 }
 
-/** MO mensual por jornada (E46 del Excel o catálogo). */
-export function costoMoJornada(
-  jornadaCodigo: VentasJornadaCodigo,
-  jornadas: JornadaMoRef[]
-): number {
+export function costoMoJornada(jornadaCodigo: string, jornadas: JornadaMoRef[]): number {
   const j = jornadas.find((x) => x.codigo === jornadaCodigo);
   const ref = j ? n(j.costoMoReferencia) : 0;
   if (ref > 0) return ref;
-  return PANI_EXCEL_2026.moCostoReferencia[jornadaCodigo] ?? 0;
+  const legacy = PANI_EXCEL_2026.moCostoReferencia as Record<string, number>;
+  return legacy[jornadaCodigo] ?? 0;
 }
 
 /** Insumo directo según equipamiento + factor (hojas 3,89AF, 1ANL, etc.). */
