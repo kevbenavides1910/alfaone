@@ -82,7 +82,7 @@ export function DisciplinaryTopNav() {
                 "flex items-center gap-1.5 whitespace-nowrap px-4 py-3 text-sm font-medium",
                 "border-b-2 transition-colors",
                 active
-                  ? "border-amber-500 text-amber-700 bg-amber-50/50"
+                  ? "border-red-600 text-red-700 bg-red-50/60"
                   : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50"
               )}
             >
@@ -109,7 +109,7 @@ export function DisciplinaryTopNav() {
                     "flex items-center gap-1.5 whitespace-nowrap px-3 py-3 text-sm font-medium",
                     "border-b-2 transition-colors",
                     active
-                      ? "border-amber-500 text-amber-700 bg-amber-50/50"
+                      ? "border-red-600 text-red-700 bg-red-50/60"
                       : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50"
                   )}
                 >

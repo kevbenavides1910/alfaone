@@ -4,35 +4,43 @@
 
 @layer base {
   :root {
-    --app-primary: #2563eb;
-    --app-sidebar: #0f172a;
-    /* Superficie gris moderna (slate) */
-    --background: 220 18% 93%;
-    --foreground: 222 47% 11%;
-    --card: 210 25% 99%;
-    --card-foreground: 222 47% 11%;
-    --popover: 210 25% 99%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 220 16% 88%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 220 14% 86%;
-    --muted-foreground: 215 16% 42%;
-    --accent: 220 16% 84%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 220 13% 80%;
-    --input: 220 14% 90%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.625rem;
+    /* ─── Paleta Alfa One ─── */
+    /* Primario: rojo corporativo */
+    --app-primary: #dc2626;
+    --app-primary-dark: #b91c1c;
+    /* Sidebar: negro profundo */
+    --app-sidebar: #111111;
+
+    /* ─── Tokens semánticos (shadcn) ─── */
+    /* Superficie: gris neutro claro */
+    --background: 210 14% 92%;
+    --foreground: 215 25% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 12%;
+    /* Primario: rojo Alfa → hsl(0, 72%, 51%) ≈ #dc2626 */
+    --primary: 0 72% 51%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 14% 88%;
+    --secondary-foreground: 215 25% 12%;
+    --muted: 215 12% 86%;
+    --muted-foreground: 215 14% 42%;
+    --accent: 215 12% 84%;
+    --accent-foreground: 215 25% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 10% 80%;
+    --input: 215 12% 90%;
+    /* Ring: rojo de marca */
+    --ring: 0 72% 51%;
+    --radius: 0.5rem;
     --success: 142.1 76.2% 36.3%;
     --success-foreground: 355.7 100% 97.3%;
     --warning: 32.1 94.6% 43.7%;
     --warning-foreground: 26 83.3% 14.1%;
-    --danger: 0 84.2% 60.2%;
-    --danger-foreground: 210 40% 98%;
+    --danger: 0 72% 51%;
+    --danger-foreground: 0 0% 100%;
   }
 
   * {
@@ -54,14 +62,14 @@
     @apply bg-muted/60 border-b border-border;
   }
 
-  /* Fondo del menú principal (/home) */
+  /* Fondo del menú principal (/home) — charcoal neutro Alfa */
   .home-menu-canvas {
     @apply relative min-h-[calc(100dvh-4rem)] overflow-hidden;
     background: linear-gradient(
       165deg,
-      hsl(220 22% 86%) 0%,
-      hsl(220 18% 90%) 42%,
-      hsl(218 20% 87%) 100%
+      hsl(215 14% 90%) 0%,
+      hsl(215 12% 93%) 42%,
+      hsl(210 10% 91%) 100%
     );
   }
 
@@ -70,17 +78,17 @@
     @apply pointer-events-none absolute inset-0;
     background: radial-gradient(
       ellipse 90% 55% at 50% -15%,
-      hsl(221 60% 78% / 0.45),
+      hsl(0 30% 88% / 0.35),
       transparent 65%
     );
   }
 
   .home-menu-canvas::after {
     content: "";
-    @apply pointer-events-none absolute inset-0 opacity-[0.22];
+    @apply pointer-events-none absolute inset-0 opacity-[0.18];
     background-image:
-      linear-gradient(to right, hsl(220 13% 72% / 0.35) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(220 13% 72% / 0.35) 1px, transparent 1px);
+      linear-gradient(to right, hsl(215 10% 72% / 0.30) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(215 10% 72% / 0.30) 1px, transparent 1px);
     background-size: 2rem 2rem;
   }
 
@@ -106,7 +114,7 @@
   }
 
   .carbon-breadcrumb-link {
-    @apply text-[#0f62fe] hover:underline underline-offset-2;
+    @apply text-[#dc2626] hover:underline underline-offset-2;
   }
 
   .carbon-toolbar {
@@ -177,7 +185,7 @@
   }
 
   .carbon-link {
-    @apply text-[#0f62fe] font-medium hover:underline underline-offset-2;
+    @apply text-[#dc2626] font-medium hover:underline underline-offset-2;
   }
 
   .carbon-tabs-list {
@@ -187,7 +195,7 @@
   .carbon-tabs-trigger {
     @apply relative rounded-none border-0 border-b-2 border-transparent bg-transparent px-4 py-3 text-sm font-normal text-[#525252] shadow-none;
     @apply data-[state=active]:bg-transparent data-[state=active]:text-[#161616] data-[state=active]:shadow-none;
-    @apply data-[state=active]:border-[#0f62fe] data-[state=active]:font-medium;
+    @apply data-[state=active]:border-[#dc2626] data-[state=active]:font-medium;
     @apply hover:bg-[#e8e8e8] hover:text-[#161616];
   }
 

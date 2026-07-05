@@ -98,8 +98,8 @@ function NavLink({ item, pathname, collapsed, onClick }: { item: NavItem; pathna
         "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
         collapsed ? "justify-center px-2" : "",
         active
-          ? "bg-card text-amber-900 shadow-sm"
-          : "text-amber-100/90 hover:bg-card/10 hover:text-white"
+          ? "bg-red-600/20 text-white shadow-sm"
+          : "text-white/70 hover:bg-white/8 hover:text-white"
       )}
     >
       <item.icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={1.75} />
@@ -153,7 +153,7 @@ export function DisciplinarySidebar({ open, onClose, collapsed, onToggleCollapse
               <div
                 className={cn(
                   "flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider",
-                  inAjustes ? "text-amber-300" : "text-amber-100/50"
+                  inAjustes ? "text-red-400" : "text-white/40"
                 )}
               >
                 <Settings2 className="h-3.5 w-3.5" />
@@ -187,7 +187,7 @@ export function DisciplinarySidebar({ open, onClose, collapsed, onToggleCollapse
       {/* Mobile sidebar — overlay */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 bg-[#1a3a5c] text-white flex flex-col",
+          "fixed inset-y-0 left-0 z-40 w-64 bg-[#111111] text-white flex flex-col",
           "transform transition-transform duration-200 ease-in-out md:hidden",
           open ? "translate-x-0" : "-translate-x-full"
         )}
@@ -199,7 +199,7 @@ export function DisciplinarySidebar({ open, onClose, collapsed, onToggleCollapse
       <aside
         className={cn(
           "hidden md:flex shrink-0 self-stretch transition-all duration-200",
-          "bg-[#1a3a5c] text-white flex-col border-r border-[#152e47]",
+          "bg-[#111111] text-white flex-col border-r border-white/5",
           collapsed ? "w-16" : "w-56 lg:w-60"
         )}
       >

@@ -11,11 +11,11 @@ interface Props {
 }
 
 const colorMap = {
-  blue:   { bg: "bg-blue-50",   icon: "text-blue-600",   border: "border-blue-200" },
-  green:  { bg: "bg-green-50",  icon: "text-green-600",  border: "border-green-200" },
-  yellow: { bg: "bg-yellow-50", icon: "text-yellow-600", border: "border-yellow-200" },
-  red:    { bg: "bg-red-50",    icon: "text-red-600",    border: "border-red-200" },
-  purple: { bg: "bg-purple-50", icon: "text-purple-600", border: "border-purple-200" },
+  blue:   { bg: "bg-slate-100",  icon: "text-slate-700",  border: "border-slate-200" },
+  green:  { bg: "bg-slate-100",  icon: "text-slate-600",  border: "border-slate-200" },
+  yellow: { bg: "bg-red-50",     icon: "text-red-500",    border: "border-red-100"   },
+  red:    { bg: "bg-red-50",     icon: "text-red-600",    border: "border-red-200"   },
+  purple: { bg: "bg-slate-800",  icon: "text-white",      border: "border-slate-700" },
 };
 
 export function MetricCard({ title, value, subtitle, icon: Icon, color = "blue" }: Props) {
