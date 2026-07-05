@@ -11,7 +11,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-background">
-      <div className="hidden md:block shrink-0">
+      <div className="hidden md:block shrink-0 sticky top-0 h-screen">
         <SidebarPane />
       </div>
 

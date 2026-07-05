@@ -12,15 +12,17 @@ export function SidebarPane() {
   }, []);
 
   return (
-    <Sidebar
-      collapsed={collapsed}
-      onToggle={() => {
-        setCollapsed((c) => {
-          const next = !c;
-          localStorage.setItem("alfa-one:sidebar-collapsed", String(next));
-          return next;
-        });
-      }}
-    />
+    <div className="h-full">
+      <Sidebar
+        collapsed={collapsed}
+        onToggle={() => {
+          setCollapsed((c) => {
+            const next = !c;
+            localStorage.setItem("alfa-one:sidebar-collapsed", String(next));
+            return next;
+          });
+        }}
+      />
+    </div>
   );
 }
