@@ -1,5 +1,6 @@
 "use client";
 
+import { Topbar } from "@/components/layout/Topbar";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Building2, FileText, Inbox, Mail, Receipt, Settings, ShoppingCart, Wallet } from "lucide-react";
@@ -98,7 +99,8 @@ function FeElectronicaShellInner({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <>
+      <Topbar title="Facturación electrónica" />
       <div className="sticky top-14 lg:top-16 z-10 shrink-0 border-b border-[#2a2a2a] bg-[#111111]">
         <div className="flex flex-wrap items-center gap-2 px-3 py-2 md:px-5">
           <nav aria-label="Secciones FE" className="flex flex-wrap items-center gap-1 flex-1 min-w-0">
@@ -149,7 +151,7 @@ function FeElectronicaShellInner({ children }: { children: React.ReactNode }) {
           </p>
         )}
       </div>
-      <div className="flex-1 overflow-auto p-4 md:p-6">{children}</div>
-    </div>
+      <main className="min-w-0">{children}</main>
+    </>
   );
 }

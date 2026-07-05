@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { hasPermission } from "@/lib/permissions/check";
 import type { PermissionKey } from "@/lib/permissions/registry";
+import { Topbar } from "@/components/layout/Topbar";
 import { ModuleSubnav } from "@/components/layout/ModuleSubnav";
 
 type Tab = {
@@ -63,11 +64,17 @@ export function TicketsTiShell({ children }: { children: React.ReactNode }) {
   });
 
   if (visibleTabs.length <= 1) {
-    return <main className="flex-1 min-w-0">{children}</main>;
+    return (
+      <>
+        <Topbar title="Tickets TI" />
+        <main className="min-w-0">{children}</main>
+      </>
+    );
   }
 
   return (
-    <div className="flex flex-col min-h-0 flex-1">
+    <>
+      <Topbar title="Tickets TI" />
       <ModuleSubnav
         ariaLabel="Secciones Tickets TI"
         tabs={visibleTabs.map((tab) => ({
@@ -76,7 +83,7 @@ export function TicketsTiShell({ children }: { children: React.ReactNode }) {
           active: tabActive(tab, pathname),
         }))}
       />
-      <main className="flex-1 min-w-0">{children}</main>
-    </div>
+      <main className="min-w-0">{children}</main>
+    </>
   );
 }
