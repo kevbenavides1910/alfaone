@@ -88,9 +88,9 @@ export function FacturacionShell({ children }: { children: React.ReactNode }) {
       {visibleTabs.length > 0 && (
         <nav
           aria-label="Secciones de facturación"
-          className="border-b border-slate-200 bg-white px-4 md:px-6"
+          className="sticky top-14 lg:top-16 z-10 border-b border-[#2a2a2a] bg-[#111111]"
         >
-          <div className="flex gap-1 overflow-x-auto">
+          <div className="flex gap-1 px-3 py-2 overflow-x-auto scrollbar-none">
             {visibleTabs.map((tab) => {
               const active = tab.match(pathname);
               return (
@@ -98,10 +98,10 @@ export function FacturacionShell({ children }: { children: React.ReactNode }) {
                   key={tab.href}
                   href={tab.href}
                   className={cn(
-                    "shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition-colors",
+                    "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-150",
                     active
-                      ? "border-red-600 text-red-600"
-                      : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"
+                      ? "bg-red-600 text-white shadow-sm"
+                      : "text-gray-300 hover:bg-white/10 hover:text-white"
                   )}
                 >
                   {tab.label}

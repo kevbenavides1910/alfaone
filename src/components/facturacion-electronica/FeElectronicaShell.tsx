@@ -99,9 +99,8 @@ function FeElectronicaShellInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="sticky top-14 lg:top-16 z-10 shrink-0 border-b border-[#2a2a2a] bg-[#121212]/95 backdrop-blur-md shadow-md">
-        <div className="h-0.5 w-full bg-[var(--app-primary)]" aria-hidden />
-        <div className="flex flex-wrap items-center gap-2 px-4 py-2 md:px-6">
+      <div className="sticky top-14 lg:top-16 z-10 shrink-0 border-b border-[#2a2a2a] bg-[#111111]">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2 md:px-5">
           <nav aria-label="Secciones FE" className="flex flex-wrap items-center gap-1 flex-1 min-w-0">
             {visibleTabs.map((tab) => {
               const active = tab.match(pathname);
@@ -111,12 +110,11 @@ function FeElectronicaShellInner({ children }: { children: React.ReactNode }) {
                   key={tab.href}
                   href={tab.href}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 whitespace-nowrap",
+                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-150 whitespace-nowrap",
                     active
-                      ? "text-white shadow-md"
+                      ? "bg-red-600 text-white shadow-sm"
                       : "text-gray-300 hover:bg-white/10 hover:text-white",
                   )}
-                  style={active ? { backgroundColor: "var(--app-primary)" } : undefined}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                   {tab.label}

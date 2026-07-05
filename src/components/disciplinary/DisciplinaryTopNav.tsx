@@ -70,8 +70,8 @@ export function DisciplinaryTopNav() {
   const inAjustes = pathname.startsWith("/disciplinario/ajustes");
 
   return (
-    <div className="border-b border-slate-200 bg-white">
-      <div className="flex items-center overflow-x-auto scrollbar-none">
+    <div className="sticky top-14 lg:top-16 z-10 border-b border-[#2a2a2a] bg-[#111111]">
+      <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto scrollbar-none">
         {mainItems.map((item) => {
           const active = isActive(item, pathname);
           return (
@@ -79,14 +79,13 @@ export function DisciplinaryTopNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-1.5 whitespace-nowrap px-4 py-3 text-sm font-medium",
-                "border-b-2 transition-colors",
+                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-150",
                 active
-                  ? "border-red-600 text-red-700 bg-red-50/60"
-                  : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  ? "bg-red-600 text-white shadow-sm"
+                  : "text-gray-300 hover:bg-white/10 hover:text-white"
               )}
             >
-              <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+              <item.icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
               <span>{item.label}</span>
             </Link>
           );
@@ -94,10 +93,10 @@ export function DisciplinaryTopNav() {
 
         {ajustesItems.length > 0 && (
           <>
-            <div className="mx-2 h-5 w-px bg-slate-200 shrink-0" />
-            <div className="flex items-center gap-0.5 text-xs text-slate-400 px-2">
-              <Settings2 className="h-3.5 w-3.5" />
-              <span className="font-semibold uppercase tracking-wider">Ajustes</span>
+            <div className="mx-1.5 h-4 w-px bg-white/15 shrink-0" />
+            <div className="flex items-center gap-1 text-white/30 px-1.5 shrink-0">
+              <Settings2 className="h-3 w-3" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider">Ajustes</span>
             </div>
             {ajustesItems.map((item) => {
               const active = isActive(item, pathname);
@@ -106,11 +105,10 @@ export function DisciplinaryTopNav() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-1.5 whitespace-nowrap px-3 py-3 text-sm font-medium",
-                    "border-b-2 transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-150",
                     active
-                      ? "border-red-600 text-red-700 bg-red-50/60"
-                      : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                      ? "bg-red-600 text-white shadow-sm"
+                      : "text-gray-300 hover:bg-white/10 hover:text-white"
                   )}
                 >
                   <item.icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />

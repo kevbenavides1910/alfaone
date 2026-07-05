@@ -93,10 +93,10 @@ export function RecorridosShell({ children }: { children: React.ReactNode }) {
       <Topbar title="Recorrido de marcas" />
       {visibleTabs.length > 0 && (
         <nav
-          className="sticky top-16 z-10 border-b border-border bg-card/90 backdrop-blur-md shadow-sm"
+          className="sticky top-14 lg:top-16 z-10 border-b border-[#2a2a2a] bg-[#111111]"
           aria-label="Secciones de recorrido de marcas"
         >
-          <div className="px-4 md:px-6 flex flex-wrap gap-1 py-2 overflow-x-auto">
+          <div className="px-3 md:px-5 flex flex-wrap gap-1 py-2 overflow-x-auto scrollbar-none">
             {visibleTabs.map((tab) => {
               const active = tabActive(tab, pathname);
               return (
@@ -104,10 +104,10 @@ export function RecorridosShell({ children }: { children: React.ReactNode }) {
                   key={tab.href}
                   href={tab.href}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
+                    "px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all duration-150",
                     active
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-slate-600 hover:bg-muted hover:text-slate-900",
+                      ? "bg-red-600 text-white shadow-sm"
+                      : "text-gray-300 hover:bg-white/10 hover:text-white",
                   )}
                 >
                   {tab.label}
