@@ -21,8 +21,17 @@ export type SessionWithPermissions = Session & {
   };
 };
 
+function isImpersonating(session: Session | null): boolean {
+  const s = session as SessionWithPermissions | null;
+  return Boolean(s?.user?.impersonatedRoleId);
+}
+
 function isAdminRole(session: Session | null): boolean {
   const s = session as SessionWithPermissions | null;
+  // En vista previa de rol, usar solo el rol efectivo (roleCode), no el enum legacy del usuario real.
+  if (isImpersonating(session)) {
+    return s?.user?.roleCode === "ADMIN";
+  }
   return s?.user?.roleCode === "ADMIN" || s?.user?.role === "ADMIN";
 }
 
@@ -44,6 +53,9 @@ export function hasPermission(
 
 /** ADMIN legacy: rol código ADMIN tiene acceso total. */
 export function isPlatformAdmin(session: Session | null): boolean {
+  if (isImpersonating(session)) {
+    return hasPermission(session, "plataforma.roles", "admin");
+  }
   if (isAdminRole(session)) return true;
   return hasPermission(session, "plataforma.roles", "admin");
 }

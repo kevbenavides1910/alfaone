@@ -76,6 +76,11 @@ async function applyImpersonatedRole(
   token.roleId = role.id;
   token.roleCode = role.code;
   token.permissions = await getRolePermissions(role.id);
+
+  const legacyRoles = ["ADMIN", "SUPERVISOR", "COMPRAS", "COMMERCIAL", "CONSULTA"] as const;
+  if (legacyRoles.includes(role.code as (typeof legacyRoles)[number])) {
+    token.role = role.code as UserRole;
+  }
 }
 
 async function clearImpersonation(token: import("next-auth/jwt").JWT): Promise<void> {
@@ -89,6 +94,10 @@ async function clearImpersonation(token: import("next-auth/jwt").JWT): Promise<v
       token.roleId = role.id;
       token.roleCode = role.code;
       token.permissions = await getRolePermissions(role.id);
+      const legacyRoles = ["ADMIN", "SUPERVISOR", "COMPRAS", "COMMERCIAL", "CONSULTA"] as const;
+      if (legacyRoles.includes(role.code as (typeof legacyRoles)[number])) {
+        token.role = role.code as UserRole;
+      }
     } else {
       const ctx = await getUserPermissionContext(userId);
       if (ctx) {
@@ -109,6 +118,12 @@ async function clearImpersonation(token: import("next-auth/jwt").JWT): Promise<v
   delete token.impersonatedRoleCode;
   delete token.realRoleId;
   delete token.realRoleCode;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+  if (user) token.role = user.role;
 }
 
 /** En dev, un secret fijo si falta en .env evita JWT inválidos y sesiones que no “pegan”. En producción debe existir NEXTAUTH_SECRET. */
