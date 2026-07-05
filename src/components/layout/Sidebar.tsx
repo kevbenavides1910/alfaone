@@ -133,7 +133,7 @@ export function Sidebar({ collapsed, onToggle, onClose, isMobile }: Props) {
       </div>
 
       {/* ── Navegación ── */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto scrollbar-none">
         {filteredItems.map((item) => {
           const active = item.isActive
             ? item.isActive(pathname, item.href)

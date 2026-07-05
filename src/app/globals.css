@@ -197,6 +197,34 @@
   }
 }
 
+/* Scrollbar oculto — mantiene funcionalidad de scroll */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Scrollbar personalizado — versión sutil para usar donde sea visible */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(215 10% 30% / 0.4) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: hsl(215 10% 50% / 0.3);
+  border-radius: 9999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: hsl(215 10% 50% / 0.5);
+}
+
 /* Traffic light colors */
 .traffic-green {
   @apply bg-green-100 text-green-800 border-green-300;
