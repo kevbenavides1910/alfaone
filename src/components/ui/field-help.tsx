@@ -70,7 +70,7 @@ export function LabelWithHelp({
       </span>
       {help && (
         <div className="relative inline-flex" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
-          <Info className="h-3.5 w-3.5 text-blue-500 cursor-help" />
+          <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
           {show && (
             <div className="absolute bottom-full left-0 z-50 mb-1 w-64 rounded-md bg-zinc-900 px-3 py-2 text-xs text-white shadow-lg ring-1 ring-zinc-700">
               {help}

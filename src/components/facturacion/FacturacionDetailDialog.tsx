@@ -234,7 +234,7 @@ export function FacturacionDetailDialog({ factura, open, onOpenChange, canEdit }
           </div>
           <div>
             <p className="text-xs text-slate-500">Total</p>
-            <p className="font-semibold text-blue-700">
+            <p className="font-semibold text-slate-700">
               {factura.amountDefined && factura.totalCalculated != null
                 ? formatCurrency(factura.totalCalculated)
                 : "—"}
@@ -385,7 +385,7 @@ export function FacturacionDetailDialog({ factura, open, onOpenChange, canEdit }
                         href={req.downloadUrl ?? "#"}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1 mt-1"
+                        className="text-xs text-red-600 hover:underline inline-flex items-center gap-1 mt-1"
                       >
                         {req.fileName}
                         <ExternalLink className="h-3 w-3" />

@@ -66,6 +66,12 @@ const TABS: Tab[] = [
     isActive: (p) => p.startsWith("/recorridos/bitacora"),
   },
   {
+    href: "/recorridos/hombre-vivo",
+    label: "Hombre vivo",
+    permission: "recorridos.reportes",
+    isActive: (p) => p.startsWith("/recorridos/hombre-vivo"),
+  },
+  {
     href: "/recorridos/configuracion",
     label: "Configuración",
     permission: "recorridos.configuracion",

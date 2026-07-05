@@ -36,7 +36,7 @@ interface ExpenseTypeConfig {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const FALLBACK_TYPES: Record<string, { label: string; color: string }> = {
-  APERTURA:  { label: "Apertura",       color: "bg-blue-100 text-blue-800" },
+  APERTURA:  { label: "Apertura",       color: "bg-blue-100 text-slate-800" },
   UNIFORMS:  { label: "Uniformes",      color: "bg-purple-100 text-purple-800" },
   AUDIT:     { label: "Auditoría",      color: "bg-orange-100 text-orange-800" },
   ADMIN:     { label: "Administrativo", color: "bg-slate-100 text-slate-700" },
@@ -297,7 +297,7 @@ export function ContractExpensesTab({
                     <td className="px-4 py-3 max-w-xs">
                       <div className="font-medium text-slate-800 truncate">{e.description}</div>
                       {e.position && (
-                        <div className="text-xs text-blue-500">
+                        <div className="text-xs text-slate-500">
                           {e.position.location
                             ? `${e.position.location.name} › ${e.position.name}`
                             : `Puesto: ${e.position.name}`}

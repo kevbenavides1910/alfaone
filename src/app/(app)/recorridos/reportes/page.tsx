@@ -410,7 +410,7 @@ export default function RecorridosReportesPage() {
       "Ultimo login": d.lastLoginAt ? formatDateTime(d.lastLoginAt) : "",
     }));
     exportRowsToExcel({
-      filename: "syntra_dispositivos",
+      filename: "alfa_one_dispositivos",
       sheetName: "Dispositivos",
       rows,
       columnWidths: [12, 18, 24, 8, 20],
@@ -443,7 +443,7 @@ export default function RecorridosReportesPage() {
       Longitud: f.longitude ?? "",
     }));
     exportRowsToExcel({
-      filename: `syntra_marcas_${queryDesde}_${queryHasta}`,
+      filename: `alfa_one_marcas_${queryDesde}_${queryHasta}`,
       sheetName: "Marcas",
       rows,
       columnWidths: [12, 24, 14, 22, 10, 18, 28, 24, 10, 16, 10, 10, 14, 28, 20, 12, 12],
@@ -471,7 +471,7 @@ export default function RecorridosReportesPage() {
       <RecorridosPageHeader
         icon={FileBarChart}
         title="Reportes operativos"
-        description="Cumplimiento de rondas NFC registradas desde la app SYNTRA."
+        description="Cumplimiento de rondas NFC registradas desde la app móvil."
       />
 
       <Card>

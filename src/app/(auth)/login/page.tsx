@@ -8,6 +8,7 @@ import { Shield, Loader2 } from "lucide-react";
 import {
   APP_BRANDING_QUERY_KEY,
   APP_NAME,
+  APP_TAGLINE,
   DEFAULT_PRIMARY_HEX,
   DEFAULT_SIDEBAR_HEX,
 } from "@/modules/plataforma/branding-constants";
@@ -95,7 +96,15 @@ function LoginForm() {
         return url.startsWith("/") ? url : "/home";
       }
 
-      window.location.assign(sameOriginPath(result.url));
+      const sessionRes = await fetch("/api/auth/session", { credentials: "same-origin" });
+      const sessionJson = (await sessionRes.json()) as {
+        user?: { mustChangePassword?: boolean };
+      };
+      const target = sessionJson.user?.mustChangePassword
+        ? "/change-password"
+        : sameOriginPath(result.url);
+
+      window.location.assign(target);
     } catch {
       setError("Error de red o del servidor. Intente de nuevo.");
     } finally {
@@ -129,7 +138,7 @@ function LoginForm() {
             )}
           </div>
           <h1 className="text-2xl font-bold text-white">{APP_NAME}</h1>
-          <p className="text-slate-400 mt-1">Control de Rentabilidad de Contratos</p>
+          <p className="text-slate-400 mt-1">{APP_TAGLINE}</p>
         </div>
 
         <Card>

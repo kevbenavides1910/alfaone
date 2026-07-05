@@ -243,7 +243,7 @@ export function ClientContactsTab({
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-slate-800">{c.name}</p>
                       {c.isBillingContact && (
-                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">Facturación</Badge>
+                        <Badge variant="secondary" className="text-xs bg-blue-100 text-red-600">Facturación</Badge>
                       )}
                       {c.isContractAdmin && (
                         <Badge variant="secondary" className="text-xs bg-violet-100 text-violet-700">Admin. contrato</Badge>
@@ -260,7 +260,7 @@ export function ClientContactsTab({
                       </p>
                       <p className="flex items-center gap-2">
                         <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                        <a href={`mailto:${c.email}`} className="text-blue-600 hover:underline truncate">{c.email}</a>
+                        <a href={`mailto:${c.email}`} className="text-red-600 hover:underline truncate">{c.email}</a>
                       </p>
                     </div>
                   </div>

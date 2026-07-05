@@ -208,7 +208,7 @@ export function OnDemandBillingTab({ contractId, readOnly }: Props) {
 
       <p className="text-xs text-slate-400">
         Ver también el módulo{" "}
-        <Link href="/facturacion" className="text-blue-600 hover:underline">
+        <Link href="/facturacion" className="text-red-600 hover:underline">
           Facturación
         </Link>{" "}
         para el seguimiento de requisitos y cierre de cada mes.

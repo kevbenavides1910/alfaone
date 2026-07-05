@@ -30,7 +30,9 @@ import { BillingRequirementsTab } from "@/components/contracts/BillingRequiremen
 import { ClientContactsTab } from "@/components/contracts/ClientContactsTab";
 import { ContractExpensesTab } from "@/components/contracts/ContractExpensesTab";
 import { AssetsTab } from "@/components/contracts/AssetsTab";
+import { AdministrationsTab } from "@/components/contracts/AdministrationsTab";
 import { canModifyContracts, canManageExpenses, isAdmin } from "@/modules/core/permissions";
+import { canEditContractTab, canViewContractTab } from "@/lib/permissions/contract-tabs";
 import type { ContractStatus, ClientType, ContractHiringType } from "@prisma/client";
 
 interface Contract {
@@ -78,6 +80,8 @@ export default function ContractDetailPage() {
   const canEditContract = role ? canModifyContracts(role) : false;
   const canEditExpenses = role ? canManageExpenses(role) : false;
   const canDeleteContract = role ? isAdmin(role) : false;
+  const canViewAdministrations = canViewContractTab(session, "administrations");
+  const canEditAdministrations = canEditContractTab(session, "administrations");
 
   const { data: companiesRes } = useCompanies();
   const companyRows = companiesRes?.data ?? [];
@@ -245,6 +249,9 @@ export default function ContractDetailPage() {
               <TabsTrigger value="billing" className="carbon-tabs-trigger">Registro de venta</TabsTrigger>
             )}
             <TabsTrigger value="billing-requirements" className="carbon-tabs-trigger">Requisitos de facturación</TabsTrigger>
+            {canViewAdministrations && (
+              <TabsTrigger value="administrations" className="carbon-tabs-trigger">Administraciones</TabsTrigger>
+            )}
             <TabsTrigger value="client-contacts" className="carbon-tabs-trigger">Contacto del cliente</TabsTrigger>
             <TabsTrigger value="periods" className="carbon-tabs-trigger">Prórrogas</TabsTrigger>
             <TabsTrigger value="expenses" className="carbon-tabs-trigger">Todos los gastos</TabsTrigger>
@@ -255,7 +262,7 @@ export default function ContractDetailPage() {
               {/* Expense breakdown */}
               {prof && (() => {
                 const EXPENSE_TYPE_META: Record<string, { label: string; color: string; bar: string }> = {
-                  APERTURA:  { label: "Apertura",       color: "text-blue-700",   bar: "bg-blue-500" },
+                  APERTURA:  { label: "Apertura",       color: "text-red-600",   bar: "bg-slate-400" },
                   UNIFORMS:  { label: "Uniformes",      color: "text-purple-600", bar: "bg-purple-400" },
                   AUDIT:     { label: "Auditoría",      color: "text-orange-600", bar: "bg-orange-400" },
                   ADMIN:     { label: "Administrativo", color: "text-slate-600",  bar: "bg-slate-400" },
@@ -273,7 +280,7 @@ export default function ContractDetailPage() {
                 if (prof.auditTotal    > 0) buckets["AUDIT"]    = (buckets["AUDIT"]    ?? 0) + prof.auditTotal;
                 // Legacy deferred/admin distributions stay as separate lines (no type info available)
                 const legacyLines = [
-                  { label: "Diferidos legacy (dist.)",        value: prof.deferredTotal, color: "text-indigo-500", bar: "bg-indigo-300" },
+                  { label: "Diferidos legacy (dist.)",        value: prof.deferredTotal, color: "text-slate-500", bar: "bg-slate-300" },
                   { label: "Administrativos legacy (dist.)",  value: prof.adminTotal,    color: "text-slate-400",  bar: "bg-slate-300" },
                 ].filter(l => l.value > 0);
 
@@ -448,6 +455,12 @@ export default function ContractDetailPage() {
           <TabsContent value="billing-requirements" className="mt-0 p-4 md:p-6">
             <BillingRequirementsTab contractId={id} readOnly={!canEditContract} />
           </TabsContent>
+
+          {canViewAdministrations && (
+            <TabsContent value="administrations" className="mt-0 p-4 md:p-6">
+              <AdministrationsTab contractId={id} readOnly={!canEditAdministrations} />
+            </TabsContent>
+          )}
 
           <TabsContent value="client-contacts" className="mt-0 p-4 md:p-6">
             <ClientContactsTab

@@ -258,7 +258,7 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
   recorridos: {
     id: "recorridos",
     label: "Recorrido de marcas",
-    description: "App SYNTRA: dispositivos, rutas NFC, puntos, horarios y asignaciones.",
+    description: "App móvil: dispositivos, rutas NFC, puntos, horarios y asignaciones.",
     uiRoutePrefixes: ["/recorridos"],
     apiRoutePrefixes: ["/api/admin/patrol", "/api/syntra"],
     codePaths: [

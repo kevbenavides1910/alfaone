@@ -50,7 +50,7 @@ export default function RecorridosConfigPage() {
   return (
     <div className="p-6 md:p-8 max-w-3xl mx-auto w-full space-y-6">
       <div>
-        <h1 className="text-xl font-bold">Configuración de la app SYNTRA</h1>
+        <h1 className="text-xl font-bold">Configuración de la app móvil</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Parámetros remotos que la app consulta en <code>/api/syntra/config</code>.
         </p>

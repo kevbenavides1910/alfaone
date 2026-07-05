@@ -240,7 +240,7 @@ export default function CuentasPorCobrarPage() {
                         {row.licitacionNo && (
                           <Link
                             href={`/contracts/${row.contractId}`}
-                            className="text-xs text-blue-600 hover:underline"
+                            className="text-xs text-red-600 hover:underline"
                           >
                             {row.licitacionNo}
                           </Link>
@@ -256,7 +256,7 @@ export default function CuentasPorCobrarPage() {
                             <div className="text-xs text-slate-600 mt-0.5">{row.billingContact.phone}</div>
                             <a
                               href={`mailto:${row.billingContact.email}`}
-                              className="text-xs text-blue-600 hover:underline"
+                              className="text-xs text-red-600 hover:underline"
                             >
                               {row.billingContact.email}
                             </a>

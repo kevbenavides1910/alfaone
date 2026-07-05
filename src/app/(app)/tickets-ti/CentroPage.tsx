@@ -56,7 +56,7 @@ export default function TicketsTiCentroPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Headset className="h-7 w-7 text-indigo-600" />
+            <Headset className="h-7 w-7 text-red-600" />
             Centro de Operaciones
           </h1>
           <p className="text-sm text-slate-500 mt-1">

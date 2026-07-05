@@ -513,7 +513,7 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { id: "laborPct",    label: "Mano de obra",          color: "text-blue-700",   bg: "bg-blue-50",   field: "laborPct" as const },
+                { id: "laborPct",    label: "Mano de obra",          color: "text-red-600", bg: "bg-red-50",   field: "laborPct" as const },
                 { id: "suppliesPct", label: "Insumos (presupuesto)", color: "text-purple-700", bg: "bg-purple-50", field: "suppliesPct" as const },
                 { id: "adminPct",    label: "Gasto administrativo",  color: "text-orange-700", bg: "bg-orange-50", field: "adminPct" as const },
                 { id: "profitPct",   label: "Utilidad",              color: "text-green-700",  bg: "bg-green-50",  field: "profitPct" as const },

@@ -61,7 +61,7 @@ function StatCard({
         ? "text-amber-700"
         : accent === "red"
           ? "text-red-700"
-          : "text-blue-700";
+          : "text-slate-800";
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -302,8 +302,8 @@ export default function FacturacionDashboardPage() {
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-blue-600" />
+          <h2 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-red-600" />
             Dashboard
           </h2>
           <p className="text-sm text-slate-500 mt-1 max-w-3xl">

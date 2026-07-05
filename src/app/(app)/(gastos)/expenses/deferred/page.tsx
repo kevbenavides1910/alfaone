@@ -176,7 +176,7 @@ export default function DeferredExpensesPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              className="gap-1 text-blue-600 hover:bg-blue-50"
+                              className="gap-1 text-red-600 hover:bg-blue-50"
                               onClick={() => setPreviewExpenseId(e.id)}
                             >
                               <Send className="h-3.5 w-3.5" />

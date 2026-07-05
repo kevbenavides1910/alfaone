@@ -131,7 +131,7 @@ export default function EmpleadosPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-              <UserCircle className="h-6 w-6 text-indigo-600" />
+              <UserCircle className="h-5 w-5 text-red-600" />
               Directorio de empleados
             </h1>
             <p className="text-sm text-slate-600 mt-1">
@@ -213,7 +213,7 @@ export default function EmpleadosPage() {
                 {canImport && (
                   <>
                     {" "}
-                    <Link href="/empleados/importar" className="text-indigo-600 hover:underline">
+                    <Link href="/empleados/importar" className="text-red-600 hover:underline">
                       Importar CSV
                     </Link>
                   </>
@@ -241,7 +241,7 @@ export default function EmpleadosPage() {
                           <div className="text-xs text-slate-500 font-mono">{r.codigoEmpleado}</div>
                           {r.cedula && <div className="text-xs text-slate-500">Céd. {r.cedula}</div>}
                           {(r.companyEntity || r.companySapCode) && (
-                            <div className="text-xs text-indigo-700 mt-0.5">
+                            <div className="text-xs text-slate-600 mt-0.5">
                               {companySapLabel(
                                 r.companySapCode,
                                 r.company ?? r.companyEntity?.code,

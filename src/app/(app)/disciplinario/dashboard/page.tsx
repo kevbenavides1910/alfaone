@@ -96,20 +96,20 @@ export default function DisciplinarioDashboardPage() {
     <>
       <div className="p-4 sm:p-6 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
-          <Link href="/disciplinario" className="inline-flex items-center text-sm text-slate-600 hover:text-blue-600 gap-1">
+          <Link href="/disciplinario" className="inline-flex items-center text-sm text-slate-600 hover:text-red-600 gap-1">
             <ArrowLeft className="h-4 w-4" /> Volver al listado
           </Link>
-          <Link href="/disciplinario/empleados" className="inline-flex items-center text-sm text-slate-600 hover:text-blue-600 gap-1">
+          <Link href="/disciplinario/empleados" className="inline-flex items-center text-sm text-slate-600 hover:text-red-600 gap-1">
             <Users className="h-4 w-4" /> Resumen por empleado
           </Link>
-          <Link href="/disciplinario/reportes/omisiones" className="inline-flex items-center text-sm text-slate-600 hover:text-blue-600 gap-1">
+          <Link href="/disciplinario/reportes/omisiones" className="inline-flex items-center text-sm text-slate-600 hover:text-red-600 gap-1">
             <AlertTriangle className="h-4 w-4" /> Reporte de omisiones
           </Link>
         </div>
 
         <div>
-          <h1 className="text-2xl font-semibold text-slate-800 flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 text-blue-600" />
+          <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-red-600" />
             Dashboard disciplinario
           </h1>
           <p className="text-sm text-slate-500">
@@ -307,7 +307,7 @@ export default function DisciplinarioDashboardPage() {
                           <td className="px-3 py-2">
                             <Link
                               href={`/disciplinario/empleados/${encodeURIComponent(t.codigoEmpleado)}`}
-                              className="font-medium text-slate-800 hover:text-blue-600 hover:underline"
+                              className="font-medium text-slate-800 hover:text-red-600 hover:underline"
                             >
                               {t.nombreEmpleado}
                             </Link>

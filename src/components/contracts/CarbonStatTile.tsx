@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils/cn";
 type Accent = "blue" | "gray" | "green" | "red" | "purple";
 
 const accentBorder: Record<Accent, string> = {
-  blue: "border-l-[#0f62fe]",
+  blue: "border-l-[#dc2626]",
   gray: "border-l-[#525252]",
   green: "border-l-[#198038]",
   red: "border-l-[#da1e28]",

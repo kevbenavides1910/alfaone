@@ -33,7 +33,7 @@ export default function RutasPermitidasPage() {
           Rutas permitidas
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Asigne qué celulares (IMEI) pueden operar cada ruta en la app SYNTRA. La configuración de
+          Asigne qué celulares (IMEI) pueden operar cada ruta en la app móvil. La configuración de
           puntos NFC y horarios está en la pestaña <strong>Rutas</strong>.
         </p>
       </div>

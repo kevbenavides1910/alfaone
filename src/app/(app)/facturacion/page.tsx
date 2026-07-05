@@ -97,7 +97,7 @@ export default function FacturacionPage() {
   return (
     <div className="p-6 space-y-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-800">Facturación mensual</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Facturación mensual</h2>
           <p className="text-sm text-slate-500 mt-1">
             Los contratos de contratación fija se cargan automáticamente con el último monto de venta del
             contrato. Los contratos por demanda aparecen pendientes hasta definir el monto en el contrato.

@@ -94,7 +94,7 @@ function GlobalPartidaCell({ sharePct, active }: { sharePct: number; active: boo
   }
   return (
     <td className="text-right whitespace-nowrap">
-      <span className="font-semibold text-[#0f62fe] tabular-nums">{(sharePct * 100).toFixed(2)}%</span>
+      <span className="font-semibold text-red-600 tabular-nums">{(sharePct * 100).toFixed(2)}%</span>
     </td>
   );
 }
@@ -305,7 +305,7 @@ export default function ContractsPage() {
                   {importing ? "Importando…" : "Importar"}
                 </Button>
                 <Link href="/contracts/new">
-                  <Button className="gap-2 rounded-sm bg-[#0f62fe] hover:bg-[#0353e9] shadow-none">
+                  <Button className="gap-2 rounded-sm bg-red-600 hover:bg-red-700 shadow-none">
                     <Plus className="h-4 w-4" />
                     Nuevo contrato
                   </Button>
@@ -358,7 +358,7 @@ export default function ContractsPage() {
               placeholder="Buscar por licitación o cliente…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="rounded-sm border-[#c6c6c6] bg-[#f4f4f4] pl-9 shadow-none focus-visible:ring-[#0f62fe]"
+              className="rounded-sm border-[#c6c6c6] bg-[#f4f4f4] pl-9 shadow-none focus-visible:ring-red-500"
             />
           </div>
           <MultiSelect
@@ -495,7 +495,7 @@ export default function ContractsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="rounded-sm text-[#0f62fe] hover:bg-[#e8e8e8] hover:text-[#0353e9]"
+                            className="rounded-sm text-red-600 hover:bg-slate-100 hover:text-red-700"
                           >
                             Ver
                           </Button>
@@ -525,19 +525,19 @@ export default function ContractsPage() {
                       <td className="text-right tabular-nums">{formatCurrency(totalSupplies)}</td>
                       <td className="text-right tabular-nums">{formatCurrency(totalAdmin)}</td>
                       <td className="text-right tabular-nums">{formatCurrency(totalProfit)}</td>
-                      <td className="text-right text-[#0f62fe] tabular-nums" title="Suma de % globales en esta página (con monto definido)">
+                      <td className="text-right text-red-600 tabular-nums" title="Suma de % globales en esta página (con monto definido)">
                         {(sumGlob((c) => c.billingSharePct) * 100).toFixed(2)}%
                       </td>
-                      <td className="text-right text-[#0f62fe] tabular-nums">
+                      <td className="text-right text-red-600 tabular-nums">
                         {(sumGlob((c) => c.laborSharePct) * 100).toFixed(2)}%
                       </td>
-                      <td className="text-right text-[#0f62fe] tabular-nums">
+                      <td className="text-right text-red-600 tabular-nums">
                         {(sumGlob((c) => c.suppliesSharePct) * 100).toFixed(2)}%
                       </td>
-                      <td className="text-right text-[#0f62fe] tabular-nums">
+                      <td className="text-right text-red-600 tabular-nums">
                         {(sumGlob((c) => c.adminSharePct) * 100).toFixed(2)}%
                       </td>
-                      <td className="text-right text-[#0f62fe] tabular-nums">
+                      <td className="text-right text-red-600 tabular-nums">
                         {(sumGlob((c) => c.profitSharePct) * 100).toFixed(2)}%
                       </td>
                       <td colSpan={4} />

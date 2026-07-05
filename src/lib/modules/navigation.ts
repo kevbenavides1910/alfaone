@@ -15,6 +15,12 @@ import {
   History,
   UserCircle,
   FolderKanban,
+  Bell,
+  MapPinned,
+  FileSpreadsheet,
+  Headphones,
+  ClipboardList,
+  UsersRound,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
 
@@ -38,7 +44,9 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     label: "Facturación y cobro",
     icon: Receipt,
     moduleId: "facturacion",
-    isActive: (p) => p.startsWith("/facturacion") || p.startsWith("/cuentas-por-cobrar"),
+    isActive: (p) =>
+      (p.startsWith("/facturacion") && !p.startsWith("/facturacion-electronica")) ||
+      p.startsWith("/cuentas-por-cobrar"),
   },
   { href: "/expenses", label: "Gastos", icon: DollarSign, moduleId: "presupuestos" },
   {
@@ -66,7 +74,7 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     label: "Empleados",
     icon: UserCircle,
     moduleId: "empleados",
-    isActive: (p) => p.startsWith("/empleados"),
+    isActive: (p) => p.startsWith("/empleados") && !p.startsWith("/empleados-naf"),
   },
   {
     href: "/sig",
@@ -74,6 +82,55 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     icon: FolderKanban,
     moduleId: "sig",
     isActive: (p) => p.startsWith("/sig"),
+  },
+  {
+    href: "/ventas",
+    label: "Ventas",
+    icon: TrendingUp,
+    moduleId: "ventas",
+    isActive: (p) => p.startsWith("/ventas"),
+  },
+  {
+    href: "/facturacion-electronica",
+    label: "Facturación electrónica",
+    icon: FileSpreadsheet,
+    moduleId: "facturacionElectronica",
+    isActive: (p) => p.startsWith("/facturacion-electronica"),
+  },
+  {
+    href: "/tickets-ti",
+    label: "Tickets TI",
+    icon: Headphones,
+    moduleId: "ticketsTi",
+    isActive: (p) => p.startsWith("/tickets-ti"),
+  },
+  {
+    href: "/formularios",
+    label: "Formularios",
+    icon: ClipboardList,
+    moduleId: "formularios",
+    isActive: (p) => p.startsWith("/formularios"),
+  },
+  {
+    href: "/empleados-naf",
+    label: "Empleados NAF",
+    icon: UsersRound,
+    moduleId: "empleadosNaf",
+    isActive: (p) => p.startsWith("/empleados-naf"),
+  },
+  {
+    href: "/bandeco",
+    label: "Monitoreo Bandeco",
+    icon: Bell,
+    moduleId: "bandeco",
+    isActive: (p) => p.startsWith("/bandeco"),
+  },
+  {
+    href: "/recorridos",
+    label: "Recorrido de marcas",
+    icon: MapPinned,
+    moduleId: "recorridos",
+    isActive: (p) => p.startsWith("/recorridos"),
   },
   { href: "/reports/annual", label: "Reporte Anual", icon: TrendingUp, moduleId: "reportes" },
   { href: "/reports", label: "Reporte mensual", icon: BarChart3, moduleId: "reportes" },

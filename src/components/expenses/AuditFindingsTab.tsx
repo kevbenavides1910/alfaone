@@ -119,7 +119,7 @@ export function AuditFindingsTab({ contractId }: { contractId: string }) {
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={`px-3 py-1.5 transition-colors ${
-                  statusFilter === s ? "bg-blue-600 text-white" : "hover:bg-muted/50 text-slate-600"
+                  statusFilter === s ? "bg-red-600 text-white" : "hover:bg-muted/50 text-slate-600"
                 }`}
               >
                 {s === "all" ? "Todos" : s === "PENDING" ? "Pendientes" : "Completados"}

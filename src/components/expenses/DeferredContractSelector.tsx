@@ -194,8 +194,8 @@ export function DeferredContractSelector({
                 onClick={() => toggleCompany(comp.code)}
                 className={
                   active
-                    ? "px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-600 text-white border border-blue-600"
-                    : "px-2 py-0.5 rounded-full text-[11px] font-medium bg-card text-slate-700 border border-slate-300 hover:border-blue-400"
+                    ? "px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-600 text-white border border-red-600"
+                    : "px-2 py-0.5 rounded-full text-[11px] font-medium bg-card text-slate-700 border border-slate-300 hover:border-red-400"
                 }
               >
                 {comp.label}
@@ -228,7 +228,7 @@ export function DeferredContractSelector({
       <div
         className={
           listClassName ??
-          "max-h-44 overflow-y-auto space-y-2 rounded-md border border-blue-100 bg-card p-2"
+          "max-h-44 overflow-y-auto space-y-2 rounded-md border border-red-100 bg-card p-2"
         }
       >
         {contracts.length === 0 ? (

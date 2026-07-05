@@ -21,11 +21,13 @@ ENV NEXTAUTH_URL=http://localhost:3000
 ENV NEXTAUTH_SECRET=ci-build-placeholder-secret-min-32-characters!!
 RUN npm run build
 
-FROM base AS runner
+FROM node:20-bookworm-slim AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-spa tesseract-ocr-data-eng poppler-utils
-RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng poppler-utils libaio1 ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+RUN groupadd --system --gid 1001 nodejs && useradd --system --uid 1001 --gid nodejs nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
@@ -42,4 +44,5 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_19_23
 CMD ["sh", "-c", "prisma migrate deploy && exec node server.js"]

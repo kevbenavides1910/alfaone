@@ -155,7 +155,7 @@ export default function RecorridosBitacoraPage() {
       <RecorridosPageHeader
         icon={BookOpen}
         title="Bitácora digital"
-        description="Justificaciones enviadas desde la app SYNTRA. Líguelas a omisiones de marca en un clic."
+        description="Justificaciones enviadas desde la app móvil. Líguelas a omisiones de marca en un clic."
       />
 
       <Card>

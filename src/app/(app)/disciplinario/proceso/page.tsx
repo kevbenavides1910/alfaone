@@ -78,11 +78,11 @@ export default function DisciplinarioProcesoPage() {
           </CardHeader>
           <CardContent className="text-sm text-slate-600 space-y-2">
             <p>
-              Use <Link href="/disciplinario" className="text-blue-600 hover:underline">Historial</Link>{" "}
+              Use <Link href="/disciplinario" className="text-red-600 hover:underline">Historial</Link>{" "}
               para estados y vigencia,{" "}
-              <Link href="/disciplinario/empleados" className="text-blue-600 hover:underline">Tratamiento</Link>{" "}
+              <Link href="/disciplinario/empleados" className="text-red-600 hover:underline">Tratamiento</Link>{" "}
               para ciclos y convocatorias, y{" "}
-              <Link href="/disciplinario/dashboard" className="text-blue-600 hover:underline">Dashboard</Link>{" "}
+              <Link href="/disciplinario/dashboard" className="text-red-600 hover:underline">Dashboard</Link>{" "}
               para métricas por administrador.
             </p>
           </CardContent>

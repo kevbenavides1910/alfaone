@@ -51,7 +51,7 @@ export function AdminSectionNav() {
   });
 
   return (
-    <div className="border-b border-slate-300 bg-slate-800 text-white">
+    <div className="border-b border-[#2a2a2a] bg-[#111111] text-white">
       <div className="flex flex-wrap gap-1 px-2 py-2 overflow-x-auto">
         {visibleTabs.map((tab) => (
           <Link
@@ -60,8 +60,8 @@ export function AdminSectionNav() {
             className={cn(
               "px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors",
               tabActive(tab, pathname, tabParam)
-                ? "bg-card text-slate-900 shadow-sm"
-                : "text-slate-300 hover:bg-card/10 hover:text-white"
+                ? "bg-red-600 text-white shadow-sm"
+                : "text-gray-300 hover:bg-white/10 hover:text-white"
             )}
           >
             {tab.label}

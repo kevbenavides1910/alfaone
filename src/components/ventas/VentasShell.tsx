@@ -3,13 +3,14 @@
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { hasPermission } from "@/lib/permissions/check";
-import type { PermissionKey } from "@/lib/permissions/registry";
+import type { PermissionKey, PermissionLevelId } from "@/lib/permissions/registry";
 import { ModuleSubnav } from "@/components/layout/ModuleSubnav";
 
 type Tab = {
   href: string;
   label: string;
   permission: PermissionKey;
+  minLevel?: PermissionLevelId;
   isActive?: (pathname: string) => boolean;
 };
 
@@ -24,7 +25,16 @@ const TABS: Tab[] = [
     href: "/ventas/presupuestos",
     label: "Presupuestos",
     permission: "ventas.presupuestos",
-    isActive: (p) => p === "/ventas/presupuestos" || p.startsWith("/ventas/presupuestos/"),
+    isActive: (p) =>
+      p === "/ventas/presupuestos" ||
+      (p.startsWith("/ventas/presupuestos/") && !p.startsWith("/ventas/presupuestos/parametros")),
+  },
+  {
+    href: "/ventas/presupuestos/parametros",
+    label: "Parametrización",
+    permission: "ventas.presupuestos",
+    minLevel: "edit",
+    isActive: (p) => p.startsWith("/ventas/presupuestos/parametros"),
   },
 ];
 
@@ -36,7 +46,9 @@ function tabActive(tab: Tab, pathname: string): boolean {
 export function VentasShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "";
   const { data: session } = useSession();
-  const visibleTabs = TABS.filter((tab) => hasPermission(session, tab.permission, "view"));
+  const visibleTabs = TABS.filter((tab) =>
+    hasPermission(session, tab.permission, tab.minLevel ?? "view")
+  );
 
   return (
     <div className="flex flex-col min-h-0 flex-1">

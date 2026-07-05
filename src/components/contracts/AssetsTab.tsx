@@ -199,7 +199,7 @@ export function AssetsTab({ contractId, readOnly }: { contractId: string; readOn
         {locations.map((loc) => (
           <Card key={loc.id} className="overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 bg-muted/50 border-b">
-              <Building2 className="h-4 w-4 text-blue-500" />
+              <Building2 className="h-4 w-4 text-slate-500" />
               <div className="flex-1">
                 <div className="font-medium text-slate-800">{loc.name}</div>
                 {loc.description && <p className="text-xs text-slate-500">{loc.description}</p>}
@@ -266,7 +266,7 @@ export function AssetsTab({ contractId, readOnly }: { contractId: string; readOn
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="h-6 text-xs text-blue-600"
+                                  className="h-6 text-xs text-red-600"
                                   onClick={() => {
                                     setPhoneEditing(pos.id);
                                     setPhoneValue(pos.phoneLine ?? "");
@@ -481,7 +481,7 @@ function AssignFromStockDialog({
                   {stock.map((s) => (
                     <tr
                       key={s.id}
-                      className={`cursor-pointer hover:bg-muted/50 ${selected === s.id ? "bg-blue-50" : ""}`}
+                      className={`cursor-pointer hover:bg-muted/50 ${selected === s.id ? "bg-red-50" : ""}`}
                       onClick={() => setSelected(s.id)}
                     >
                       <td className="px-2 py-2 text-center">
@@ -507,7 +507,7 @@ function AssignFromStockDialog({
           </div>
 
           {selectedAsset && (
-            <p className="text-xs text-blue-700 bg-blue-50 p-2 rounded">
+            <p className="text-xs text-red-600 bg-red-50 p-2 rounded">
               Seleccionado: {selectedAsset.type.name} · {selectedAsset.code}
             </p>
           )}

@@ -95,7 +95,7 @@ const MOVEMENT_LABEL: Record<MovementRow["type"], string> = {
 const MOVEMENT_BADGE: Record<MovementRow["type"], string> = {
   INTAKE: "bg-emerald-100 text-emerald-800",
   ISSUE: "bg-red-100 text-red-700",
-  ASSIGN: "bg-blue-100 text-blue-800",
+  ASSIGN: "bg-slate-100 text-slate-700",
   RETURN: "bg-amber-100 text-amber-800",
 };
 const INTAKE_REASON: Record<string, string> = {
@@ -142,7 +142,7 @@ function ColumnFilterInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full h-7 text-xs border border-slate-200 rounded px-2 pr-6 bg-card focus:outline-none focus:border-blue-400"
+        className="w-full h-7 text-xs border border-slate-200 rounded px-2 pr-6 bg-card focus:outline-none focus:border-red-400"
       />
       {value && (
         <button
@@ -516,14 +516,14 @@ function AssetsTable({
         </Button>
       </div>
       {hasActiveFilters && (
-        <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 text-xs text-blue-800 flex items-center justify-between">
+        <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs text-slate-700 flex items-center justify-between">
           <span>
             Mostrando <strong>{filtered.length}</strong> de <strong>{assets.length}</strong> activo(s) tras filtros por columna.
           </span>
           <button
             type="button"
             onClick={() => setFilters({})}
-            className="text-blue-700 hover:underline font-medium"
+            className="text-red-600 hover:underline font-medium"
           >
             Limpiar filtros
           </button>
@@ -775,14 +775,14 @@ function MovementsTable({ movements, loading }: { movements: MovementRow[]; load
         </Button>
       </div>
       {hasActiveFilters && (
-        <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 text-xs text-blue-800 flex items-center justify-between">
+        <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs text-slate-700 flex items-center justify-between">
           <span>
             Mostrando <strong>{filtered.length}</strong> de <strong>{movements.length}</strong> movimiento(s) tras filtros por columna.
           </span>
           <button
             type="button"
             onClick={() => setFilters({})}
-            className="text-blue-700 hover:underline font-medium"
+            className="text-red-600 hover:underline font-medium"
           >
             Limpiar filtros
           </button>
@@ -1597,7 +1597,7 @@ function AssignFromStockDialog({
               Escriba el número del puesto, el nombre de la ubicación o la licitación del contrato.
             </p>
             {selected ? (
-              <div className="flex items-start gap-2 p-3 rounded border bg-blue-50">
+              <div className="flex items-start gap-2 p-3 rounded border bg-slate-50">
                 <div className="flex-1 min-w-0 text-sm">
                   <div className="font-medium text-slate-800">{selected.name}</div>
                   {selected.description && (

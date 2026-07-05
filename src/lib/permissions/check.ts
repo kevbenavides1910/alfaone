@@ -16,6 +16,8 @@ export type SessionWithPermissions = Session & {
     roleId?: string | null;
     roleCode?: string;
     permissions?: PermissionMap;
+    impersonatedRoleId?: string | null;
+    impersonatedRoleCode?: string | null;
   };
 };
 

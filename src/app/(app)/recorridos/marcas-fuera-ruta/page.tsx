@@ -104,7 +104,7 @@ export default function MarcasFueraRutaPage() {
         Horario_programado: f.horarioProgramado ?? "",
         Motivo: f.motivoLabel,
       })),
-      filename: `syntra_marcas_fuera_ruta_${queryDesde}_${queryHasta}`,
+      filename: `alfa_one_marcas_fuera_ruta_${queryDesde}_${queryHasta}`,
       sheetName: "Fuera de ruta",
     });
   }

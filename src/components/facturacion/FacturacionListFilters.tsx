@@ -400,14 +400,14 @@ function ColumnHeader({
           type="button"
           onClick={() => onToggle?.(filterKey)}
           className={cn(
-            "inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap hover:text-blue-700 transition-colors mb-0",
+            "inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap hover:text-slate-700 transition-colors mb-0",
             align === "right" && "ml-auto",
-            active || isOpen ? "text-blue-700" : "text-slate-600"
+            active || isOpen ? "text-slate-700" : "text-slate-600"
           )}
           title="Clic para filtrar"
         >
           <span>{label}</span>
-          {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600" />}
+          {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-600" />}
           <ChevronDown
             className={cn("h-3.5 w-3.5 shrink-0 opacity-50 transition-transform", isOpen && "rotate-180")}
           />
@@ -416,7 +416,7 @@ function ColumnHeader({
         <div
           className={cn(
             "text-xs font-semibold whitespace-nowrap",
-            active ? "text-blue-700" : "text-slate-600"
+            active ? "text-slate-700" : "text-slate-600"
           )}
         >
           {label}

@@ -154,7 +154,7 @@ export default function AdminExpensesPage() {
                         {!e.isDistributed && (
                           <Button
                             variant="outline" size="sm"
-                            className="gap-1 text-blue-600 hover:bg-blue-50"
+                            className="gap-1 text-red-600 hover:bg-blue-50"
                             onClick={() => {
                               if (confirm("¿Distribuir estos gastos entre los contratos activos de la empresa?")) {
                                 distributeMutation.mutate(e.id);

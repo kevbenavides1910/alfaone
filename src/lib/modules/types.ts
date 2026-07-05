@@ -1,4 +1,4 @@
-/** Identificadores estables de dominio de negocio en la plataforma Syntra Dynamics. */
+/** Identificadores estables de dominio de negocio en la plataforma Alfa One. */
 export type AppModuleId =
   | "core"
   | "presupuestos"

@@ -719,23 +719,23 @@ export default function DisciplinarioImportPage() {
   return (
     <>
       <div className="p-4 sm:p-6 space-y-4">
-        <Link href="/disciplinario" className="inline-flex items-center text-sm text-slate-600 hover:text-blue-600 gap-1">
+        <Link href="/disciplinario" className="inline-flex items-center text-sm text-slate-600 hover:text-red-600 gap-1">
           <ArrowLeft className="h-4 w-4" /> Volver al listado
         </Link>
 
         <div>
           <h1 className="text-2xl font-semibold text-slate-800 flex items-center gap-2">
-            <Upload className="h-6 w-6 text-blue-600" />
+            <Upload className="h-6 w-6 text-red-600" />
             Importar disciplinario
           </h1>
           <p className="text-sm text-slate-500">
             Dos flujos: Excel de la app de escritorio (Historial/Estadísticas) y carga masiva de
             marcas (primera hoja). Los nombres, correos y cédulas se toman del módulo{" "}
-            <Link href="/empleados" className="text-blue-600 hover:underline">
+            <Link href="/empleados" className="text-red-600 hover:underline">
               Empleados
             </Link>
             . Los archivos duplicados (mismo contenido) se rechazan.{" "}
-            <Link href="/disciplinario/proceso" className="text-blue-600 hover:underline">
+            <Link href="/disciplinario/proceso" className="text-red-600 hover:underline">
               Guía del flujo paso a paso
             </Link>
             .
@@ -795,7 +795,7 @@ export default function DisciplinarioImportPage() {
                 {!smtpReady && (
                   <p className="text-xs text-amber-800 rounded border border-amber-200 bg-amber-50/80 p-2">
                     Para enviar correos debe <strong>guardar</strong> la salida SMTP en{" "}
-                    <Link href="/disciplinario/ajustes/configuracion" className="text-blue-700 hover:underline">
+                    <Link href="/disciplinario/ajustes/configuracion" className="text-red-600 hover:underline">
                       Disciplinario → Ajustes → Configuración
                     </Link>
                     . La prueba de envío del formulario no basta si no pulsó Guardar.
@@ -1100,7 +1100,7 @@ export default function DisciplinarioImportPage() {
                   <p>
                     No se envió ningún correo en esta importación. Lo más habitual es que{" "}
                     <strong>SMTP no esté guardado</strong> en{" "}
-                    <Link href="/disciplinario/ajustes/configuracion" className="text-blue-700 hover:underline">
+                    <Link href="/disciplinario/ajustes/configuracion" className="text-red-600 hover:underline">
                       Ajustes → Configuración
                     </Link>{" "}
                     (la prueba del formulario no sustituye a Guardar).
@@ -1348,7 +1348,7 @@ export default function DisciplinarioImportPage() {
                 ref={fileInputRef}
                 type="file"
                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className="block text-sm text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                className="block text-sm text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-blue-50 file:text-red-600 hover:file:bg-blue-100"
                 disabled={importMutation.isPending}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -1478,7 +1478,7 @@ export default function DisciplinarioImportPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <FileSpreadsheet className="h-5 w-5 text-blue-600" />
+              <FileSpreadsheet className="h-5 w-5 text-red-600" />
               Historial de importaciones
             </CardTitle>
             <p className="text-xs text-slate-500 font-normal">

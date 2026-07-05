@@ -229,7 +229,7 @@ export function RoutePhonesPanel({ routeId }: { routeId: string }) {
             ) : (
               <div className="space-y-2">
                 <p className="text-muted-foreground">
-                  Asigne el celular que usará la app SYNTRA en esta ruta (por IMEI).
+                  Asigne el celular que usará la app móvil en esta ruta (por IMEI).
                 </p>
                 <Button size="sm" onClick={() => setPrimaryPhoneOpen(true)}>
                   Asignar celular principal

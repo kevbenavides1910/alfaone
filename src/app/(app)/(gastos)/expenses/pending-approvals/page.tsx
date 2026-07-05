@@ -506,7 +506,7 @@ export default function PendingApprovalsPage() {
                           {canPreview ? (
                             <button
                               type="button"
-                              className="text-blue-600 hover:underline text-left"
+                              className="text-red-600 hover:underline text-left"
                               onClick={() =>
                                 setPreviewAttachment({
                                   id: att.id,
@@ -522,7 +522,7 @@ export default function PendingApprovalsPage() {
                           ) : (
                             <a
                               href={att.downloadUrl}
-                              className="text-blue-600 hover:underline"
+                              className="text-red-600 hover:underline"
                               target="_blank"
                               rel="noreferrer"
                             >
@@ -625,7 +625,7 @@ export default function PendingApprovalsPage() {
               {previewAttachment && (
                 <a
                   href={previewAttachment.downloadUrl}
-                  className="text-xs text-blue-600 hover:underline shrink-0"
+                  className="text-xs text-red-600 hover:underline shrink-0"
                   target="_blank"
                   rel="noreferrer"
                 >

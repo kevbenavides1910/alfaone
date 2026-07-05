@@ -26,7 +26,7 @@ const ESTADO_LABEL: Record<string, string> = {
   ANULADO: "Anulado",
 };
 const ESTADO_COLOR: Record<string, string> = {
-  EMITIDO: "bg-blue-100 text-blue-700",
+  EMITIDO: "bg-blue-100 text-red-600",
   ENTREGADO: "bg-amber-100 text-amber-800",
   FIRMADO: "bg-emerald-100 text-emerald-800",
   ANULADO: "bg-rose-100 text-rose-700",
@@ -39,7 +39,7 @@ const VIGENCIA_LABEL: Record<string, string> = {
   ANULADO: "Anulado",
 };
 const VIGENCIA_COLOR: Record<string, string> = {
-  VIGENTE: "bg-blue-100 text-blue-700",
+  VIGENTE: "bg-blue-100 text-red-600",
   VENCIDO: "bg-amber-100 text-amber-800",
   PRESCRITO: "bg-slate-200 text-slate-700",
   FINALIZADO: "bg-emerald-100 text-emerald-800",
@@ -201,7 +201,7 @@ export default function EmployeeDetailPage({
   return (
     <>
       <div className="p-4 sm:p-6 space-y-4">
-        <Link href="/disciplinario" className="inline-flex items-center text-sm text-slate-600 hover:text-blue-600 gap-1">
+        <Link href="/disciplinario" className="inline-flex items-center text-sm text-slate-600 hover:text-red-600 gap-1">
           <ArrowLeft className="h-4 w-4" /> Volver al listado
         </Link>
 
@@ -413,7 +413,7 @@ export default function EmployeeDetailPage({
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="gap-1 text-slate-600 hover:text-blue-700"
+                                className="gap-1 text-slate-600 hover:text-red-600"
                                 onClick={() =>
                                   setContractTarget({
                                     id: a.id,
@@ -429,7 +429,7 @@ export default function EmployeeDetailPage({
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="gap-1 text-blue-600 hover:text-blue-700"
+                                className="gap-1 text-red-600 hover:text-red-600"
                                 onClick={() =>
                                   setStatusTarget({
                                     id: a.id,

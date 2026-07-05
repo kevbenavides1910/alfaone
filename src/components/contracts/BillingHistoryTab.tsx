@@ -258,9 +258,9 @@ export function BillingHistoryTab({
       </div>
 
       {showForm && (
-        <Card className="border-blue-200 bg-blue-50">
+        <Card className="border-red-200 bg-red-50">
           <CardContent className="p-4 space-y-3">
-            <p className="text-sm font-medium text-blue-800">Registrar facturación para un mes específico</p>
+            <p className="text-sm font-medium text-slate-800">Registrar facturación para un mes específico</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div>
                 <label className="text-xs text-slate-600 block mb-1">Año</label>

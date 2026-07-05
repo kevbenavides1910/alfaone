@@ -141,7 +141,7 @@ export default function DocumentosNafPage() {
         <div className="text-xs text-slate-500 text-right">
           <p>Última consulta: {dataUpdatedAt ? formatDateTime(new Date(dataUpdatedAt)) : "—"}</p>
           {(isFetching || isLoading) && (
-            <p className="flex items-center justify-end gap-1 text-blue-600 mt-1">
+            <p className="flex items-center justify-end gap-1 text-red-600 mt-1">
               <RefreshCw className="h-3 w-3 animate-spin" />
               Actualizando…
             </p>

@@ -113,7 +113,7 @@ export function PeriodsTab({ contractId, periods, readOnly }: Props) {
             <Card key={p.id}>
               <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold">
+                  <div className="h-8 w-8 rounded-full bg-blue-100 text-red-600 flex items-center justify-center text-sm font-bold">
                     {p.periodNumber}
                   </div>
                   <div>

@@ -127,7 +127,7 @@ export default function EmpleadoDetailPage({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-                  <UserCircle className="h-6 w-6 text-indigo-600" />
+                  <UserCircle className="h-6 w-6 text-red-600" />
                   {employee.nombre ?? "Sin nombre"}
                 </h1>
                 <p className="text-sm text-slate-600 mt-1 font-mono">
@@ -243,7 +243,7 @@ export default function EmpleadoDetailPage({
                               {p.contract ? (
                                 <Link
                                   href={`/contracts/${p.contract.id}`}
-                                  className="text-indigo-600 hover:underline"
+                                  className="text-red-600 hover:underline"
                                 >
                                   {p.contract.licitacionNo}
                                 </Link>

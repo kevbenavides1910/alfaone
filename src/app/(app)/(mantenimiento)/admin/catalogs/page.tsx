@@ -257,7 +257,7 @@ function ExpenseTypesTab({ readOnly }: { readOnly?: boolean }) {
                     type="checkbox"
                     checked={row.isActive}
                     onChange={e => updateRow(row.type, "isActive", e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-blue-600"
+                    className="w-4 h-4 rounded border-slate-300 text-red-600"
                     disabled={readOnly}
                   />
                 </td>

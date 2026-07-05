@@ -731,6 +731,16 @@ export const HOME_MODULE_PERMISSION_GROUPS: {
   { tileId: "empleados", label: "Empleados", moduleKeys: ["empleados"] },
   { tileId: "inventario", label: "Inventario", moduleKeys: ["inventario"] },
   { tileId: "sig", label: "SIG", moduleKeys: ["sig"] },
+  { tileId: "ventas", label: "Ventas", moduleKeys: ["ventas"] },
+  {
+    tileId: "facturacion_electronica",
+    label: "Facturación electrónica",
+    moduleKeys: ["facturacionElectronica"],
+  },
+  { tileId: "tickets_ti", label: "Tickets TI", moduleKeys: ["ticketsTi"] },
+  { tileId: "formularios", label: "Formularios", moduleKeys: ["formularios"] },
+  { tileId: "empleados_naf", label: "Empleados NAF", moduleKeys: ["empleadosNaf"] },
+  { tileId: "bandeco", label: "Monitoreo Bandeco", moduleKeys: ["bandeco"] },
   { tileId: "recorridos", label: "Recorrido de marcas", moduleKeys: ["recorridos"] },
   { tileId: "mantenimiento", label: "Mantenimiento", moduleKeys: ["plataforma"] },
 ];

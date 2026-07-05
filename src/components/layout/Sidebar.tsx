@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
-import { Shield } from "lucide-react";
+import { ChevronLeft, ChevronRight, Shield, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   APP_BRANDING_QUERY_KEY,
@@ -15,17 +15,18 @@ import {
 } from "@/modules/plataforma/branding-constants";
 import { SIDEBAR_NAV_ITEMS } from "@/lib/modules/navigation";
 import { canAccessModule } from "@/lib/modules/access";
-import { hasPermission } from "@/lib/permissions/check";
+import { hasPermission, isPlatformAdmin } from "@/lib/permissions/check";
 
-type SidebarProps = {
-  collapsed?: boolean;
-  onNavigate?: () => void;
-};
+interface Props {
+  collapsed: boolean;
+  onToggle?: () => void;
+  onClose?: () => void;
+  isMobile?: boolean;
+}
 
-export function Sidebar({ collapsed: _collapsed = false, onNavigate: _onNavigate }: SidebarProps = {}) {
+export function Sidebar({ collapsed, onToggle, onClose, isMobile }: Props) {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const role = session?.user?.role;
 
   const { data: brand } = useQuery({
     queryKey: APP_BRANDING_QUERY_KEY,
@@ -49,13 +50,41 @@ export function Sidebar({ collapsed: _collapsed = false, onNavigate: _onNavigate
 
   const primary = brand?.primaryHex ?? DEFAULT_PRIMARY_HEX;
   const sidebarBg = brand?.sidebarHex ?? DEFAULT_SIDEBAR_HEX;
-  const logoSrc = brand?.hasLogo && brand.updatedAt ? `/api/branding/logo?${encodeURIComponent(brand.updatedAt)}` : null;
+  const logoSrc =
+    brand?.hasLogo && brand.updatedAt
+      ? `/api/branding/logo?${encodeURIComponent(brand.updatedAt)}`
+      : null;
+
+  const filteredItems = SIDEBAR_NAV_ITEMS.filter((item) => {
+    if (!session) return false;
+    if (item.adminOnly && !isPlatformAdmin(session)) return false;
+    if (item.href === "/facturacion") return canAccessModule(session, "facturacion");
+    if (item.href === "/contracts") return hasPermission(session, "presupuestos.contracts", "view");
+    return canAccessModule(session, item.moduleId);
+  });
+
+  const handleNav = () => {
+    if (isMobile && onClose) onClose();
+  };
 
   return (
-    <aside className="w-64 text-white flex flex-col min-h-screen" style={{ backgroundColor: sidebarBg }}>
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-white/10">
-        <div className="rounded-lg p-2 shrink-0 overflow-hidden flex items-center justify-center w-10 h-10" style={{ backgroundColor: primary }}>
+    <aside
+      className={cn(
+        "flex flex-col h-full text-white transition-all duration-300 ease-in-out overflow-hidden",
+        !isMobile && (collapsed ? "w-16" : "w-64")
+      )}
+      style={{ backgroundColor: sidebarBg }}
+    >
+      <div
+        className={cn(
+          "flex items-center border-b border-white/10 h-16 shrink-0",
+          collapsed && !isMobile ? "justify-center px-0" : "gap-3 px-4 md:px-6"
+        )}
+      >
+        <div
+          className="rounded-lg p-2 shrink-0 flex items-center justify-center w-10 h-10"
+          style={{ backgroundColor: primary }}
+        >
           {logoSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoSrc} alt="" className="max-h-8 max-w-8 object-contain" />
@@ -63,27 +92,25 @@ export function Sidebar({ collapsed: _collapsed = false, onNavigate: _onNavigate
             <Shield className="h-5 w-5 text-white" />
           )}
         </div>
-        <div>
-          <div className="font-bold text-sm leading-tight">{APP_NAME}</div>
-          <div className="text-xs text-slate-400">{APP_TAGLINE}</div>
-        </div>
+        {!collapsed && (
+          <div className="overflow-hidden flex-1 min-w-0">
+            <div className="font-bold text-sm leading-tight truncate">{APP_NAME}</div>
+            <div className="text-xs text-slate-400 truncate">{APP_TAGLINE}</div>
+          </div>
+        )}
+        {isMobile && onClose && (
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/10 shrink-0"
+            aria-label="Cerrar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-4 py-4 space-y-1">
-        {SIDEBAR_NAV_ITEMS.filter((item) => {
-          if (!session) return false;
-          if (item.adminOnly && session.user?.role !== "ADMIN" && session.user?.roleCode !== "ADMIN") {
-            return false;
-          }
-          if (item.href === "/facturacion") {
-            return canAccessModule(session, "facturacion");
-          }
-          if (item.href === "/contracts") {
-            return hasPermission(session, "presupuestos.contracts", "view");
-          }
-          return canAccessModule(session, item.moduleId);
-        }).map((item) => {
+      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+        {filteredItems.map((item) => {
           const active = item.isActive
             ? item.isActive(pathname, item.href)
             : pathname === item.href ||
@@ -94,34 +121,60 @@ export function Sidebar({ collapsed: _collapsed = false, onNavigate: _onNavigate
             <Link
               key={item.href}
               href={item.href}
+              onClick={handleNav}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                active
-                  ? "text-white"
-                  : "text-slate-400 hover:bg-card/5 hover:text-white"
+                "flex items-center rounded-md text-sm font-medium transition-colors",
+                collapsed && !isMobile ? "justify-center px-0 py-2.5 w-full" : "gap-3 px-3 py-2",
+                active ? "text-white" : "text-slate-400 hover:bg-white/10 hover:text-white"
               )}
               style={active ? { backgroundColor: primary } : undefined}
+              title={collapsed && !isMobile ? item.label : undefined}
             >
-              <item.icon className="h-4 w-4" />
-              {item.label}
+              <item.icon className="h-5 w-5 shrink-0" />
+              {(!collapsed || isMobile) && <span className="truncate">{item.label}</span>}
             </Link>
           );
         })}
       </nav>
 
-      {/* User */}
-      <div className="px-4 py-4 border-t border-white/10">
-        <div className="flex items-center gap-3 px-3 py-2">
+      {!isMobile && onToggle && (
+        <button
+          onClick={onToggle}
+          className="flex items-center justify-center h-10 border-t border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-colors shrink-0"
+          title={collapsed ? "Expandir" : "Colapsar"}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <>
+              <ChevronLeft className="h-4 w-4" />
+              <span className="ml-2 text-xs">Colapsar</span>
+            </>
+          )}
+        </button>
+      )}
+
+      <div
+        className={cn(
+          "shrink-0 border-t border-white/10 px-4 py-3",
+          collapsed && !isMobile ? "flex justify-center" : ""
+        )}
+      >
+        <div className={cn("flex items-center gap-3", collapsed && !isMobile ? "justify-center" : "")}>
           <div
-            className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+            className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
             style={{ backgroundColor: primary }}
           >
             {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
           </div>
-          <div className="overflow-hidden">
-            <div className="text-sm font-medium truncate">{session?.user?.name}</div>
-            <div className="text-xs text-slate-400 truncate">{role}</div>
-          </div>
+          {(!collapsed || isMobile) && (
+            <div className="overflow-hidden min-w-0">
+              <div className="text-sm font-medium truncate">{session?.user?.name}</div>
+              <div className="text-xs text-slate-400 truncate">
+                {session?.user?.roleCode ?? session?.user?.role}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </aside>

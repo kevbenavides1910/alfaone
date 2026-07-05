@@ -148,7 +148,7 @@ interface Expense {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const EXPENSE_TYPES: { value: ExpenseType; label: string; color: string }[] = [
-  { value: "APERTURA",  label: "Apertura",       color: "bg-blue-100 text-blue-800" },
+  { value: "APERTURA",  label: "Apertura",       color: "bg-slate-100 text-slate-700" },
   { value: "UNIFORMS",  label: "Uniformes",       color: "bg-purple-100 text-purple-800" },
   { value: "AUDIT",     label: "Auditoría",       color: "bg-orange-100 text-orange-800" },
   { value: "ADMIN",     label: "Administrativo",  color: "bg-slate-100 text-slate-700" },
@@ -220,7 +220,7 @@ function AttachmentPreviewDialog({
             {attachment && (
               <a
                 href={attachment.downloadUrl}
-                className="text-xs text-blue-600 hover:underline shrink-0"
+                className="text-xs text-red-600 hover:underline shrink-0"
                 target="_blank"
                 rel="noreferrer"
               >
@@ -1170,7 +1170,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                                 <div className="font-medium text-slate-700">{e.contract.client}</div>
                                 <div className="text-xs text-slate-400">{e.contract.licitacionNo} · {companyDisplayName(e.contract.company, companyRows)}</div>
                                 {e.position && (
-                                  <div className="text-xs text-blue-500 mt-0.5">
+                                  <div className="text-xs text-slate-500 mt-0.5">
                                     {e.position.location
                                       ? `${e.position.location.name} › ${e.position.name}`
                                       : `Puesto: ${e.position.name}`}
@@ -1233,7 +1233,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                                   type="button"
                                   size="sm"
                                   variant="ghost"
-                                  className="text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+                                  className="text-slate-600 hover:text-red-600 hover:bg-red-50"
                                   title="Editar tipo, descripción u origen"
                                   onClick={() => openEdit(e)}
                                 >
@@ -1536,7 +1536,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 rounded-md border border-slate-200 p-1 bg-muted/50/50">
                 <button
                   type="button"
-                  className={`rounded py-2.5 px-1 text-xs sm:text-sm font-medium transition-colors ${form.mode === "contract" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-card"}`}
+                  className={`rounded py-2.5 px-1 text-xs sm:text-sm font-medium transition-colors ${form.mode === "contract" ? "bg-red-600 text-white shadow-sm" : "text-slate-600 hover:bg-card"}`}
                   onClick={() => {
                     setCreateDeferredDraft("all");
                     setCustomDeferredRows([{ contractId: "", amount: "", contractQuery: "" }]);
@@ -1547,7 +1547,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                 </button>
                 <button
                   type="button"
-                  className={`rounded py-2.5 px-1 text-xs sm:text-sm font-medium transition-colors ${form.mode === "deferred" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-card"}`}
+                  className={`rounded py-2.5 px-1 text-xs sm:text-sm font-medium transition-colors ${form.mode === "deferred" ? "bg-red-600 text-white shadow-sm" : "text-slate-600 hover:bg-card"}`}
                   onClick={() => {
                     setCreateDeferredDraft("all");
                     setCustomDeferredRows([{ contractId: "", amount: "", contractQuery: "" }]);
@@ -1564,7 +1564,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                 </button>
                 <button
                   type="button"
-                  className={`rounded py-2.5 px-1 text-xs sm:text-sm font-medium transition-colors ${form.mode === "deferred_custom" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-card"}`}
+                  className={`rounded py-2.5 px-1 text-xs sm:text-sm font-medium transition-colors ${form.mode === "deferred_custom" ? "bg-red-600 text-white shadow-sm" : "text-slate-600 hover:bg-card"}`}
                   onClick={() => {
                     setCreateDeferredDraft("all");
                     setCustomDeferredRows([{ contractId: "", amount: "", contractQuery: "" }]);
@@ -1617,7 +1617,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                     ) : filteredContracts.map(c => (
                       <button
                         key={c.id} type="button"
-                        className={`w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 transition-colors ${form.contractId === c.id ? "bg-blue-50 text-blue-700" : ""}`}
+                        className={`w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 transition-colors ${form.contractId === c.id ? "bg-red-50 text-red-700" : ""}`}
                         onMouseDown={e => e.preventDefault()}
                         onClick={() => {
                           setForm(f => ({ ...f, contractId: c.id, company: c.company, positionId: "" }));
@@ -1647,7 +1647,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                 {(positionsData?.data ?? []).length === 0 ? (
                   <p className="text-xs text-slate-400">
                     Este contrato no tiene puestos en ninguna ubicación.{" "}
-                    <a href={`/contracts/${form.contractId}`} className="text-blue-600 hover:underline" target="_blank">
+                    <a href={`/contracts/${form.contractId}`} className="text-red-600 hover:underline" target="_blank">
                       Agregar en Ubicaciones
                     </a>
                   </p>
@@ -1711,9 +1711,9 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
 
             {/* Deferred proporcional */}
             {form.mode === "deferred" && (
-              <div className="rounded-lg border border-blue-200 bg-blue-50/80 p-3 text-sm space-y-2">
-                <p className="font-medium text-blue-900">Gasto diferido proporcional</p>
-                <p className="text-xs text-blue-800">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm space-y-2">
+                <p className="font-medium text-slate-900">Gasto diferido proporcional</p>
+                <p className="text-xs text-slate-700">
                   El monto <strong>entra de inmediato</strong> al presupuesto de los contratos marcados (proporcional al presupuesto de insumos). Si un aprobador rechaza el gasto, ese impacto se revierte.
                 </p>
                 <p className="text-xs font-medium text-slate-700">Contratos que reciben el reparto</p>
@@ -2023,7 +2023,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
               {previewExpense.isDeferred &&
                 (previewExpense.approvalStatus ?? "APPROVED") !== "APPROVED" &&
                 (previewExpense.approvalStatus ?? "APPROVED") !== "REJECTED" && (
-                  <div className="rounded-md border border-blue-200 bg-blue-50 text-blue-950 text-sm p-3">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 text-slate-900 text-sm p-3">
                     Este gasto ya impacta el presupuesto según el reparto indicado. Los aprobadores pueden ver el efecto antes de confirmar. Si alguien rechaza el gasto, el impacto se revierte.
                   </div>
                 )}
@@ -2069,7 +2069,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                           {canPreview ? (
                             <button
                               type="button"
-                              className="text-blue-600 hover:underline text-left"
+                              className="text-red-600 hover:underline text-left"
                               onClick={() =>
                                 setPreviewAttachment({
                                   id: att.id,
@@ -2085,7 +2085,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                           ) : (
                             <a
                               href={att.downloadUrl}
-                              className="text-blue-600 hover:underline"
+                              className="text-red-600 hover:underline"
                               target="_blank"
                               rel="noreferrer"
                             >
@@ -2245,7 +2245,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                       previewLoading ||
                       (distributionDraft !== "all" && distributionDraft.length === 0)
                     }
-                    className="bg-blue-600 hover:bg-blue-700"
+                    className="bg-red-600 hover:bg-red-700"
                   >
                     {saveDeferredTargetsMutation.isPending ? "Guardando…" : "Guardar reparto"}
                   </Button>

@@ -100,7 +100,7 @@ export default function DisciplinarioConvocatoriaPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-            <CalendarDays className="h-6 w-6 text-blue-600" />
+            <CalendarDays className="h-6 w-6 text-red-600" />
             Cronograma de convocatorias
           </h1>
           <p className="text-sm text-slate-600 mt-1">
@@ -154,7 +154,7 @@ export default function DisciplinarioConvocatoriaPage() {
           {agenda && grid && agenda.total === 0 && (
             <p className="p-6 text-sm text-slate-500">
               No hay convocatorias con fecha en esta semana. Defina fechas en{" "}
-              <Link href="/disciplinario/empleados" className="text-blue-600 underline">
+              <Link href="/disciplinario/empleados" className="text-red-600 underline">
                 Tratamiento
               </Link>
               .
@@ -271,7 +271,7 @@ export default function DisciplinarioConvocatoriaPage() {
           <>
             Haga clic en una convocatoria para cambiar fecha y hora, guardar en el cronograma o
             enviar (o reenviar) el correo con el PDF F-RH-42. También puede usar{" "}
-            <Link href="/disciplinario/empleados" className="text-blue-600 underline">
+            <Link href="/disciplinario/empleados" className="text-red-600 underline">
               Tratamiento
             </Link>{" "}
             para el ciclo completo del empleado.
@@ -279,7 +279,7 @@ export default function DisciplinarioConvocatoriaPage() {
         ) : (
           <>
             Los datos provienen del tratamiento disciplinario. Para editar, use{" "}
-            <Link href="/disciplinario/empleados" className="text-blue-600 underline">
+            <Link href="/disciplinario/empleados" className="text-red-600 underline">
               resumen por empleado
             </Link>
             .

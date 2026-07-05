@@ -47,7 +47,7 @@ const QUICK_LINKS = [
   { href: "/recorridos/reportes", label: "Reportes de marcas", icon: FileBarChart, desc: "Cumplimiento NFC" },
   { href: "/recorridos/rutas", label: "Rutas y puntos", icon: MapPin, desc: "Ventanas horarias" },
   { href: "/recorridos/rutas-permitidas", label: "Asignaciones", icon: CalendarCheck, desc: "Rutas del día" },
-  { href: "/recorridos/configuracion", label: "Configuración app", icon: Settings2, desc: "Parámetros SYNTRA" },
+  { href: "/recorridos/configuracion", label: "Configuración app", icon: Settings2, desc: "Parámetros de la app móvil" },
   { href: "/inventory", label: "Dispositivos", icon: Smartphone, desc: "Inventario celulares" },
 ] as const;
 
@@ -69,7 +69,7 @@ export default function RecorridosDashboardPage() {
     <div className="p-6 space-y-6 max-w-6xl mx-auto w-full">
       <RecorridosPageHeader
         title="Panel operativo"
-        description="Supervise dispositivos SYNTRA, rutas NFC, asignaciones diarias y cumplimiento de marcas."
+        description="Supervise dispositivos móviles, rutas NFC, asignaciones diarias y cumplimiento de marcas."
       />
 
       {isError ? (
@@ -116,14 +116,14 @@ export default function RecorridosDashboardPage() {
                     href={link.href}
                     className="group flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-3 hover:bg-muted/60 hover:border-slate-300 transition-colors"
                   >
-                    <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
+                    <div className="rounded-lg bg-red-50 p-2 text-red-600">
                       <link.icon className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-800">{link.label}</p>
                       <p className="text-xs text-slate-500 truncate">{link.desc}</p>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 shrink-0" />
+                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-red-600 shrink-0" />
                   </Link>
                 ))}
               </CardContent>
@@ -132,7 +132,7 @@ export default function RecorridosDashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <MapPinned className="h-4 w-4 text-blue-600" />
+                  <MapPinned className="h-4 w-4 text-red-600" />
                   Últimos accesos móviles
                 </CardTitle>
               </CardHeader>

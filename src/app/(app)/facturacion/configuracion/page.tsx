@@ -541,7 +541,7 @@ export default function FacturacionCobroConfigPage() {
 
       <p className="text-sm text-slate-500">
         Los correos manuales se envían desde{" "}
-        <Link href="/facturacion/cuentas-por-cobrar" className="text-blue-600 hover:underline">
+        <Link href="/facturacion/cuentas-por-cobrar" className="text-red-600 hover:underline">
           Cuentas por cobrar
         </Link>{" "}
         al contacto marcado como facturación en el contrato.

@@ -208,7 +208,7 @@ export default function EmpleadosContratosPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-              <GitMerge className="h-6 w-6 text-indigo-600" />
+              <GitMerge className="h-6 w-6 text-red-600" />
               Conciliación de contratos
             </h1>
             <p className="text-sm text-slate-600 mt-1 max-w-2xl">
@@ -243,7 +243,7 @@ export default function EmpleadosContratosPage() {
               value={summary.coincidenciaExactaPendiente}
               accent="text-emerald-600"
             />
-            <MetricCard label="Vinculados" value={summary.vinculadosManual} accent="text-indigo-600" />
+            <MetricCard label="Vinculados" value={summary.vinculadosManual} accent="text-red-600" />
             <MetricCard label="Desincronizados" value={summary.desincronizados} accent="text-amber-600" />
             <MetricCard
               label="Contratos sin empleados"
@@ -367,7 +367,7 @@ export default function EmpleadosContratosPage() {
                                   <li key={s.contractId} className="text-[11px] text-slate-600">
                                     <button
                                       type="button"
-                                      className="text-left hover:text-indigo-600 underline-offset-2 hover:underline"
+                                      className="text-left hover:text-red-600 underline-offset-2 hover:underline"
                                       onClick={() =>
                                         setSelectedByRow((prev) => ({
                                           ...prev,
@@ -445,7 +445,7 @@ export default function EmpleadosContratosPage() {
                         <td className="px-4 py-2">
                           <Link
                             href={`/contracts/${c.contractId}`}
-                            className="text-indigo-600 hover:underline font-mono text-xs"
+                            className="text-red-600 hover:underline font-mono text-xs"
                           >
                             {c.licitacionNo}
                           </Link>

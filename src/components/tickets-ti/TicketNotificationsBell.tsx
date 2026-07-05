@@ -79,7 +79,7 @@ export function TicketNotificationsBell() {
             {unread > 0 && (
               <button
                 type="button"
-                className="text-xs text-indigo-600 hover:underline"
+                className="text-xs text-red-600 hover:underline"
                 onClick={() => markAll.mutate()}
               >
                 Marcar leídas

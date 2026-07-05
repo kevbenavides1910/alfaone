@@ -11,9 +11,9 @@ interface Props {
 }
 
 const colorMap = {
-  blue:   { bg: "bg-slate-100",  icon: "text-slate-700",  border: "border-slate-200" },
+  blue:   { bg: "bg-red-50",     icon: "text-red-600",    border: "border-slate-200" },
   green:  { bg: "bg-slate-100",  icon: "text-slate-600",  border: "border-slate-200" },
-  yellow: { bg: "bg-red-50",     icon: "text-red-500",    border: "border-red-100"   },
+  yellow: { bg: "bg-amber-50",   icon: "text-amber-600",  border: "border-amber-100" },
   red:    { bg: "bg-red-50",     icon: "text-red-600",    border: "border-red-200"   },
   purple: { bg: "bg-slate-800",  icon: "text-white",      border: "border-slate-700" },
 };

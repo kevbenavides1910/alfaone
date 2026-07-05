@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
-import { Plus, Pencil, Trash2, Copy, Shield } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, Shield, Eye } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -101,6 +101,25 @@ export default function RolesPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["roles"] });
       toast.success("Rol eliminado");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const impersonateMutation = useMutation({
+    mutationFn: async (roleId: string) => {
+      const r = await fetch(`/api/admin/roles/${roleId}/impersonate-token`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      return parseJson<{ data: { token: string; roleId: string } }>(r);
+    },
+    onSuccess: (res, roleId) => {
+      const token = res.data?.token;
+      if (!token) {
+        toast.error("No se recibió token de vista previa");
+        return;
+      }
+      window.location.href = `/impersonate/${roleId}?t=${encodeURIComponent(token)}`;
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -210,6 +229,15 @@ export default function RolesPage() {
                       <td className="px-4 py-3 text-slate-500">{role.permissions.length} pantallas</td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Ver como este rol"
+                            disabled={impersonateMutation.isPending}
+                            onClick={() => impersonateMutation.mutate(role.id)}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(role.id)}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>

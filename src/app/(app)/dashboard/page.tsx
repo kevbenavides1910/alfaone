@@ -107,7 +107,7 @@ export default function DashboardPage() {
           {month !== currentMonth() && (
             <button
               onClick={() => setMonth(currentMonth())}
-              className="text-xs text-blue-600 hover:underline"
+              className="text-xs text-red-600 hover:underline"
             >
               Volver al mes actual
             </button>
@@ -176,7 +176,7 @@ export default function DashboardPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <Building2 className="h-4 w-4" />
+                <Building2 className="h-4 w-4 text-red-600" />
                 Estado por Empresa
               </CardTitle>
             </CardHeader>
@@ -201,7 +201,7 @@ export default function DashboardPage() {
           <Card className="lg:col-span-2">
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-orange-500" />
+                <AlertTriangle className="h-4 w-4 text-red-600" />
                 Mayor Ejecución de Presupuesto — {monthLabel(month)}
               </CardTitle>
             </CardHeader>
@@ -243,9 +243,9 @@ export default function DashboardPage() {
 
         {/* Expiring soon */}
         {expiringSoon.length > 0 && (
-          <Card className="border-orange-200">
+          <Card className="border-amber-200">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base text-orange-700 flex items-center gap-2">
+              <CardTitle className="text-base text-amber-700 flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
                 Contratos Próximos a Vencer (90 días)
               </CardTitle>
@@ -258,7 +258,7 @@ export default function DashboardPage() {
                     <Link
                       key={c.contractId}
                       href={`/contracts/${c.contractId}`}
-                      className="flex items-center justify-between px-6 py-3 hover:bg-orange-50 transition-colors"
+                      className="flex items-center justify-between px-6 py-3 hover:bg-amber-50 transition-colors"
                     >
                       <div>
                         <span className="text-sm font-medium">{c.client}</span>

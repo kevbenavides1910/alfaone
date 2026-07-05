@@ -37,7 +37,7 @@ type OportunidadOption = {
 function estadoBadge(estado: string) {
   const label = VENTAS_PRESUPUESTO_ESTADO_LABELS[estado] ?? estado;
   if (estado === "FINALIZADO") return <Badge className="bg-emerald-600 hover:bg-emerald-600">{label}</Badge>;
-  if (estado === "EN_REVISION") return <Badge className="bg-blue-600 hover:bg-blue-600">{label}</Badge>;
+  if (estado === "EN_REVISION") return <Badge className="bg-amber-600 hover:bg-amber-600">{label}</Badge>;
   return <Badge variant="secondary">{label}</Badge>;
 }
 
@@ -221,7 +221,7 @@ export default function PresupuestosPage() {
               {rows.map((row) => (
                 <tr key={row.id} className="border-t hover:bg-muted/40">
                   <td className="px-3 py-2">
-                    <Link href={`/ventas/presupuestos/${row.id}`} className="text-blue-600 hover:underline font-medium">
+                    <Link href={`/ventas/presupuestos/${row.id}`} className="text-red-600 hover:underline font-medium">
                       {row.licitacionNo}
                     </Link>
                   </td>

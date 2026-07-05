@@ -54,8 +54,11 @@ services:
       APP_DATA_ROOT: /data
       EXPENSE_UPLOAD_DIR: /data/expense-uploads
       BRANDING_UPLOAD_DIR: /data/branding
+      NAF_ORACLE_CLIENT_DIR: /opt/oracle/instantclient_19_23
+      LD_LIBRARY_PATH: /opt/oracle/instantclient_19_23
     volumes:
       - ${APP_DATA_HOST:-/mnt/storage/apps/presupuestos-alfa}:/data
+      - /opt/oracle/instantclient_19_23:/opt/oracle/instantclient_19_23:ro
     depends_on:
       postgres:
         condition: service_healthy

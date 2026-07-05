@@ -378,7 +378,7 @@ export default function ResumenEmpleadosPage() {
                         <td className="px-3 py-2">
                           <Link
                             href={`/disciplinario/empleados/${encodeURIComponent(r.codigoEmpleado)}`}
-                            className="font-medium text-slate-800 hover:text-blue-600 hover:underline"
+                            className="font-medium text-slate-800 hover:text-red-600 hover:underline"
                           >
                             {r.nombreEmpleado || "—"}
                           </Link>
@@ -417,7 +417,7 @@ export default function ResumenEmpleadosPage() {
                           <div className="flex items-center justify-end gap-1">
                             <Link
                               href={`/disciplinario/empleados/${encodeURIComponent(r.codigoEmpleado)}`}
-                              className="inline-flex items-center text-blue-600 hover:underline text-xs gap-1 px-2"
+                              className="inline-flex items-center text-red-600 hover:underline text-xs gap-1 px-2"
                               title="Ver detalle"
                             >
                               <Eye className="h-3.5 w-3.5" /> Ver

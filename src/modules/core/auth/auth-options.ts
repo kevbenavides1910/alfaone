@@ -3,7 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/modules/core/db/prisma";
 import type { UserRole } from "@prisma/client";
-import { getUserPermissionContext } from "@/lib/permissions/resolve";
+import { getUserPermissionContext, getRolePermissions } from "@/lib/permissions/resolve";
 import type { PermissionMap } from "@/lib/permissions/resolve";
 
 declare module "next-auth" {
@@ -19,6 +19,8 @@ declare module "next-auth" {
       company: string | null;
       permissions: PermissionMap;
       mustChangePassword: boolean;
+      impersonatedRoleId?: string | null;
+      impersonatedRoleCode?: string | null;
     };
   }
   interface User {
@@ -40,7 +42,73 @@ declare module "next-auth/jwt" {
     company: string | null;
     permissions: PermissionMap;
     mustChangePassword: boolean;
+    realRoleId?: string | null;
+    realRoleCode?: string | null;
+    impersonatedRoleId?: string | null;
+    impersonatedRoleCode?: string | null;
   }
+}
+
+async function userIsPlatformAdmin(userId: string): Promise<boolean> {
+  const ctx = await getUserPermissionContext(userId);
+  if (!ctx) return false;
+  if (ctx.roleCode === "ADMIN") return true;
+  return (ctx.permissions["plataforma.roles"] ?? "none") === "admin";
+}
+
+async function applyImpersonatedRole(
+  token: import("next-auth/jwt").JWT,
+  roleId: string,
+): Promise<void> {
+  const role = await prisma.role.findUnique({
+    where: { id: roleId },
+    select: { id: true, code: true },
+  });
+  if (!role) return;
+
+  if (!token.realRoleId) {
+    token.realRoleId = token.roleId ?? null;
+    token.realRoleCode = token.roleCode ?? null;
+  }
+
+  token.impersonatedRoleId = role.id;
+  token.impersonatedRoleCode = role.code;
+  token.roleId = role.id;
+  token.roleCode = role.code;
+  token.permissions = await getRolePermissions(role.id);
+}
+
+async function clearImpersonation(token: import("next-auth/jwt").JWT): Promise<void> {
+  const userId = token.id as string;
+  if (token.realRoleId) {
+    const role = await prisma.role.findUnique({
+      where: { id: token.realRoleId },
+      select: { id: true, code: true },
+    });
+    if (role) {
+      token.roleId = role.id;
+      token.roleCode = role.code;
+      token.permissions = await getRolePermissions(role.id);
+    } else {
+      const ctx = await getUserPermissionContext(userId);
+      if (ctx) {
+        token.roleId = ctx.roleId;
+        token.roleCode = ctx.roleCode;
+        token.permissions = ctx.permissions;
+      }
+    }
+  } else {
+    const ctx = await getUserPermissionContext(userId);
+    if (ctx) {
+      token.roleId = ctx.roleId;
+      token.roleCode = ctx.roleCode;
+      token.permissions = ctx.permissions;
+    }
+  }
+  delete token.impersonatedRoleId;
+  delete token.impersonatedRoleCode;
+  delete token.realRoleId;
+  delete token.realRoleCode;
 }
 
 /** En dev, un secret fijo si falta en .env evita JWT inválidos y sesiones que no “pegan”. En producción debe existir NEXTAUTH_SECRET. */
@@ -119,7 +187,7 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.sub = user.id;
         token.id = user.id;
@@ -129,17 +197,34 @@ export const authOptions: NextAuthOptions = {
         token.company = user.company;
         token.permissions = user.permissions;
         token.mustChangePassword = user.mustChangePassword;
+      } else if (trigger === "update" && session) {
+        const userId = token.id as string;
+        const s = session as {
+          impersonatedRoleId?: string | null;
+          clearImpersonation?: boolean;
+        };
+
+        if (s.clearImpersonation) {
+          await clearImpersonation(token);
+        } else if (s.impersonatedRoleId && (await userIsPlatformAdmin(userId))) {
+          await applyImpersonatedRole(token, s.impersonatedRoleId);
+        }
       } else if (token.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
           select: { mustChangePassword: true },
         });
         if (dbUser) token.mustChangePassword = dbUser.mustChangePassword;
-        const ctx = await getUserPermissionContext(token.id as string);
-        if (ctx) {
-          token.roleId = ctx.roleId;
-          token.roleCode = ctx.roleCode;
-          token.permissions = ctx.permissions;
+
+        if (token.impersonatedRoleId) {
+          token.permissions = await getRolePermissions(token.impersonatedRoleId);
+        } else {
+          const ctx = await getUserPermissionContext(token.id as string);
+          if (ctx) {
+            token.roleId = ctx.roleId;
+            token.roleCode = ctx.roleCode;
+            token.permissions = ctx.permissions;
+          }
         }
       }
       return token;
@@ -156,6 +241,8 @@ export const authOptions: NextAuthOptions = {
         session.user.company = token.company ?? null;
         session.user.permissions = token.permissions ?? {};
         session.user.mustChangePassword = Boolean(token.mustChangePassword);
+        session.user.impersonatedRoleId = token.impersonatedRoleId ?? null;
+        session.user.impersonatedRoleCode = token.impersonatedRoleCode ?? null;
       }
       return session;
     },

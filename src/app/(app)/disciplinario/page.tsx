@@ -36,7 +36,7 @@ const ESTADO_LABEL: Record<string, string> = {
   ANULADO: "Anulado",
 };
 const ESTADO_COLOR: Record<string, string> = {
-  EMITIDO: "bg-blue-100 text-blue-700",
+  EMITIDO: "bg-slate-100 text-slate-700",
   ENTREGADO: "bg-amber-100 text-amber-800",
   FIRMADO: "bg-emerald-100 text-emerald-800",
   ANULADO: "bg-rose-100 text-rose-700",
@@ -50,7 +50,7 @@ const VIGENCIA_LABEL: Record<string, string> = {
   ANULADO: "Anulado",
 };
 const VIGENCIA_COLOR: Record<string, string> = {
-  VIGENTE: "bg-blue-100 text-blue-700",
+  VIGENTE: "bg-green-100 text-green-700",
   VENCIDO: "bg-amber-100 text-amber-800",
   PRESCRITO: "bg-slate-200 text-slate-700",
   FINALIZADO: "bg-emerald-100 text-emerald-800",
@@ -509,7 +509,7 @@ export default function DisciplinarioListPage() {
                       <td className="px-4 py-3">
                         <Link
                           href={`/disciplinario/empleados/${encodeURIComponent(r.codigoEmpleado)}`}
-                          className="font-medium text-slate-800 hover:text-blue-600 hover:underline"
+                          className="font-medium text-slate-800 hover:text-red-600 hover:underline"
                         >
                           {r.nombreEmpleado}
                         </Link>
@@ -582,7 +582,7 @@ export default function DisciplinarioListPage() {
                         <div className="flex justify-center gap-1 flex-wrap">
                           <a
                             href={`/api/disciplinary/apercibimientos/${r.id}/pdf`}
-                            className="inline-flex text-slate-400 hover:text-blue-600 transition-colors"
+                            className="inline-flex text-slate-400 hover:text-red-600 transition-colors"
                             title="Descargar PDF de omisión / apercibimiento"
                             target="_blank"
                             rel="noopener noreferrer"
@@ -646,7 +646,7 @@ export default function DisciplinarioListPage() {
                                     clienteSetManual: r.clienteSetManual,
                                   })
                                 }
-                                className="inline-flex items-center text-slate-500 hover:text-blue-600 text-xs gap-1"
+                                className="inline-flex items-center text-slate-500 hover:text-red-600 text-xs gap-1"
                                 title="Editar contrato/cliente"
                               >
                                 <Pencil className="h-3.5 w-3.5" /> Contrato
@@ -663,7 +663,7 @@ export default function DisciplinarioListPage() {
                           )}
                           <Link
                             href={`/disciplinario/empleados/${encodeURIComponent(r.codigoEmpleado)}`}
-                            className="inline-flex items-center text-blue-600 hover:underline text-xs gap-1"
+                            className="inline-flex items-center text-red-600 hover:underline text-xs gap-1"
                           >
                             <Eye className="h-3.5 w-3.5" /> Ver
                           </Link>

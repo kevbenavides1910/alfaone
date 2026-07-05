@@ -27,7 +27,7 @@ export const EMPTY_OPORTUNIDAD_FILTERS: OportunidadSearchFilters = {
 };
 
 const FILTER_INPUT =
-  "w-full h-8 text-xs border border-slate-200 rounded-md px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400";
+  "w-full h-8 text-xs border border-slate-200 rounded-md px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-red-400";
 
 const STICKY_TH =
   "sticky top-0 z-20 bg-slate-50 align-top border-b border-slate-200 shadow-[0_1px_0_0_rgb(226,232,240)]";

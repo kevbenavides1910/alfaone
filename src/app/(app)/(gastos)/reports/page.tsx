@@ -393,7 +393,7 @@ export default function ReportsPage() {
                         <td className="px-3 py-2">
                           <Link
                             href={`/contracts/${r.contractId}`}
-                            className="font-medium text-blue-600 hover:underline"
+                            className="font-medium text-red-600 hover:underline"
                           >
                             {r.licitacionNo}
                           </Link>

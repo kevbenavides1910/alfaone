@@ -6,12 +6,12 @@ export type FacturacionCobroMailProvider = (typeof FACTURACION_COBRO_MAIL_PROVID
 export const DEFAULT_FACTURACION_COBRO_SETTINGS = {
   emailSubjectTemplate: "Recordatorio de pago — {{cliente}} — {{numero_factura}}",
   emailBodyTemplate:
-    "Estimado/a {{contacto_nombre}}:\n\nPor medio de la presente le recordamos que la factura {{numero_factura}} correspondiente al periodo {{periodo}} por un monto de {{total}} se encuentra pendiente de pago.\n\nFecha de vencimiento: {{fecha_vencimiento}}\nDias vencidos: {{dias_vencidos}}\n\nAgradecemos gestionar el pago a la brevedad posible.\n\nEste mensaje fue enviado automaticamente desde Syntra Dynamics.",
+    "Estimado/a {{contacto_nombre}}:\n\nPor medio de la presente le recordamos que la factura {{numero_factura}} correspondiente al periodo {{periodo}} por un monto de {{total}} se encuentra pendiente de pago.\n\nFecha de vencimiento: {{fecha_vencimiento}}\nDias vencidos: {{dias_vencidos}}\n\nAgradecemos gestionar el pago a la brevedad posible.\n\nEste mensaje fue enviado automaticamente desde Alfa One.",
   dueReminderDaysBefore: 7,
   dueReminderSubjectTemplate:
     "Aviso: factura {{numero_factura}} vence en {{dias_hasta_vencimiento}} dias — {{cliente}}",
   dueReminderBodyTemplate:
-    "Estimado/a {{contacto_nombre}}:\n\nLe informamos que la factura {{numero_factura}} correspondiente al periodo {{periodo}} por un monto de {{total}} vence el {{fecha_vencimiento}} (faltan {{dias_hasta_vencimiento}} dia(s) para el vencimiento).\n\nAgradecemos adelantar las gestiones de pago correspondientes para evitar retrasos.\n\nEste mensaje fue enviado automaticamente desde Syntra Dynamics.",
+    "Estimado/a {{contacto_nombre}}:\n\nLe informamos que la factura {{numero_factura}} correspondiente al periodo {{periodo}} por un monto de {{total}} vence el {{fecha_vencimiento}} (faltan {{dias_hasta_vencimiento}} dia(s) para el vencimiento).\n\nAgradecemos adelantar las gestiones de pago correspondientes para evitar retrasos.\n\nEste mensaje fue enviado automaticamente desde Alfa One.",
   autoDueReminderEnabled: true,
   autoCollectionEnabled: true,
   collectionEmailIntervalDays: 7,

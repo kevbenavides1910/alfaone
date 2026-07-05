@@ -116,7 +116,7 @@ export default function EmpleadosImportarPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <UserCircle className="h-5 w-5 text-indigo-600" />
+              <UserCircle className="h-5 w-5 text-red-600" />
               Carga masiva de empleados
             </CardTitle>
           </CardHeader>

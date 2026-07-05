@@ -78,7 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               collapsedReady && collapsed ? "w-[4.25rem]" : "w-64",
             )}
           >
-            <Sidebar collapsed={collapsed} />
+            <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} />
           </div>
         )}
 
@@ -92,7 +92,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="fixed left-0 top-0 z-50 lg:hidden h-screen w-64"
               style={{ animation: "slideIn 0.2s ease-out" }}
             >
-              <Sidebar collapsed={false} onNavigate={closeMobile} />
+              <Sidebar
+                collapsed={false}
+                onToggle={closeMobile}
+                onClose={closeMobile}
+                isMobile
+              />
             </div>
           </>
         )}

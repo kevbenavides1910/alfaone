@@ -247,7 +247,7 @@ export default function DisciplinarioReportOmisionesPage() {
           <div>
             <Link
               href="/disciplinario"
-              className="inline-flex items-center text-sm text-slate-600 hover:text-blue-600 gap-1 mb-1"
+              className="inline-flex items-center text-sm text-slate-600 hover:text-red-600 gap-1 mb-1"
             >
               <ArrowLeft className="h-4 w-4" /> Volver al listado
             </Link>
@@ -522,7 +522,7 @@ export default function DisciplinarioReportOmisionesPage() {
                             <td className="px-3 py-2 text-right">
                               <Link
                                 href={`/disciplinario/empleados/${encodeURIComponent(a.codigoEmpleado)}`}
-                                className="text-xs text-blue-600 hover:underline"
+                                className="text-xs text-red-600 hover:underline"
                               >
                                 Ver
                               </Link>
@@ -637,7 +637,7 @@ export default function DisciplinarioReportOmisionesPage() {
                             <td className="px-3 py-2 text-right">
                               <Link
                                 href={`/disciplinario/empleados/${encodeURIComponent(e.codigoEmpleado)}`}
-                                className="text-xs text-blue-600 hover:underline"
+                                className="text-xs text-red-600 hover:underline"
                               >
                                 Ver detalle
                               </Link>
@@ -1026,7 +1026,7 @@ function DrillModal({
                     <td className="px-3 py-2">
                       <Link
                         href={`/disciplinario/empleados/${encodeURIComponent(a.codigoEmpleado)}`}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="text-xs text-red-600 hover:underline"
                       >
                         Ver empleado
                       </Link>
@@ -1111,7 +1111,7 @@ function DrillModal({
                     <td className="px-3 py-2">
                       <Link
                         href={`/disciplinario/empleados/${encodeURIComponent(e.codigoEmpleado)}`}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="text-xs text-red-600 hover:underline"
                       >
                         Ver detalle
                       </Link>

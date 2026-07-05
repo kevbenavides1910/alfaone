@@ -5,7 +5,7 @@ import { APP_NAME, APP_TAGLINE } from "@/modules/plataforma/branding-constants";
 
 export const metadata: Metadata = {
   title: `${APP_TAGLINE} | ${APP_NAME}`,
-  description: `Sistema de control de rentabilidad de contratos — ${APP_NAME}`,
+  description: `Plataforma de gestión empresarial — ${APP_NAME}`,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

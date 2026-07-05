@@ -33,7 +33,7 @@ export default function DisciplinarioAjustesBasesPage() {
             </Button>
             <p className="text-xs text-slate-500">
               Para importar o actualizar el directorio, use{" "}
-              <Link href="/empleados/importar" className="text-blue-600 hover:underline">
+              <Link href="/empleados/importar" className="text-red-600 hover:underline">
                 Empleados → Importar
               </Link>
               .

@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { BrandingProvider } from "@/components/branding/BrandingProvider";
+import { CommandPalette } from "@/components/layout/CommandPalette";
+import { ImpersonationProvider } from "@/lib/impersonation/context";
+import { ImpersonationBanner } from "@/components/layout/ImpersonationBanner";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -19,7 +22,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider refetchOnWindowFocus>
       <QueryClientProvider client={queryClient}>
-        <BrandingProvider>{children}</BrandingProvider>
+        <BrandingProvider>
+          <ImpersonationProvider>
+            <ImpersonationBanner />
+            {children}
+            <CommandPalette />
+          </ImpersonationProvider>
+        </BrandingProvider>
         <Toaster />
       </QueryClientProvider>
     </SessionProvider>
