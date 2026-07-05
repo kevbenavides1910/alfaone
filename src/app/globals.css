@@ -62,34 +62,23 @@
     @apply bg-muted/60 border-b border-border;
   }
 
-  /* Fondo del menú principal (/home) — charcoal neutro Alfa */
+  /* Fondo del menú principal (/home) — negro Alfa */
   .home-menu-canvas {
-    @apply relative min-h-[calc(100dvh-4rem)] overflow-hidden;
-    background: linear-gradient(
-      165deg,
-      hsl(215 14% 90%) 0%,
-      hsl(215 12% 93%) 42%,
-      hsl(210 10% 91%) 100%
-    );
+    @apply relative min-h-[calc(100dvh-4rem)] overflow-hidden bg-[#0f0f0f];
   }
 
   .home-menu-canvas::before {
     content: "";
     @apply pointer-events-none absolute inset-0;
     background: radial-gradient(
-      ellipse 90% 55% at 50% -15%,
-      hsl(0 30% 88% / 0.35),
-      transparent 65%
+      ellipse 70% 40% at 20% 0%,
+      hsl(0 60% 30% / 0.12),
+      transparent 60%
     );
   }
 
   .home-menu-canvas::after {
-    content: "";
-    @apply pointer-events-none absolute inset-0 opacity-[0.18];
-    background-image:
-      linear-gradient(to right, hsl(215 10% 72% / 0.30) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(215 10% 72% / 0.30) 1px, transparent 1px);
-    background-size: 2rem 2rem;
+    content: none;
   }
 
   /* Módulo Contratos — estilo IBM Carbon */

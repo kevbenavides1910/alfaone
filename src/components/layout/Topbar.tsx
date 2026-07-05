@@ -80,7 +80,7 @@ export function Topbar({
         className={cn(
           "h-16 border-b flex items-center justify-between px-4 md:px-6 sticky top-0 z-20",
           onHome
-            ? "bg-[#161616] border-[#393939] text-white shadow-md"
+            ? "bg-[#0f0f0f] border-white/8 text-white"
             : "border-border bg-card/90 backdrop-blur-md shadow-sm"
         )}
       >
