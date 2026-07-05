@@ -115,7 +115,7 @@ export function Topbar({
           <button
             type="button"
             className={cn(
-              "flex items-center justify-center h-8 w-8 rounded-md transition-colors",
+              "relative flex items-center justify-center h-8 w-8 rounded-md transition-colors",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500",
               onHome
                 ? "text-white/50 hover:text-white hover:bg-white/10"
@@ -124,6 +124,12 @@ export function Topbar({
             aria-label="Notificaciones"
           >
             <Bell className="h-4 w-4" />
+            <span
+              className={cn(
+                "absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-red-500",
+                onHome ? "ring-1 ring-[#0f0f0f]" : "ring-1 ring-white"
+              )}
+            />
           </button>
           <Button
             variant="ghost"

@@ -42,7 +42,8 @@ export function HomeModuleGrid() {
           className={cn(
             "group flex flex-col items-center rounded-2xl p-5 md:p-6",
             "transition-all duration-200",
-            "hover:scale-[1.03] hover:shadow-xl hover:shadow-black/40",
+            "hover:bg-[#242428]",
+            "hover:shadow-[0_0_0_1px_rgba(255,255,255,0.10),0_8px_28px_rgba(0,0,0,0.55)]",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f0f0f]",
             tile.tile
           )}
@@ -50,7 +51,7 @@ export function HomeModuleGrid() {
           <div
             className={cn(
               "flex h-14 w-14 md:h-16 md:w-16 items-center justify-center rounded-2xl",
-              "transition-transform duration-200 group-hover:scale-105",
+              "transition-opacity duration-200 group-hover:opacity-90",
               tile.accent
             )}
           >
