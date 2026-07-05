@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Search, FileSpreadsheet, BarChart3, Upload, AlertTriangle, FileText, Eye, Users, Download, Plus, Trash2, Repeat, PenLine,
+  Search, FileSpreadsheet, BarChart3, Upload, AlertTriangle, FileText, Eye, Users, Download, Plus, Trash2, Repeat, PenLine, SlidersHorizontal, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +133,7 @@ export default function DisciplinarioListPage() {
     contrato: "",
     cliente: "",
   });
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 100;
 
@@ -310,27 +311,30 @@ export default function DisciplinarioListPage() {
         {/* Filtros */}
         <Card>
           <CardContent className="p-4 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {/* Filtros principales — siempre visibles */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
-                <label className="text-xs text-slate-600 block mb-1">Desde</label>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Desde</label>
                 <Input
                   type="date"
                   value={filters.desde}
                   onChange={(e) => { setFilters({ ...filters, desde: e.target.value }); setPage(1); }}
+                  className="h-9"
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-600 block mb-1">Hasta</label>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Hasta</label>
                 <Input
                   type="date"
                   value={filters.hasta}
                   onChange={(e) => { setFilters({ ...filters, hasta: e.target.value }); setPage(1); }}
+                  className="h-9"
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-600 block mb-1">Estado</label>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Estado</label>
                 <select
-                  className="w-full h-9 rounded-md border border-input bg-card px-3 text-sm"
+                  className="w-full h-9 rounded-md border border-input bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   value={filters.estado}
                   onChange={(e) => { setFilters({ ...filters, estado: e.target.value }); setPage(1); }}
                 >
@@ -341,9 +345,9 @@ export default function DisciplinarioListPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-slate-600 block mb-1">Vigencia</label>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Vigencia</label>
                 <select
-                  className="w-full h-9 rounded-md border border-input bg-card px-3 text-sm"
+                  className="w-full h-9 rounded-md border border-input bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   value={filters.vigencia}
                   onChange={(e) => { setFilters({ ...filters, vigencia: e.target.value }); setPage(1); }}
                 >
@@ -353,79 +357,109 @@ export default function DisciplinarioListPage() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="text-xs text-slate-600 block mb-1">Administrador</label>
-                <Input
-                  value={filters.administrador}
-                  onChange={(e) => { setFilters({ ...filters, administrador: e.target.value }); setPage(1); }}
-                  placeholder="Contiene…"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-600 block mb-1">Zona</label>
-                <Input
-                  value={filters.zona}
-                  onChange={(e) => { setFilters({ ...filters, zona: e.target.value }); setPage(1); }}
-                  placeholder="Contiene…"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-600 block mb-1">Sucursal</label>
-                <Input
-                  value={filters.sucursal}
-                  onChange={(e) => { setFilters({ ...filters, sucursal: e.target.value }); setPage(1); }}
-                  placeholder="Contiene…"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-600 block mb-1">Código empleado</label>
-                <Input
-                  value={filters.codigo}
-                  onChange={(e) => { setFilters({ ...filters, codigo: e.target.value }); setPage(1); }}
-                  placeholder="Exacto"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-600 block mb-1">Nombre</label>
-                <Input
-                  value={filters.nombre}
-                  onChange={(e) => { setFilters({ ...filters, nombre: e.target.value }); setPage(1); }}
-                  placeholder="Contiene…"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-600 block mb-1">N° Apercibimiento</label>
-                <Input
-                  value={filters.numero}
-                  onChange={(e) => { setFilters({ ...filters, numero: e.target.value }); setPage(1); }}
-                  placeholder="Contiene…"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-600 block mb-1">Contrato (Licitación)</label>
-                <Input
-                  value={filters.contrato}
-                  onChange={(e) => { setFilters({ ...filters, contrato: e.target.value }); setPage(1); }}
-                  placeholder="Contiene…"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-600 block mb-1">Cliente</label>
-                <Input
-                  value={filters.cliente}
-                  onChange={(e) => { setFilters({ ...filters, cliente: e.target.value }); setPage(1); }}
-                  placeholder="Contiene…"
-                />
-              </div>
             </div>
+
+            {/* Filtros avanzados — colapsables */}
+            {showAdvancedFilters && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">Nombre</label>
+                  <Input
+                    value={filters.nombre}
+                    onChange={(e) => { setFilters({ ...filters, nombre: e.target.value }); setPage(1); }}
+                    placeholder="Contiene…"
+                    className="h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">Administrador</label>
+                  <Input
+                    value={filters.administrador}
+                    onChange={(e) => { setFilters({ ...filters, administrador: e.target.value }); setPage(1); }}
+                    placeholder="Contiene…"
+                    className="h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">Zona</label>
+                  <Input
+                    value={filters.zona}
+                    onChange={(e) => { setFilters({ ...filters, zona: e.target.value }); setPage(1); }}
+                    placeholder="Contiene…"
+                    className="h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">Sucursal</label>
+                  <Input
+                    value={filters.sucursal}
+                    onChange={(e) => { setFilters({ ...filters, sucursal: e.target.value }); setPage(1); }}
+                    placeholder="Contiene…"
+                    className="h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">Código empleado</label>
+                  <Input
+                    value={filters.codigo}
+                    onChange={(e) => { setFilters({ ...filters, codigo: e.target.value }); setPage(1); }}
+                    placeholder="Exacto"
+                    className="h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">N° Apercibimiento</label>
+                  <Input
+                    value={filters.numero}
+                    onChange={(e) => { setFilters({ ...filters, numero: e.target.value }); setPage(1); }}
+                    placeholder="Contiene…"
+                    className="h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">Contrato (Licitación)</label>
+                  <Input
+                    value={filters.contrato}
+                    onChange={(e) => { setFilters({ ...filters, contrato: e.target.value }); setPage(1); }}
+                    placeholder="Contiene…"
+                    className="h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">Cliente</label>
+                  <Input
+                    value={filters.cliente}
+                    onChange={(e) => { setFilters({ ...filters, cliente: e.target.value }); setPage(1); }}
+                    placeholder="Contiene…"
+                    className="h-9"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between pt-1">
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
-                Limpiar filtros
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 gap-1.5 text-slate-600 hover:text-slate-900"
+                  onClick={() => setShowAdvancedFilters((v) => !v)}
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  Filtros avanzados
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAdvancedFilters ? "rotate-180" : ""}`} />
+                  {(filters.zona || filters.sucursal || filters.administrador || filters.codigo || filters.nombre || filters.numero || filters.contrato || filters.cliente) && (
+                    <span className="ml-0.5 h-2 w-2 rounded-full bg-amber-500" />
+                  )}
+                </Button>
+                <Button variant="ghost" size="sm" className="h-9 text-slate-500" onClick={clearFilters}>
+                  Limpiar
+                </Button>
+              </div>
               <Button
                 size="sm"
                 variant="outline"
-                className="gap-2"
+                className="h-9 gap-2"
                 disabled={rows.length === 0}
                 onClick={handleExport}
               >
@@ -449,30 +483,30 @@ export default function DisciplinarioListPage() {
             ) : (
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-muted/50 border-b">
-                  <tr className="text-left text-xs uppercase text-slate-500">
-                    <th className="px-3 py-3">N°</th>
-                    <th className="px-3 py-3">Fecha</th>
-                    <th className="px-3 py-3">Código</th>
-                    <th className="px-3 py-3">Empleado</th>
-                    <th className="px-3 py-3">Zona / Sucursal</th>
-                    <th className="px-3 py-3 text-center">Omisiones / Fechas</th>
-                    <th className="px-3 py-3">Administrador</th>
-                    <th className="px-3 py-3">Estado</th>
-                    <th className="px-3 py-3">Vigencia</th>
-                    <th className="px-3 py-3">Contrato</th>
-                    <th className="px-3 py-3">Cliente</th>
-                    <th className="px-3 py-3 text-center">Adjuntos</th>
-                    <th className="px-3 py-3 text-right" />
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr className="text-left">
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">N°</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Fecha</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Código</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Empleado</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Zona / Sucursal</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 text-center">Omisiones</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Administrador</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Estado</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Vigencia</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Contrato</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Cliente</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 text-center">Adjuntos</th>
+                    <th className="px-4 py-3 text-right" />
                   </tr>
                 </thead>
-                <tbody className="divide-y">
+                <tbody className="divide-y divide-slate-100">
                   {rows.map((r) => (
-                    <tr key={r.id} className="hover:bg-muted/50">
-                      <td className="px-3 py-2 font-mono text-xs">{r.numero}</td>
-                      <td className="px-3 py-2">{formatDate(r.fechaEmision)}</td>
-                      <td className="px-3 py-2 font-mono">{r.codigoEmpleado}</td>
-                      <td className="px-3 py-2">
+                    <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-slate-700">{r.numero}</td>
+                      <td className="px-4 py-3 text-slate-700">{formatDate(r.fechaEmision)}</td>
+                      <td className="px-4 py-3 font-mono text-slate-700">{r.codigoEmpleado}</td>
+                      <td className="px-4 py-3">
                         <Link
                           href={`/disciplinario/empleados/${encodeURIComponent(r.codigoEmpleado)}`}
                           className="font-medium text-slate-800 hover:text-blue-600 hover:underline"
@@ -480,10 +514,10 @@ export default function DisciplinarioListPage() {
                           {r.nombreEmpleado}
                         </Link>
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-600">
+                      <td className="px-4 py-3 text-xs text-slate-500">
                         {[r.zona, r.sucursal].filter(Boolean).join(" / ") || "—"}
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-4 py-3 text-center">
                         <div className="font-medium">{r.cantidadOmisiones}</div>
                         {r.omisiones && r.omisiones.length > 0 && (
                           <div className="mt-1 flex flex-wrap justify-center gap-1">
@@ -504,8 +538,8 @@ export default function DisciplinarioListPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-600">{r.administrador ?? "—"}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-4 py-3 text-xs text-slate-500">{r.administrador ?? "—"}</td>
+                      <td className="px-4 py-3">
                         {canManage ? (
                           <select
                             className={`h-7 rounded-md border border-input px-2 text-xs font-medium ${ESTADO_COLOR[r.estado] ?? "bg-card"}`}
@@ -521,20 +555,20 @@ export default function DisciplinarioListPage() {
                             ))}
                           </select>
                         ) : (
-                          <Badge className={`${ESTADO_COLOR[r.estado] ?? ""} text-xs`}>
+                          <Badge className={`${ESTADO_COLOR[r.estado] ?? ""} border-0 text-xs font-medium`}>
                             {ESTADO_LABEL[r.estado] ?? r.estado}
                           </Badge>
                         )}
                       </td>
-                      <td className="px-3 py-2">
-                        <Badge className={`${VIGENCIA_COLOR[r.vigencia] ?? ""} text-xs`}>
+                      <td className="px-4 py-3">
+                        <Badge className={`${VIGENCIA_COLOR[r.vigencia] ?? ""} border-0 text-xs font-medium`}>
                           {VIGENCIA_LABEL[r.vigencia] ?? r.vigencia}
                         </Badge>
                       </td>
-                      <td className="px-3 py-2 text-xs font-mono text-slate-700">
+                      <td className="px-4 py-3 text-xs font-mono text-slate-700">
                         {r.contrato || <span className="text-slate-400">—</span>}
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-700">
+                      <td className="px-4 py-3 text-xs text-slate-700">
                         {r.cliente ? (
                           <span title={r.clienteSetManual ? "Cliente editado manualmente" : undefined}>
                             {r.cliente}
@@ -544,11 +578,11 @@ export default function DisciplinarioListPage() {
                           <span className="text-slate-400">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-center text-xs">
+                      <td className="px-4 py-3 text-center text-xs">
                         <div className="flex justify-center gap-1 flex-wrap">
                           <a
                             href={`/api/disciplinary/apercibimientos/${r.id}/pdf`}
-                            className="inline-flex text-slate-500 hover:text-blue-600"
+                            className="inline-flex text-slate-400 hover:text-blue-600 transition-colors"
                             title="Descargar PDF de omisión / apercibimiento"
                             target="_blank"
                             rel="noopener noreferrer"
@@ -556,18 +590,18 @@ export default function DisciplinarioListPage() {
                             <Download className="h-3.5 w-3.5" />
                           </a>
                           {r.pdfDisponible && (
-                            <span title="PDF de archivo interno (app escritorio)" className="text-slate-500">
+                            <span title="PDF de archivo interno (app escritorio)" className="text-slate-400">
                               <FileText className="h-3.5 w-3.5" />
                             </span>
                           )}
                           {r.evidenciaDisponible && (
-                            <span title="Evidencia de anulación disponible" className="text-slate-500">
+                            <span title="Evidencia de anulación disponible" className="text-slate-400">
                               <AlertTriangle className="h-3.5 w-3.5" />
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-4 py-3 text-right">
                         <div className="inline-flex items-center gap-2">
                           {canManage && r.estado !== "ANULADO" && (
                               <button

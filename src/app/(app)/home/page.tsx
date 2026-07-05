@@ -17,13 +17,13 @@ export default function HomePage() {
       <div className="home-menu-canvas">
         <header className="bg-[#161616] text-white px-6 py-8 md:px-8 md:py-10">
           <div className="mx-auto w-full max-w-6xl">
-            <p className="text-xs font-semibold uppercase tracking-widest text-white/60">
+            <p className="text-xs font-semibold uppercase tracking-widest text-white/80">
               Portal de gestión
             </p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight md:text-3xl">
               Bienvenido, {name}
             </h1>
-            <p className="mt-2 max-w-xl text-sm text-white/75 md:text-base">
+            <p className="mt-2 max-w-xl text-sm text-white/85 md:text-base">
               Seleccione un módulo para comenzar. {APP_TAGLINE}.
             </p>
           </div>

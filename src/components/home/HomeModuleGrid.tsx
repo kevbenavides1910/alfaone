@@ -41,9 +41,9 @@ export function HomeModuleGrid() {
           key={tile.id}
           href={tile.href}
           className={cn(
-            "group relative flex flex-col items-center rounded-2xl border bg-gradient-to-b p-5 md:p-6",
+            "group relative flex flex-col items-center rounded-2xl p-5 md:p-6",
             "shadow-sm transition-all duration-200",
-            "hover:shadow-lg hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-ring",
+            "hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-ring",
             tile.tile
           )}
         >
