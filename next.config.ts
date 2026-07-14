@@ -18,7 +18,19 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   /** Requerido para Docker (multi-stage) — genera .next/standalone */
   output: "standalone",
-  serverExternalPackages: ["@prisma/client", "pdf-parse", "mammoth", "pdfjs-dist", "oracledb"],
+  serverExternalPackages: [
+    "@prisma/client",
+    "pdf-parse",
+    "mammoth",
+    "pdfjs-dist",
+    "oracledb",
+    // Firma XAdES (createRequire nativo; deben resolverse fuera del bundle)
+    "xadesjs",
+    "xmldsigjs",
+    "xpath",
+    "@xmldom/xmldom",
+    "xml-core",
+  ],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

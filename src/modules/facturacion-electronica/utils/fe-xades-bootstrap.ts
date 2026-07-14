@@ -31,12 +31,26 @@ export function ensureFeXadesBootstrap(): void {
 
   try {
     const req = getNativeRequire();
-    const bootstrapPath = join(process.cwd(), "scripts/fe-xades-bootstrap.cjs");
+    // Prod (Docker): scripts/fe-xades-bootstrap.cjs
+    // Dev / repo reorganizado: scripts/db/fe-xades-bootstrap.cjs
+    const bootstrapCandidates = [
+      join(process.cwd(), "scripts/fe-xades-bootstrap.cjs"),
+      join(process.cwd(), "scripts/db/fe-xades-bootstrap.cjs"),
+    ];
 
-    try {
-      req(bootstrapPath).ensureFeXadesBootstrap();
-    } catch {
-      // Fallback inline (p. ej. dev sin scripts/ copiado al standalone)
+    let bootstrapped = false;
+    for (const bootstrapPath of bootstrapCandidates) {
+      try {
+        req(bootstrapPath).ensureFeXadesBootstrap();
+        bootstrapped = true;
+        break;
+      } catch {
+        // Probar siguiente ruta o fallback inline
+      }
+    }
+
+    if (!bootstrapped) {
+      // Fallback inline (p. ej. imagen antigua sin el .cjs)
       const path = req("path") as typeof import("node:path");
       const { DOMImplementation, DOMParser, XMLSerializer } = req("@xmldom/xmldom") as typeof import("@xmldom/xmldom");
       const xpath = req("xpath") as typeof import("xpath");

@@ -37,6 +37,17 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modul
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 # Para prisma/reset-admin-password.js (no siempre incluido en el trace de standalone)
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/bcryptjs ./node_modules/bcryptjs
+# Firma XAdES (aceptar facturas FE): createRequire desde server.js, no quedan en el trace de standalone
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/xpath ./node_modules/xpath
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/xadesjs ./node_modules/xadesjs
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/xmldsigjs ./node_modules/xmldsigjs
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/xml-core ./node_modules/xml-core
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@xmldom ./node_modules/@xmldom
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/asn1js ./node_modules/asn1js
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pkijs ./node_modules/pkijs
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pvtsutils ./node_modules/pvtsutils
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pvutils ./node_modules/pvutils
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/fe-xades-bootstrap.cjs ./scripts/fe-xades-bootstrap.cjs
 USER root
 # CLI de Prisma para aplicar migraciones al arrancar (tabla companies, FKs, etc.)
 RUN npm install -g prisma@5.22.0
