@@ -29,6 +29,7 @@ export const GET = withPermission<Params>(async (_req, { params }) => {
         location: { select: { id: true, name: true } },
         position: { select: { id: true, name: true } },
         points: { orderBy: [{ sortOrder: "asc" }, { code: "asc" }] },
+        pointDays: { select: { pointId: true, dayOfWeek: true } },
         schedules: { orderBy: [{ dayOfWeek: "asc" }, { sortOrder: "asc" }] },
       },
     });

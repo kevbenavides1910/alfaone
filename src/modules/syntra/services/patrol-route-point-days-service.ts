@@ -19,11 +19,14 @@ export function getActivePointsForRouteOnDate<P extends { id: string }>(
   if (route.samePointsEveryDay ?? true) {
     return route.points;
   }
+  const assignments = route.pointDays ?? [];
+  // Sin filas guardadas aún: no bloquear la ruta (comportamiento previo).
+  if (assignments.length === 0) {
+    return route.points;
+  }
   const dow = dayOfWeekFromIsoDate(isoDate);
   const activeIds = new Set(
-    (route.pointDays ?? [])
-      .filter((d) => d.dayOfWeek === dow)
-      .map((d) => d.pointId),
+    assignments.filter((d) => d.dayOfWeek === dow).map((d) => d.pointId),
   );
   return route.points.filter((p): p is P => activeIds.has(p.id));
 }

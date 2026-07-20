@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { use, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Pencil, Trash2, Clock, HeartPulse } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Clock, HeartPulse, MapPinned } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,8 +48,10 @@ type RouteDetail = {
   location: Location | null;
   position: Position | null;
   openSchedule: boolean;
+  samePointsEveryDay: boolean;
   schedules: ScheduleSlot[];
   points: Point[];
+  pointDays: Array<{ pointId: string; dayOfWeek: number }>;
   welfareEnabled: boolean;
   welfareIntervalMinutes: number;
 };
@@ -91,6 +93,11 @@ export default function RecorridosRutaDetailPage({
   const [welfareForm, setWelfareForm] = useState<{
     enabled: boolean;
     intervalMinutes: number;
+  } | null>(null);
+  const [pointDaysForm, setPointDaysForm] = useState<{
+    samePointsEveryDay: boolean;
+    /** key `${pointId}:${dayOfWeek}` */
+    active: Set<string>;
   } | null>(null);
 
   const { data, isLoading } = useQuery<{ data: RouteDetail }>({
@@ -138,6 +145,101 @@ export default function RecorridosRutaDetailPage({
           intervalMinutes: route.welfareIntervalMinutes ?? 60,
         }
       : null);
+
+  function buildAllPointsActiveSet(points: Point[]): Set<string> {
+    const active = new Set<string>();
+    for (const p of points) {
+      for (let day = 0; day <= 6; day++) {
+        active.add(`${p.id}:${day}`);
+      }
+    }
+    return active;
+  }
+
+  const pointDaysMeta =
+    pointDaysForm ??
+    (route
+      ? (() => {
+          const same = route.samePointsEveryDay ?? true;
+          const active = new Set(
+            (route.pointDays ?? []).map((d) => `${d.pointId}:${d.dayOfWeek}`),
+          );
+          if (!same) {
+            for (const p of route.points) {
+              const hasAny = [0, 1, 2, 3, 4, 5, 6].some((d) => active.has(`${p.id}:${d}`));
+              if (!hasAny) {
+                for (let d = 0; d <= 6; d++) active.add(`${p.id}:${d}`);
+              }
+            }
+          }
+          return {
+            samePointsEveryDay: same,
+            active: same || active.size === 0 ? buildAllPointsActiveSet(route.points) : active,
+          };
+        })()
+      : null);
+
+  function setSamePointsEveryDay(checked: boolean) {
+    if (!route || !pointDaysMeta) return;
+    if (checked) {
+      setPointDaysForm({ samePointsEveryDay: true, active: pointDaysMeta.active });
+      return;
+    }
+    // Al desactivar: partir de todos seleccionados para que el usuario desmarque
+    setPointDaysForm({
+      samePointsEveryDay: false,
+      active: buildAllPointsActiveSet(route.points),
+    });
+  }
+
+  function togglePointDay(pointId: string, dayOfWeek: number) {
+    if (!pointDaysMeta || pointDaysMeta.samePointsEveryDay) return;
+    const key = `${pointId}:${dayOfWeek}`;
+    const next = new Set(pointDaysMeta.active);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setPointDaysForm({ ...pointDaysMeta, active: next });
+  }
+
+  function setAllPointsForDay(dayOfWeek: number, selected: boolean) {
+    if (!route || !pointDaysMeta || pointDaysMeta.samePointsEveryDay) return;
+    const next = new Set(pointDaysMeta.active);
+    for (const p of route.points) {
+      const key = `${p.id}:${dayOfWeek}`;
+      if (selected) next.add(key);
+      else next.delete(key);
+    }
+    setPointDaysForm({ ...pointDaysMeta, active: next });
+  }
+
+  const savePointDays = useMutation({
+    mutationFn: async () => {
+      if (!pointDaysMeta) return;
+      const assignments = pointDaysMeta.samePointsEveryDay
+        ? []
+        : [...pointDaysMeta.active].map((key) => {
+            const [pointId, dayStr] = key.split(":");
+            return { pointId, dayOfWeek: Number(dayStr) };
+          });
+      const res = await fetch(`/api/admin/patrol/routes/${id}/point-days`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          samePointsEveryDay: pointDaysMeta.samePointsEveryDay,
+          assignments,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error?.message ?? "Error al guardar puntos por día");
+    },
+    onSuccess: () => {
+      toast.success("Puntos por día actualizados");
+      setPointDaysForm(null);
+      qc.invalidateQueries({ queryKey: ["patrol-route", id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
 
   const { data: locationsData } = useQuery<{ data: Location[] }>({
     queryKey: ["patrol-contract-locations", meta?.contractId],
@@ -641,6 +743,116 @@ export default function RecorridosRutaDetailPage({
           </table>
         </CardContent>
       </Card>
+
+      {pointDaysMeta && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <MapPinned className="h-4 w-4" />
+              Puntos por día de la semana
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={pointDaysMeta.samePointsEveryDay}
+                onChange={(e) => setSamePointsEveryDay(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium">Mismos puntos todos los días</span>
+                <span className="block text-muted-foreground text-xs mt-0.5">
+                  Si lo desmarca, puede quitar puntos que no aplican en cada día (p. ej. solo lunes a
+                  viernes).
+                </span>
+              </span>
+            </label>
+
+            {!pointDaysMeta.samePointsEveryDay && (
+              <div className="space-y-3">
+                {route.points.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Agregue puntos de marca antes de configurar días.
+                  </p>
+                ) : (
+                  DAY_LABELS.map((dayLabel, dayOfWeek) => {
+                    const selectedCount = route.points.filter((p) =>
+                      pointDaysMeta.active.has(`${p.id}:${dayOfWeek}`),
+                    ).length;
+                    const allSelected = selectedCount === route.points.length && route.points.length > 0;
+                    return (
+                      <div key={dayOfWeek} className="rounded-md border px-3 py-3 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-medium">
+                            {dayLabel}{" "}
+                            <span className="text-muted-foreground font-normal">
+                              ({selectedCount}/{route.points.length})
+                            </span>
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setAllPointsForDay(dayOfWeek, true)}
+                              disabled={allSelected}
+                            >
+                              Todos
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setAllPointsForDay(dayOfWeek, false)}
+                              disabled={selectedCount === 0}
+                            >
+                              Ninguno
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {route.points.map((p) => {
+                            const key = `${p.id}:${dayOfWeek}`;
+                            const checked = pointDaysMeta.active.has(key);
+                            return (
+                              <label
+                                key={key}
+                                className="flex items-center gap-2 text-sm rounded border px-2 py-1.5 cursor-pointer hover:bg-muted/40"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => togglePointDay(p.id, dayOfWeek)}
+                                />
+                                <span className="font-mono text-xs text-muted-foreground">{p.code}</span>
+                                <span className="truncate">{p.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                        {selectedCount === 0 && (
+                          <p className="text-xs text-amber-700 dark:text-amber-400">
+                            Sin puntos este día: la ruta no exigirá marcas.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            <Button
+              size="sm"
+              onClick={() => savePointDays.mutate()}
+              disabled={savePointDays.isPending || route.points.length === 0}
+            >
+              Guardar puntos por día
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={pointOpen} onOpenChange={setPointOpen}>
         <DialogContent className="max-w-lg">

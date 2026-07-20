@@ -5,6 +5,7 @@ import {
   type JustificationSummary,
 } from "@/modules/syntra/services/patrol-justification-service";
 import { getScheduleWindowsForDate } from "@/modules/syntra/services/patrol-route-schedule-service";
+import { getActivePointsForRouteOnDate } from "@/modules/syntra/services/patrol-route-point-days-service";
 import {
   CR_TZ,
   patrolImeisMatch,
@@ -153,6 +154,7 @@ export async function getPatrolMarksComplianceReport(input: {
         route: {
           include: {
             points: { orderBy: { sortOrder: "asc" } },
+            pointDays: { select: { pointId: true, dayOfWeek: true } },
             schedules: { orderBy: [{ dayOfWeek: "asc" }, { sortOrder: "asc" }] },
             contract: { select: { client: true, licitacionNo: true } },
             location: { include: { zone: { select: { name: true } } } },
@@ -201,8 +203,10 @@ export async function getPatrolMarksComplianceReport(input: {
       const windows = getScheduleWindowsForDate(rp.route, fecha);
       if (windows.length === 0) continue;
 
+      const activePoints = getActivePointsForRouteOnDate(rp.route, fecha);
+
       for (const window of windows) {
-        for (const point of rp.route.points) {
+        for (const point of activePoints) {
           const tagCode = (point.nfcTagCode ?? point.code ?? "").trim();
           const pointCode = (point.code ?? "").trim();
           if (!tagCode) continue;

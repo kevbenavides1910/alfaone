@@ -18,6 +18,8 @@ import { getTodayScheduleWindows } from "@/modules/syntra/services/patrol-route-
 
 import { todayIsoInCostaRica } from "@/modules/syntra/services/patrol-marks-compliance-service";
 
+import { getActivePointsForRouteOnDate } from "@/modules/syntra/services/patrol-route-point-days-service";
+
 
 
 type LegacyRouteRow = {
@@ -218,6 +220,8 @@ export async function getAuthorizedRoutesForDevice(deviceId: string) {
 
           points: { orderBy: [{ sortOrder: "asc" }, { code: "asc" }] },
 
+          pointDays: { select: { pointId: true, dayOfWeek: true } },
+
           schedules: { orderBy: [{ dayOfWeek: "asc" }, { sortOrder: "asc" }] },
 
         },
@@ -278,7 +282,9 @@ export async function getPatrolRoutesForDevice(deviceId: string) {
 
     for (const window of windows) {
 
-      for (const point of route.points) {
+      const activePoints = getActivePointsForRouteOnDate(route, todayIsoInCostaRica());
+
+      for (const point of activePoints) {
 
         table.push({
 
