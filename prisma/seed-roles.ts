@@ -9,6 +9,7 @@ const prisma = new PrismaClient();
 const ALL_KEYS = [
   "core.home",
   "core.dashboard_ejecutivo",
+  "core.notifications",
   "presupuestos.contracts",
   "facturacion.cobro",
   "facturacion.cxc",
@@ -84,6 +85,7 @@ const SYSTEM_ROLES: {
     permissions: {
       "core.home": PermissionLevel.VIEW,
       "core.dashboard_ejecutivo": PermissionLevel.VIEW,
+      "core.notifications": PermissionLevel.VIEW,
       "presupuestos.contracts": PermissionLevel.EDIT,
       "facturacion.cobro": PermissionLevel.EDIT,
       "facturacion.cxc": PermissionLevel.EDIT,
@@ -121,6 +123,7 @@ const SYSTEM_ROLES: {
     permissions: {
       "core.home": PermissionLevel.VIEW,
       "core.dashboard_ejecutivo": PermissionLevel.VIEW,
+      "core.notifications": PermissionLevel.VIEW,
       "presupuestos.contracts": PermissionLevel.VIEW,
       "facturacion.cobro": PermissionLevel.VIEW,
       "facturacion.cxc": PermissionLevel.VIEW,
@@ -148,6 +151,7 @@ const SYSTEM_ROLES: {
     permissions: {
       "core.home": PermissionLevel.VIEW,
       "core.dashboard_ejecutivo": PermissionLevel.VIEW,
+      "core.notifications": PermissionLevel.VIEW,
       "presupuestos.contracts": PermissionLevel.EDIT,
       "facturacion.cobro": PermissionLevel.EDIT,
       "facturacion.cxc": PermissionLevel.EDIT,
@@ -170,6 +174,7 @@ const SYSTEM_ROLES: {
     permissions: {
       "core.home": PermissionLevel.VIEW,
       "core.dashboard_ejecutivo": PermissionLevel.VIEW,
+      "core.notifications": PermissionLevel.VIEW,
       "presupuestos.contracts": PermissionLevel.VIEW,
       "facturacion.cobro": PermissionLevel.VIEW,
       "facturacion.cxc": PermissionLevel.VIEW,

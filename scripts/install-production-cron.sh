@@ -60,6 +60,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 # Respaldo Expediente Digital diario 03:30 UTC (21:30 CR) — SSH pull 10.1.1.6 → disco local
 30 3 * * * $RUN_USER EXPEDIENTE_BACKUP_ENV=$EXPEDIENTE_BACKUP_ENV LOG_DIR=$LOG_DIR $PROJECT_DIR/scripts/expediente-digital-backup.sh
+
+# Archivo automático de notificaciones (>3 días → historial) diario 05:00 UTC
+0 5 * * * $RUN_USER BASE_URL=http://127.0.0.1:3000 $PROJECT_DIR/scripts/cron/notifications-archive.sh >> $LOG_DIR/cron-notifications-archive.log 2>&1
 EOF
 
 chmod 644 "$CRON_FILE"
@@ -74,6 +77,7 @@ chmod +x "$PROJECT_DIR/scripts/vps-health-monitor.sh" \
   "$PROJECT_DIR/scripts/cron-fe-jobs.sh" \
   "$PROJECT_DIR/scripts/cron-fe-imap.sh" \
   "$PROJECT_DIR/scripts/cron-facturacion-cobro-emails.sh" \
+  "$PROJECT_DIR/scripts/cron/notifications-archive.sh" \
   "$PROJECT_DIR/scripts/expediente-digital-backup.sh" \
   "$PROJECT_DIR/scripts/verify-expediente-digital-backup.sh" \
   "$PROJECT_DIR/scripts/ops/guard-cifs-path.sh" \

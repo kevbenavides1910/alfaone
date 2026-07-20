@@ -8,6 +8,7 @@ export const CRON_SELF_AUTH_API_PATHS = [
   "/api/fe/cron/imap",
   "/api/cron/facturacion-cobro-emails",
   "/api/cron/patrol-welfare",
+  "/api/cron/notifications/archive",
   "/api/ventas/oportunidades/ingest",
 ] as const;
 

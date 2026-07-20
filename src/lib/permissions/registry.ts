@@ -35,6 +35,15 @@ export const PERMISSION_REGISTRY = {
         apiPrefixes: ["/api/reports/traffic-light"],
         actions: { view: "Ver KPIs y semáforo" },
       },
+      notifications: {
+        label: "Centro de notificaciones",
+        uiRoutes: ["/notificaciones"],
+        apiPrefixes: ["/api/notifications"],
+        actions: {
+          view: "Ver bandeja e historial",
+          edit: "Gestionar preferencias",
+        },
+      },
     },
   },
   presupuestos: {

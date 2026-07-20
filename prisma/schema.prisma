@@ -34,6 +34,22 @@ enum PermissionLevel {
   ADMIN
 }
 
+enum NotificationPriority {
+  INFO
+  WARNING
+  ERROR
+  SUCCESS
+  URGENT
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+  DELETED
+}
+
+
 enum ClientType {
   PUBLIC
   PRIVATE
@@ -287,6 +303,9 @@ model User {
   ticketAttachmentsUploaded   TicketAttachment[]   @relation("TicketAttachmentUploader")
   ticketHistoriesChanged      TicketHistory[]      @relation("TicketHistoryChanger")
   ticketNotificationsReceived TicketNotification[] @relation("TicketNotificationUser")
+  appNotificationsReceived  AppNotification[]      @relation("AppNotificationUser")
+  appNotificationsActed     AppNotification[]      @relation("AppNotificationActor")
+  notificationPreferences NotificationPreference[]
   ticketAuditsPerformed       TicketAudit[]        @relation("TicketAuditUser")
   ticketWorkLogs              TicketWorkLog[]      @relation("TicketWorkLogTechnician")
   assetsDeleted               Asset[]              @relation("AssetDeletedBy")
@@ -4518,4 +4537,114 @@ model TicketWorkLog {
 
   @@index([ticketId])
   @@map("ticket_work_logs")
+}
+
+// ─── Centro de notificaciones (plataforma) ───────────────────────────────────
+
+model NotificationType {
+  id             String               @id @default(cuid())
+  code           String               @unique
+  moduleKey      String
+  label          String
+  description    String?
+  priority       NotificationPriority @default(INFO)
+  icon           String?
+  permissionKey  String?
+  hrefTemplate   String?
+  active         Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  roleRules      NotificationRoleRule[]
+  preferences    NotificationPreference[]
+  notifications  AppNotification[]
+
+  @@index([moduleKey])
+  @@map("notification_types")
+}
+
+model NotificationRoleRule {
+  id                 String           @id @default(cuid())
+  notificationTypeId String
+  notificationType   NotificationType @relation(fields: [notificationTypeId], references: [id], onDelete: Cascade)
+  roleCode           String
+  minLevel           PermissionLevel  @default(VIEW)
+
+  @@unique([notificationTypeId, roleCode])
+  @@index([roleCode])
+  @@map("notification_role_rules")
+}
+
+model AppNotification {
+  id           String               @id @default(cuid())
+  userId       String
+  user         User                 @relation("AppNotificationUser", fields: [userId], references: [id], onDelete: Cascade)
+  typeId       String
+  type         NotificationType     @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  title        String
+  body         String               @db.Text
+  moduleKey    String
+  entityType   String?
+  entityId     String?
+  href         String?
+  priority     NotificationPriority
+  status       NotificationStatus   @default(UNREAD)
+  inboxVisible Boolean              @default(true)
+  readAt       DateTime?
+  archivedAt   DateTime?
+  deletedAt    DateTime?
+  metadata     Json?
+  actorUserId  String?
+  actorUser    User?                @relation("AppNotificationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorIp      String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  auditLogs NotificationAuditLog[]
+
+  @@index([userId, inboxVisible, status, createdAt(sort: Desc)])
+  @@index([userId, status])
+  @@index([createdAt])
+  @@map("app_notifications")
+}
+
+model NotificationHistory {
+  id             String   @id @default(cuid())
+  notificationId String   @unique
+  userId         String
+  snapshot       Json
+  movedAt        DateTime @default(now())
+
+  @@index([userId, movedAt(sort: Desc)])
+  @@map("notification_history")
+}
+
+model NotificationPreference {
+  id                 String           @id @default(cuid())
+  userId             String
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notificationTypeId String
+  notificationType   NotificationType @relation(fields: [notificationTypeId], references: [id], onDelete: Cascade)
+  enabled            Boolean          @default(true)
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([userId, notificationTypeId])
+  @@map("notification_preferences")
+}
+
+model NotificationAuditLog {
+  id             String           @id @default(cuid())
+  notificationId String?
+  notification   AppNotification? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  action         String
+  userId         String?
+  recipientId    String?
+  moduleKey      String?
+  actorIp        String?
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+
+  @@index([notificationId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notification_audit_logs")
 }
