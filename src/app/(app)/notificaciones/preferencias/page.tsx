@@ -6,8 +6,8 @@ import { Settings } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toaster";
-import type { NotificationPreferenceItem } from "@/modules/notifications";
-import { MODULE_LABELS } from "@/modules/notifications";
+import type { NotificationPreferenceItem } from "@/modules/notifications/business/types";
+import { MODULE_LABELS } from "@/modules/notifications/business/types";
 
 export default function NotificationPreferencesPage() {
   const qc = useQueryClient();

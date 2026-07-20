@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 import { formatDate } from "@/lib/utils/format";
-import type { NotificationListItem } from "@/modules/notifications";
+import type { NotificationListItem } from "@/modules/notifications/business/types";
 import {
   notificationIcon,
   PRIORITY_STYLES,

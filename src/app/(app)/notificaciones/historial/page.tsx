@@ -9,7 +9,7 @@ import { Topbar } from "@/components/layout/Topbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils/format";
-import type { NotificationHistoryItem } from "@/modules/notifications";
+import type { NotificationHistoryItem } from "@/modules/notifications/business/types";
 import {
   notificationIcon,
   PRIORITY_STYLES,
