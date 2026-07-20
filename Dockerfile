@@ -21,6 +21,8 @@ RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXTAUTH_URL=http://localhost:3000
 ENV NEXTAUTH_SECRET=ci-build-placeholder-secret-min-32-characters!!
+# Self-hosted alfaia tiene mucha RAM/CPU; evita OOM y acelera el compile.
+ENV NODE_OPTIONS=--max-old-space-size=8192
 RUN npm run build
 
 # Stage aislado: oracledb thick (glibc). Cache estable — no se reinstala en cada rebuild de Next.

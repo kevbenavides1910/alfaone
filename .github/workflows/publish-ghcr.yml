@@ -1,4 +1,5 @@
-# Publica imagen Docker a GHCR para deploy rápido en el VPS (ops:deploy:pull).
+# Publica imagen Docker a GHCR para deploy rápido en el VPS (ops:deploy:ghcr).
+# Corre en self-hosted alfaia-229 (48 cores) — mucho más rápido que ubuntu-latest (2 cores).
 name: Publish GHCR
 
 on:
@@ -24,11 +25,12 @@ concurrency:
 
 env:
   IMAGE_NAME: ghcr.io/kevbenavides1910/alfaone
+  CACHE_IMAGE: ghcr.io/kevbenavides1910/alfaone:buildcache
 
 jobs:
   publish:
     name: Build y push imagen
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, alfaia]
     permissions:
       contents: read
       packages: write
@@ -63,6 +65,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Cache en GHCR (persiste entre runs del self-hosted mejor que solo GHA)
+          cache-from: |
+            type=registry,ref=${{ env.CACHE_IMAGE }}
+            type=gha
+          cache-to: |
+            type=registry,ref=${{ env.CACHE_IMAGE }},mode=max
+            type=gha,mode=max
           provenance: false
+          # Aprovechar CPU del host (buildkit)
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
