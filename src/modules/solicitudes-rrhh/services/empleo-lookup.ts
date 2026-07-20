@@ -37,19 +37,43 @@ function digitsMatch(cedula: string | null | undefined, target: string): boolean
   return n !== null && n === target;
 }
 
+/** Variantes de búsqueda: NAF suele guardar `4-0250-0022`, no solo dígitos. */
+function cedulaQueryVariants(digits: string): string[] {
+  const out = new Set<string>([digits]);
+  if (digits.length === 9) {
+    out.add(`${digits[0]}-${digits.slice(1, 5)}-${digits.slice(5)}`);
+  }
+  if (digits.length === 10) {
+    out.add(`${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`);
+  }
+  return [...out];
+}
+
 export async function resolveEmpleoByCedula(rawCedula: string): Promise<EmpleoSnapshot | null> {
   const cedula = normalizeCedula(rawCedula);
   if (!cedula) return null;
 
-  const nafCandidates = await prisma.nafEmployee.findMany({
-    where: {
-      OR: [
-        { cedula },
-        { cedula: { contains: cedula } },
-      ],
-    },
-    take: 80,
-  });
+  // Match por dígitos aunque en BD venga con guiones/espacios (p. ej. 4-0250-0022).
+  const nafIdRows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id
+    FROM naf_employees
+    WHERE regexp_replace(coalesce(cedula, ''), '[^0-9]', '', 'g') = ${cedula}
+       OR NULLIF(ltrim(regexp_replace(coalesce(cedula, ''), '[^0-9]', '', 'g'), '0'), '') = ${cedula}
+    LIMIT 80
+  `;
+
+  const variants = cedulaQueryVariants(cedula);
+  const nafCandidates =
+    nafIdRows.length > 0
+      ? await prisma.nafEmployee.findMany({
+          where: { id: { in: nafIdRows.map((r) => r.id) } },
+        })
+      : await prisma.nafEmployee.findMany({
+          where: {
+            OR: variants.flatMap((v) => [{ cedula: v }, { cedula: { contains: v } }]),
+          },
+          take: 80,
+        });
   const nafRows = nafCandidates.filter((r) => digitsMatch(r.cedula, cedula));
   const naf = pickCanonicalEmpleo(nafRows);
 
@@ -83,12 +107,26 @@ export async function resolveEmpleoByCedula(rawCedula: string): Promise<EmpleoSn
     };
   }
 
-  const empCandidates = await prisma.employee.findMany({
-    where: {
-      OR: [{ cedulaNormalizada: cedula }, { cedula: { contains: cedula } }],
-    },
-    take: 20,
-  });
+  const empIdRows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id
+    FROM employees
+    WHERE "cedulaNormalizada" = ${cedula}
+       OR regexp_replace(coalesce(cedula, ''), '[^0-9]', '', 'g') = ${cedula}
+       OR NULLIF(ltrim(regexp_replace(coalesce(cedula, ''), '[^0-9]', '', 'g'), '0'), '') = ${cedula}
+    LIMIT 20
+  `;
+  const empCandidates =
+    empIdRows.length > 0
+      ? await prisma.employee.findMany({ where: { id: { in: empIdRows.map((r) => r.id) } } })
+      : await prisma.employee.findMany({
+          where: {
+            OR: [
+              { cedulaNormalizada: cedula },
+              ...variants.flatMap((v) => [{ cedula: v }, { cedula: { contains: v } }]),
+            ],
+          },
+          take: 20,
+        });
   const emp = empCandidates.find((e) => (e.cedulaNormalizada || normalizeCedula(e.cedula)) === cedula);
   if (!emp) return null;
 
