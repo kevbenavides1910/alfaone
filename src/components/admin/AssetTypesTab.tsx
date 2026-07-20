@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { TableColumnFilterHead, type TableColumnFilterDef } from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2, X, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -109,6 +111,16 @@ export function AssetTypesTab({ readOnly }: { readOnly?: boolean }) {
   });
 
   const rows = data?.data ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const assetTypeColumnDefs: TableColumnFilterDef<AssetTypeRow>[] = [
+    { key: "code", label: "Código", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600 w-32", getValue: (r) => r.code },
+    { key: "name", label: "Nombre", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => r.name },
+    { key: "fields", label: "Campos extra", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => (r.fields || []).map((f) => f.label).join(", ") },
+    { key: "estado", label: "Estado", headerClassName: "text-center px-4 py-3 font-semibold text-slate-600 w-24", align: "center", getValue: (r) => (r.isActive ? "Activo" : "Inactivo") },
+    { key: "orden", label: "Orden", headerClassName: "text-center px-4 py-3 font-semibold text-slate-600 w-20", align: "center", getValue: (r) => String(r.sortOrder) },
+    { key: "actions", label: "", headerClassName: "px-4 py-3 w-24", filterable: false, getValue: () => "" },
+  ];
+  const displayedRows = filterRowsByColumnFilters(rows, columnFilters, assetTypeColumnDefs);
 
   function addField() {
     setForm((f) => ({
@@ -184,17 +196,15 @@ export function AssetTypesTab({ readOnly }: { readOnly?: boolean }) {
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-muted/50 border-b">
-                <th className="text-left px-4 py-3 font-semibold text-slate-600 w-32">Código</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Nombre</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Campos extra</th>
-                <th className="text-center px-4 py-3 font-semibold text-slate-600 w-24">Estado</th>
-                <th className="text-center px-4 py-3 font-semibold text-slate-600 w-20">Orden</th>
-                <th className="px-4 py-3 w-24" />
-              </tr>
+              <TableColumnFilterHead
+                columns={assetTypeColumnDefs}
+                rows={rows}
+                filters={columnFilters}
+                onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+              />
             </thead>
             <tbody className="divide-y">
-              {rows.map((r) => {
+              {displayedRows.map((r) => {
                 const fields: ExtraField[] = Array.isArray(r.fields) ? r.fields : [];
                 return (
                   <tr key={r.id} className="hover:bg-muted/50">

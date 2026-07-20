@@ -1,40 +1,25 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@/modules/core/db/prisma";
-import { getSession, requirePermission } from "@/lib/api/middleware";
-import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
+import { apiHandler } from "@/lib/api/handler";
+import { ok, badRequest, notFound } from "@/lib/api/response";
 import { puestoSchema } from "@/modules/bandeco/validations/schemas";
+import { getPuesto, updatePuesto, deletePuesto } from "@/modules/bandeco/services/catalogs-service";
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!session) return unauthorized();
-  if (!requirePermission(session, "bandeco.mantenimientos", "edit")) return forbidden();
-
-  try {
-    const { id } = await params;
-    const existing = await prisma.bandecoPuesto.findUnique({ where: { id } });
-    if (!existing) return notFound("Puesto no encontrado");
-
-    const body = await req.json();
-    const parsed = puestoSchema.partial().safeParse(body);
+export const PATCH = apiHandler(
+  { permission: ["bandeco.mantenimientos", "edit"], errorLabel: "Error al actualizar puesto" },
+  async ({ req, params }) => {
+    const { id } = await (params as Promise<{ id: string }>);
+    if (!await getPuesto(id)) return notFound("Puesto no encontrado");
+    const parsed = puestoSchema.partial().safeParse(await req.json());
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
-
-    const updated = await prisma.bandecoPuesto.update({ where: { id }, data: parsed.data });
-    return ok(updated);
-  } catch (e) {
-    return serverError("Error al actualizar puesto", e);
+    return ok(await updatePuesto(id, parsed.data));
   }
-}
+);
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!session) return unauthorized();
-  if (!requirePermission(session, "bandeco.mantenimientos", "admin")) return forbidden();
-
-  try {
-    const { id } = await params;
-    await prisma.bandecoPuesto.delete({ where: { id } });
+export const DELETE = apiHandler(
+  { permission: ["bandeco.mantenimientos", "admin"], errorLabel: "Error al eliminar puesto" },
+  async ({ params }) => {
+    const { id } = await (params as Promise<{ id: string }>);
+    if (!await getPuesto(id)) return notFound("Puesto no encontrado");
+    await deletePuesto(id);
     return ok({ deleted: true });
-  } catch (e) {
-    return serverError("Error al eliminar puesto", e);
   }
-}
+);

@@ -1,40 +1,25 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@/modules/core/db/prisma";
-import { getSession, requirePermission } from "@/lib/api/middleware";
-import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
+import { apiHandler } from "@/lib/api/handler";
+import { ok, badRequest, notFound } from "@/lib/api/response";
 import { camaraSchema } from "@/modules/bandeco/validations/schemas";
+import { getCamara, updateCamara, deleteCamara } from "@/modules/bandeco/services/catalogs-service";
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!session) return unauthorized();
-  if (!requirePermission(session, "bandeco.mantenimientos", "edit")) return forbidden();
-
-  try {
-    const { id } = await params;
-    const existing = await prisma.bandecoCamara.findUnique({ where: { id } });
-    if (!existing) return notFound("Cámara no encontrada");
-
-    const body = await req.json();
-    const parsed = camaraSchema.partial().safeParse(body);
+export const PATCH = apiHandler(
+  { permission: ["bandeco.mantenimientos", "edit"], errorLabel: "Error al actualizar cámara" },
+  async ({ req, params }) => {
+    const { id } = await (params as Promise<{ id: string }>);
+    if (!await getCamara(id)) return notFound("Cámara no encontrada");
+    const parsed = camaraSchema.partial().safeParse(await req.json());
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
-
-    const updated = await prisma.bandecoCamara.update({ where: { id }, data: parsed.data });
-    return ok(updated);
-  } catch (e) {
-    return serverError("Error al actualizar cámara", e);
+    return ok(await updateCamara(id, parsed.data));
   }
-}
+);
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!session) return unauthorized();
-  if (!requirePermission(session, "bandeco.mantenimientos", "admin")) return forbidden();
-
-  try {
-    const { id } = await params;
-    await prisma.bandecoCamara.delete({ where: { id } });
+export const DELETE = apiHandler(
+  { permission: ["bandeco.mantenimientos", "admin"], errorLabel: "Error al eliminar cámara" },
+  async ({ params }) => {
+    const { id } = await (params as Promise<{ id: string }>);
+    if (!await getCamara(id)) return notFound("Cámara no encontrada");
+    await deleteCamara(id);
     return ok({ deleted: true });
-  } catch (e) {
-    return serverError("Error al eliminar cámara", e);
   }
-}
+);

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useSession } from "@/lib/auth/client-session";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Eye, Search, Receipt, Pencil, Upload, Download, Paperclip, X } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
@@ -17,161 +17,37 @@ import { toast } from "@/components/ui/toaster";
 import { formatCurrency, formatMonthYear } from "@/lib/utils/format";
 import { companyDisplayName, EXPENSE_BUDGET_LINES, EXPENSE_BUDGET_LINE_LABELS } from "@/lib/utils/constants";
 import { useCompanies } from "@/lib/hooks/use-companies";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
   DeferredContractSelector,
+  draftFromServer,
   type DeferredContractDraft,
+  type DeferredSelectorContract,
 } from "@/components/expenses/DeferredContractSelector";
+import { AttachmentPreviewDialog } from "@/components/expenses/AttachmentPreviewDialog";
+import { ExpenseEditDialog } from "@/components/expenses/ExpenseEditDialog";
+import { ExpensePreviewDialog } from "@/components/expenses/ExpensePreviewDialog";
 import { canManageExpenses as userCanManageExpenses } from "@/modules/core/permissions";
-import type { ExpenseApprovalStatus, ExpenseBudgetLine, ExpenseType } from "@prisma/client";
-import * as XLSX from "xlsx";
+import type { ExpenseBudgetLine, ExpenseType } from "@prisma/client";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
+import { exportRowsToExcel } from "@/lib/utils/excel-export";
+import {
+  type Contract, type Distribution, type ExpenseOrigin, type ExpenseDetailDto,
+  type PreviewableAttachment, type Expense, type ExpenseDistributionFilter,
+  EXPENSE_TYPES, PRORRATEO_DESC_RE, DEFAULT_EXPENSE_LIST_URL, ATTACH_ACCEPT,
+  isAssignableContractForExpense, filterAssignableContractsByQuery,
+  isPdf, isImage, isPreviewable, expenseDistributionKind,
+  typeInfo, budgetLineLabel, formatSequentialNo, currentMonth, uploadExpenseAttachments,
+} from "./expenses-types";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface Contract {
-  id: string; licitacionNo: string; client: string; company: string;
-  status: string; endDate: string;
-}
 
-/** Alineado con assignable en API (activos, suspendidos, cerrados recientes). */
-function isAssignableContractForExpense(c: Contract): boolean {
-  if (c.status === "ACTIVE" || c.status === "PROLONGATION" || c.status === "SUSPENDED") return true;
-  if (c.status === "FINISHED" && c.endDate) {
-    const cutoff = new Date();
-    cutoff.setMonth(cutoff.getMonth() - 6);
-    return new Date(c.endDate) >= cutoff;
-  }
-  return false;
-}
 
-function filterAssignableContractsByQuery(contracts: Contract[], query: string, limit = 20): Contract[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return contracts.slice(0, limit);
-  return contracts
-    .filter(
-      (c) =>
-        c.licitacionNo.toLowerCase().includes(q) ||
-        c.client.toLowerCase().includes(q) ||
-        c.company.toLowerCase().includes(q)
-    )
-    .slice(0, limit);
-}
-
-function useDebouncedValue<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(id);
-  }, [value, delay]);
-  return debounced;
-}
-
-interface Distribution {
-  contractId: string; licitacionNo: string; client: string; company: string;
-  equivalencePct: number; allocatedAmount: number;
-  suppliesBudget?: number;
-}
-interface ExpenseOrigin { id: string; name: string; isActive: boolean; sortOrder: number; }
-type ExpenseDetailDto = {
-  id: string;
-  deferredManualDistribution?: boolean;
-  deferredIncludeContractIds?: string[];
-  registroCxp?: string | null;
-  registroTr?: string | null;
-  approvals: Array<{
-    id: string;
-    stepOrder: number;
-    decision: string;
-    comment: string | null;
-    decidedAt: string;
-    approver: { name: string };
-  }>;
-  attachments: Array<{
-    id: string;
-    fileName: string;
-    mimeType: string;
-    downloadUrl: string;
-    createdAt: string;
-    uploadedBy: { name: string };
-    note: string | null;
-  }>;
-};
-
-type PreviewableAttachment = {
-  id: string;
-  fileName: string;
-  mimeType: string;
-  downloadUrl: string;
-};
-
-function isPdf(mime: string | undefined, fileName: string) {
-  if (mime && mime.toLowerCase() === "application/pdf") return true;
-  return fileName.toLowerCase().endsWith(".pdf");
-}
-
-function isImage(mime: string | undefined, fileName: string) {
-  if (mime && mime.toLowerCase().startsWith("image/")) return true;
-  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(fileName);
-}
-
-function isPreviewable(mime: string | undefined, fileName: string) {
-  return isPdf(mime, fileName) || isImage(mime, fileName);
-}
-
-/** Prorrateo en N meses: al crear, la descripción termina en «(mes i/n)». */
-const PRORRATEO_DESC_RE = /\(\s*mes\s+\d+\s*\/\s*\d+\s*\)\s*$/i;
-
-type ExpenseDistributionFilter = "all" | "single_contract" | "multi_month" | "deferred";
-
-function expenseDistributionKind(e: Expense): Exclude<ExpenseDistributionFilter, "all"> {
-  if (e.isDeferred) return "deferred";
-  if (PRORRATEO_DESC_RE.test((e.description ?? "").trim())) return "multi_month";
-  return "single_contract";
-}
-
-interface Expense {
-  id: string; sequentialNo?: number | null; type: ExpenseType; budgetLine?: ExpenseBudgetLine | null;
-  description: string; amount: number;
-  periodMonth: string; isDeferred: boolean; isDistributed: boolean;
-  deferredManualDistribution?: boolean;
-  deferredIncludeContractIds?: string[];
-  contractId?: string; positionId?: string; originId?: string; referenceNumber?: string;
-  company?: string; notes?: string; createdAt: string;
-  approvalStatus?: ExpenseApprovalStatus;
-  currentApprovalStep?: number | null;
-  requiredApprovalSteps?: number;
-  registroCxp?: string | null;
-  registroTr?: string | null;
-  contract?: { id: string; licitacionNo: string; client: string; company: string } | null;
-  position?: { id: string; name: string; location?: { name: string } | null } | null;
-  origin?: { id: string; name: string } | null;
-  createdBy?: { name: string };
-}
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-const EXPENSE_TYPES: { value: ExpenseType; label: string; color: string }[] = [
-  { value: "APERTURA",  label: "Apertura",       color: "bg-slate-100 text-slate-700" },
-  { value: "UNIFORMS",  label: "Uniformes",       color: "bg-purple-100 text-purple-800" },
-  { value: "AUDIT",     label: "Auditoría",       color: "bg-orange-100 text-orange-800" },
-  { value: "ADMIN",     label: "Administrativo",  color: "bg-slate-100 text-slate-700" },
-  { value: "TRANSPORT", label: "Transporte",      color: "bg-cyan-100 text-cyan-800" },
-  { value: "FUEL",      label: "Combustible",     color: "bg-yellow-100 text-yellow-800" },
-  { value: "PHONES",    label: "Teléfonos",       color: "bg-green-100 text-green-800" },
-  { value: "PLANILLA",  label: "Planilla",        color: "bg-emerald-100 text-emerald-800" },
-  { value: "OTHER",     label: "Otros",           color: "bg-gray-100 text-gray-700" },
-];
-
-function typeInfo(t: ExpenseType) {
-  return EXPENSE_TYPES.find(e => e.value === t) ?? EXPENSE_TYPES[EXPENSE_TYPES.length - 1];
-}
-
-function budgetLineLabel(b: ExpenseBudgetLine | null | undefined) {
-  if (!b) return "—";
-  return EXPENSE_BUDGET_LINE_LABELS[b];
-}
-
-function formatSequentialNo(n: number | null | undefined): string {
-  if (n === null || n === undefined) return "—";
-  return `#${String(n).padStart(5, "0")}`;
-}
 
 function approvalBadge(e: Expense) {
   const st = e.approvalStatus ?? "APPROVED";
@@ -197,104 +73,11 @@ function approvalBadge(e: Expense) {
   return <Badge variant="secondary">{st}</Badge>;
 }
 
-function AttachmentPreviewDialog({
-  attachment,
-  onOpenChange,
-}: {
-  attachment: PreviewableAttachment | null;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const open = !!attachment;
-  const inlineUrl = attachment ? `${attachment.downloadUrl}?inline=1` : "";
-  const pdf = attachment ? isPdf(attachment.mimeType, attachment.fileName) : false;
-  const img = attachment ? isImage(attachment.mimeType, attachment.fileName) : false;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl w-[95vw] p-0 overflow-hidden">
-        <DialogHeader className="px-4 py-3 border-b">
-          <DialogTitle className="flex items-center justify-between gap-3 pr-6">
-            <span className="truncate text-sm font-medium" title={attachment?.fileName}>
-              {attachment?.fileName ?? "Previsualización"}
-            </span>
-            {attachment && (
-              <a
-                href={attachment.downloadUrl}
-                className="text-xs text-red-600 hover:underline shrink-0"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Descargar
-              </a>
-            )}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="bg-slate-100" style={{ height: "80vh" }}>
-          {attachment && pdf && (
-            <iframe
-              src={inlineUrl}
-              title={attachment.fileName}
-              className="w-full h-full bg-card"
-            />
-          )}
-          {attachment && img && (
-            <div className="w-full h-full overflow-auto flex items-center justify-center p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={inlineUrl}
-                alt={attachment.fileName}
-                className="max-w-full max-h-full object-contain"
-              />
-            </div>
-          )}
-          {attachment && !pdf && !img && (
-            <div className="w-full h-full flex items-center justify-center text-sm text-slate-500">
-              No hay previsualización disponible para este formato.
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function currentMonth() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-const DEFAULT_EXPENSE_LIST_URL = "/api/expenses?pageSize=200";
-
-const ATTACH_ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.gif,.xlsx,.xls,.csv";
-const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
-
-async function uploadExpenseAttachments(expenseIds: string[], files: File[]): Promise<void> {
-  if (files.length === 0 || expenseIds.length === 0) return;
-  const targets = expenseIds.length > 1 ? [expenseIds[0]!] : expenseIds;
-  for (const expenseId of targets) {
-    for (const file of files) {
-      if (file.size > MAX_ATTACHMENT_BYTES) {
-        throw new Error(`«${file.name}» supera el máximo de 15 MB`);
-      }
-      const fd = new FormData();
-      fd.set("file", file);
-      const r = await fetch(`/api/expenses/${expenseId}/attachments`, {
-        method: "POST",
-        body: fd,
-        credentials: "same-origin",
-      });
-      const j = (await r.json()) as { error?: { message?: string } };
-      if (!r.ok) throw new Error(j.error?.message ?? `No se pudo subir «${file.name}»`);
-    }
-  }
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ExpensesPageClient({ initialExpenses }: { initialExpenses: Expense[] }) {
   const qc = useQueryClient();
   const { data: session } = useSession();
-  const canEdit = session?.user?.role ? userCanManageExpenses(session.user.role) : false;
+  const canEdit = userCanManageExpenses(session ?? null);
   const { data: companiesRes } = useCompanies();
   const companyRows = companiesRes?.data ?? [];
   const activeCompanies = companyRows.filter((c) => c.isActive);
@@ -492,15 +275,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
 
   useEffect(() => {
     if (!previewExpense?.isDeferred || previewExpense.deferredManualDistribution) return;
-    setDistributionDraft("all");
-  }, [previewExpense?.id, previewExpense?.isDeferred, previewExpense?.deferredManualDistribution]);
-
-  useEffect(() => {
-    if (!previewExpense?.isDeferred || !previewDetail || previewExpense.deferredManualDistribution) return;
-    const ids = previewDetail.deferredIncludeContractIds;
-    if (ids === undefined) return;
-    if (ids.length > 0) setDistributionDraft(ids);
-    else setDistributionDraft("all");
+    setDistributionDraft(draftFromServer(previewDetail?.deferredIncludeContractIds));
   }, [
     previewExpense?.id,
     previewExpense?.isDeferred,
@@ -804,8 +579,124 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
     return bySearch.filter((e) => expenseDistributionKind(e) === filterDistribution);
   }, [data?.data, search, filterDistribution]);
 
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const onColumnFilterChange = useCallback((key: string, value: string) => {
+    setColumnFilters((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const expenseColumnDefs = useMemo((): TableColumnFilterDef<Expense>[] => {
+    const typeOptions = EXPENSE_TYPES.map((t) => ({ value: t.label, label: t.label }));
+    const approvalOptions = [
+      { value: "Aprobado", label: "Aprobado" },
+      { value: "Rechazado", label: "Rechazado" },
+      { value: "Pendiente", label: "Pendiente" },
+    ];
+    return [
+      {
+        key: "sequentialNo",
+        label: "N°",
+        headerClassName: "text-left px-4 py-3 font-semibold text-foreground/90",
+        getValue: (e) => formatSequentialNo(e.sequentialNo),
+      },
+      {
+        key: "type",
+        label: "Tipo",
+        headerClassName: "text-left px-4 py-3 font-semibold text-foreground/90",
+        getValue: (e) => typeInfo(e.type).label,
+        options: typeOptions,
+        mode: "select",
+      },
+      {
+        key: "budgetLine",
+        label: "Partida",
+        headerClassName: "text-left px-4 py-3 font-semibold text-foreground/90",
+        getValue: (e) => budgetLineLabel(e.budgetLine),
+      },
+      {
+        key: "company",
+        label: "Empresa",
+        headerClassName: "text-left px-4 py-3 font-semibold text-foreground/90",
+        getValue: (e) => (e.company ? companyDisplayName(e.company, companyRows) : ""),
+      },
+      {
+        key: "description",
+        label: "Descripción",
+        headerClassName: "text-left px-4 py-3 font-semibold text-foreground/90",
+        getValue: (e) => e.description,
+      },
+      {
+        key: "originRef",
+        label: "Origen / Ref.",
+        headerClassName: "text-left px-4 py-3 font-semibold text-foreground/90",
+        getValue: (e) =>
+          [e.origin?.name, e.referenceNumber].filter(Boolean).join(" · "),
+      },
+      {
+        key: "contract",
+        label: "Contrato / Empresa",
+        headerClassName: "text-left px-4 py-3 font-semibold text-foreground/90",
+        getValue: (e) =>
+          e.isDeferred
+            ? "Diferido"
+            : e.contract
+              ? `${e.contract.licitacionNo} · ${e.contract.client}`
+              : e.company
+                ? companyDisplayName(e.company, companyRows)
+                : "",
+      },
+      {
+        key: "period",
+        label: "Período",
+        headerClassName: "text-left px-4 py-3 font-semibold text-foreground/90",
+        getValue: (e) => formatMonthYear(e.periodMonth),
+      },
+      {
+        key: "createdAt",
+        label: "Registrado",
+        headerClassName: "text-left px-4 py-3 font-semibold text-foreground/90",
+        getValue: (e) => e.createdAt.slice(0, 10),
+      },
+      {
+        key: "amount",
+        label: "Monto",
+        align: "right",
+        headerClassName: "text-right px-4 py-3 font-semibold text-foreground/90",
+        getValue: (e) => formatCurrency(e.amount),
+      },
+      {
+        key: "status",
+        label: "Estado",
+        headerClassName: "text-left px-4 py-3 font-semibold text-foreground/90",
+        getValue: (e) => approvalStatusLabel(e),
+        options: approvalOptions,
+        mode: "select",
+      },
+      { key: "actions", label: "", filterable: false, headerClassName: "px-4 py-3", getValue: () => "" },
+    ];
+  }, [companyRows]);
+
+  const displayedExpenses = useMemo(
+    () =>
+      filterRowsByColumnFilters(
+        expenses,
+        columnFilters,
+        expenseColumnDefs.map((col) => ({
+          key: col.key,
+          getValue: col.getValue,
+          mode: col.mode,
+          filterable: col.filterable,
+        }))
+      ),
+    [expenses, columnFilters, expenseColumnDefs]
+  );
+
+  const expenseColumnFilterKeys = useMemo(
+    () => expenseColumnDefs.filter((c) => c.filterable !== false).map((c) => c.key),
+    [expenseColumnDefs]
+  );
+
   // ── Totals ─────────────────────────────────────────────────────────────────
-  const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const total = displayedExpenses.reduce((s, e) => s + e.amount, 0);
 
   async function downloadExpenseTemplate() {
     const res = await fetch("/api/import/expenses", { credentials: "same-origin" });
@@ -898,19 +789,6 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
       "Creado por": "",
       Notas: "",
     };
-    const exportData = [...rows, totalRow];
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    ws["!cols"] = [
-      { wch: 9 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 36 },
-      { wch: 22 }, { wch: 28 }, { wch: 22 }, { wch: 18 },
-      { wch: 20 }, { wch: 20 }, { wch: 26 }, { wch: 12 },
-      { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 22 },
-      { wch: 20 }, { wch: 22 }, { wch: 30 },
-    ];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Gastos");
 
     const stamp = new Date().toISOString().slice(0, 10);
     const parts = ["gastos", stamp];
@@ -921,7 +799,14 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
     if (filterCompany !== "all") {
       parts.push(filterCompany.toLowerCase());
     }
-    XLSX.writeFile(wb, `${parts.join("_")}.xlsx`);
+    exportRowsToExcel({
+      filename: parts.join("_"),
+      sheetName: "Gastos",
+      rows,
+      columnWidths: [9, 14, 14, 14, 36, 22, 28, 22, 18, 20, 20, 26, 12, 14, 16, 16, 22, 20, 22, 30],
+      totalRow,
+      appendDateToFilename: false,
+    });
   }
 
   async function onExpenseFileSelected(f: File | null) {
@@ -984,13 +869,13 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-slate-800">Gastos</h2>
-            <p className="text-sm text-slate-500">
+            <h2 className="text-xl font-bold text-foreground">Gastos</h2>
+            <p className="text-sm text-muted-foreground">
               {expensesLoading ? (
                 "Cargando totales…"
               ) : (
                 <>
-                  {expenses.length} registros · Total: <span className="font-semibold text-slate-700">{formatCurrency(total)}</span>
+                  {expenses.length} registros · Total: <span className="font-semibold text-foreground">{formatCurrency(total)}</span>
                 </>
               )}
             </p>
@@ -1112,25 +997,32 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
               </div>
             ) : (
               <div className="overflow-x-auto">
+                {hasActiveColumnFilters(columnFilters) && (
+                  <div className="flex justify-end px-3 py-1.5 border-b bg-muted/30">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => setColumnFilters(clearColumnFilters(expenseColumnFilterKeys))}
+                    >
+                      <X className="h-3 w-3" />
+                      Limpiar filtros de columnas
+                    </Button>
+                  </div>
+                )}
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">N°</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Tipo</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Partida</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Empresa</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Descripción</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Origen / Ref.</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Contrato / Empresa</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Período</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Registrado</th>
-                      <th className="text-right px-4 py-3 font-semibold text-slate-600">Monto</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Estado</th>
-                      <th className="px-4 py-3" />
-                    </tr>
+                    <TableColumnFilterHead
+                      columns={expenseColumnDefs}
+                      rows={expenses}
+                      filters={columnFilters}
+                      onFilterChange={onColumnFilterChange}
+                      filterRowClassName="border-b bg-muted/30"
+                    />
                   </thead>
                   <tbody className="divide-y">
-                    {expenses.map(e => {
+                    {displayedExpenses.map(e => {
                       const ti = typeInfo(e.type);
                       return (
                         <tr key={e.id} className="hover:bg-muted/50 transition-colors">
@@ -1265,145 +1157,17 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
       </div>
 
       {/* ── Edit Expense Modal ───────────────────────────────────────────────── */}
-      <Dialog open={!!editExpense} onOpenChange={(v) => { if (!v) setEditExpense(null); }}>
-        <DialogContent className="max-w-lg max-h-[min(92vh,880px)] flex flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
-          <div className="shrink-0 px-6 pt-6 pb-2 pr-12">
-            <DialogHeader>
-              <DialogTitle>Editar gasto</DialogTitle>
-            </DialogHeader>
-            <p className="text-sm text-slate-500 mt-2">
-              Corrija el tipo, la partida, la empresa, la descripción, el origen o la referencia si se registraron mal.
-              {editExpense?.isDistributed ? " Este gasto ya está distribuido; solo se actualizan estos datos de clasificación." : ""}
-            </p>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-2">
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Partida</label>
-                <Select
-                  value={editForm.budgetLine}
-                  onValueChange={(v) => setEditForm((f) => ({ ...f, budgetLine: v as ExpenseBudgetLine }))}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EXPENSE_BUDGET_LINES.map((bl) => (
-                      <SelectItem key={bl} value={bl}>{EXPENSE_BUDGET_LINE_LABELS[bl]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Empresa</label>
-                <Select
-                  value={editForm.company || "none"}
-                  onValueChange={(v) => setEditForm((f) => ({ ...f, company: v === "none" ? "" : v }))}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Empresa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— Sin especificar —</SelectItem>
-                    {activeCompanies.map((c) => (
-                      <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Período</label>
-              <Input
-                type="month"
-                value={editForm.periodMonth}
-                onChange={(e) => setEditForm((f) => ({ ...f, periodMonth: e.target.value }))}
-              />
-              <p className="text-xs text-slate-400">Mes contable al que se imputa este gasto.</p>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Tipo de gasto</label>
-              <Select value={editForm.type} onValueChange={(v) => setEditForm((f) => ({ ...f, type: v as ExpenseType }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {EXPENSE_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mr-2 ${t.color}`}>{t.label}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Origen</label>
-                <Select value={editForm.originId || "none"} onValueChange={(v) => setEditForm((f) => ({ ...f, originId: v === "none" ? "" : v }))}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Origen..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— Sin especificar —</SelectItem>
-                    {(originsData?.data ?? []).filter((o) => o.isActive).map((o) => (
-                      <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">N° Referencia</label>
-                <Input
-                  placeholder="Factura, OC..."
-                  value={editForm.referenceNumber}
-                  onChange={(e) => setEditForm((f) => ({ ...f, referenceNumber: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Descripción</label>
-              <Input
-                value={editForm.description}
-                onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Registro 1 CXP</label>
-                <Input
-                  value={editForm.registroCxp}
-                  onChange={(e) => setEditForm((f) => ({ ...f, registroCxp: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Registro 2 TR</label>
-                <Input
-                  value={editForm.registroTr}
-                  onChange={(e) => setEditForm((f) => ({ ...f, registroTr: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Notas (opcional)</label>
-              <Input
-                placeholder="Detalles adicionales..."
-                value={editForm.notes}
-                onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
-              />
-            </div>
-          </div>
-          </div>
-          <div className="shrink-0 border-t border-slate-200 bg-background px-6 py-4">
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={() => setEditExpense(null)}>Cancelar</Button>
-              <Button onClick={handleSaveEdit} disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? "Guardando..." : "Guardar cambios"}
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ExpenseEditDialog
+        editExpense={editExpense}
+        editForm={editForm}
+        setEditForm={setEditForm}
+        setEditExpense={setEditExpense}
+        handleSaveEdit={handleSaveEdit}
+        updateMutation={updateMutation}
+        activeCompanies={activeCompanies}
+        originsData={originsData}
+      />
+
 
       {/* ── Add Expense Modal ────────────────────────────────────────────────── */}
       <Dialog open={showForm && canEdit} onOpenChange={v => { if (!v) { setShowForm(false); resetForm(); } }}>
@@ -1993,267 +1757,24 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
       </Dialog>
 
       {/* ── Distribution Preview Modal ───────────────────────────────────────── */}
-      <Dialog open={!!previewExpense} onOpenChange={v => { if (!v) setPreviewExpense(null); }}>
-        <DialogContent className="max-w-2xl max-h-[min(90vh,900px)] flex flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-          <div className="px-6 pt-6 pb-4 shrink-0">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <span>
-                  {previewExpense?.isDeferred ? "Gasto diferido — reparto y detalle" : "Detalle del gasto"}
-                </span>
-                {previewExpense?.sequentialNo != null && (
-                  <span className="text-xs font-mono text-slate-500 font-normal">
-                    {formatSequentialNo(previewExpense.sequentialNo)}
-                  </span>
-                )}
-              </DialogTitle>
-            </DialogHeader>
-          </div>
-
-          {previewExpense && (
-            <div className="flex-1 min-h-0 overflow-y-auto px-6 space-y-4 pb-4">
-              <div className="bg-muted/50 rounded-lg p-4 grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-slate-500">Descripción:</span> <span className="font-medium ml-1">{previewExpense.description}</span></div>
-                <div><span className="text-slate-500">Monto:</span> <span className="font-semibold ml-1">{formatCurrency(previewExpense.amount)}</span></div>
-                <div><span className="text-slate-500">Empresa:</span> <span className="font-medium ml-1">{previewExpense.company ? companyDisplayName(previewExpense.company, companyRows) : "—"}</span></div>
-                <div><span className="text-slate-500">Período:</span> <span className="font-medium ml-1">{formatMonthYear(previewExpense.periodMonth)}</span></div>
-                <div className="col-span-2">{approvalBadge(previewExpense)}</div>
-              </div>
-
-              {previewExpense.isDeferred &&
-                (previewExpense.approvalStatus ?? "APPROVED") !== "APPROVED" &&
-                (previewExpense.approvalStatus ?? "APPROVED") !== "REJECTED" && (
-                  <div className="rounded-md border border-slate-200 bg-slate-50 text-slate-900 text-sm p-3">
-                    Este gasto ya impacta el presupuesto según el reparto indicado. Los aprobadores pueden ver el efecto antes de confirmar. Si alguien rechaza el gasto, el impacto se revierte.
-                  </div>
-                )}
-
-              {previewDetail?.registroCxp || previewDetail?.registroTr ? (
-                <div className="rounded-lg border p-3 text-sm space-y-1 bg-card">
-                  <p className="font-medium text-slate-800">Registros</p>
-                  {previewDetail.registroCxp && (
-                    <div>
-                      <span className="text-slate-500">Registro 1 CXP:</span> {previewDetail.registroCxp}
-                    </div>
-                  )}
-                  {previewDetail.registroTr && (
-                    <div>
-                      <span className="text-slate-500">Registro 2 TR:</span> {previewDetail.registroTr}
-                    </div>
-                  )}
-                </div>
-              ) : null}
-
-              {previewDetail && previewDetail.approvals.length > 0 && (
-                <div className="rounded-lg border p-3 text-sm bg-card">
-                  <p className="font-medium text-slate-800 mb-2">Aprobaciones</p>
-                  <ul className="space-y-1 text-xs text-slate-700">
-                    {previewDetail.approvals.map((a) => (
-                      <li key={a.id}>
-                        Paso {a.stepOrder} · {a.approver.name} · {a.decision === "APPROVED" ? "Aprobado" : "Rechazado"}
-                        {a.comment ? ` — ${a.comment}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="rounded-lg border p-3 text-sm space-y-2 bg-card">
-                <p className="font-medium text-slate-800">Documentación</p>
-                {previewDetail?.attachments?.length ? (
-                  <ul className="text-xs space-y-1">
-                    {previewDetail.attachments.map((att) => {
-                      const canPreview = isPreviewable(att.mimeType, att.fileName);
-                      return (
-                        <li key={att.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                          {canPreview ? (
-                            <button
-                              type="button"
-                              className="text-red-600 hover:underline text-left"
-                              onClick={() =>
-                                setPreviewAttachment({
-                                  id: att.id,
-                                  fileName: att.fileName,
-                                  mimeType: att.mimeType,
-                                  downloadUrl: att.downloadUrl,
-                                })
-                              }
-                              title="Previsualizar"
-                            >
-                              {att.fileName}
-                            </button>
-                          ) : (
-                            <a
-                              href={att.downloadUrl}
-                              className="text-red-600 hover:underline"
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              {att.fileName}
-                            </a>
-                          )}
-                          {canPreview && (
-                            <a
-                              href={att.downloadUrl}
-                              className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline"
-                              target="_blank"
-                              rel="noreferrer"
-                              title="Descargar"
-                            >
-                              descargar
-                            </a>
-                          )}
-                          <span className="text-slate-400">· {att.uploadedBy.name}</span>
-                          {att.note ? <span className="text-slate-500">— {att.note}</span> : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-slate-500">Sin archivos adjuntos.</p>
-                )}
-                <input
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.xlsx,.xls,.csv"
-                  className="text-xs w-full"
-                  onChange={async (ev) => {
-                    const f = ev.target.files?.[0];
-                    if (!f) return;
-                    const fd = new FormData();
-                    fd.set("file", f);
-                    const r = await fetch(`/api/expenses/${previewExpense.id}/attachments`, {
-                      method: "POST",
-                      body: fd,
-                      credentials: "same-origin",
-                    });
-                    const j = (await r.json()) as { error?: { message?: string } };
-                    if (!r.ok) {
-                      toast.error(j.error?.message ?? "Error al subir");
-                    } else {
-                      toast.success("Archivo adjuntado");
-                      refetchPreviewDetail();
-                      qc.invalidateQueries({ queryKey: ["expenses"] });
-                    }
-                    ev.target.value = "";
-                  }}
-                />
-              </div>
-
-              {previewExpense.isDeferred && (previewExpense.approvalStatus ?? "APPROVED") !== "REJECTED" && (
-                <>
-                  {!previewExpense.deferredManualDistribution ? (
-                    <div className="rounded-lg border bg-card p-3 text-sm space-y-2">
-                      <p className="font-medium text-slate-800">Contratos incluidos en el reparto</p>
-                      <p className="text-xs text-slate-500">
-                        Solo los marcados reciben el gasto. Los porcentajes suman 100 % entre los seleccionados (peso = presupuesto de insumos de cada contrato).
-                      </p>
-                      <DeferredContractSelector
-                        contracts={deferredAssignableContracts}
-                        allIds={deferredAssignableIds}
-                        draft={distributionDraft}
-                        onChange={setDistributionDraft}
-                        companyRows={companyRows}
-                        listClassName="max-h-40 overflow-y-auto space-y-2 rounded-md border p-2 bg-muted/50/80"
-                      />
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-violet-200 bg-violet-50/90 p-3 text-sm text-violet-950">
-                      <p className="font-medium">Reparto manual (montos fijos)</p>
-                      <p className="text-xs mt-1 opacity-90">
-                        Este gasto se distribuyó con montos definidos manualmente por contrato. Para modificar el reparto hay que actualizar el gasto con permisos completos (no desde esta vista).
-                      </p>
-                    </div>
-                  )}
-                  {previewLoading ? (
-                    <div className="text-center py-6 text-slate-400">Calculando distribución...</div>
-                  ) : (
-                    <div className="border rounded-lg overflow-hidden">
-                      <p className="text-xs text-slate-500 px-3 py-2 bg-muted/50 border-b">
-                        {previewExpense.deferredManualDistribution
-                          ? "Montos asignados por contrato (reparto manual)."
-                          : "Vista del reparto (según selección arriba; guarde para aplicar cambios al presupuesto)"}
-                      </p>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-muted/50 border-b">
-                            <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Contrato</th>
-                            <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Empresa</th>
-                            <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Equiv. %</th>
-                            <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Monto asignado</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {(previewData?.data ?? []).map((d) => (
-                            <tr key={d.contractId} className="hover:bg-muted/50">
-                              <td className="px-4 py-2.5">
-                                <div className="font-medium">{d.client}</div>
-                                <div className="text-xs text-slate-400">{d.licitacionNo}</div>
-                              </td>
-                              <td className="px-4 py-2.5 text-slate-500 text-sm">
-                                {companyDisplayName(d.company, companyRows)}
-                              </td>
-                              <td className="px-4 py-2.5 text-right text-slate-600">
-                                {(d.equivalencePct * 100).toFixed(2)}%
-                              </td>
-                              <td className="px-4 py-2.5 text-right font-semibold">
-                                {formatCurrency(d.allocatedAmount)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="border-t bg-muted/50">
-                            <td colSpan={2} className="px-4 py-2.5 font-semibold text-slate-700">Total</td>
-                            <td className="px-4 py-2.5 text-right font-semibold text-slate-600">
-                              {((previewData?.data ?? []).reduce((s, d) => s + d.equivalencePct, 0) * 100).toFixed(2)}%
-                            </td>
-                            <td className="px-4 py-2.5 text-right font-bold text-slate-900">
-                              {formatCurrency((previewData?.data ?? []).reduce((s, d) => s + d.allocatedAmount, 0))}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          <div className="shrink-0 border-t bg-background px-6 py-4">
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={() => setPreviewExpense(null)}>Cerrar</Button>
-              {canEdit &&
-                previewExpense &&
-                previewExpense.isDeferred &&
-                !previewExpense.deferredManualDistribution &&
-                (previewExpense.approvalStatus ?? "APPROVED") !== "REJECTED" && (
-                  <Button
-                    onClick={() => {
-                      if (distributionDraft !== "all" && distributionDraft.length === 0) {
-                        toast.error("Seleccione al menos un contrato para el reparto");
-                        return;
-                      }
-                      const ids = distributionDraft === "all" ? [] : distributionDraft;
-                      saveDeferredTargetsMutation.mutate({
-                        id: previewExpense.id,
-                        contractIds: ids,
-                      });
-                    }}
-                    disabled={
-                      saveDeferredTargetsMutation.isPending ||
-                      previewLoading ||
-                      (distributionDraft !== "all" && distributionDraft.length === 0)
-                    }
-                    className="bg-red-600 hover:bg-red-700"
-                  >
-                    {saveDeferredTargetsMutation.isPending ? "Guardando…" : "Guardar reparto"}
-                  </Button>
-                )}
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ExpensePreviewDialog
+        previewExpense={previewExpense}
+        setPreviewExpense={setPreviewExpense}
+        previewData={previewData}
+        previewDetail={previewDetail}
+        previewLoading={previewLoading}
+        distributionDraft={distributionDraft}
+        setDistributionDraft={setDistributionDraft}
+        saveDeferredTargetsMutation={saveDeferredTargetsMutation}
+        setPreviewAttachment={setPreviewAttachment}
+        refetchPreviewDetail={refetchPreviewDetail}
+        canEdit={canEdit}
+        companyRows={companyRows}
+        deferredAssignableContracts={deferredAssignableContracts as DeferredSelectorContract[]}
+        deferredAssignableIds={deferredAssignableIds}
+        approvalBadge={approvalBadge}
+        qc={qc}
+      />
 
       <AttachmentPreviewDialog
         attachment={previewAttachment}

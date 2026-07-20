@@ -1,8 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
 
+type AdminSyncDb = Pick<PrismaClient, "contractAdministration">;
+
 /** Asegura que existan exactamente `count` filas de administración para el contrato. */
 export async function syncContractAdministrations(
-  prisma: PrismaClient,
+  prisma: AdminSyncDb,
   contractId: string,
   count: number,
   createdById?: string

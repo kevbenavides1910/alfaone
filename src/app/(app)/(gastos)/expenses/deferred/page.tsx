@@ -19,6 +19,13 @@ import { deferredExpenseSchema, type DeferredExpenseInput } from "@/modules/pres
 import { formatCurrency, formatDate, formatMonthYear, fromMonthString, toMonthString } from "@/lib/utils/format";
 import { companyDisplayName, EXPENSE_CATEGORY_LABELS } from "@/lib/utils/constants";
 import { useCompanies } from "@/lib/hooks/use-companies";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 
 interface DeferredExpense {
   id: string; company: string; description: string; category: string;
@@ -87,6 +94,17 @@ export default function DeferredExpensesPage() {
   });
 
   const expenses = data?.data ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const filterCols: TableColumnFilterDef<DeferredExpense>[] = [
+    { key: "description", label: "Descripción", getValue: (r) => r.description, headerClassName: "text-left px-4 py-3 font-semibold text-slate-600" },
+    { key: "company", label: "Empresa", getValue: (r) => r.company ?? "", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600" },
+    { key: "category", label: "Categoría", getValue: (r) => r.category, headerClassName: "text-left px-4 py-3 font-semibold text-slate-600" },
+    { key: "period", label: "Período", getValue: (r) => r.periodMonth, headerClassName: "text-left px-4 py-3 font-semibold text-slate-600" },
+    { key: "amount", label: "Monto", getValue: (r) => String(r.totalAmount), headerClassName: "text-right px-4 py-3 font-semibold text-slate-600" },
+    { key: "status", label: "Estado", getValue: (r) => (r.isDistributed ? "Distribuido" : "Pendiente"), headerClassName: "text-left px-4 py-3 font-semibold text-slate-600" },
+    { key: "actions", label: "", getValue: (_r) => "", headerClassName: "px-4 py-3", filterable: false },
+  ];
+  const displayedExpenses = filterRowsByColumnFilters(expenses, columnFilters, filterCols);
 
   return (
     <>
@@ -122,7 +140,7 @@ export default function DeferredExpensesPage() {
 
         {/* List */}
         <Card>
-          <CardContent className="p-0">
+              <CardContent className="p-0">
             {isLoading ? (
               <div className="p-8 text-center text-slate-400">Cargando...</div>
             ) : expenses.length === 0 ? (
@@ -130,18 +148,16 @@ export default function DeferredExpensesPage() {
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Descripción</th>
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Empresa</th>
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Categoría</th>
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Período</th>
-                    <th className="text-right px-4 py-3 font-semibold text-slate-600">Monto</th>
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Estado</th>
-                    <th className="px-4 py-3" />
-                  </tr>
+                  <TableColumnFilterHead
+                    columns={filterCols}
+                    rows={expenses}
+                    filters={columnFilters}
+                    onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                    headerRowClassName="border-b bg-muted/50"
+                  />
                 </thead>
                 <tbody className="divide-y">
-                  {expenses.map((e) => (
+                  {displayedExpenses.map((e) => (
                     <tr key={e.id} className="hover:bg-muted/50">
                       <td className="px-4 py-3">
                         <div className="font-medium">{e.description}</div>

@@ -13,7 +13,9 @@ export async function validateAndApplyAssetMovement(
   | { ok: false; error: MovementValidationError; notFound?: boolean }
 > {
   const asset = await prisma.asset.findUnique({ where: { id: assetId } });
-  if (!asset) return { ok: false, error: { message: "Activo no encontrado" }, notFound: true };
+  if (!asset || asset.deletedAt) {
+    return { ok: false, error: { message: "Activo no encontrado" }, notFound: true };
+  }
 
   if (data.action === "ASSIGN") {
     if (asset.status !== "IN_STOCK") {

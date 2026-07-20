@@ -1,16 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Search, FileSpreadsheet, BarChart3, Upload, AlertTriangle, FileText, Eye, Users, Download, Plus, Trash2, Repeat, PenLine, SlidersHorizontal, ChevronDown,
+  Search, FileSpreadsheet, BarChart3, Upload, AlertTriangle, FileText, Eye, Users, Download, Plus, Trash2, Repeat, PenLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
+import {
+  canEditDisciplinaryHistorialSession,
+  canImportDisciplinarySession,
+} from "@/modules/core/permissions";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import { formatDate } from "@/lib/utils/format";
 import { ApercibimientoStatusDialog } from "@/components/disciplinary/StatusDialog";
@@ -83,9 +94,8 @@ interface ApercibimientoRow {
 
 export default function DisciplinarioListPage() {
   const { data: session } = useSession();
-  const role = session?.user?.role;
-  const isAdmin = role === "ADMIN";
-  const canManage = role === "ADMIN" || role === "SUPERVISOR";
+  const canManage = canEditDisciplinaryHistorialSession(session ?? null);
+  const canImport = canImportDisciplinarySession(session ?? null);
   const queryClient = useQueryClient();
 
   const [statusDialog, setStatusDialog] = useState<{
@@ -133,7 +143,6 @@ export default function DisciplinarioListPage() {
     contrato: "",
     cliente: "",
   });
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 100;
 
@@ -158,6 +167,135 @@ export default function DisciplinarioListPage() {
   const rows = data?.data ?? [];
   const total = data?.meta?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
+
+  const onColumnFilterChange = useCallback((key: string, value: string) => {
+    setPage(1);
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const historialColumnDefs = useMemo((): TableColumnFilterDef<ApercibimientoRow>[] => {
+    const estadoOptions = Object.entries(ESTADO_LABEL).map(([, label]) => ({
+      value: label,
+      label,
+    }));
+    const vigenciaOptions = Object.entries(VIGENCIA_LABEL).map(([, label]) => ({
+      value: label,
+      label,
+    }));
+    return [
+      { key: "numero", label: "N°", getValue: (r) => r.numero },
+      { key: "fecha", label: "Fecha", getValue: (r) => formatDate(r.fechaEmision) },
+      { key: "codigo", label: "Código", getValue: (r) => r.codigoEmpleado },
+      { key: "nombre", label: "Empleado", getValue: (r) => r.nombreEmpleado },
+      {
+        key: "zona",
+        label: "Zona / Sucursal",
+        getValue: (r) => [r.zona, r.sucursal].filter(Boolean).join(" / "),
+      },
+      { key: "omisiones", label: "Omisiones", align: "center", getValue: (r) => String(r.cantidadOmisiones) },
+      { key: "administrador", label: "Administrador", getValue: (r) => r.administrador ?? "" },
+      {
+        key: "estado",
+        label: "Estado",
+        getValue: (r) => ESTADO_LABEL[r.estado] ?? r.estado,
+        options: estadoOptions,
+        mode: "select",
+      },
+      {
+        key: "vigencia",
+        label: "Vigencia",
+        getValue: (r) => VIGENCIA_LABEL[r.vigencia] ?? r.vigencia,
+        options: vigenciaOptions,
+        mode: "select",
+      },
+      { key: "contrato", label: "Contrato", getValue: (r) => r.contrato ?? "" },
+      { key: "cliente", label: "Cliente", getValue: (r) => r.cliente ?? "" },
+      { key: "adjuntos", label: "Adjuntos", align: "center", filterable: false, getValue: () => "" },
+      { key: "actions", label: "", filterable: false, getValue: () => "" },
+    ];
+  }, []);
+
+  const [localColumnFilters, setLocalColumnFilters] = useState<Record<string, string>>({});
+  const onLocalColumnFilterChange = useCallback((key: string, value: string) => {
+    setLocalColumnFilters((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const displayedRows = useMemo(() => {
+    const serverKeys = new Set([
+      "numero",
+      "codigo",
+      "nombre",
+      "zona",
+      "administrador",
+      "estado",
+      "vigencia",
+      "contrato",
+      "cliente",
+    ]);
+    const localOnly = historialColumnDefs.filter(
+      (c) => c.filterable !== false && !serverKeys.has(c.key)
+    );
+    if (localOnly.length === 0) return rows;
+    return filterRowsByColumnFilters(
+      rows,
+      localColumnFilters,
+      localOnly.map((col) => ({
+        key: col.key,
+        getValue: col.getValue,
+        mode: col.mode,
+        filterable: col.filterable,
+      }))
+    );
+  }, [rows, localColumnFilters, historialColumnDefs]);
+
+  const mergedColumnFilters = useMemo(
+    () => ({
+      numero: filters.numero,
+      fecha: localColumnFilters.fecha ?? "",
+      codigo: filters.codigo,
+      nombre: filters.nombre,
+      zona: filters.zona,
+      omisiones: localColumnFilters.omisiones ?? "",
+      administrador: filters.administrador,
+      estado: filters.estado ? (ESTADO_LABEL[filters.estado as keyof typeof ESTADO_LABEL] ?? filters.estado) : "",
+      vigencia: filters.vigencia ? (VIGENCIA_LABEL[filters.vigencia as keyof typeof VIGENCIA_LABEL] ?? filters.vigencia) : "",
+      contrato: filters.contrato,
+      cliente: filters.cliente,
+    }),
+    [filters, localColumnFilters]
+  );
+
+  const onHistorialColumnFilterChange = useCallback(
+    (key: string, value: string) => {
+      if (key === "fecha" || key === "omisiones") {
+        onLocalColumnFilterChange(key, value);
+        return;
+      }
+      if (key === "estado") {
+        const code =
+          Object.entries(ESTADO_LABEL).find(([, label]) => label === value)?.[0] ?? value;
+        onColumnFilterChange("estado", value ? code : "");
+        return;
+      }
+      if (key === "vigencia") {
+        const code =
+          Object.entries(VIGENCIA_LABEL).find(([, label]) => label === value)?.[0] ?? value;
+        onColumnFilterChange("vigencia", value ? code : "");
+        return;
+      }
+      if (key === "zona") {
+        onColumnFilterChange("zona", value);
+        return;
+      }
+      onColumnFilterChange(key, value);
+    },
+    [onColumnFilterChange, onLocalColumnFilterChange]
+  );
+
+  const historialFilterKeys = useMemo(
+    () => historialColumnDefs.filter((c) => c.filterable !== false).map((c) => c.key),
+    [historialColumnDefs]
+  );
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -296,7 +434,7 @@ export default function DisciplinarioListPage() {
                 <Button size="sm" variant="outline" className="gap-1.5 text-xs sm:text-sm" onClick={() => setManualDialogOpen(true)}>
                   <Plus className="h-4 w-4 shrink-0" /> <span>Alta</span>
                 </Button>
-                {isAdmin && (
+                {canImport && (
                   <Link href="/disciplinario/importar">
                     <Button size="sm" className="gap-1.5 text-xs sm:text-sm">
                       <Upload className="h-4 w-4 shrink-0" /> <span>Importar</span>
@@ -311,8 +449,7 @@ export default function DisciplinarioListPage() {
         {/* Filtros */}
         <Card>
           <CardContent className="p-4 space-y-3">
-            {/* Filtros principales — siempre visibles */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
               <div>
                 <label className="text-xs font-medium text-slate-600 block mb-1">Desde</label>
                 <Input
@@ -357,105 +494,84 @@ export default function DisciplinarioListPage() {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Administrador</label>
+                <Input
+                  value={filters.administrador}
+                  onChange={(e) => { setFilters({ ...filters, administrador: e.target.value }); setPage(1); }}
+                  placeholder="Contiene…"
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Zona</label>
+                <Input
+                  value={filters.zona}
+                  onChange={(e) => { setFilters({ ...filters, zona: e.target.value }); setPage(1); }}
+                  placeholder="Contiene…"
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Sucursal</label>
+                <Input
+                  value={filters.sucursal}
+                  onChange={(e) => { setFilters({ ...filters, sucursal: e.target.value }); setPage(1); }}
+                  placeholder="Contiene…"
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Código empleado</label>
+                <Input
+                  value={filters.codigo}
+                  onChange={(e) => { setFilters({ ...filters, codigo: e.target.value }); setPage(1); }}
+                  placeholder="Exacto"
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Nombre</label>
+                <Input
+                  value={filters.nombre}
+                  onChange={(e) => { setFilters({ ...filters, nombre: e.target.value }); setPage(1); }}
+                  placeholder="Contiene…"
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">N° Apercibimiento</label>
+                <Input
+                  value={filters.numero}
+                  onChange={(e) => { setFilters({ ...filters, numero: e.target.value }); setPage(1); }}
+                  placeholder="Contiene…"
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Contrato (Licitación)</label>
+                <Input
+                  value={filters.contrato}
+                  onChange={(e) => { setFilters({ ...filters, contrato: e.target.value }); setPage(1); }}
+                  placeholder="Contiene…"
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Cliente</label>
+                <Input
+                  value={filters.cliente}
+                  onChange={(e) => { setFilters({ ...filters, cliente: e.target.value }); setPage(1); }}
+                  placeholder="Contiene…"
+                  className="h-9"
+                />
+              </div>
             </div>
 
-            {/* Filtros avanzados — colapsables */}
-            {showAdvancedFilters && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
-                <div>
-                  <label className="text-xs font-medium text-slate-600 block mb-1">Nombre</label>
-                  <Input
-                    value={filters.nombre}
-                    onChange={(e) => { setFilters({ ...filters, nombre: e.target.value }); setPage(1); }}
-                    placeholder="Contiene…"
-                    className="h-9"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 block mb-1">Administrador</label>
-                  <Input
-                    value={filters.administrador}
-                    onChange={(e) => { setFilters({ ...filters, administrador: e.target.value }); setPage(1); }}
-                    placeholder="Contiene…"
-                    className="h-9"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 block mb-1">Zona</label>
-                  <Input
-                    value={filters.zona}
-                    onChange={(e) => { setFilters({ ...filters, zona: e.target.value }); setPage(1); }}
-                    placeholder="Contiene…"
-                    className="h-9"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 block mb-1">Sucursal</label>
-                  <Input
-                    value={filters.sucursal}
-                    onChange={(e) => { setFilters({ ...filters, sucursal: e.target.value }); setPage(1); }}
-                    placeholder="Contiene…"
-                    className="h-9"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 block mb-1">Código empleado</label>
-                  <Input
-                    value={filters.codigo}
-                    onChange={(e) => { setFilters({ ...filters, codigo: e.target.value }); setPage(1); }}
-                    placeholder="Exacto"
-                    className="h-9"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 block mb-1">N° Apercibimiento</label>
-                  <Input
-                    value={filters.numero}
-                    onChange={(e) => { setFilters({ ...filters, numero: e.target.value }); setPage(1); }}
-                    placeholder="Contiene…"
-                    className="h-9"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 block mb-1">Contrato (Licitación)</label>
-                  <Input
-                    value={filters.contrato}
-                    onChange={(e) => { setFilters({ ...filters, contrato: e.target.value }); setPage(1); }}
-                    placeholder="Contiene…"
-                    className="h-9"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 block mb-1">Cliente</label>
-                  <Input
-                    value={filters.cliente}
-                    onChange={(e) => { setFilters({ ...filters, cliente: e.target.value }); setPage(1); }}
-                    placeholder="Contiene…"
-                    className="h-9"
-                  />
-                </div>
-              </div>
-            )}
-
             <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 gap-1.5 text-slate-600 hover:text-slate-900"
-                  onClick={() => setShowAdvancedFilters((v) => !v)}
-                >
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
-                  Filtros avanzados
-                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAdvancedFilters ? "rotate-180" : ""}`} />
-                  {(filters.zona || filters.sucursal || filters.administrador || filters.codigo || filters.nombre || filters.numero || filters.contrato || filters.cliente) && (
-                    <span className="ml-0.5 h-2 w-2 rounded-full bg-amber-500" />
-                  )}
-                </Button>
-                <Button variant="ghost" size="sm" className="h-9 text-slate-500" onClick={clearFilters}>
-                  Limpiar
-                </Button>
-              </div>
+              <Button variant="ghost" size="sm" className="h-9 text-slate-500" onClick={clearFilters}>
+                Limpiar filtros
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -482,26 +598,47 @@ export default function DisciplinarioListPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
+              {hasActiveColumnFilters({ ...mergedColumnFilters, ...localColumnFilters }) && (
+                <div className="flex justify-end px-3 py-1.5 border-b bg-slate-50">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      setLocalColumnFilters(clearColumnFilters(["fecha", "omisiones"]));
+                      setFilters((prev) => ({
+                        ...prev,
+                        numero: "",
+                        codigo: "",
+                        nombre: "",
+                        zona: "",
+                        administrador: "",
+                        estado: "",
+                        vigencia: "",
+                        contrato: "",
+                        cliente: "",
+                      }));
+                      setPage(1);
+                    }}
+                  >
+                    Limpiar filtros de columnas
+                  </Button>
+                </div>
+              )}
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr className="text-left">
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">N°</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Fecha</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Código</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Empleado</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Zona / Sucursal</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 text-center">Omisiones</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Administrador</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Estado</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Vigencia</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Contrato</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Cliente</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 text-center">Adjuntos</th>
-                    <th className="px-4 py-3 text-right" />
-                  </tr>
+                  <TableColumnFilterHead
+                    columns={historialColumnDefs}
+                    rows={rows}
+                    filters={mergedColumnFilters}
+                    onFilterChange={onHistorialColumnFilterChange}
+                    headerRowClassName="text-left"
+                    filterRowClassName="bg-slate-50/80 border-b border-slate-200"
+                  />
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {rows.map((r) => (
+                  {displayedRows.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs text-slate-700">{r.numero}</td>
                       <td className="px-4 py-3 text-slate-700">{formatDate(r.fechaEmision)}</td>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Settings2 } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import { PresupuestoEditableField, PresupuestoEditableCell } from "@/components/ventas/PresupuestoEditableField";
 import { PresupuestoModuloPanel } from "@/components/ventas/PresupuestoModuloPanel";

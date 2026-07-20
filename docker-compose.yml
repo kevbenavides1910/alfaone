@@ -38,6 +38,10 @@ services:
       EXPENSE_UPLOAD_DIR: /data/expense-uploads
       BRANDING_UPLOAD_DIR: /data/branding
       PATROL_UPLOAD_DIR: /data/patrol-uploads
+      FRAPPE_BASE_URL: ${FRAPPE_BASE_URL:-}
+      FRAPPE_API_KEY: ${FRAPPE_API_KEY:-}
+      FRAPPE_API_SECRET: ${FRAPPE_API_SECRET:-}
+      FRAPPE_COMPANY: ${FRAPPE_COMPANY:-Grupo Alfa}
     volumes:
       # Disco grande del servidor (HDD en /mnt/storage) — ver docs/STORAGE.md
       - ${APP_DATA_HOST:-/mnt/storage/apps/presupuestos-alfa}:/data

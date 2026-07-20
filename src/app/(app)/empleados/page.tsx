@@ -2,6 +2,13 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { useQuery } from "@tanstack/react-query";
 import {
   Eye,
@@ -17,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import { formatDate } from "@/lib/utils/format";
 import { canImportEmployeesSession } from "@/modules/core/permissions";
@@ -72,6 +79,7 @@ export default function EmpleadosPage() {
     company: "",
   });
   const [page, setPage] = useState(1);
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
 
   const queryParams = useMemo(() => {
     const sp = new URLSearchParams();
@@ -97,6 +105,15 @@ export default function EmpleadosPage() {
   const rows = data?.data.rows ?? [];
   const total = data?.data.total ?? 0;
   const totalPages = data?.data.totalPages ?? 1;
+  const empleadoColumns: TableColumnFilterDef<EmployeeRow>[] = [
+    { key: "empleado", label: "Empleado", headerClassName: "px-4 py-3", filterClassName: "px-4 py-1.5", getValue: (r) => r.nombre ?? "" },
+    { key: "contacto", label: "Contacto", headerClassName: "px-4 py-3", filterClassName: "px-4 py-1.5", getValue: (r) => r.email ?? r.telefono ?? "" },
+    { key: "contrato", label: "Contrato / ubicación", headerClassName: "px-4 py-3", filterClassName: "px-4 py-1.5", getValue: (r) => r.primaryPlacement?.contract?.licitacionNo ?? r.primaryPlacement?.contrato ?? r.primaryPlacement?.ubicacionNombre ?? "" },
+    { key: "zona", label: "Zona", headerClassName: "px-4 py-3", filterClassName: "px-4 py-1.5", getValue: (r) => r.zona ?? "" },
+    { key: "estado", label: "Estado", headerClassName: "px-4 py-3", filterClassName: "px-4 py-1.5", getValue: (r) => r.estado ?? "" },
+    { key: "acciones", label: "Acciones", headerClassName: "px-4 py-3 text-right", filterable: false, getValue: () => "" },
+  ];
+  const displayedRows = filterRowsByColumnFilters(rows, columnFilters, empleadoColumns);
 
   function handleExport() {
     exportRowsToExcel({
@@ -224,17 +241,16 @@ export default function EmpleadosPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                      <th className="px-4 py-3">Empleado</th>
-                      <th className="px-4 py-3">Contacto</th>
-                      <th className="px-4 py-3">Contrato / ubicación</th>
-                      <th className="px-4 py-3">Zona</th>
-                      <th className="px-4 py-3">Estado</th>
-                      <th className="px-4 py-3 text-right">Acciones</th>
-                    </tr>
+                    <TableColumnFilterHead
+                      columns={empleadoColumns}
+                      rows={rows}
+                      filters={columnFilters}
+                      onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                      headerRowClassName="border-b bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"
+                    />
                   </thead>
                   <tbody>
-                    {rows.map((r) => (
+                    {displayedRows.map((r) => (
                       <tr key={r.id} className="border-b hover:bg-slate-50/80">
                         <td className="px-4 py-3">
                           <div className="font-medium text-slate-900">{r.nombre ?? "—"}</div>

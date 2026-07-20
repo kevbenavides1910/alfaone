@@ -1015,6 +1015,25 @@ export class FeEmisionOrchestratorService {
         params.documentId,
         consulta.mapped.factura
       );
+
+      if (
+        params.documentKind === "factura" &&
+        (consulta.mapped.factura === "ACEPTADA" || consulta.mapped.factura === "ACEPTADA_PARCIALMENTE")
+      ) {
+        await this.jobRepo.enqueue({
+          jobType: "SYNC_FRAPPE",
+          empresaId: params.empresa.id,
+          comprobanteId: params.comprobanteId,
+          maxAttempts: 8,
+          payload: {
+            documentKind: params.documentKind,
+            documentId: params.documentId,
+            facturaId: params.documentId,
+            companyCode: params.companyCode,
+            comprobanteId: params.comprobanteId,
+          },
+        });
+      }
     }
 
     return {

@@ -13,6 +13,13 @@ import { formatCurrency, formatMonthYear } from "@/lib/utils/format";
 import { companyDisplayName } from "@/lib/utils/constants";
 import { useCompanies } from "@/lib/hooks/use-companies";
 import type { ExpenseType } from "@prisma/client";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Distribution {
@@ -151,6 +158,33 @@ export function ContractExpensesTab({
     return expenses.filter((e) => expenseMonthKey(e.periodMonth) === filterMonth);
   }, [expenses, filterMonth]);
 
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const onColumnFilterChange = (k: string, v: string) => setColumnFilters((p) => ({ ...p, [k]: v }));
+
+  const columnDefs = useMemo((): TableColumnFilterDef<Expense>[] => {
+    return [
+      { key: "tipo", label: "Tipo", getValue: (e) => typeInfo(e.type, typeConfigs).label },
+      { key: "descripcion", label: "Descripción", getValue: (e) => e.description },
+      { key: "origen", label: "Origen / Ref.", getValue: (e) => e.origin?.name ?? e.referenceNumber ?? "" },
+      { key: "periodo", label: "Período", getValue: (e) => expenseMonthKey(e.periodMonth) },
+      { key: "registrado", label: "Registrado", getValue: (e) => new Date(e.createdAt).toISOString() },
+      { key: "monto", label: "Monto", getValue: (e) => String(e.amount) },
+      { key: "estado", label: "Estado", getValue: (e) => e.approvalStatus ?? "" },
+      { key: "actions", label: "", filterable: false, getValue: () => "" },
+    ];
+  }, [typeConfigs]);
+
+  const filteredByColumn = useMemo(
+    () =>
+      filterRowsByColumnFilters(
+        displayedExpenses,
+        columnFilters,
+        columnDefs.map((c) => ({ key: c.key, getValue: c.getValue, mode: c.mode, filterable: c.filterable }))
+      ),
+    [displayedExpenses, columnDefs, columnFilters]
+  );
+  const columnFilterKeys = useMemo(() => columnDefs.map((c) => c.key), [columnDefs]);
+
   const total = displayedExpenses.reduce((s, e) => s + e.amount, 0);
 
   // Tipos presentes (directos + diferidos), sin filtrar por tipo/mes — para el selector
@@ -264,28 +298,33 @@ export function ContractExpensesTab({
             Vaya a <span className="font-medium">Gastos → Agregar Gasto</span> para imputar a este contrato o registrar un gasto diferido.
           </p>
         </div>
-      ) : displayedExpenses.length === 0 ? (
+      ) : filteredByColumn.length === 0 ? (
         <div className="p-10 text-center text-slate-400 border rounded-lg">
           <Receipt className="h-8 w-8 mx-auto mb-2 opacity-30" />
           No hay gastos que coincidan con el mes seleccionado. Pruebe otro mes o use &quot;Quitar mes&quot;.
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/50 border-b">
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Tipo</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Descripción</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Origen / Ref.</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Período</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Registrado</th>
-                <th className="text-right px-4 py-3 font-semibold text-slate-600">Monto</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Estado</th>
-                <th className="px-4 py-3 w-20" />
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {displayedExpenses.map(e => {
+          <>
+            {hasActiveColumnFilters(columnFilters) && (
+              <div className="flex justify-end px-3 py-1.5 border-b bg-muted/50">
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setColumnFilters(clearColumnFilters(columnFilterKeys))}>
+                  Limpiar filtros
+                </Button>
+              </div>
+            )}
+            <table className="w-full text-sm">
+              <thead>
+                <TableColumnFilterHead
+                  columns={columnDefs}
+                  rows={displayedExpenses}
+                  filters={columnFilters}
+                  onFilterChange={onColumnFilterChange}
+                  filterRowClassName="bg-muted/50"
+                />
+              </thead>
+              <tbody className="divide-y">
+                {filteredByColumn.map((e) => {
                 const ti = typeInfo(e.type, typeConfigs);
                 return (
                   <tr key={e.id} className="hover:bg-muted/50 transition-colors">
@@ -375,6 +414,7 @@ export function ContractExpensesTab({
               </tr>
             </tfoot>
           </table>
+          </>
         </div>
       )}
 

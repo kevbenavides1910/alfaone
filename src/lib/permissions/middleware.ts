@@ -1,9 +1,9 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/modules/core/auth/auth-options";
-import { unauthorized, forbidden } from "@/lib/api/response";
 import { NextRequest } from "next/server";
+import type { Session } from "next-auth";
+import { unauthorized, forbidden } from "@/lib/api/response";
 import { hasPermission, isPlatformAdmin } from "./check";
 import type { PermissionKey, PermissionLevelId } from "./registry";
+import { getEffectiveSession } from "@/lib/impersonation/server";
 
 type RouteContext<T = Record<string, string>> = {
   params: Promise<T>;
@@ -19,7 +19,7 @@ export function withPermission<T extends Record<string, string> = Record<string,
   handler: (
     req: NextRequest,
     context: {
-      session: NonNullable<Awaited<ReturnType<typeof getServerSession>>>;
+      session: Session;
       params: T;
     }
   ) => Promise<Response>,
@@ -27,7 +27,8 @@ export function withPermission<T extends Record<string, string> = Record<string,
   minLevel: PermissionLevelId = "view"
 ) {
   return async (req: NextRequest, ctx: RouteContext<T>) => {
-    const session = await getServerSession(authOptions);
+    const token = req.headers.get("x-impersonation-token");
+    const session = await getEffectiveSession(token);
     if (!session?.user) return unauthorized();
     if (!hasPermission(session, permissionKey, minLevel)) {
       return forbidden();
@@ -42,13 +43,14 @@ export function withPlatformAdmin<T extends Record<string, string> = Record<stri
   handler: (
     req: NextRequest,
     context: {
-      session: NonNullable<Awaited<ReturnType<typeof getServerSession>>>;
+      session: Session;
       params: T;
     }
   ) => Promise<Response>
 ) {
   return async (req: NextRequest, ctx?: RouteContext<T>) => {
-    const session = await getServerSession(authOptions);
+    const token = req.headers.get("x-impersonation-token");
+    const session = await getEffectiveSession(token);
     if (!session?.user) return unauthorized();
     if (!isPlatformAdmin(session)) return forbidden();
     const params = ctx ? ((await ctx.params) as T) : ({} as T);

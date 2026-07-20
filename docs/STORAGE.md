@@ -93,3 +93,9 @@ df -h /mnt/storage
 ls -la /mnt/storage/apps/presupuestos-alfa
 docker exec security_contracts_app ls -la /data
 ```
+
+## Expediente digital NAF
+
+Los PDFs del expediente **no** viven en `/mnt/storage`: permanecen en el share de `10.1.1.6`. Ver [EXPEDIENTE-DIGITAL.md](./EXPEDIENTE-DIGITAL.md).
+
+Réplica filesystem en este VPS: `/mnt/data/backups/expediente-digital/` (SSH desde Oracle, no CIFS).

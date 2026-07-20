@@ -1,6 +1,5 @@
 import type { PermissionLevel } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
-import { allPermissionKeys } from "./registry";
 import { permissionLevelFromDb } from "./levels";
 import type { PermissionLevelId } from "./registry";
 
@@ -9,10 +8,9 @@ export type PermissionMap = Record<string, PermissionLevelId>;
 export function buildPermissionMap(
   rows: { permissionKey: string; level: PermissionLevel }[]
 ): PermissionMap {
+  // Solo niveles ≠ none: la cookie JWT de ADMIN no cabe si se serializan
+  // todas las claves en "none". hasPermission usa `perms[key] ?? "none"`.
   const map: PermissionMap = {};
-  for (const key of allPermissionKeys()) {
-    map[key] = "none";
-  }
   for (const row of rows) {
     if (row.level !== "NONE") {
       map[row.permissionKey] = permissionLevelFromDb(row.level);

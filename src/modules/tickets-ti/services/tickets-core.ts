@@ -113,6 +113,12 @@ export async function listTickets(
     statusCode?: string;
     priorityCode?: string;
     assignedToMe?: boolean;
+    ticketNumber?: string;
+    title?: string;
+    requester?: string;
+    technician?: string;
+    page?: number;
+    pageSize?: number;
     limit?: number;
   }
 ) {
@@ -130,6 +136,18 @@ export async function listTickets(
   if (filters.assignedToMe) {
     where.assignedToId = userId;
   }
+  if (filters.ticketNumber?.trim()) {
+    where.ticketNumber = { contains: filters.ticketNumber.trim(), mode: "insensitive" };
+  }
+  if (filters.title?.trim()) {
+    where.title = { contains: filters.title.trim(), mode: "insensitive" };
+  }
+  if (filters.requester?.trim()) {
+    where.requester = { name: { contains: filters.requester.trim(), mode: "insensitive" } };
+  }
+  if (filters.technician?.trim()) {
+    where.assignedTo = { name: { contains: filters.technician.trim(), mode: "insensitive" } };
+  }
   if (filters.q?.trim()) {
     const q = filters.q.trim();
     where.OR = [
@@ -140,14 +158,28 @@ export async function listTickets(
     ];
   }
 
-  const rows = await prisma.ticket.findMany({
-    where,
-    include: ticketInclude,
-    orderBy: { lastActivityAt: "desc" },
-    take: filters.limit ?? 50,
-  });
+  const page = filters.page ?? 1;
+  const pageSize = filters.pageSize ?? filters.limit ?? 20;
+  const skip = (page - 1) * pageSize;
 
-  return rows.map(serializeTicket);
+  const [total, rows] = await Promise.all([
+    prisma.ticket.count({ where }),
+    prisma.ticket.findMany({
+      where,
+      include: ticketInclude,
+      orderBy: { openedAt: "desc" },
+      skip,
+      take: pageSize,
+    }),
+  ]);
+
+  return {
+    rows: rows.map(serializeTicket),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
 }
 
 export async function getTicketDetail(

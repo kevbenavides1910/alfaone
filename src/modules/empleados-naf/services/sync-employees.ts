@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
 import { nafEmployeeSourceKey } from "@/modules/empleados-naf/business/employee-key";
 import { withNafOracleConnection } from "@/modules/empleados-naf/services/oracle-client";
+import { syncNafRoleContracts } from "@/modules/empleados-naf/services/sync-role-contracts";
 
 const NAF_EMPLOYEES_QUERY = `
 SELECT
@@ -19,12 +20,12 @@ SELECT
   d.DESCRIPCION_PUESTO,
   d.DESCRIPCION_AREA,
   d.DESCRIPCION_DEPA,
-  COALESCE(d.NUM_CUENTA, e.NUM_CUENTA) AS NUM_CUENTA,
+  COALESCE(d.NUM_CUENTA, m.NUM_CUENTA, e.NUM_CUENTA) AS NUM_CUENTA,
   d.BANCO,
   e.TIPO_EMP,
   e.TELEFONO,
-  e.FORMA_PAGO,
-  e.TIPO_CTA,
+  COALESCE(m.FORMA_PAGO, e.FORMA_PAGO) AS FORMA_PAGO,
+  COALESCE(m.ID_CTA, e.TIPO_CTA) AS TIPO_CTA,
   e.AREA,
   e.DEPTO,
   e.PUESTO,
@@ -34,6 +35,17 @@ SELECT
   e.IND_OFICIAL,
   e.SAL_BAS,
   e.CONTRATO,
+  (
+    SELECT MAX(cp.NO_ROL) KEEP (DENSE_RANK FIRST ORDER BY cp.F_INICIO DESC)
+    FROM NAF5.AROPCP cp
+    WHERE cp.NO_CIA = p.NO_CIA AND cp.NO_EMPLE = p.NO_EMPLE
+  ) AS NO_ROL,
+  (
+    SELECT MAX(COALESCE(NULLIF(TRIM(cp.NO_CONTRATO), ''), mr.NO_CONTRATO)) KEEP (DENSE_RANK FIRST ORDER BY cp.F_INICIO DESC)
+    FROM NAF5.AROPCP cp
+    LEFT JOIN NAF5.AROPMR mr ON mr.NO_ROL = cp.NO_ROL AND mr.NO_CONTRATO IS NOT NULL AND mr.ESTADO = 'A'
+    WHERE cp.NO_CIA = p.NO_CIA AND cp.NO_EMPLE = p.NO_EMPLE
+  ) AS CONTRATO_ROL,
   e.DIRECCION,
   e.CORREO,
   e.F_NACIMI,
@@ -54,19 +66,14 @@ SELECT
   rs.ZONA AS ZONA_STREAM,
   tit.DESCRIPCION AS NOMBRE_TITULO,
   ma.COD_PLA,
-  vn.DESCRI_NOMINA,
-  (
-    SELECT MAX(cp.NO_ROL) KEEP (DENSE_RANK FIRST ORDER BY cp.F_INICIO DESC)
-    FROM NAF5.AROPCP cp
-    WHERE cp.NO_CIA = p.NO_CIA
-      AND cp.NO_EMPLE = p.NO_EMPLE
-      AND (cp.F_FIN IS NULL OR cp.F_FIN >= SYSDATE)
-  ) AS NO_ROL
+  vn.DESCRI_NOMINA
 FROM NAF5.PVEMPLEADOS p
 LEFT JOIN NAF5.VDATOS_EMPLEADO d
   ON d.NO_CIA = p.NO_CIA AND d.NO_EMPLE = p.NO_EMPLE
 LEFT JOIN NAF5.EMPLEADOS_NEW e
   ON e.NO_CIA = p.NO_CIA AND e.NO_EMPLE = p.NO_EMPLE
+LEFT JOIN NAF5.ARPLME m
+  ON m.NO_CIA = p.NO_CIA AND m.NO_EMPLE = p.NO_EMPLE
 LEFT JOIN NAF5.ARCOUB ub1
   ON ub1.NO_CIA = e.NO_CIA AND ub1.NO_UBICACION = e.NO_UBICACION
 LEFT JOIN NAF5.ARCOUB ub2
@@ -171,7 +178,7 @@ function mapRow(row: OracleRow) {
     tipoCuenta: asString(row.TIPO_CTA),
     banco: asString(row.BANCO),
     tipoEmp: asString(row.TIPO_EMP),
-    contrato: asString(row.CONTRATO),
+    contrato: asString(row.CONTRATO_ROL) ?? asString(row.CONTRATO),
     ubicacionCode: asString(row.NO_UBICACION),
     ubicacionNombre: asString(row.NOMBRE_UBICACION),
     zonaCode: asString(row.NO_ZONA),
@@ -234,6 +241,8 @@ export async function syncNafEmployees(options?: { triggeredBy?: string }): Prom
     }
 
     const finishedAt = new Date();
+    await syncNafRoleContracts().catch(() => undefined);
+
     await prisma.nafEmployeeSyncRun.update({
       where: { id: run.id },
       data: {

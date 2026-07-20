@@ -2,19 +2,11 @@ import { NextRequest } from "next/server";
 import { getSession } from "@/lib/api/middleware";
 import { hasPermission } from "@/lib/permissions/check";
 import { ok, unauthorized, forbidden, serverError, badRequest } from "@/lib/api/response";
-import { isCronAuthorized } from "@/lib/api/cron-auth";
+import { isNafSyncCronAuthorized } from "@/lib/api/cron-auth";
 import { syncNafEmployees } from "@/modules/empleados-naf/services/sync-employees";
 
-function isNafSyncCron(req: NextRequest): boolean {
-  if (isCronAuthorized(req)) return true;
-  const nafSecret = process.env.NAF_SYNC_CRON_SECRET?.trim();
-  if (!nafSecret) return false;
-  const auth = req.headers.get("authorization");
-  return auth === `Bearer ${nafSecret}`;
-}
-
 export async function POST(req: NextRequest) {
-  const isCron = isNafSyncCron(req);
+  const isCron = isNafSyncCronAuthorized(req);
 
   if (!isCron) {
     const session = await getSession();

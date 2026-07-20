@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import {
   ArrowLeft, AlertTriangle, FileText, FileSpreadsheet, Pencil, ClipboardCheck, CheckCircle2, RotateCcw,
 } from "lucide-react";
@@ -12,7 +12,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import { formatDate, formatCurrency } from "@/lib/utils/format";
-import { canManageDisciplinary } from "@/modules/core/permissions";
+import { canManageDisciplinarySession } from "@/modules/core/permissions";
+import {
+  describeTreatmentState,
+  formatCycleClosureLabel,
+} from "@/modules/disciplinario/business/cycle-display";
 import { ApercibimientoStatusDialog } from "@/components/disciplinary/StatusDialog";
 import { TreatmentDialog } from "@/components/disciplinary/TreatmentDialog";
 import { CloseCycleDialog } from "@/components/disciplinary/CloseCycleDialog";
@@ -120,7 +124,7 @@ export default function EmployeeDetailPage({
   const { codigo } = use(params);
   const codigoDecoded = decodeURIComponent(codigo);
   const { data: session } = useSession();
-  const canManage = session ? canManageDisciplinary(session.user.role) : false;
+  const canManage = canManageDisciplinarySession(session ?? null);
 
   const [statusTarget, setStatusTarget] = useState<{
     id: string;
@@ -208,7 +212,20 @@ export default function EmployeeDetailPage({
         {isLoading && <div className="text-slate-400">Cargando…</div>}
         {error && <div className="text-rose-600">No se pudo cargar el empleado.</div>}
 
-        {data?.data && (
+        {data?.data && (() => {
+          const ultimoCierre = data.data.closedCycles[0] ?? null;
+          const ultimoCierreMonto =
+            ultimoCierre?.monto != null && ultimoCierre.monto !== undefined
+              ? typeof ultimoCierre.monto === "string"
+                ? parseFloat(ultimoCierre.monto)
+                : ultimoCierre.monto
+              : null;
+          const totalMontoCobrado = data.data.closedCycles.reduce((sum, c) => {
+            if (c.accion !== "COBRADO" || c.monto == null) return sum;
+            const n = typeof c.monto === "string" ? parseFloat(c.monto) : c.monto;
+            return Number.isNaN(n) ? sum : sum + n;
+          }, 0);
+          return (
           <>
             <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-3">
               <div>
@@ -258,7 +275,7 @@ export default function EmployeeDetailPage({
             </div>
 
             {/* Resumen */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
               <Card>
                 <CardContent className="p-4">
                   <div className="text-xs text-slate-500">Total apercibimientos</div>
@@ -289,30 +306,60 @@ export default function EmployeeDetailPage({
               <Card>
                 <CardContent className="p-4">
                   <div className="text-xs text-slate-500">Tratamiento</div>
-                  {data.data.treatment ? (
+                  {data.data.treatment || ultimoCierre ? (
                     <>
                       <div className="text-sm font-medium">
-                        {data.data.treatment.accion ?? "—"}
+                        {describeTreatmentState(data.data.treatment, ultimoCierre).label}
                       </div>
-                      <div className="text-xs text-slate-500">
-                        Conv.:{" "}
-                        {data.data.treatment.fechaConvocatoria
-                          ? formatDate(data.data.treatment.fechaConvocatoria)
-                          : "—"}
-                        {data.data.treatment.horaConvocatoria
-                          ? ` · ${data.data.treatment.horaConvocatoria}`
-                          : ""}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        Ubic.: {data.data.ubicacion ?? "—"} · Suc.: {data.data.sucursal ?? "—"}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        Cobrado: {data.data.treatment.cobradoDate ? formatDate(data.data.treatment.cobradoDate) : "—"}
-                      </div>
+                      {data.data.treatment && (
+                        <>
+                          <div className="text-xs text-slate-500">
+                            Acción: {data.data.treatment.accion ?? "—"}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Conv.:{" "}
+                            {data.data.treatment.fechaConvocatoria
+                              ? formatDate(data.data.treatment.fechaConvocatoria)
+                              : "—"}
+                            {data.data.treatment.horaConvocatoria
+                              ? ` · ${data.data.treatment.horaConvocatoria}`
+                              : ""}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Ubic.: {data.data.ubicacion ?? "—"} · Suc.: {data.data.sucursal ?? "—"}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Cobrado: {data.data.treatment.cobradoDate ? formatDate(data.data.treatment.cobradoDate) : "—"}
+                          </div>
+                        </>
+                      )}
+                      {ultimoCierre && (
+                        <div className="text-xs text-slate-600 mt-1 pt-1 border-t border-slate-200">
+                          <span className="text-slate-500">Último cierre: </span>
+                          {formatCycleClosureLabel(ultimoCierre.accion, ultimoCierre.accionRaw)}
+                          {ultimoCierreMonto != null && !Number.isNaN(ultimoCierreMonto) && (
+                            <span> · {formatCurrency(ultimoCierreMonto)}</span>
+                          )}
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div className="text-sm text-slate-400">Sin tratamiento registrado</div>
                   )}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-xs text-slate-500">Total cobrado (histórico)</div>
+                  <div className="text-2xl font-semibold text-emerald-700">
+                    {totalMontoCobrado > 0 ? formatCurrency(totalMontoCobrado) : "—"}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    {data.data.closedCycles.filter((c) => c.accion === "COBRADO").length}{" "}
+                    {data.data.closedCycles.filter((c) => c.accion === "COBRADO").length === 1
+                      ? "cobro registrado"
+                      : "cobros registrados"}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -516,7 +563,8 @@ export default function EmployeeDetailPage({
               </Card>
             )}
           </>
-        )}
+          );
+        })()}
       </div>
 
       {canManage && (
@@ -531,6 +579,28 @@ export default function EmployeeDetailPage({
             onOpenChange={setTreatmentOpen}
             codigo={codigoDecoded}
             initial={data?.data.treatment ?? null}
+            ultimoCierre={
+              data?.data.closedCycles[0]
+                ? {
+                    cerradoEl: data.data.closedCycles[0].cerradoEl,
+                    accion: data.data.closedCycles[0].accion,
+                    accionRaw: data.data.closedCycles[0].accionRaw,
+                    monto: (() => {
+                      const m = data.data.closedCycles[0].monto;
+                      if (m == null) return null;
+                      const n = typeof m === "string" ? parseFloat(m) : m;
+                      return Number.isNaN(n) ? null : n;
+                    })(),
+                  }
+                : null
+            }
+            totalMontoCobrado={
+              data?.data.closedCycles.reduce((sum, c) => {
+                if (c.accion !== "COBRADO" || c.monto == null) return sum;
+                const n = typeof c.monto === "string" ? parseFloat(c.monto) : c.monto;
+                return Number.isNaN(n) ? sum : sum + n;
+              }, 0)
+            }
             employee={
               data?.data
                 ? {

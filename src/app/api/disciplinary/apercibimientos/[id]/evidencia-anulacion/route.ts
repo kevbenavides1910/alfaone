@@ -2,7 +2,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { NextRequest } from "next/server";
 import { getSession } from "@/lib/api/middleware";
-import { canManageDisciplinary, canViewDisciplinary } from "@/modules/core/permissions";
+import { canEditDisciplinaryHistorial, canViewDisciplinary } from "@/modules/core/permissions";
 import { badRequest, forbidden, notFound, ok, serverError, unauthorized } from "@/lib/api/response";
 import { prisma } from "@/modules/core/db/prisma";
 import { resolveUnderRoot } from "@/lib/security/path-safety";
@@ -68,7 +68,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 export async function POST(req: NextRequest, { params }: Ctx) {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!canManageDisciplinary(session)) return forbidden();
+  if (!canEditDisciplinaryHistorial(session)) return forbidden();
 
   const { id } = await params;
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { Headset, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,17 +26,17 @@ export default function MisTicketsPage() {
   const { data: session } = useSession();
   const canCreate = hasPermission(session, "ticketsTi.tickets", "edit");
 
-  const { data, isLoading, error } = useQuery<{ data: TicketRow[] }>({
+  const { data, isLoading, error } = useQuery<{ data: { rows: TicketRow[] } }>({
     queryKey: ["tickets-ti-mis-tickets"],
     queryFn: async () => {
-      const r = await fetch("/api/tickets-ti?limit=100");
+      const r = await fetch("/api/tickets-ti?pageSize=100");
       const json = await r.json();
       if (json.error) throw new Error(json.error.message);
       return json;
     },
   });
 
-  const tickets = data?.data ?? [];
+  const tickets = data?.data?.rows ?? [];
 
   return (
     <div className="p-6 space-y-6 max-w-3xl">

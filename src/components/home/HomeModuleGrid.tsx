@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { cn } from "@/lib/utils/cn";
 import { HOME_MODULE_TILES } from "@/lib/modules/home-menu";
 import { canAccessHomeTile, canAccessModuleFromSession, hasPermission } from "@/lib/permissions/check";
+
+const ICON_COLOR = "text-[color:var(--app-primary)]";
 
 export function HomeModuleGrid() {
   const { data: session } = useSession();
@@ -27,7 +29,7 @@ export function HomeModuleGrid() {
 
   if (tiles.length === 0) {
     return (
-      <p className="text-sm text-slate-500 text-center py-12">
+      <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-12">
         No tiene módulos asignados. Contacte al administrador.
       </p>
     );
@@ -40,27 +42,26 @@ export function HomeModuleGrid() {
           key={tile.id}
           href={tile.href}
           className={cn(
-            "group flex flex-col items-center rounded-2xl p-5 md:p-6",
-            "transition-all duration-200",
-            "hover:bg-[#242428]",
-            "hover:shadow-[0_0_0_1px_rgba(255,255,255,0.10),0_8px_28px_rgba(0,0,0,0.55)]",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f0f0f]",
+            "group flex flex-col items-center rounded-2xl bg-white px-3 py-5 md:px-4 md:py-6",
+            "shadow-[0_2px_10px_rgba(0,0,0,0.06)]",
+            "dark:bg-zinc-900 dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]",
+            "transition-all duration-200 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_4px_16px_rgba(0,0,0,0.4)]",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--app-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0f0f0f]",
             tile.tile
           )}
         >
           <div
             className={cn(
-              "flex h-14 w-14 md:h-16 md:w-16 items-center justify-center rounded-2xl",
-              "transition-opacity duration-200 group-hover:opacity-90",
-              tile.accent
+              "flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-xl shrink-0",
+              "bg-[#fde2d9] dark:bg-red-950/50"
             )}
           >
-            <tile.icon className="h-7 w-7 md:h-8 md:w-8 text-white" strokeWidth={1.75} />
+            <tile.icon className={cn("h-6 w-6 md:h-7 md:w-7", ICON_COLOR)} strokeWidth={1.5} />
           </div>
-          <h3 className="mt-3.5 text-center text-sm font-semibold text-white/90 leading-snug">
+          <h3 className="mt-3 text-center text-sm font-bold text-black dark:text-white leading-snug">
             {tile.label}
           </h3>
-          <p className="mt-1 text-center text-[11px] text-white/35 leading-snug line-clamp-2">
+          <p className="mt-1.5 text-center text-[11px] font-normal text-gray-500 dark:text-gray-400 leading-snug line-clamp-3">
             {tile.description}
           </p>
         </Link>

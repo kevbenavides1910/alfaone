@@ -17,6 +17,7 @@ import {
   useFeCompany,
   withFeCompanyBody,
 } from "@/components/facturacion-electronica/fe-company-context";
+import { lineTotals, type LineaForm } from "@/modules/facturacion-electronica/business/line-totals";
 
 type ReferenciaTipo = "FACTURA_VENTA" | "FACTURA_COMPRA" | "RECIBO_PAGO";
 
@@ -40,28 +41,6 @@ type DocumentoRef = {
     codigoCabys?: string | null;
   }>;
 };
-
-type LineaForm = {
-  key: string;
-  descripcion: string;
-  cantidad: string;
-  unidadMedida: string;
-  precioUnitario: string;
-  montoDescuento: string;
-  tarifaImpuesto: string;
-  codigoCabys: string;
-};
-
-function lineTotals(line: LineaForm) {
-  const cantidad = Number(line.cantidad) || 0;
-  const precio = Number(line.precioUnitario) || 0;
-  const descuento = Number(line.montoDescuento) || 0;
-  const tarifa = Number(line.tarifaImpuesto) || 0;
-  const base = Math.max(0, cantidad * precio - descuento);
-  const montoImpuesto = Math.round(base * (tarifa / 100) * 100) / 100;
-  const totalLinea = Math.round((base + montoImpuesto) * 100) / 100;
-  return { base, montoImpuesto, totalLinea };
-}
 
 function mapDetalleToLine(d: DocumentoRef["detalles"][0], key: string, referenciaTipo: ReferenciaTipo): LineaForm {
   if (referenciaTipo === "RECIBO_PAGO") {

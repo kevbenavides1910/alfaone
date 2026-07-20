@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/modules/core/db/prisma";
-import { getSession, isAdmin } from "@/lib/api/middleware";
+import { getSession } from "@/lib/api/middleware";
+import { hasPermission } from "@/lib/permissions/check";
 import { badRequest, forbidden, ok, serverError, unauthorized } from "@/lib/api/response";
 import { unlink } from "fs/promises";
 import {
@@ -43,7 +44,7 @@ function cleanNullable(v: string | null | undefined): string | null {
 export async function GET() {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!isAdmin(session)) return forbidden();
+  if (!hasPermission(session, "disciplinario.ajustes", "view")) return forbidden();
   try {
     const row = await ensureDisciplinarySettingsRow();
     return ok({
@@ -58,7 +59,7 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!isAdmin(session)) return forbidden();
+  if (!hasPermission(session, "disciplinario.ajustes", "edit")) return forbidden();
   try {
     const parsed = patchSchema.safeParse(await req.json());
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());

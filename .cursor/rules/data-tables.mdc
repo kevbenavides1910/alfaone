@@ -1,0 +1,37 @@
+---
+description: Tablas de datos — filtros, Excel, sticky y columnas redimensionables
+globs: src/**/*.{tsx,ts}
+alwaysApply: false
+---
+
+# Tablas de datos
+
+Toda tabla nueva o editada de listados debe:
+
+1. **Filtros** al clic/fila de título de columna (ocultos por defecto) vía `TableColumnFilterHead`.
+2. **Export Excel** con `exportRowsToExcel` (`src/lib/utils/excel-export.ts`) — nunca `import * as XLSX`.
+3. **Encabezado sticky** + scroll interno cuando el listado sea largo.
+4. **Columnas redimensionables** para que el usuario pueda ver todos los datos (claves FE, contratos, etc.).
+
+## Columnas redimensionables (obligatorio)
+
+- El layout `(app)` monta `EnableTableColumnResize`: todas las `<table>` ganan asa en el borde derecho del `<th>` y el ancho se guarda en `localStorage`.
+- Preferir `data-table-id="modulo-pantalla"` en la `<table>` para una clave de persistencia estable.
+- Con `TableColumnFilterHead`, pasar `tableId` (y opcional `defaultColumnWidths`) para resize nativo + persistencia.
+- No truncar datos críticos en el JSX (`slice`, solo últimos N chars). Usar `whitespace-nowrap` + resize; el `title` puede repetir el valor completo.
+- Evitar `max-w-[…px]` + `truncate` en celdas de identificadores largos (Clave FE, licitación, cédula).
+
+```tsx
+// ✅ BIEN
+<table data-table-id="facturacion-documentos-naf" className="w-full text-sm">
+  <thead>
+    <TableColumnFilterHead tableId="facturacion-documentos-naf" ... />
+  </thead>
+</table>
+
+// ❌ MAL — oculta datos aunque se ensanche la columna
+<span>{row.claveFactura.slice(-12)}</span>
+<td className="max-w-[160px]"><span className="truncate">{row.claveFactura}</span></td>
+```
+
+Referencia: `src/components/ui/enable-table-column-resize.tsx`, `ResizableTh`, `useResizableTableColumns`.

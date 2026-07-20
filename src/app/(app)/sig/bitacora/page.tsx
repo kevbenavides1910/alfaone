@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { TableColumnFilterHead, type TableColumnFilterDef } from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { Topbar } from "@/components/layout/Topbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils/format";
@@ -39,6 +42,15 @@ export default function SigBitacoraPage() {
   });
 
   const rows = data?.data.rows ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const bitacoraColumnDefs: TableColumnFilterDef<BitacoraRow>[] = [
+    { key: "fecha", label: "Fecha", headerClassName: "px-3 py-2", getValue: (r) => formatDate(r.createdAt) },
+    { key: "documento", label: "Documento", headerClassName: "px-3 py-2", getValue: (r) => r.document.code },
+    { key: "accion", label: "Acción", headerClassName: "px-3 py-2", getValue: (r) => ACTION_LABELS[r.action] ?? r.action },
+    { key: "usuario", label: "Usuario", headerClassName: "px-3 py-2", getValue: (r) => r.actor.name },
+    { key: "notas", label: "Notas", headerClassName: "px-3 py-2", getValue: (r) => r.notes ?? "" },
+  ];
+  const displayedRows = filterRowsByColumnFilters(rows, columnFilters, bitacoraColumnDefs);
 
   return (
     <>
@@ -48,13 +60,12 @@ export default function SigBitacoraPage() {
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/40 text-left">
-                  <th className="px-3 py-2">Fecha</th>
-                  <th className="px-3 py-2">Documento</th>
-                  <th className="px-3 py-2">Acción</th>
-                  <th className="px-3 py-2">Usuario</th>
-                  <th className="px-3 py-2">Notas</th>
-                </tr>
+                <TableColumnFilterHead
+                  columns={bitacoraColumnDefs}
+                  rows={rows}
+                  filters={columnFilters}
+                  onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                />
               </thead>
               <tbody>
                 {isLoading && (
@@ -64,7 +75,7 @@ export default function SigBitacoraPage() {
                     </td>
                   </tr>
                 )}
-                {rows.map((row) => (
+                {displayedRows.map((row) => (
                   <tr key={row.id} className="border-b">
                     <td className="px-3 py-2 whitespace-nowrap">{formatDate(row.createdAt)}</td>
                     <td className="px-3 py-2">

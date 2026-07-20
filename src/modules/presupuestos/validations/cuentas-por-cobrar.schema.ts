@@ -9,6 +9,7 @@ const optionalDateQuery = z
 export const cuentasPorCobrarListSchema = z.object({
   filter: z.enum(["pending", "collected", "all"]).default("pending"),
   company: z.string().trim().optional(),
+  companies: z.array(z.string().trim().min(1)).optional(),
   client: z.string().trim().optional(),
   licitacion: z.string().trim().optional(),
   issuedFrom: optionalDateQuery,
@@ -35,6 +36,7 @@ const optionalCalendarDate = z
   .transform((v) => (v === "" ? null : v));
 
 export const updateCxcGestionSchema = z.object({
+  isReajuste: z.boolean().optional(),
   invoiceReceivedAt: optionalCalendarDate,
   cxcExpectedPaymentDate: optionalCalendarDate,
   provisionalReceiptNumber: z

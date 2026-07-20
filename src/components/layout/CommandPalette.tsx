@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { Search, Command } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { SIDEBAR_NAV_ITEMS } from "@/lib/modules/navigation";

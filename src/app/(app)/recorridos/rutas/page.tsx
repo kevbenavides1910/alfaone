@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, ChevronRight, Trash2, Search, RefreshCw, Route } from "lucide-react";
+import {
+  TableColumnFilterHead,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -54,6 +59,16 @@ export default function RecorridosRutasPage() {
       )
     : allRows;
   const rows = showInactive ? filtered : filtered.filter((r) => r.isActive);
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const columnDefs: TableColumnFilterDef<RouteRow>[] = [
+    { key: "code", label: "Código", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => r.code },
+    { key: "name", label: "Nombre", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => r.name },
+    { key: "puesto", label: "Puesto / Ubicación", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => r.position?.name ?? r.location?.name ?? "" },
+    { key: "points", label: "Puntos", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => String(r.pointsCount) },
+    { key: "estado", label: "Estado", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => (r.isActive ? "Activa" : "Inactiva") },
+    { key: "actions", label: "", headerClassName: "px-4 py-3", filterable: false, getValue: () => "" },
+  ];
+  const displayedRows = filterRowsByColumnFilters(rows, columnFilters, columnDefs);
 
   const create = useMutation({
     mutationFn: async () => {
@@ -147,17 +162,15 @@ export default function RecorridosRutasPage() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Código</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Nombre</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Puesto / Ubicación</th>
-                  <th className="text-right px-4 py-3 font-semibold text-slate-600">Puntos</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Estado</th>
-                  <th className="px-4 py-3" />
-                </tr>
+                <TableColumnFilterHead
+                  columns={columnDefs}
+                  rows={rows}
+                  filters={columnFilters}
+                  onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                />
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {displayedRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80">
                     <td className="px-4 py-3 font-mono text-slate-700">{r.code}</td>
                     <td className="px-4 py-3">

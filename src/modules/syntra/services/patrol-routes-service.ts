@@ -186,7 +186,7 @@ async function buildRouteImeisMap(routeIds: string[]): Promise<Map<string, strin
 
 
 
-async function getAuthorizedRoutesForDevice(deviceId: string) {
+export async function getAuthorizedRoutesForDevice(deviceId: string) {
 
   const device = await prisma.patrolDevice.findUnique({ where: { id: deviceId } });
 

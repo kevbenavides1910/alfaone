@@ -8,11 +8,13 @@ export const DEFAULT_SAP_TO_COMPANY: Record<string, string> = {
   "03": "MONITOREO",
   "04": "BENA",
   "05": "CONSORCIO",
+  "06": "GRUPOCORP",
   "08": "DESARROLLOS",
   "09": "ALFATRONIC",
   "10": "JOBEN",
   "11": "BENLO",
   "30": "ACE",
+  "31": "ALFASECURE",
 };
 
 export type CompanySapLookup = {

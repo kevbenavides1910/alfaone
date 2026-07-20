@@ -89,5 +89,6 @@ export function withAuth<T = unknown>(
 export { withPermission, withPlatformAdmin } from "@/lib/permissions/middleware";
 
 export async function getSession() {
-  return getServerSession(authOptions);
+  const { getEffectiveSession } = await import("@/lib/impersonation/server");
+  return getEffectiveSession();
 }

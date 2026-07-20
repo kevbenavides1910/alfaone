@@ -1,11 +1,18 @@
-"use client";
-
-import { useState } from "react";
+ "use client";
+ 
+ import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Send, Loader2, CheckCircle2 } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
+import {
+  TableColumnFilterHead,
+  type TableColumnFilterDef,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -84,6 +91,25 @@ export default function AdminExpensesPage() {
   });
 
   const expenses = data?.data ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+
+  const columnDefs = useMemo((): TableColumnFilterDef<AdminExpense>[] => {
+    return [
+      { key: "company", label: "Empresa", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => companyDisplayName(r.company, companyRows) },
+      { key: "period", label: "Período", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => formatMonthYear(r.periodMonth) },
+      { key: "transport", label: "Transportes", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => String(r.transport), align: "right" },
+      { key: "phones", label: "Celulares", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => String(r.phones), align: "right" },
+      { key: "fuel", label: "Combustible", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => String(r.fuel), align: "right" },
+      { key: "total", label: "Total", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => String(r.totalAmount), align: "right" },
+      { key: "state", label: "Estado", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => (r.isDistributed ? "Distribuido" : "Pendiente") },
+      { key: "actions", label: "", headerClassName: "px-4 py-3", filterable: false, getValue: () => "" },
+    ];
+  }, [companyRows]);
+
+  const displayedExpenses = useMemo(
+    () => filterRowsByColumnFilters(expenses, columnFilters, columnDefs),
+    [expenses, columnFilters, columnDefs]
+  );
 
   return (
     <>
@@ -121,19 +147,31 @@ export default function AdminExpensesPage() {
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Empresa</th>
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Período</th>
-                    <th className="text-right px-4 py-3 font-semibold text-slate-600">Transportes</th>
-                    <th className="text-right px-4 py-3 font-semibold text-slate-600">Celulares</th>
-                    <th className="text-right px-4 py-3 font-semibold text-slate-600">Combustible</th>
-                    <th className="text-right px-4 py-3 font-semibold text-slate-600">Total</th>
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Estado</th>
-                    <th className="px-4 py-3" />
-                  </tr>
+                  <TableColumnFilterHead
+                    columns={columnDefs}
+                    rows={expenses}
+                    filters={columnFilters}
+                    onFilterChange={(k, v) => setColumnFilters((p) => ({ ...p, [k]: v }))}
+                  />
                 </thead>
+                {hasActiveColumnFilters(columnFilters) && (
+                  <tbody>
+                    <tr>
+                      <td colSpan={8} className="px-4 py-2 bg-slate-50 text-sm text-slate-600">
+                        Mostrando {displayedExpenses.length} de {expenses.length} ·{" "}
+                        <button
+                          type="button"
+                          className="text-red-600 hover:underline"
+                          onClick={() => setColumnFilters(clearColumnFilters(columnDefs.map((c) => c.key)))}
+                        >
+                          Limpiar filtros
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                )}
                 <tbody className="divide-y">
-                  {expenses.map((e) => (
+                  {displayedExpenses.map((e) => (
                     <tr key={e.id} className="hover:bg-muted/50">
                       <td className="px-4 py-3">
                         <Badge variant="outline">{companyDisplayName(e.company, companyRows)}</Badge>

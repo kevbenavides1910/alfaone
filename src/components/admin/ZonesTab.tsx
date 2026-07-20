@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2, FileSpreadsheet } from "lucide-react";
+import { TableColumnFilterHead, type TableColumnFilterDef } from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -133,6 +135,18 @@ export function ZonesTab({ readOnly }: { readOnly?: boolean }) {
   });
 
   const rows = data?.data ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const zoneColumnDefs: TableColumnFilterDef<ZoneRow>[] = [
+    { key: "name", label: "Nombre", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (z) => z.name },
+    { key: "description", label: "Descripción", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (z) => z.description ?? "" },
+    { key: "admin", label: "Adm. disciplinario", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600 min-w-[9rem]", getValue: (z) => z.disciplinaryAdministrator ?? "" },
+    { key: "email", label: "Correo adm.", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600 min-w-[9rem]", getValue: (z) => z.disciplinaryAdministratorEmail ?? "" },
+    { key: "ubicaciones", label: "Ubicaciones", headerClassName: "text-center px-4 py-3 font-semibold text-slate-600 w-32", align: "center", getValue: (z) => String(z.locationsCount) },
+    { key: "estado", label: "Estado", headerClassName: "text-center px-4 py-3 font-semibold text-slate-600 w-24", align: "center", getValue: (z) => (z.isActive ? "Activa" : "Inactiva") },
+    { key: "orden", label: "Orden", headerClassName: "text-center px-4 py-3 font-semibold text-slate-600 w-20", align: "center", getValue: (z) => String(z.sortOrder) },
+    { key: "actions", label: "", headerClassName: "px-4 py-3 w-24", filterable: false, getValue: () => "" },
+  ];
+  const displayedRows = filterRowsByColumnFilters(rows, columnFilters, zoneColumnDefs);
 
   return (
     <div className="space-y-4">
@@ -189,19 +203,15 @@ export function ZonesTab({ readOnly }: { readOnly?: boolean }) {
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-muted/50 border-b">
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Nombre</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Descripción</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600 min-w-[9rem]">Adm. disciplinario</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600 min-w-[9rem]">Correo adm.</th>
-                <th className="text-center px-4 py-3 font-semibold text-slate-600 w-32">Ubicaciones</th>
-                <th className="text-center px-4 py-3 font-semibold text-slate-600 w-24">Estado</th>
-                <th className="text-center px-4 py-3 font-semibold text-slate-600 w-20">Orden</th>
-                <th className="px-4 py-3 w-24" />
-              </tr>
+              <TableColumnFilterHead
+                columns={zoneColumnDefs}
+                rows={rows}
+                filters={columnFilters}
+                onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+              />
             </thead>
             <tbody className="divide-y">
-              {rows.map((z) => (
+              {displayedRows.map((z) => (
                 <tr key={z.id} className="hover:bg-muted/50 transition-colors">
                   <td className="px-4 py-3 font-medium text-slate-800">{z.name}</td>
                   <td className="px-4 py-3 text-slate-600 text-xs">{z.description ?? "—"}</td>

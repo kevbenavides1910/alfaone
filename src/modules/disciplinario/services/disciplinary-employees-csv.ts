@@ -1,6 +1,10 @@
 import { prisma } from "@/modules/core/db/prisma";
 import { normalizeEmployeeCode } from "@/modules/disciplinario/business/disciplinary";
 import { normalizeHeaderKey } from "@/modules/core/import/xlsx-read";
+import {
+  canonicalZoneLabel,
+  loadZoneCatalogNameByKey,
+} from "@/modules/disciplinario/services/disciplinary-zone-defaults";
 
 export type EmployeeMasterImportResult = {
   rowsProcessed: number;
@@ -139,6 +143,7 @@ export async function importDisciplinaryEmployeeMasterCsv(
 
   const errors: EmployeeMasterImportResult["errors"] = [];
   let upserted = 0;
+  const zoneCatalogNames = await loadZoneCatalogNameByKey();
 
   for (let r = 1; r < nonEmpty.length; r++) {
     const rowNum = r + 1; // 1-based incl. header
@@ -155,7 +160,8 @@ export async function importDisciplinaryEmployeeMasterCsv(
     const nombre = idxNombre !== undefined ? emptyToNull(cells[idxNombre]) : null;
     const cedula = idxCedula !== undefined ? emptyToNull(cells[idxCedula]) : null;
     const email = idxEmail !== undefined ? emptyToNull(cells[idxEmail]) : null;
-    const zona = idxZona !== undefined ? emptyToNull(cells[idxZona]) : null;
+    const zonaRaw = idxZona !== undefined ? emptyToNull(cells[idxZona]) : null;
+    const zona = canonicalZoneLabel(zoneCatalogNames, zonaRaw);
     const telefono = idxTel !== undefined ? emptyToNull(cells[idxTel]) : null;
     const cuentaBancaria = idxCuenta !== undefined ? emptyToNull(cells[idxCuenta]) : null;
 

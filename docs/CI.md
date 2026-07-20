@@ -1,14 +1,28 @@
 # CI — GitHub Actions
 
-Pipeline en [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+Pipelines:
 
-## Qué hace
+| Workflow | Archivo | Rol |
+|----------|---------|-----|
+| **CI** | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Lint + build de validación en PR/push |
+| **Publish GHCR** | [`.github/workflows/publish-ghcr.yml`](../.github/workflows/publish-ghcr.yml) | Build Docker + push a `ghcr.io/kevbenavides1910/alfaone` |
+
+## Qué hace CI
 
 1. **Detectar módulos** (`dorny/paths-filter`) según carpetas tocadas en el PR o push.
 2. **Lint + build** si hay cambios en `src/`, `prisma/`, dependencias o workflows.
 3. **Omitir build** si solo cambian docs u otros archivos fuera del alcance (job `docs-only`).
 
 El **build siempre compila el monolito completo** cuando corre: es lo correcto mientras haya una sola app Next.js.
+
+## Qué hace Publish GHCR
+
+En push a `main`/`master` (paths de app) o `workflow_dispatch`:
+
+1. Build multi-stage del [`Dockerfile`](../Dockerfile) con BuildKit + cache GHA.
+2. Push de tags: `<sha>` corto, `<sha>` completo y `latest` (en default branch).
+
+En el VPS: `npm run ops:deploy:pull` o `ops:deploy:auto` (sin recompilar).
 
 ## Módulos vigilados
 

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import { cn } from "@/lib/utils/cn";
 

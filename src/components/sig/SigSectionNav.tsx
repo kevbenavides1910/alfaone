@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { cn } from "@/lib/utils/cn";
 import { hasPermission } from "@/lib/permissions/check";
 import type { PermissionKey } from "@/lib/permissions/registry";
@@ -42,6 +42,12 @@ const TABS: Tab[] = [
     href: "/sig/bitacora",
     label: "Bitácora",
     permission: "sig.bitacora",
+  },
+  {
+    href: "/sig/auditorias",
+    label: "Auditorías",
+    permission: "sig.auditorias",
+    isActive: (p) => p.startsWith("/sig/auditorias") || p.startsWith("/audits/"),
   },
   {
     href: "/sig/procesos",

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { getSession, isAdmin } from "@/lib/api/middleware";
+import { getSession } from "@/lib/api/middleware";
+import { hasPermission } from "@/lib/permissions/check";
 import { badRequest, forbidden, ok, unauthorized } from "@/lib/api/response";
 import { DISCIPLINARY_MAIL_PROVIDERS, ensureDisciplinarySettingsRow } from "@/modules/disciplinario/services/disciplinary-settings";
 import { mergeDisciplinaryCc, sendDisciplinaryOmisionEmail } from "@/modules/disciplinario/services/disciplinary-email";
@@ -28,7 +29,7 @@ const bodySchema = z.object({
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!isAdmin(session)) return forbidden();
+  if (!hasPermission(session, "disciplinario.ajustes", "admin")) return forbidden();
 
   try {
     const parsed = bodySchema.safeParse(await req.json());

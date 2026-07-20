@@ -11,6 +11,7 @@ function serialize(row: {
   id: string;
   description: string;
   notes: string | null;
+  requiresEvidence: boolean;
   sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
@@ -19,6 +20,7 @@ function serialize(row: {
     id: row.id,
     description: row.description,
     notes: row.notes,
+    requiresEvidence: row.requiresEvidence,
     sortOrder: row.sortOrder,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -76,6 +78,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         contractId,
         description: parsed.data.description.trim(),
         notes: parsed.data.notes?.trim() || null,
+        requiresEvidence: parsed.data.requiresEvidence ?? true,
         sortOrder,
         createdById: session.user.id,
       },

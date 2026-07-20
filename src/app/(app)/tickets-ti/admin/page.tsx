@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import {
+  TableColumnFilterHead,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { ArrowLeft, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -191,6 +196,39 @@ export default function TicketsTiAdminPage() {
   const activeMeta = STANDARD_KINDS.find((k) => k.kind === selectedKind);
   const standardRows = activeMeta ? (catalogs?.[activeMeta.key] ?? []) : [];
   const technicianRows = catalogs?.technicians ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const standardColumnDefs = useMemo((): TableColumnFilterDef<CatalogRow>[] => {
+    const cols: TableColumnFilterDef<CatalogRow>[] = [
+      { key: "code", label: "Código", headerClassName: "px-3 py-2 font-medium", getValue: (r) => r.code },
+      { key: "name", label: "Nombre", headerClassName: "px-3 py-2 font-medium", getValue: (r) => r.name },
+      { key: "order", label: "Orden", headerClassName: "px-3 py-2 font-medium", getValue: (r) => String(r.sortOrder) },
+    ];
+    if (selectedKind === "priority") {
+      cols.push({
+        key: "sla",
+        label: "SLA (min)",
+        headerClassName: "px-3 py-2 font-medium",
+        getValue: (r) => String(r.slaMinutes ?? ""),
+      });
+    }
+    cols.push({
+      key: "activo",
+      label: "Activo",
+      headerClassName: "px-3 py-2 font-medium",
+      getValue: (r) => (r.isActive ? "Sí" : "No"),
+    });
+    if (canAdmin) {
+      cols.push({
+        key: "actions",
+        label: "Acciones",
+        headerClassName: "px-3 py-2 font-medium",
+        filterable: false,
+        getValue: () => "",
+      });
+    }
+    return cols;
+  }, [selectedKind, canAdmin]);
+  const displayedStandardRows = filterRowsByColumnFilters(standardRows, columnFilters, standardColumnDefs);
 
   return (
     <div className="p-6 max-w-5xl space-y-6">
@@ -242,20 +280,16 @@ export default function TicketsTiAdminPage() {
               <>
                 <div className="overflow-x-auto rounded-md border border-slate-200">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-left">
-                      <tr>
-                        <th className="px-3 py-2 font-medium">Código</th>
-                        <th className="px-3 py-2 font-medium">Nombre</th>
-                        <th className="px-3 py-2 font-medium">Orden</th>
-                        {selectedKind === "priority" && (
-                          <th className="px-3 py-2 font-medium">SLA (min)</th>
-                        )}
-                        <th className="px-3 py-2 font-medium">Activo</th>
-                        {canAdmin && <th className="px-3 py-2 font-medium">Acciones</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {standardRows.map((row) => {
+                  <thead className="bg-slate-50 text-left">
+                    <TableColumnFilterHead
+                      columns={standardColumnDefs}
+                      rows={standardRows}
+                      filters={columnFilters}
+                      onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                    />
+                  </thead>
+                  <tbody>
+                    {displayedStandardRows.map((row) => {
                         const d = draftFor(row);
                         return (
                           <tr key={row.id} className="border-t border-slate-100">

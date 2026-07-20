@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { TableColumnFilterHead, type TableColumnFilterDef } from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Search, Smartphone } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,6 +65,17 @@ export default function AuditoriaPendientesPage() {
   });
 
   const report = data?.data;
+
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+
+  type MissingRow = NonNullable<AuditResponse["data"]>["missingOnServer"][number];
+  const missingColumnDefs: TableColumnFilterDef<MissingRow>[] = [
+    { key: "localId", label: "ID local", headerClassName: "py-2 pr-4", getValue: (r) => r.localId ?? "" },
+    { key: "type", label: "Tipo", headerClassName: "py-2 pr-4", getValue: (r) => r.type ?? r.markType ?? "" },
+    { key: "tag", label: "Tag / Tipo marca", headerClassName: "py-2 pr-4", getValue: (r) => r.tag ?? r.markType ?? "" },
+    { key: "fecha", label: "Fecha", headerClassName: "py-2 pr-4", getValue: (r) => r.timestamp ?? "" },
+    { key: "estado", label: "Estado", headerClassName: "py-2", getValue: (r) => r.status ?? "" },
+  ];
 
   return (
     <div className="space-y-6 p-6">
@@ -158,17 +171,16 @@ export default function AuditoriaPendientesPage() {
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pr-4">ID local</th>
-                    <th className="py-2 pr-4">Tipo</th>
-                    <th className="py-2 pr-4">Tag / Tipo marca</th>
-                    <th className="py-2 pr-4">Fecha</th>
-                    <th className="py-2">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.missingOnServer.length === 0 ? (
+              <thead>
+                <TableColumnFilterHead
+                  columns={missingColumnDefs}
+                  rows={report.missingOnServer}
+                  filters={columnFilters}
+                  onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                />
+              </thead>
+              <tbody>
+                {report.missingOnServer.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="py-4 text-muted-foreground">
                         No hay discrepancias en el rango seleccionado.

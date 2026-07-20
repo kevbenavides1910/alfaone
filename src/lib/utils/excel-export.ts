@@ -60,6 +60,55 @@ export interface ExportRowsOptions {
   appendDateToFilename?: boolean;
 }
 
+export interface ExportSheet {
+  sheetName: string;
+  rows: Array<Record<string, string | number | null | undefined>>;
+  columnWidths?: number[];
+  totalRow?: Record<string, string | number | null | undefined>;
+}
+
+export interface ExportWorkbookOptions {
+  filename: string;
+  sheets: ExportSheet[];
+  appendDateToFilename?: boolean;
+}
+
+function buildWorksheet(
+  rows: Array<Record<string, string | number | null | undefined>>,
+  columnWidths?: number[],
+  totalRow?: Record<string, string | number | null | undefined>,
+) {
+  const sanitized = sanitizeRows(rows);
+  const sanitizedTotal = totalRow
+    ? Object.fromEntries(
+        Object.entries(totalRow).map(([k, v]) => [k, sanitizeExportCell(v)]),
+      )
+    : undefined;
+  const data = sanitizedTotal ? [...sanitized, sanitizedTotal] : sanitized;
+  const ws = XLSX.utils.json_to_sheet(data);
+  if (columnWidths && columnWidths.length > 0) {
+    ws["!cols"] = columnWidths.map((wch) => ({ wch }));
+  }
+  return ws;
+}
+
+export function exportWorkbookToExcel(opts: ExportWorkbookOptions): void {
+  const { filename, sheets, appendDateToFilename = true } = opts;
+  const nonEmptySheets = sheets.filter((sheet) => sheet.rows.length > 0 || sheet.totalRow);
+  if (nonEmptySheets.length === 0) return;
+
+  const wb = XLSX.utils.book_new();
+  for (const sheet of nonEmptySheets) {
+    const ws = buildWorksheet(sheet.rows, sheet.columnWidths, sheet.totalRow);
+    const safeSheetName = sheet.sheetName.replace(/[\\/?*[\]:]/g, "").slice(0, 31) || "Datos";
+    XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
+  }
+
+  const safeFilename = filename.replace(/[\\/?*"<>|]/g, "_");
+  const stamp = appendDateToFilename ? `_${new Date().toISOString().slice(0, 10)}` : "";
+  XLSX.writeFile(wb, `${safeFilename}${stamp}.xlsx`);
+}
+
 /**
  * Genera y descarga un archivo Excel desde un arreglo de filas.
  * Solo funciona en el cliente (browser); no llamar desde el server.
@@ -78,18 +127,7 @@ export function exportRowsToExcel(opts: ExportRowsOptions): void {
     return;
   }
 
-  const sanitized = sanitizeRows(rows);
-  const sanitizedTotal = totalRow
-    ? Object.fromEntries(
-        Object.entries(totalRow).map(([k, v]) => [k, sanitizeExportCell(v)]),
-      )
-    : undefined;
-  const data = sanitizedTotal ? [...sanitized, sanitizedTotal] : sanitized;
-
-  const ws = XLSX.utils.json_to_sheet(data);
-  if (columnWidths && columnWidths.length > 0) {
-    ws["!cols"] = columnWidths.map((wch) => ({ wch }));
-  }
+  const ws = buildWorksheet(rows, columnWidths, totalRow);
 
   const wb = XLSX.utils.book_new();
   // Excel limita los nombres de hojas a 31 caracteres y prohíbe ciertos caracteres.

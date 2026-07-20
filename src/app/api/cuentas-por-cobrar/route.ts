@@ -16,9 +16,11 @@ export async function GET(req: NextRequest) {
   if (!hasPermission(session, "facturacion.cxc", "view")) return forbidden();
 
   const { searchParams } = new URL(req.url);
+  const companyValues = searchParams.getAll("company").map((c) => c.trim()).filter(Boolean);
   const raw = {
     filter: searchParams.get("filter") ?? "pending",
-    company: searchParams.get("company") ?? undefined,
+    company: companyValues[0] ?? searchParams.get("company") ?? undefined,
+    companies: companyValues.length > 0 ? companyValues : undefined,
     client: searchParams.get("client") ?? undefined,
     licitacion: searchParams.get("licitacion") ?? undefined,
     issuedFrom: searchParams.get("issuedFrom") ?? undefined,

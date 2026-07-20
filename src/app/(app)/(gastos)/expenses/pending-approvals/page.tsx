@@ -16,6 +16,13 @@ import { useCompanies } from "@/lib/hooks/use-companies";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import { FileSpreadsheet } from "lucide-react";
 import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
+import {
   DeferredContractSelector,
   draftFromServer,
   type DeferredContractDraft,
@@ -238,6 +245,18 @@ export default function PendingApprovalsPage() {
   });
 
   const rows = data?.data ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const filterCols: TableColumnFilterDef<PendingExpense>[] = [
+    { key: "sequentialNo", label: "N°", getValue: (r) => (r.sequentialNo != null ? `#${String(r.sequentialNo).padStart(5, "0")}` : ""), headerClassName: "text-left px-4 py-3 font-semibold text-slate-600" },
+    { key: "type", label: "Tipo", getValue: (r) => r.type, headerClassName: "text-left px-4 py-3 font-semibold text-slate-600" },
+    { key: "description", label: "Descripción", getValue: (r) => r.description, headerClassName: "text-left px-4 py-3 font-semibold text-slate-600" },
+    { key: "company", label: "Empresa", getValue: (r) => r.company ?? "", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600" },
+    { key: "period", label: "Período", getValue: (r) => r.periodMonth, headerClassName: "text-left px-4 py-3 font-semibold text-slate-600" },
+    { key: "amount", label: "Monto", getValue: (r) => String(r.amount), headerClassName: "text-right px-4 py-3 font-semibold text-slate-600" },
+    { key: "progress", label: "Progreso", getValue: (r) => String(r.currentApprovalStep ?? ""), headerClassName: "text-left px-4 py-3 font-semibold text-slate-600" },
+    { key: "actions", label: "", getValue: (_r) => "", headerClassName: "px-4 py-3", filterable: false },
+  ];
+  const displayedRows = filterRowsByColumnFilters(rows, columnFilters, filterCols);
 
   function handleExport() {
     const exportRows = rows.map((e) => {
@@ -292,7 +311,7 @@ export default function PendingApprovalsPage() {
         </div>
 
         <Card>
-          <CardContent className="p-0">
+              <CardContent className="p-0">
             {isLoading ? (
               <div className="p-12 text-center text-slate-400">Cargando…</div>
             ) : rows.length === 0 ? (
@@ -301,19 +320,16 @@ export default function PendingApprovalsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">N°</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Tipo</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Descripción</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Empresa</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Período</th>
-                      <th className="text-right px-4 py-3 font-semibold text-slate-600">Monto</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Progreso</th>
-                      <th className="px-4 py-3" />
-                    </tr>
+                    <TableColumnFilterHead
+                      columns={filterCols}
+                      rows={rows}
+                      filters={columnFilters}
+                      onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                      headerRowClassName="border-b bg-muted/50"
+                    />
                   </thead>
                   <tbody className="divide-y">
-                    {rows.map((e) => {
+                    {displayedRows.map((e) => {
                       const done = e.approvals.filter((a) => a.decision === "APPROVED").length;
                       return (
                         <tr key={e.id} className="hover:bg-muted/50">

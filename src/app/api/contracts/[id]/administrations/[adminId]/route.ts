@@ -18,7 +18,10 @@ function serializeAdmin(row: {
   billingPeriodToDay: number | null;
   sortOrder: number;
   zone: { id: string; name: string } | null;
-  billingLines: { billingLineId: string }[];
+  billingLines: {
+    billingLineId: string;
+    monthlyAmount: { toString(): string } | null;
+  }[];
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -33,10 +36,35 @@ function serializeAdmin(row: {
     billingPeriodFromDay: row.billingPeriodFromDay,
     billingPeriodToDay: row.billingPeriodToDay,
     billingLineIds: row.billingLines.map((l) => l.billingLineId),
+    billingLines: row.billingLines.map((l) => ({
+      billingLineId: l.billingLineId,
+      monthlyAmount: l.monthlyAmount ? parseFloat(l.monthlyAmount.toString()) : null,
+    })),
     sortOrder: row.sortOrder,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+function resolveBillingLinesPayload(
+  data: {
+    billingLineIds?: string[];
+    billingLines?: { billingLineId: string; monthlyAmount?: number | null }[];
+  }
+): { billingLineId: string; monthlyAmount: number | null }[] | undefined {
+  if (data.billingLines !== undefined) {
+    return data.billingLines.map((l) => ({
+      billingLineId: l.billingLineId,
+      monthlyAmount: l.monthlyAmount ?? null,
+    }));
+  }
+  if (data.billingLineIds !== undefined) {
+    return data.billingLineIds.map((billingLineId) => ({
+      billingLineId,
+      monthlyAmount: null,
+    }));
+  }
+  return undefined;
 }
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
@@ -60,12 +88,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       if (!zone) return badRequest("Zona no encontrada");
     }
 
-    if (parsed.data.billingLineIds !== undefined) {
+    const billingLinesPayload = resolveBillingLinesPayload(parsed.data);
+
+    if (billingLinesPayload !== undefined) {
+      const lineIds = billingLinesPayload.map((l) => l.billingLineId);
       const validLines = await prisma.contractBillingLine.findMany({
-        where: { contractId, id: { in: parsed.data.billingLineIds } },
+        where: { contractId, id: { in: lineIds } },
         select: { id: true },
       });
-      if (validLines.length !== parsed.data.billingLineIds.length) {
+      if (validLines.length !== lineIds.length) {
         return badRequest("Una o más líneas de facturación no pertenecen al contrato");
       }
     }
@@ -93,15 +124,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         },
       });
 
-      if (parsed.data.billingLineIds !== undefined) {
+      if (billingLinesPayload !== undefined) {
         await tx.contractAdministrationBillingLine.deleteMany({
           where: { administrationId: adminId },
         });
-        if (parsed.data.billingLineIds.length > 0) {
+        if (billingLinesPayload.length > 0) {
           await tx.contractAdministrationBillingLine.createMany({
-            data: parsed.data.billingLineIds.map((billingLineId) => ({
+            data: billingLinesPayload.map((line) => ({
               administrationId: adminId,
-              billingLineId,
+              billingLineId: line.billingLineId,
+              monthlyAmount: line.monthlyAmount,
             })),
           });
         }
@@ -112,7 +144,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       where: { id: adminId },
       include: {
         zone: { select: { id: true, name: true } },
-        billingLines: { select: { billingLineId: true } },
+        billingLines: { select: { billingLineId: true, monthlyAmount: true } },
       },
     });
 

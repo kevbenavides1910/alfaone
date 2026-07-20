@@ -2,15 +2,15 @@
 
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Download, Upload } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Download, Pencil, Upload } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import { formatDate } from "@/lib/utils/format";
 
@@ -28,8 +28,8 @@ interface DocDetail {
   title: string;
   status: string;
   revisionIntervalDays: number | null;
-  documentType: { name: string };
-  process: { name: string } | null;
+  documentType: { id: string; name: string };
+  process: { id: string; name: string } | null;
   currentVersion: {
     id: string;
     versionLabel: string;
@@ -62,6 +62,9 @@ export default function SigDocumentoDetailPage() {
   const { data: session } = useSession();
   const canUpload = hasPermission(session, "sig.documentos", "edit");
   const canSameVersion = hasPermission(session, "sig.documentos", "admin");
+  const canEditMetadata =
+    hasPermission(session, "sig.biblioteca", "edit") ||
+    hasPermission(session, "sig.documentos", "edit");
 
   const { data: approversData } = useQuery({
     queryKey: ["sig-aprobadores"],
@@ -71,6 +74,33 @@ export default function SigDocumentoDetailPage() {
       return r.json() as Promise<{ data: { id: string; name: string; email: string }[] }>;
     },
     enabled: canUpload,
+  });
+
+  const { data: typesData } = useQuery({
+    queryKey: ["sig-tipos"],
+    queryFn: async () => {
+      const r = await fetch("/api/sig/tipos-documento", { credentials: "same-origin" });
+      if (!r.ok) throw new Error("Error al cargar tipos");
+      return r.json() as Promise<{ data: { id: string; code: string; name: string }[] }>;
+    },
+  });
+
+  const { data: processesData } = useQuery({
+    queryKey: ["sig-procesos"],
+    queryFn: async () => {
+      const r = await fetch("/api/sig/procesos", { credentials: "same-origin" });
+      if (!r.ok) throw new Error("Error al cargar procesos");
+      return r.json() as Promise<{ data: { id: string; code: string; name: string }[] }>;
+    },
+  });
+
+  const { data: companiesData } = useQuery({
+    queryKey: ["companies"],
+    queryFn: async () => {
+      const r = await fetch("/api/companies", { credentials: "same-origin" });
+      if (!r.ok) throw new Error("Error al cargar empresas");
+      return r.json() as Promise<{ data: { code: string; name: string }[] }>;
+    },
   });
 
   const { data, isLoading } = useQuery({
@@ -84,7 +114,18 @@ export default function SigDocumentoDetailPage() {
 
   const doc = data?.data;
   const approvers = approversData?.data ?? [];
+  const types = typesData?.data ?? [];
+  const processes = processesData?.data ?? [];
+  const companies = companiesData?.data ?? [];
   const today = new Date().toISOString().slice(0, 10);
+  const [isEditingMetadata, setIsEditingMetadata] = useState(false);
+  const [metadataForm, setMetadataForm] = useState({
+    title: "",
+    documentTypeId: "",
+    processId: "",
+    company: "",
+    revisionIntervalDays: "" as string | number,
+  });
   const [newVersionFile, setNewVersionFile] = useState<File | null>(null);
   const [versionForm, setVersionForm] = useState({
     versionLabel: "",
@@ -109,6 +150,18 @@ export default function SigDocumentoDetailPage() {
     queryClient.invalidateQueries({ queryKey: ["sig-documents"] });
   };
 
+  useEffect(() => {
+    if (doc) {
+      setMetadataForm({
+        title: doc.title,
+        documentTypeId: doc.documentType?.id ?? "",
+        processId: doc.process?.id ?? "",
+        company: (doc as unknown as { company?: string | null }).company ?? "",
+        revisionIntervalDays: doc.revisionIntervalDays ?? "",
+      });
+    }
+  }, [doc]);
+
   const newVersionMutation = useMutation({
     mutationFn: async () => {
       if (!newVersionFile) throw new Error("Seleccione archivo");
@@ -129,6 +182,36 @@ export default function SigDocumentoDetailPage() {
     },
     onSuccess: () => {
       setMsg("Nueva versión enviada a aprobación");
+      invalidate();
+    },
+    onError: (e: Error) => setMsg(e.message),
+  });
+
+  const metadataMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/sig/documents/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: metadataForm.title,
+          documentTypeId: metadataForm.documentTypeId || undefined,
+          processId: metadataForm.processId || undefined,
+          company: metadataForm.company || undefined,
+          revisionIntervalDays:
+            typeof metadataForm.revisionIntervalDays === "number"
+              ? metadataForm.revisionIntervalDays
+              : metadataForm.revisionIntervalDays
+                ? Number(metadataForm.revisionIntervalDays)
+                : undefined,
+        }),
+        credentials: "same-origin",
+      });
+      const json = await r.json();
+      if (!r.ok) throw new Error(json?.error?.message ?? "Error");
+    },
+    onSuccess: () => {
+      setMsg("Metadatos actualizados");
+      setIsEditingMetadata(false);
       invalidate();
     },
     onError: (e: Error) => setMsg(e.message),
@@ -227,22 +310,114 @@ export default function SigDocumentoDetailPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-2">
-              {doc.title}
-              <Badge>{STATUS_LABELS[doc.status] ?? doc.status}</Badge>
+            <CardTitle className="flex flex-wrap items-center gap-2 justify-between">
+              <div className="flex items-center gap-2">
+                {doc.title}
+                <Badge>{STATUS_LABELS[doc.status] ?? doc.status}</Badge>
+              </div>
+              {canEditMetadata && !isEditingMetadata && (
+                <Button size="sm" onClick={() => setIsEditingMetadata(true)}>
+                  <Pencil className="h-4 w-4 mr-1" />
+                  Editar metadatos
+                </Button>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p>
               <strong>Código:</strong> {doc.code}
             </p>
-            <p>
-              <strong>Tipo:</strong> {doc.documentType.name}
-            </p>
-            {doc.process && (
-              <p>
-                <strong>Proceso:</strong> {doc.process.name}
-              </p>
+            {isEditingMetadata ? (
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs">Título</Label>
+                  <Input
+                    value={metadataForm.title}
+                    onChange={(e) => setMetadataForm((f) => ({ ...f, title: e.target.value }))}
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label className="text-xs">Tipo documental</Label>
+                    <select
+                      className="w-full h-10 rounded-md border px-3 text-sm"
+                      value={metadataForm.documentTypeId}
+                      onChange={(e) => setMetadataForm((f) => ({ ...f, documentTypeId: e.target.value }))}
+                    >
+                      <option value="">Sin tipo</option>
+                      {types.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Proceso</Label>
+                    <select
+                      className="w-full h-10 rounded-md border px-3 text-sm"
+                      value={metadataForm.processId}
+                      onChange={(e) => setMetadataForm((f) => ({ ...f, processId: e.target.value }))}
+                    >
+                      <option value="">Sin proceso</option>
+                      {processes.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label className="text-xs">Empresa</Label>
+                    <select
+                      className="w-full h-10 rounded-md border px-3 text-sm"
+                      value={metadataForm.company}
+                      onChange={(e) => setMetadataForm((f) => ({ ...f, company: e.target.value }))}
+                    >
+                      <option value="">Todas / corporativo</option>
+                      {companies.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Intervalo revisión (días)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={metadataForm.revisionIntervalDays}
+                      onChange={(e) => setMetadataForm((f) => ({ ...f, revisionIntervalDays: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => metadataMutation.mutate()}
+                    disabled={metadataMutation.isPending}
+                  >
+                    {metadataMutation.isPending ? "Guardando…" : "Guardar"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setIsEditingMetadata(false)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p>
+                  <strong>Tipo:</strong> {doc.documentType.name}
+                </p>
+                {doc.process && (
+                  <p>
+                    <strong>Proceso:</strong> {doc.process.name}
+                  </p>
+                )}
+              </>
             )}
             {doc.currentVersion && (
               <>

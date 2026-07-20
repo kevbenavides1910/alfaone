@@ -1,7 +1,7 @@
 import type { ExpenseApprovalStatus, ExpenseType } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
 import type { Session } from "next-auth";
-import { isAdmin } from "@/modules/core/permissions";
+import { isAdminSession } from "@/modules/core/permissions";
 
 export async function getApprovalStepCountForType(type: ExpenseType): Promise<number> {
   return prisma.expenseTypeApprovalStep.count({ where: { expenseType: type } });
@@ -46,7 +46,7 @@ export async function canViewExpenseDetail(session: Session, expenseId: string):
     },
   });
   if (!expense) return false;
-  if (isAdmin(session.user.role)) return true;
+  if (isAdminSession(session)) return true;
   if (expense.createdById === session.user.id) return true;
 
   const decided = await prisma.expenseApproval.findFirst({

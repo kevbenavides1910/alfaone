@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { TableColumnFilterHead, type TableColumnFilterDef } from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -19,9 +21,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
+import { canManageDisciplinarySession } from "@/modules/core/permissions";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
-import { formatDate } from "@/lib/utils/format";
+import { formatCurrency, formatDate } from "@/lib/utils/format";
+import {
+  describeTreatmentState,
+  formatCycleClosureLabel,
+  TREATMENT_FILTER_OPTIONS,
+  type TreatmentFilterKey,
+} from "@/modules/disciplinario/business/cycle-display";
 import { TreatmentDialog } from "@/components/disciplinary/TreatmentDialog";
 import { CloseCycleDialog } from "@/components/disciplinary/CloseCycleDialog";
 import { toast } from "@/components/ui/toaster";
@@ -41,28 +50,26 @@ interface ResumenRow {
   tieneObligacion: boolean;
   treatment: {
     fechaConvocatoria: string | null;
+    horaConvocatoria?: string | null;
     accion: string | null;
     cobradoDate: string | null;
   } | null;
+  ultimoCierre: {
+    accion: string;
+    accionRaw: string | null;
+    monto: number | null;
+  } | null;
+  totalMontoCobrado: number;
 }
 
-function describeTreatmentState(t: ResumenRow["treatment"]): {
-  label: string;
-  color: string;
-} {
-  if (!t) return { label: "Sin definir", color: "bg-slate-100 text-slate-600" };
-  if (t.cobradoDate) return { label: "Cobrado", color: "bg-emerald-100 text-emerald-800" };
-  if ((t.accion ?? "").toLowerCase().includes("baja"))
-    return { label: "Dado de baja", color: "bg-rose-100 text-rose-700" };
-  if (t.fechaConvocatoria || t.accion)
-    return { label: "Pendiente", color: "bg-amber-100 text-amber-800" };
-  return { label: "Sin definir", color: "bg-slate-100 text-slate-600" };
+function treatmentAccionLabel(t: ResumenRow["treatment"]): string | null {
+  if (!t?.accion?.trim()) return null;
+  return t.accion.trim();
 }
 
 export default function ResumenEmpleadosPage() {
   const { data: session } = useSession();
-  const role = session?.user?.role;
-  const canManage = role === "ADMIN" || role === "SUPERVISOR";
+  const canManage = canManageDisciplinarySession(session ?? null);
   const queryClient = useQueryClient();
 
   const [filters, setFilters] = useState({
@@ -73,6 +80,7 @@ export default function ResumenEmpleadosPage() {
     convocatoriaDesde: "",
     convocatoriaHasta: "",
     sinConvocatoria: false,
+    tratamiento: "" as "" | TreatmentFilterKey,
   });
 
   const queryParams = useMemo(() => {
@@ -84,6 +92,7 @@ export default function ResumenEmpleadosPage() {
     if (filters.convocatoriaDesde) sp.set("convocatoriaDesde", filters.convocatoriaDesde);
     if (filters.convocatoriaHasta) sp.set("convocatoriaHasta", filters.convocatoriaHasta);
     if (filters.sinConvocatoria) sp.set("sinConvocatoria", "1");
+    if (filters.tratamiento) sp.set("tratamiento", filters.tratamiento);
     return sp.toString();
   }, [filters]);
 
@@ -98,6 +107,23 @@ export default function ResumenEmpleadosPage() {
 
   const rows = data?.data ?? [];
   const obligaciones = rows.filter((r) => r.tieneObligacion).length;
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const resumenColumnDefs = useMemo((): TableColumnFilterDef<ResumenRow>[] => [
+    { key: "codigo", label: "Código", headerClassName: "px-3 py-3", getValue: (r) => r.codigoEmpleado },
+    { key: "empleado", label: "Empleado", headerClassName: "px-3 py-3", getValue: (r) => r.nombreEmpleado },
+    { key: "zona", label: "Zona", headerClassName: "px-3 py-3", getValue: (r) => r.zona ?? "" },
+    { key: "administrador", label: "Administrador", headerClassName: "px-3 py-3", getValue: (r) => r.administrador ?? "" },
+    { key: "ciclo", label: "Ciclo actual", headerClassName: "px-3 py-3 text-center", align: "center", getValue: (r) => String(r.vigentesEnCicloActual) },
+    { key: "noanulados", label: "No anulados (hist.)", headerClassName: "px-3 py-3 text-center", align: "center", getValue: (r) => String(r.totalNoAnulados) },
+    { key: "ultimocierre", label: "Último cierre", headerClassName: "px-3 py-3", getValue: (r) => r.ultimoCerradoEl ? formatDate(r.ultimoCerradoEl) : "" },
+    { key: "totalcobrado", label: "Total cobrado", headerClassName: "px-3 py-3 text-right", align: "right", getValue: (r) => r.totalMontoCobrado > 0 ? formatCurrency(r.totalMontoCobrado) : "" },
+    { key: "tratamiento", label: "Tratamiento", headerClassName: "px-3 py-3", getValue: (r) => describeTreatmentState(r.treatment, r.ultimoCierre).label },
+    { key: "actions", label: "", headerClassName: "px-3 py-3 text-right", filterable: false, getValue: () => "" },
+  ], []);
+  const displayedRows = useMemo(
+    () => filterRowsByColumnFilters(rows, columnFilters, resumenColumnDefs),
+    [rows, columnFilters, resumenColumnDefs]
+  );
 
   // Diálogos
   const [treatmentRow, setTreatmentRow] = useState<ResumenRow | null>(null);
@@ -112,6 +138,7 @@ export default function ResumenEmpleadosPage() {
       convocatoriaDesde: "",
       convocatoriaHasta: "",
       sinConvocatoria: false,
+      tratamiento: "",
     });
   }
 
@@ -161,7 +188,7 @@ export default function ResumenEmpleadosPage() {
   function handleExport() {
     if (rows.length === 0) return;
     const exportRows = rows.map((r) => {
-      const t = describeTreatmentState(r.treatment);
+      const t = describeTreatmentState(r.treatment, r.ultimoCierre);
       return {
         Código: r.codigoEmpleado,
         Empleado: r.nombreEmpleado,
@@ -179,13 +206,20 @@ export default function ResumenEmpleadosPage() {
           : "",
         "Acción tratamiento": r.treatment?.accion ?? "",
         "Fecha cobrado": r.treatment?.cobradoDate ? formatDate(r.treatment.cobradoDate) : "",
+        "Cierre del ciclo": r.ultimoCierre
+          ? formatCycleClosureLabel(r.ultimoCierre.accion, r.ultimoCierre.accionRaw)
+          : "",
+        "Monto cobrado (último cierre)":
+          r.ultimoCierre?.monto != null ? formatCurrency(r.ultimoCierre.monto) : "",
+        "Total cobrado (histórico)":
+          r.totalMontoCobrado > 0 ? formatCurrency(r.totalMontoCobrado) : "",
       };
     });
     exportRowsToExcel({
       filename: "disciplinario_resumen_empleados",
       sheetName: "Resumen",
       rows: exportRows,
-      columnWidths: [12, 28, 18, 22, 14, 16, 14, 16, 18, 18, 16, 16, 22, 14],
+      columnWidths: [12, 28, 18, 22, 14, 16, 14, 16, 18, 18, 16, 16, 22, 14, 18, 20, 20],
     });
   }
 
@@ -241,7 +275,7 @@ export default function ResumenEmpleadosPage() {
         {/* Filtros */}
         <Card>
           <CardContent className="p-4 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
               <div>
                 <label className="text-xs text-slate-600 block mb-1">Buscar</label>
                 <Input
@@ -287,6 +321,25 @@ export default function ResumenEmpleadosPage() {
                     setFilters({ ...filters, convocatoriaHasta: e.target.value })
                   }
                 />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 block mb-1">Tratamiento</label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-card px-3 text-sm"
+                  value={filters.tratamiento}
+                  onChange={(e) =>
+                    setFilters({
+                      ...filters,
+                      tratamiento: e.target.value as "" | TreatmentFilterKey,
+                    })
+                  }
+                >
+                  {TREATMENT_FILTER_OPTIONS.map((o) => (
+                    <option key={o.value || "all"} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-4">
@@ -348,21 +401,17 @@ export default function ResumenEmpleadosPage() {
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 border-b">
-                  <tr className="text-left text-xs uppercase text-slate-500">
-                    <th className="px-3 py-3">Código</th>
-                    <th className="px-3 py-3">Empleado</th>
-                    <th className="px-3 py-3">Zona</th>
-                    <th className="px-3 py-3">Administrador</th>
-                    <th className="px-3 py-3 text-center">Ciclo actual</th>
-                    <th className="px-3 py-3 text-center">No anulados (hist.)</th>
-                    <th className="px-3 py-3">Último cierre</th>
-                    <th className="px-3 py-3">Tratamiento</th>
-                    <th className="px-3 py-3 text-right" />
-                  </tr>
+                  <TableColumnFilterHead
+                    columns={resumenColumnDefs}
+                    rows={rows}
+                    filters={columnFilters}
+                    onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                  />
                 </thead>
                 <tbody className="divide-y">
-                  {rows.map((r) => {
-                    const t = describeTreatmentState(r.treatment);
+                  {displayedRows.map((r) => {
+                    const t = describeTreatmentState(r.treatment, r.ultimoCierre);
+                    const accionVigente = treatmentAccionLabel(r.treatment);
                     const cicloColor = r.tieneObligacion
                       ? "bg-rose-100 text-rose-700"
                       : r.vigentesEnCicloActual === 2
@@ -404,12 +453,41 @@ export default function ResumenEmpleadosPage() {
                         <td className="px-3 py-2 text-xs text-slate-600">
                           {r.ultimoCerradoEl ? formatDate(r.ultimoCerradoEl) : "—"}
                         </td>
+                        <td className="px-3 py-2 text-right text-xs font-medium text-slate-700">
+                          {r.totalMontoCobrado > 0 ? formatCurrency(r.totalMontoCobrado) : "—"}
+                        </td>
                         <td className="px-3 py-2">
                           <Badge className={`${t.color} text-xs`}>{t.label}</Badge>
+                          {accionVigente && (
+                            <div className="text-[11px] text-slate-600 mt-0.5">
+                              <span className="text-slate-500">Acción: </span>
+                              {accionVigente}
+                            </div>
+                          )}
                           {r.treatment?.fechaConvocatoria && (
                             <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
                               <CalendarClock className="h-3 w-3" />
                               Conv: {formatDate(r.treatment.fechaConvocatoria)}
+                              {r.treatment.horaConvocatoria
+                                ? ` · ${r.treatment.horaConvocatoria}`
+                                : ""}
+                            </div>
+                          )}
+                          {r.ultimoCierre && (
+                            <div className="text-[11px] text-slate-600 mt-1 space-y-0.5">
+                              <div>
+                                <span className="text-slate-500">Cierre: </span>
+                                {formatCycleClosureLabel(
+                                  r.ultimoCierre.accion,
+                                  r.ultimoCierre.accionRaw,
+                                )}
+                              </div>
+                              {r.ultimoCierre.monto != null && (
+                                <div>
+                                  <span className="text-slate-500">Monto: </span>
+                                  {formatCurrency(r.ultimoCierre.monto)}
+                                </div>
+                              )}
                             </div>
                           )}
                         </td>
@@ -490,6 +568,15 @@ export default function ResumenEmpleadosPage() {
         onOpenChange={(o) => !o && setTreatmentRow(null)}
         codigo={treatmentRow?.codigoEmpleado ?? ""}
         initial={treatmentRow?.treatment ?? null}
+        ultimoCierre={
+          treatmentRow?.ultimoCierre
+            ? {
+                cerradoEl: treatmentRow.ultimoCerradoEl,
+                ...treatmentRow.ultimoCierre,
+              }
+            : null
+        }
+        totalMontoCobrado={treatmentRow?.totalMontoCobrado}
         employee={
           treatmentRow
             ? {

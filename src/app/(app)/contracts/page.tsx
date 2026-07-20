@@ -1,10 +1,10 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState, useRef } from "react";
-import { useSession } from "next-auth/react";
+import { useMemo, useState, useRef, useCallback } from "react";
+import { useSession } from "@/lib/auth/client-session";
 import Link from "next/link";
-import { Plus, Search, Upload, Download, FileSpreadsheet, CalendarDays } from "lucide-react";
+import { Plus, Search, Upload, Download, FileSpreadsheet, CalendarDays, X } from "lucide-react";
 import { toast } from "@/components/ui/toaster";
 import { Topbar } from "@/components/layout/Topbar";
 import { ContractsPageHeader } from "@/components/contracts/ContractsPageHeader";
@@ -20,6 +20,13 @@ import { useCompanies } from "@/lib/hooks/use-companies";
 import { canModifyContracts } from "@/modules/core/permissions";
 import { periodViewKind } from "@/modules/presupuestos/business/contractPeriodBilling";
 import type { ContractStatus, ClientType, ContractHiringType } from "@prisma/client";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 
 const MONTHS = [
   { value: 1, label: "Enero" },
@@ -62,6 +69,55 @@ interface Contract {
   equivalencePct: number;
   billingSharePct: number; laborSharePct: number; suppliesSharePct: number;
   adminSharePct: number; profitSharePct: number;
+  laborSpend?: number;
+  suppliesSpend?: number;
+  adminSpend?: number;
+  profitSpend?: number;
+  periodGrandTotal?: number;
+}
+
+type PeriodTotals = {
+  contractCount: number;
+  contractsWithAmount: number;
+  billing: number;
+  specialServicesTotal: number;
+  budgets: {
+    labor: number;
+    supplies: number;
+    admin: number;
+    profit: number;
+    combined: number;
+  };
+  spend: {
+    labor: number;
+    supplies: number;
+    admin: number;
+    profit: number;
+    grandTotal: number;
+  };
+  expensesByType: Record<string, number>;
+};
+
+const EXPENSE_TYPE_LABELS: Record<string, string> = {
+  UNIFORMS: "Uniformes",
+  AUDIT: "Auditoría",
+  DEFERRED_LEGACY: "Diferidos (dist.)",
+  ADMIN: "Administrativo",
+  TRANSPORT: "Transporte",
+  FUEL: "Combustible",
+  PHONES: "Teléfonos",
+  PLANILLA: "Planilla",
+  APERTURA: "Apertura",
+  OTHER: "Otros",
+};
+
+function expenseTypeLabel(type: string): string {
+  return EXPENSE_TYPE_LABELS[type] ?? type.replace(/_/g, " ");
+}
+
+function spendUsagePct(spend: number, budget: number): string {
+  if (budget <= 0) return spend > 0 ? "—" : "0%";
+  return `${((spend / budget) * 100).toFixed(0)}%`;
 }
 
 function BudgetPartidaCell({
@@ -104,7 +160,7 @@ export default function ContractsPage() {
   const { data: session } = useSession();
   const { data: companiesRes } = useCompanies();
   const companyRows = companiesRes?.data ?? [];
-  const canCreate = session?.user?.role ? canModifyContracts(session.user.role) : false;
+  const canCreate = canModifyContracts(session ?? null);
   const contractFileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState("");
@@ -132,13 +188,142 @@ export default function ContractsPage() {
   params.set("periodYear", String(periodYear));
   params.set("periodMonth", String(periodMonth));
 
-  const { data, isLoading } = useQuery<{ data: Contract[]; meta: { total: number } }>({
+  const { data, isLoading } = useQuery<{ data: Contract[]; meta: { total: number; periodTotals?: PeriodTotals } }>({
     queryKey: ["contracts", search, companies, status, clientType, periodYear, periodMonth],
     queryFn: () => fetch(`/api/contracts?${params}`).then((r) => r.json()),
     staleTime: 30000,
   });
 
   const contracts = data?.data ?? [];
+  const periodTotals = data?.meta?.periodTotals;
+
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const onColumnFilterChange = useCallback((key: string, value: string) => {
+    setColumnFilters((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const contractColumnDefs = useMemo((): TableColumnFilterDef<Contract>[] => {
+    const clientTypeOptions = Object.entries(CLIENT_TYPE_LABELS).map(([value, label]) => ({
+      value: label,
+      label,
+    }));
+    const hiringOptions = Object.entries(HIRING_TYPE_LABELS).map(([value, label]) => ({
+      value: label,
+      label,
+    }));
+    const statusOptions = Object.entries(CONTRACT_STATUS_LABELS).map(([value, label]) => ({
+      value: label,
+      label,
+    }));
+    return [
+      { key: "licitacion", label: "Licitación", getValue: (c) => c.licitacionNo },
+      { key: "cliente", label: "Cliente", getValue: (c) => c.client },
+      {
+        key: "empresa",
+        label: "Empresa",
+        getValue: (c) => companyDisplayName(c.company, companyRows),
+      },
+      {
+        key: "tipoCliente",
+        label: "Tipo cliente",
+        getValue: (c) => CLIENT_TYPE_LABELS[c.clientType],
+        options: clientTypeOptions,
+        mode: "select",
+      },
+      {
+        key: "contratacion",
+        label: "Contratación",
+        getValue: (c) => HIRING_TYPE_LABELS[c.hiringType ?? "FIXED"],
+        options: hiringOptions,
+        mode: "select",
+      },
+      {
+        key: "facturacion",
+        label: "Facturación",
+        align: "right",
+        headerClassName: "text-right",
+        getValue: (c) =>
+          c.amountDefined !== false && c.monthlyBilling != null
+            ? formatCurrency(c.monthlyBilling)
+            : "Pendiente",
+      },
+      {
+        key: "mo",
+        label: "M.O.",
+        align: "right",
+        headerClassName: "text-right",
+        getValue: (c) =>
+          c.amountDefined !== false && c.laborBudget != null
+            ? formatCurrency(c.laborBudget)
+            : "Pendiente",
+      },
+      {
+        key: "insumos",
+        label: "Insumos",
+        align: "right",
+        headerClassName: "text-right",
+        getValue: (c) =>
+          c.amountDefined !== false && c.suppliesBudget != null
+            ? formatCurrency(c.suppliesBudget)
+            : "Pendiente",
+      },
+      {
+        key: "adm",
+        label: "Adm.",
+        align: "right",
+        headerClassName: "text-right",
+        getValue: (c) =>
+          c.amountDefined !== false && c.adminBudget != null
+            ? formatCurrency(c.adminBudget)
+            : "Pendiente",
+      },
+      {
+        key: "util",
+        label: "Util.",
+        align: "right",
+        headerClassName: "text-right",
+        getValue: (c) =>
+          c.amountDefined !== false && c.profitBudget != null
+            ? formatCurrency(c.profitBudget)
+            : "Pendiente",
+      },
+      { key: "pgFact", label: "P.g. fact.", align: "right", headerClassName: "text-right", getValue: (c) => `${((c.billingSharePct ?? 0) * 100).toFixed(2)}%` },
+      { key: "pgMo", label: "P.g. M.O.", align: "right", headerClassName: "text-right", getValue: (c) => `${((c.laborSharePct ?? 0) * 100).toFixed(2)}%` },
+      { key: "pgIns", label: "P.g. ins.", align: "right", headerClassName: "text-right", getValue: (c) => `${((c.suppliesSharePct ?? 0) * 100).toFixed(2)}%` },
+      { key: "pgAdm", label: "P.g. adm.", align: "right", headerClassName: "text-right", getValue: (c) => `${((c.adminSharePct ?? 0) * 100).toFixed(2)}%` },
+      { key: "pgUtil", label: "P.g. util.", align: "right", headerClassName: "text-right", getValue: (c) => `${((c.profitSharePct ?? 0) * 100).toFixed(2)}%` },
+      { key: "ejecucion", label: "Ejecución", getValue: () => "Verde" },
+      { key: "vencimiento", label: "Vencimiento", getValue: (c) => formatDate(c.endDate) },
+      {
+        key: "estado",
+        label: "Estado",
+        getValue: (c) => CONTRACT_STATUS_LABELS[c.status],
+        options: statusOptions,
+        mode: "select",
+      },
+      { key: "actions", label: "", filterable: false, getValue: () => "" },
+    ];
+  }, [companyRows]);
+
+  const displayedContracts = useMemo(
+    () =>
+      filterRowsByColumnFilters(
+        contracts,
+        columnFilters,
+        contractColumnDefs.map((col) => ({
+          key: col.key,
+          getValue: col.getValue,
+          mode: col.mode,
+          filterable: col.filterable,
+        }))
+      ),
+    [contracts, columnFilters, contractColumnDefs]
+  );
+
+  const columnFilterKeys = useMemo(
+    () => contractColumnDefs.filter((c) => c.filterable !== false).map((c) => c.key),
+    [contractColumnDefs]
+  );
 
   async function downloadContractsExport() {
     const sp = new URLSearchParams();
@@ -396,38 +581,38 @@ export default function ContractsPage() {
       <div className="carbon-panel mx-4 mb-8 md:mx-6 border-x-0 border-t-0">
         {isLoading ? (
           <div className="carbon-empty">Cargando contratos…</div>
-        ) : contracts.length === 0 ? (
+        ) : displayedContracts.length === 0 ? (
               <div className="carbon-empty">
                 No se encontraron contratos en vigencia para {monthLabel} {periodYear} con los filtros aplicados.
               </div>
         ) : (
           <div className="carbon-table-viewport">
+            {hasActiveColumnFilters(columnFilters) && (
+              <div className="flex justify-end px-3 py-1.5 border-b border-[#e0e0e0] bg-[#f4f4f4]">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => setColumnFilters(clearColumnFilters(columnFilterKeys))}
+                >
+                  <X className="h-3 w-3" />
+                  Limpiar filtros de columnas
+                </Button>
+              </div>
+            )}
             <table className="carbon-data-table">
               <thead>
-                <tr>
-                  <th>Licitación</th>
-                  <th>Cliente</th>
-                  <th>Empresa</th>
-                  <th>Tipo cliente</th>
-                  <th>Contratación</th>
-                  <th className="text-right">Facturación</th>
-                  <th className="text-right" title="Mano de obra">M.O.</th>
-                  <th className="text-right" title="Insumos">Insumos</th>
-                  <th className="text-right" title="Gasto administrativo">Adm.</th>
-                  <th className="text-right" title="Utilidad">Util.</th>
-                  <th className="text-right" title="Participación global de la facturación (activos)">P.g. fact.</th>
-                  <th className="text-right" title="Participación global M.O. (activos)">P.g. M.O.</th>
-                  <th className="text-right" title="Participación global insumos (activos)">P.g. ins.</th>
-                  <th className="text-right" title="Participación global adm. (activos)">P.g. adm.</th>
-                  <th className="text-right" title="Participación global utilidad (activos)">P.g. util.</th>
-                  <th>Ejecución</th>
-                  <th>Vencimiento</th>
-                  <th>Estado</th>
-                  <th />
-                </tr>
+                <TableColumnFilterHead
+                  columns={contractColumnDefs}
+                  rows={contracts}
+                  filters={columnFilters}
+                  onFilterChange={onColumnFilterChange}
+                  filterRowClassName="bg-[#f4f4f4] border-b border-[#e0e0e0]"
+                />
               </thead>
               <tbody>
-                {contracts.map((c) => {
+                {displayedContracts.map((c) => {
                   const days = daysUntilExpiry(c.endDate);
                   const expireWarning = days >= 0 && days <= 30;
                   return (
@@ -477,7 +662,27 @@ export default function ContractsPage() {
                         );
                       })()}
                       <td className="min-w-32">
-                        <TrafficLightBadge light="GREEN" size="sm" />
+                        {(() => {
+                          if (c.laborSpend == null) {
+                            return <TrafficLightBadge light="GREEN" size="sm" />;
+                          }
+                          const usages = [
+                            c.laborBudget && c.laborBudget > 0 ? (c.laborSpend ?? 0) / c.laborBudget : 0,
+                            c.suppliesBudget && c.suppliesBudget > 0 ? (c.suppliesSpend ?? 0) / c.suppliesBudget : 0,
+                            c.adminBudget && c.adminBudget > 0 ? (c.adminSpend ?? 0) / c.adminBudget : 0,
+                          ];
+                          const maxUsage = Math.max(...usages, 0);
+                          const light =
+                            maxUsage > 1 ? "RED" : maxUsage > 0.85 ? "YELLOW" : "GREEN";
+                          return (
+                            <div>
+                              <TrafficLightBadge light={light as "GREEN" | "YELLOW" | "RED"} size="sm" />
+                              <div className="text-[10px] text-[#525252] tabular-nums mt-0.5">
+                                {formatCurrency(c.periodGrandTotal ?? 0)}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td>
                         <span className={expireWarning ? "font-medium text-[#da1e28]" : "text-[#525252]"}>
@@ -505,45 +710,88 @@ export default function ContractsPage() {
                   );
                 })}
               </tbody>
-              <tfoot>
-                {(() => {
-                  const defined = contracts.filter((c) => c.amountDefined !== false && c.monthlyBilling != null);
-                  const totalBilling = defined.reduce((s, c) => s + (c.monthlyBilling ?? 0), 0);
-                  const totalLabor = defined.reduce((s, c) => s + (c.laborBudget ?? 0), 0);
-                  const totalSupplies = defined.reduce((s, c) => s + (c.suppliesBudget ?? 0), 0);
-                  const totalAdmin = defined.reduce((s, c) => s + (c.adminBudget ?? 0), 0);
-                  const totalProfit = defined.reduce((s, c) => s + (c.profitBudget ?? 0), 0);
-                  const sumGlob = (pick: (c: Contract) => number) =>
-                    defined.reduce((s, c) => s + pick(c), 0);
-                  return (
-                    <tr>
-                      <td colSpan={5}>
-                        Total ({defined.length} con monto · {contracts.length} en vigencia)
+              <tfoot className="bg-[#f4f4f4] border-t-2 border-[#c6c6c6]">
+                {periodTotals ? (
+                  <>
+                    <tr className="font-semibold">
+                      <td colSpan={5} className="py-2">
+                        Presupuesto — {periodTotals.contractCount} contratos en vigencia
+                        {periodTotals.specialServicesTotal > 0 && (
+                          <span className="block text-xs font-normal text-[#525252]">
+                            Incluye {formatCurrency(periodTotals.specialServicesTotal)} en servicios especiales
+                          </span>
+                        )}
                       </td>
-                      <td className="text-right tabular-nums">{formatCurrency(totalBilling)}</td>
-                      <td className="text-right tabular-nums">{formatCurrency(totalLabor)}</td>
-                      <td className="text-right tabular-nums">{formatCurrency(totalSupplies)}</td>
-                      <td className="text-right tabular-nums">{formatCurrency(totalAdmin)}</td>
-                      <td className="text-right tabular-nums">{formatCurrency(totalProfit)}</td>
-                      <td className="text-right text-red-600 tabular-nums" title="Suma de % globales en esta página (con monto definido)">
-                        {(sumGlob((c) => c.billingSharePct) * 100).toFixed(2)}%
-                      </td>
-                      <td className="text-right text-red-600 tabular-nums">
-                        {(sumGlob((c) => c.laborSharePct) * 100).toFixed(2)}%
-                      </td>
-                      <td className="text-right text-red-600 tabular-nums">
-                        {(sumGlob((c) => c.suppliesSharePct) * 100).toFixed(2)}%
-                      </td>
-                      <td className="text-right text-red-600 tabular-nums">
-                        {(sumGlob((c) => c.adminSharePct) * 100).toFixed(2)}%
-                      </td>
-                      <td className="text-right text-red-600 tabular-nums">
-                        {(sumGlob((c) => c.profitSharePct) * 100).toFixed(2)}%
-                      </td>
-                      <td colSpan={4} />
+                      <td className="text-right tabular-nums py-2">{formatCurrency(periodTotals.billing)}</td>
+                      <td className="text-right tabular-nums py-2">{formatCurrency(periodTotals.budgets.labor)}</td>
+                      <td className="text-right tabular-nums py-2">{formatCurrency(periodTotals.budgets.supplies)}</td>
+                      <td className="text-right tabular-nums py-2">{formatCurrency(periodTotals.budgets.admin)}</td>
+                      <td className="text-right tabular-nums py-2">{formatCurrency(periodTotals.budgets.profit)}</td>
+                      <td colSpan={6} />
                     </tr>
-                  );
-                })()}
+                    <tr className="font-semibold text-[#161616]">
+                      <td colSpan={5} className="py-2">
+                        Gasto del mes — todos los contratos
+                        <span className="block text-xs font-normal text-[#525252]">
+                          Total: {formatCurrency(periodTotals.spend.grandTotal)}
+                        </span>
+                      </td>
+                      <td className="text-right tabular-nums py-2 text-[#525252]">—</td>
+                      <td className="text-right tabular-nums py-2">
+                        <div>{formatCurrency(periodTotals.spend.labor)}</div>
+                        <div className="text-xs font-normal text-[#525252]">
+                          {spendUsagePct(periodTotals.spend.labor, periodTotals.budgets.labor)} del P. MO
+                        </div>
+                      </td>
+                      <td className="text-right tabular-nums py-2">
+                        <div>{formatCurrency(periodTotals.spend.supplies)}</div>
+                        <div className="text-xs font-normal text-[#525252]">
+                          {spendUsagePct(periodTotals.spend.supplies, periodTotals.budgets.supplies)} del P. ins.
+                        </div>
+                      </td>
+                      <td className="text-right tabular-nums py-2">
+                        <div>{formatCurrency(periodTotals.spend.admin)}</div>
+                        <div className="text-xs font-normal text-[#525252]">
+                          {spendUsagePct(periodTotals.spend.admin, periodTotals.budgets.admin)} del P. adm.
+                        </div>
+                      </td>
+                      <td className="text-right tabular-nums py-2">
+                        <div>{formatCurrency(periodTotals.spend.profit)}</div>
+                        <div className="text-xs font-normal text-[#525252]">
+                          {spendUsagePct(periodTotals.spend.profit, periodTotals.budgets.profit)} del P. util.
+                        </div>
+                      </td>
+                      <td colSpan={6} />
+                    </tr>
+                    <tr>
+                      <td colSpan={5} className="py-2 align-top text-sm font-medium">
+                        Detalle del gasto (suma de todos los contratos)
+                      </td>
+                      <td colSpan={11} className="py-2">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                          {Object.entries(periodTotals.expensesByType)
+                            .filter(([, amount]) => amount > 0)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([type, amount]) => (
+                              <span key={type} className="tabular-nums whitespace-nowrap">
+                                <span className="text-[#525252]">{expenseTypeLabel(type)}:</span>{" "}
+                                <span className="font-medium">{formatCurrency(amount)}</span>
+                              </span>
+                            ))}
+                          {Object.keys(periodTotals.expensesByType).length === 0 && (
+                            <span className="text-[#8d8d8d]">Sin gastos registrados en el mes</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  </>
+                ) : (
+                  <tr>
+                    <td colSpan={16} className="py-2 text-sm text-[#525252]">
+                      Seleccione un mes para ver presupuesto y gasto consolidados.
+                    </td>
+                  </tr>
+                )}
               </tfoot>
             </table>
           </div>

@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     search: searchParams.get("search") ?? undefined,
     page: searchParams.get("page") ?? "1",
     pageSize: searchParams.get("pageSize") ?? "50",
+    ligadoFilter: searchParams.get("ligadoFilter") ?? "ALL",
   });
 
   if (!parsed.success) {

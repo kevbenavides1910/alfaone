@@ -2,13 +2,20 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Database, Eye, RefreshCw, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import { formatDateTime } from "@/lib/utils/format";
 import { hasPermission } from "@/lib/permissions/check";
@@ -68,12 +75,23 @@ function estadoBadge(estado: string | null) {
   return <Badge variant="outline">{estado}</Badge>;
 }
 
+/** Filtros de columna que van al API (lista paginada); el resto solo filtran la página actual. */
+const SERVER_COLUMN_KEYS = new Set([
+  "noEmple",
+  "nombre",
+  "cedula",
+  "correoElectronico",
+  "telefono",
+  "noCia",
+  "estado",
+]);
+
 export default function EmpleadosNafPage() {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const canSync = hasPermission(session ?? null, "empleadosNaf.sync", "edit");
 
-  const [filters, setFilters] = useState({ q: "", noCia: "", estado: "" });
+  const [filters, setFilters] = useState({ q: "", noCia: "", estado: "A" });
   const [page, setPage] = useState(1);
 
   const queryParams = useMemo(() => {
@@ -115,6 +133,62 @@ export default function EmpleadosNafPage() {
     ...NAF_REPORT_COLUMNS,
     { key: "estado" as const, label: "Estado" },
   ];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const columnDefs: TableColumnFilterDef<NafEmployeeRow>[] = [
+    ...tableColumns.map((c) => ({
+      key: c.key as string,
+      label: c.label,
+      headerClassName: "p-3 font-medium whitespace-nowrap",
+      filterClassName: "p-3",
+      getValue: (r: NafEmployeeRow) => String((r as unknown as Record<string, unknown>)[c.key as string] ?? ""),
+    })),
+    { key: "actions", label: "", headerClassName: "p-3 font-medium w-20 sticky right-0 bg-slate-50", filterable: false, getValue: () => "" },
+  ];
+
+  const clientColumnFilters = useMemo(() => {
+    const next: Record<string, string> = {};
+    for (const [k, v] of Object.entries(columnFilters)) {
+      if (!SERVER_COLUMN_KEYS.has(k)) next[k] = v;
+    }
+    return next;
+  }, [columnFilters]);
+
+  const displayedRows = filterRowsByColumnFilters(rows, clientColumnFilters, columnDefs);
+
+  const onColumnFilterChange = (key: string, value: string) => {
+    setColumnFilters((s) => ({ ...s, [key]: value }));
+    if (key === "noCia") {
+      setPage(1);
+      setFilters((f) => ({ ...f, noCia: value }));
+      return;
+    }
+    if (key === "estado") {
+      const code = value.trim().toUpperCase();
+      const mapped =
+        code === "A" || code === "I" || code === "B" || code === ""
+          ? code
+          : code.startsWith("ACT")
+            ? "A"
+            : code.startsWith("INA")
+              ? "I"
+              : code.startsWith("BAJ")
+                ? "B"
+                : value.trim();
+      setPage(1);
+      setFilters((f) => ({ ...f, estado: mapped }));
+      return;
+    }
+    if (
+      key === "noEmple" ||
+      key === "nombre" ||
+      key === "cedula" ||
+      key === "correoElectronico" ||
+      key === "telefono"
+    ) {
+      setPage(1);
+      setFilters((f) => ({ ...f, q: value }));
+    }
+  };
 
   return (
     <ModulePage wide className="space-y-4">
@@ -180,8 +254,17 @@ export default function EmpleadosNafPage() {
               className="pl-9"
               value={filters.q}
               onChange={(e) => {
+                const v = e.target.value;
                 setPage(1);
-                setFilters((f) => ({ ...f, q: e.target.value }));
+                setFilters((f) => ({ ...f, q: v }));
+                setColumnFilters((s) => ({
+                  ...s,
+                  noEmple: v,
+                  nombre: "",
+                  cedula: "",
+                  correoElectronico: "",
+                  telefono: "",
+                }));
               }}
             />
           </div>
@@ -190,16 +273,20 @@ export default function EmpleadosNafPage() {
             className="lg:w-36"
             value={filters.noCia}
             onChange={(e) => {
+              const v = e.target.value;
               setPage(1);
-              setFilters((f) => ({ ...f, noCia: e.target.value }));
+              setFilters((f) => ({ ...f, noCia: v }));
+              setColumnFilters((s) => ({ ...s, noCia: v }));
             }}
           />
           <select
             className="h-10 rounded-md border border-input bg-background px-3 text-sm lg:w-40"
             value={filters.estado}
             onChange={(e) => {
+              const v = e.target.value;
               setPage(1);
-              setFilters((f) => ({ ...f, estado: e.target.value }));
+              setFilters((f) => ({ ...f, estado: v }));
+              setColumnFilters((s) => ({ ...s, estado: v }));
             }}
           >
             <option value="">Todos los estados</option>
@@ -232,14 +319,12 @@ export default function EmpleadosNafPage() {
           <CardContent className="p-0 overflow-x-auto">
             <table className="premium-table w-full text-sm min-w-[3600px]">
               <thead>
-                <tr className="border-b bg-slate-50 text-left text-slate-600">
-                  {tableColumns.map((col) => (
-                    <th key={col.key} className="p-3 font-medium whitespace-nowrap">
-                      {col.label}
-                    </th>
-                  ))}
-                  <th className="p-3 font-medium w-20 sticky right-0 bg-slate-50" />
-                </tr>
+                <TableColumnFilterHead
+                  columns={columnDefs}
+                  rows={rows}
+                  filters={columnFilters}
+                  onFilterChange={onColumnFilterChange}
+                />
               </thead>
               <tbody>
                 {isLoading && (
@@ -257,7 +342,15 @@ export default function EmpleadosNafPage() {
                     </td>
                   </tr>
                 )}
-                {rows.map((row) => (
+                {!isLoading && rows.length > 0 && displayedRows.length === 0 && (
+                  <tr>
+                    <td colSpan={tableColumns.length + 1} className="p-8 text-center text-slate-500">
+                      Ningún registro de esta página coincide con los filtros de columna.
+                      Use la búsqueda superior o el filtro Empleado/Nombre/Cédula para buscar en todo el directorio.
+                    </td>
+                  </tr>
+                )}
+                {displayedRows.map((row) => (
                   <tr key={row.id} className="border-b hover:bg-slate-50/80">
                     {NAF_REPORT_COLUMNS.map((col) => (
                       <td key={col.key} className="p-3 whitespace-nowrap">

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/api/middleware";
 import { ok, unauthorized, badRequest, serverError } from "@/lib/api/response";
-import { prisma } from "@/modules/core/db/prisma";
+import { searchEmployeesForDisciplinary } from "@/modules/disciplinario/services/disciplinary-employee-lookup";
 
 const QuerySchema = z.object({
   q: z.string().trim().min(1, "Debe ingresar al menos un carácter"),
@@ -21,26 +21,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { q, limit } = parsed.data;
-
-    const rows = await prisma.employee.findMany({
-      where: {
-        OR: [
-          { codigoEmpleado: { contains: q, mode: "insensitive" } },
-          { nombre: { contains: q, mode: "insensitive" } },
-          { cedula: { contains: q } },
-        ],
-      },
-      select: {
-        codigoEmpleado: true,
-        nombre: true,
-        cedula: true,
-        email: true,
-        zona: true,
-      },
-      take: limit,
-      orderBy: [{ nombre: "asc" }],
-    });
-
+    const rows = await searchEmployeesForDisciplinary(q, limit);
     return ok(rows);
   } catch (e) {
     return serverError(

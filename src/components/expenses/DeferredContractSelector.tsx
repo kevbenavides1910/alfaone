@@ -65,6 +65,19 @@ export function draftFromServer(ids: string[] | null | undefined): DeferredContr
   return [...ids];
 }
 
+function applyDraftChange(
+  draft: DeferredContractDraft,
+  allIds: string[],
+  mutate: (currentIds: Set<string>) => void
+): DeferredContractDraft {
+  const current = new Set(draft === "all" ? allIds : draft);
+  mutate(current);
+  const sorted = allIds.filter((id) => current.has(id));
+  if (sorted.length === 0) return [];
+  if (sorted.length === allIds.length) return "all";
+  return sorted;
+}
+
 export function DeferredContractSelector({
   contracts,
   allIds,
@@ -83,10 +96,19 @@ export function DeferredContractSelector({
   readOnly?: boolean;
 }) {
   const [query, setQuery] = useState("");
-  const [companyFilter, setCompanyFilter] = useState<string[]>([]);
   const q = query.trim().toLowerCase();
 
-  // Empresas presentes en los contratos disponibles (para los chips del filtro).
+  const companyContractIds = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const c of contracts) {
+      if (!c.company) continue;
+      const list = map.get(c.company) ?? [];
+      list.push(c.id);
+      map.set(c.company, list);
+    }
+    return map;
+  }, [contracts]);
+
   const availableCompanies = useMemo(() => {
     const seen = new Map<string, string>();
     for (const c of contracts) {
@@ -100,10 +122,28 @@ export function DeferredContractSelector({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [contracts, companyRows]);
 
+  const companyInclusionState = (code: string): "all" | "partial" | "none" => {
+    const ids = companyContractIds.get(code) ?? [];
+    if (ids.length === 0) return "all";
+    const included = ids.filter((id) => contractIncludedInDeferredDraft(draft, id, allIds)).length;
+    if (included === 0) return "none";
+    if (included === ids.length) return "all";
+    return "partial";
+  };
+
+  const setCompanyIncluded = (code: string, included: boolean) => {
+    const ids = companyContractIds.get(code) ?? [];
+    if (ids.length === 0) return;
+    onChange(
+      applyDraftChange(draft, allIds, (current) => {
+        if (included) ids.forEach((id) => current.add(id));
+        else ids.forEach((id) => current.delete(id));
+      })
+    );
+  };
+
   const filtered = useMemo(() => {
-    const activeCompanies = new Set(companyFilter);
     return contracts.filter((c) => {
-      if (activeCompanies.size > 0 && !activeCompanies.has(c.company)) return false;
       if (!q) return true;
       const comp = companyDisplayName(c.company, companyRows) ?? "";
       return (
@@ -112,20 +152,14 @@ export function DeferredContractSelector({
         comp.toLowerCase().includes(q)
       );
     });
-  }, [contracts, q, companyRows, companyFilter]);
+  }, [contracts, q, companyRows]);
 
   const selectedCount = draft === "all" ? allIds.length : draft.length;
   const visibleIds = filtered.map((c) => c.id);
   const allVisibleSelected =
     visibleIds.length > 0 &&
     visibleIds.every((id) => contractIncludedInDeferredDraft(draft, id, allIds));
-  const hasFilter = q.length > 0 || companyFilter.length > 0;
-
-  const toggleCompany = (code: string) => {
-    setCompanyFilter((prev) =>
-      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
-    );
-  };
+  const hasTextFilter = q.length > 0;
 
   return (
     <div className="space-y-2">
@@ -157,20 +191,22 @@ export function DeferredContractSelector({
             >
               Ninguno
             </button>
-            {hasFilter && visibleIds.length > 0 && (
+            {hasTextFilter && visibleIds.length > 0 && (
               <button
                 type="button"
                 onClick={() => {
                   if (allVisibleSelected) {
-                    const current = draft === "all" ? allIds.slice() : draft.slice();
-                    const remaining = current.filter((id) => !visibleIds.includes(id));
-                    const sorted = allIds.filter((id) => remaining.includes(id));
-                    onChange(sorted.length === allIds.length ? "all" : sorted);
+                    onChange(
+                      applyDraftChange(draft, allIds, (current) => {
+                        visibleIds.forEach((id) => current.delete(id));
+                      })
+                    );
                   } else {
-                    const current = new Set(draft === "all" ? allIds : draft);
-                    visibleIds.forEach((id) => current.add(id));
-                    const sorted = allIds.filter((id) => current.has(id));
-                    onChange(sorted.length === allIds.length ? "all" : sorted);
+                    onChange(
+                      applyDraftChange(draft, allIds, (current) => {
+                        visibleIds.forEach((id) => current.add(id));
+                      })
+                    );
                   }
                 }}
                 className="text-xs font-medium text-slate-600 hover:underline"
@@ -184,33 +220,32 @@ export function DeferredContractSelector({
 
       {availableCompanies.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] text-slate-500 mr-1">Empresas:</span>
+          <span className="text-[11px] text-slate-500 mr-1">Empresas en reparto:</span>
           {availableCompanies.map((comp) => {
-            const active = companyFilter.includes(comp.code);
+            const state = companyInclusionState(comp.code);
+            const chipClass =
+              state === "all"
+                ? "px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-600 text-white border border-red-600"
+                : state === "partial"
+                  ? "px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-400"
+                  : "px-2 py-0.5 rounded-full text-[11px] font-medium bg-card text-slate-500 border border-slate-300 line-through";
             return (
               <button
                 key={comp.code}
                 type="button"
-                onClick={() => toggleCompany(comp.code)}
-                className={
-                  active
-                    ? "px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-600 text-white border border-red-600"
-                    : "px-2 py-0.5 rounded-full text-[11px] font-medium bg-card text-slate-700 border border-slate-300 hover:border-red-400"
+                disabled={readOnly}
+                onClick={() => setCompanyIncluded(comp.code, state !== "all")}
+                className={chipClass}
+                title={
+                  state === "all"
+                    ? "Excluir todos los contratos de esta empresa"
+                    : "Incluir todos los contratos de esta empresa"
                 }
               >
                 {comp.label}
               </button>
             );
           })}
-          {companyFilter.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setCompanyFilter([])}
-              className="text-[11px] text-slate-500 hover:underline ml-1"
-            >
-              limpiar
-            </button>
-          )}
         </div>
       )}
 
@@ -223,7 +258,7 @@ export function DeferredContractSelector({
       >
         {selectedCount} de {allIds.length} seleccionados
         {selectedCount === 0 && " · seleccione al menos uno para guardar"}
-        {hasFilter && ` · ${filtered.length} coinciden con el filtro`}
+        {hasTextFilter && ` · ${filtered.length} coinciden con la búsqueda`}
       </p>
       <div
         className={
@@ -235,9 +270,7 @@ export function DeferredContractSelector({
           <p className="text-xs text-slate-500">No hay contratos en estado Activo o Prórroga.</p>
         ) : filtered.length === 0 ? (
           <p className="text-xs text-slate-500">
-            {q
-              ? `Sin resultados para “${query}”.`
-              : "Ningún contrato coincide con el filtro de empresas."}
+            {q ? `Sin resultados para “${query}”.` : "Ningún contrato disponible."}
           </p>
         ) : (
           filtered.map((c) => {

@@ -1,10 +1,12 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/modules/core/db/prisma";
 import { getSession, requirePermission } from "@/lib/api/middleware";
+import { apiHandler } from "@/lib/api/handler";
 import { ok, created, badRequest, unauthorized, forbidden, serverError } from "@/lib/api/response";
 import { pilaFincaSchema } from "@/modules/bandeco/validations/schemas";
+import { listPilasFincas, createPilaFinca } from "@/modules/bandeco/services/catalogs-service";
 
-export async function GET() {
+// GET requiere mantenimientos OR operacion — dual permission no encaja en apiHandler simple
+export async function GET(_req: NextRequest) {
   const session = await getSession();
   if (!session) return unauthorized();
   if (
@@ -13,36 +15,18 @@ export async function GET() {
   ) {
     return forbidden();
   }
-
   try {
-    const rows = await prisma.bandecoPilaFinca.findMany({ orderBy: { finca: "asc" } });
-    return ok(rows);
+    return ok(await listPilasFincas());
   } catch (e) {
     return serverError("Error al listar fincas de pilas", e);
   }
 }
 
-export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return unauthorized();
-  if (!requirePermission(session, "bandeco.mantenimientos", "edit")) return forbidden();
-
-  try {
-    const body = await req.json();
-    const parsed = pilaFincaSchema.safeParse(body);
+export const POST = apiHandler(
+  { permission: ["bandeco.mantenimientos", "edit"], errorLabel: "Error al crear finca de pilas" },
+  async ({ req }) => {
+    const parsed = pilaFincaSchema.safeParse(await req.json());
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
-
-    const row = await prisma.bandecoPilaFinca.create({
-      data: {
-        ...parsed.data,
-        desmane: parsed.data.desmane ?? null,
-        paneo: parsed.data.paneo ?? null,
-        zonaMotorizado: parsed.data.zonaMotorizado ?? null,
-        observaciones: parsed.data.observaciones ?? null,
-      },
-    });
-    return created(row);
-  } catch (e) {
-    return serverError("Error al crear finca de pilas", e);
+    return created(await createPilaFinca(parsed.data));
   }
-}
+);

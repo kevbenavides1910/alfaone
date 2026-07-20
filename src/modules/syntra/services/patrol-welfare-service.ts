@@ -1,7 +1,10 @@
 import { prisma } from "@/modules/core/db/prisma";
 import { getTodayScheduleWindows } from "@/modules/syntra/services/patrol-route-schedule-service";
+import { getAuthorizedRoutesForDevice } from "@/modules/syntra/services/patrol-routes-service";
 import { assetImeiFromAttributes } from "@/modules/syntra/services/patrol-inventory-phone-service";
-import { patrolImeisMatch } from "@/modules/syntra/utils/costa-rica-time";
+import { patrolImeisMatch, patrolMarkWithinScheduleWindow } from "@/modules/syntra/utils/costa-rica-time";
+
+const WELFARE_ACK_GRACE_MINUTES = 10;
 
 export type WelfareConfigRow = {
   COD_RUTA: string;
@@ -173,6 +176,105 @@ export function buildWelfareConfigForRoutes(routes: WelfareRouteInput[]): Welfar
     });
   }
   return rows;
+}
+
+function isRouteActiveNow(route: {
+  openSchedule: boolean;
+  schedules: { dayOfWeek: number; startTime: string; endTime: string }[];
+}): boolean {
+  const windows = getTodayScheduleWindows(route);
+  if (windows.length === 0) return false;
+  const now = new Date();
+  return windows.some((w) => patrolMarkWithinScheduleWindow(now, w.startTime, w.endTime));
+}
+
+/** Marca alertas pendientes vencidas como no respondidas. */
+export async function markOverdueWelfareChecksAsMissed(
+  graceMinutes = WELFARE_ACK_GRACE_MINUTES,
+): Promise<number> {
+  const cutoff = new Date(Date.now() - graceMinutes * 60 * 1000);
+  const result = await prisma.patrolWelfareCheck.updateMany({
+    where: {
+      status: "PENDING",
+      scheduledAt: { lt: cutoff },
+    },
+    data: { status: "MISSED" },
+  });
+  return result.count;
+}
+
+/** Crea alertas programadas según intervalo configurado por ruta. */
+export async function runScheduledWelfareChecks(): Promise<{ created: number }> {
+  const routes = await prisma.patrolRoute.findMany({
+    where: { isActive: true, welfareEnabled: true },
+    include: { schedules: true },
+  });
+
+  const now = new Date();
+  let created = 0;
+
+  for (const route of routes) {
+    if (!isRouteActiveNow(route)) continue;
+
+    const imeis = await routeImeis(route.id);
+    if (imeis.length === 0) continue;
+
+    const intervalMs = clampInterval(route.welfareIntervalMinutes) * 60 * 1000;
+    const devices = await prisma.patrolDevice.findMany({
+      where: { imei: { in: imeis } },
+      select: { id: true, imei: true },
+    });
+    const deviceByImei = new Map(devices.map((d) => [d.imei, d.id]));
+
+    for (const imei of imeis) {
+      const pending = await prisma.patrolWelfareCheck.findFirst({
+        where: { routeId: route.id, imei, status: "PENDING" },
+      });
+      if (pending) continue;
+
+      const last = await prisma.patrolWelfareCheck.findFirst({
+        where: { routeId: route.id, imei },
+        orderBy: { scheduledAt: "desc" },
+      });
+      if (last && now.getTime() - last.scheduledAt.getTime() < intervalMs) continue;
+
+      await prisma.patrolWelfareCheck.create({
+        data: {
+          routeId: route.id,
+          imei,
+          deviceId: deviceByImei.get(imei) ?? null,
+          source: "SCHEDULED",
+          status: "PENDING",
+          scheduledAt: now,
+          triggeredAt: now,
+        },
+      });
+      created++;
+    }
+  }
+
+  return { created };
+}
+
+/** Job periódico: vence pendientes y genera alertas programadas. */
+export async function runPatrolWelfareCron() {
+  const missed = await markOverdueWelfareChecksAsMissed();
+  const { created } = await runScheduledWelfareChecks();
+  return { missed, created };
+}
+
+export async function getWelfareConfigForDevice(deviceId: string): Promise<WelfareConfigRow[]> {
+  const routes = await getAuthorizedRoutesForDevice(deviceId);
+  return buildWelfareConfigForRoutes(
+    routes.map((r) => ({
+      code: r.code,
+      name: r.name,
+      welfareEnabled: r.welfareEnabled,
+      welfareIntervalMinutes: r.welfareIntervalMinutes,
+      openSchedule: r.openSchedule,
+      schedules: r.schedules,
+    })),
+  );
 }
 
 export async function acknowledgeWelfareCheck(input: {

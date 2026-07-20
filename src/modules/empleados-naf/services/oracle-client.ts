@@ -50,15 +50,10 @@ function initOracleClientIfNeeded(clientDir?: string) {
   }
 }
 
-export async function withNafOracleConnection<T>(
+async function withOracleConfig<T>(
+  config: NafOracleConfig,
   fn: (conn: oracledb.Connection) => Promise<T>,
 ): Promise<T> {
-  const config = getNafOracleConfig();
-  if (!config) {
-    throw new Error(
-      "Oracle NAF no configurado. Defina NAF_ORACLE_USER, NAF_ORACLE_PASSWORD y NAF_ORACLE_CONNECT_STRING.",
-    );
-  }
   initOracleClientIfNeeded(config.clientDir);
   oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
   const conn = await oracledb.getConnection({
@@ -71,4 +66,52 @@ export async function withNafOracleConnection<T>(
   } finally {
     await conn.close();
   }
+}
+
+export async function withNafOracleConnection<T>(
+  fn: (conn: oracledb.Connection) => Promise<T>,
+): Promise<T> {
+  const config = getNafOracleConfig();
+  if (!config) {
+    throw new Error(
+      "Oracle NAF no configurado. Defina NAF_ORACLE_USER, NAF_ORACLE_PASSWORD y NAF_ORACLE_CONNECT_STRING.",
+    );
+  }
+  return withOracleConfig(config, fn);
+}
+
+/**
+ * Credencial de escritura (Forms: aprobación / prep. ARPLCK).
+ * Requiere NAF_ORACLE_WRITE_USER + NAF_ORACLE_WRITE_PASSWORD.
+ * CONNECT_STRING opcional (cae al de lectura).
+ */
+export function getNafOracleWriteConfig(): NafOracleConfig | null {
+  const user = process.env.NAF_ORACLE_WRITE_USER?.trim();
+  const password = process.env.NAF_ORACLE_WRITE_PASSWORD;
+  const connectString =
+    process.env.NAF_ORACLE_WRITE_CONNECT_STRING?.trim() ||
+    process.env.NAF_ORACLE_CONNECT_STRING?.trim();
+  if (!user || !password || !connectString) return null;
+  return {
+    user,
+    password,
+    connectString,
+    clientDir: process.env.NAF_ORACLE_CLIENT_DIR?.trim(),
+  };
+}
+
+export function isNafOracleWriteConfigured(): boolean {
+  return getNafOracleWriteConfig() != null;
+}
+
+export async function withNafOracleWriteConnection<T>(
+  fn: (conn: oracledb.Connection) => Promise<T>,
+): Promise<T> {
+  const config = getNafOracleWriteConfig();
+  if (!config) {
+    throw new Error(
+      "Oracle NAF escritura no configurada. Defina NAF_ORACLE_WRITE_USER y NAF_ORACLE_WRITE_PASSWORD (opcional: NAF_ORACLE_WRITE_CONNECT_STRING).",
+    );
+  }
+  return withOracleConfig(config, fn);
 }

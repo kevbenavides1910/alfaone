@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQueryTab } from "@/lib/hooks/use-query-tab";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { cn } from "@/lib/utils/cn";
 import { hasPermission, isPlatformAdmin } from "@/lib/permissions/check";
 import type { PermissionKey } from "@/lib/permissions/registry";
@@ -45,9 +45,11 @@ export function AdminSectionNav() {
   const { data: session, status } = useSession();
 
   const visibleTabs = TABS.filter((tab) => {
-    if (status === "loading") return true;
-    if (isPlatformAdmin(session)) return true;
-    return !tab.permission || hasPermission(session, tab.permission, "view");
+    if (status === "loading") return false;
+    if (tab.permission) {
+      return hasPermission(session, tab.permission, "view");
+    }
+    return isPlatformAdmin(session);
   });
 
   return (

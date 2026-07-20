@@ -1,6 +1,6 @@
 import type { Session } from "next-auth";
 import type { ExpenseApprovalStatus, ExpenseType } from "@prisma/client";
-import { prisma } from "@/modules/core/db/prisma";
+import { dbForSession, resolveTenantCompany } from "@/modules/core/db/db-for-session";
 
 export type ListExpensesOptions = {
   page?: number;
@@ -18,10 +18,11 @@ export type ListExpensesOptions = {
 export async function listExpensesForSession(session: Session, opts: ListExpensesOptions = {}) {
   const page = opts.page ?? 1;
   const pageSize = opts.pageSize ?? 50;
+  const db = dbForSession(session);
 
-  const where: Record<string, unknown> = {};
-  if (session.user.company) where.company = session.user.company;
-  else if (opts.company) where.company = opts.company;
+  const where: Record<string, unknown> = { deletedAt: null };
+  const company = resolveTenantCompany(session, opts.company);
+  if (company) where.company = company;
   if (opts.contractId) where.contractId = opts.contractId;
   if (opts.type) where.type = opts.type;
   if (opts.approvalStatus) {
@@ -33,7 +34,7 @@ export async function listExpensesForSession(session: Session, opts: ListExpense
   }
 
   const [expenses, total] = await Promise.all([
-    prisma.expense.findMany({
+    db.expense.findMany({
       where,
       include: {
         contract: { select: { id: true, licitacionNo: true, client: true, company: true } },
@@ -52,7 +53,7 @@ export async function listExpensesForSession(session: Session, opts: ListExpense
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
-    prisma.expense.count({ where }),
+    db.expense.count({ where }),
   ]);
 
   const data = expenses.map((e) => ({

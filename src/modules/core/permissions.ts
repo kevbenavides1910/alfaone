@@ -70,6 +70,20 @@ export function canViewDisciplinarySession(session: Session | null): boolean {
   return hasPermission(session, "disciplinario.historial", "view");
 }
 
+/** Editar historial: estados, alta manual, firma, reasignación, etc. */
+export function canEditDisciplinaryHistorial(roleOrSession: UserRole | Session | null): boolean {
+  if (roleOrSession && typeof roleOrSession === "object" && "user" in roleOrSession) {
+    return hasPermission(roleOrSession, "disciplinario.historial", "edit");
+  }
+  const role = roleOrSession as UserRole;
+  return role === "ADMIN" || role === "SUPERVISOR";
+}
+
+export function canEditDisciplinaryHistorialSession(session: Session | null): boolean {
+  return hasPermission(session, "disciplinario.historial", "edit");
+}
+
+/** Tratamiento: ciclos, convocatorias por empleado, cerrar/reabrir. */
 export function canManageDisciplinary(roleOrSession: UserRole | Session | null): boolean {
   if (roleOrSession && typeof roleOrSession === "object" && "user" in roleOrSession) {
     return hasPermission(roleOrSession, "disciplinario.empleados", "edit");
@@ -80,6 +94,26 @@ export function canManageDisciplinary(roleOrSession: UserRole | Session | null):
 
 export function canManageDisciplinarySession(session: Session | null): boolean {
   return hasPermission(session, "disciplinario.empleados", "edit");
+}
+
+/** Convocatoria: editar agenda y enviar correos. */
+export function canEditDisciplinaryConvocatoriaSession(session: Session | null): boolean {
+  return hasPermission(session, "disciplinario.convocatoria", "edit");
+}
+
+/** Ajustes disciplinario: documento, plantillas, etc. */
+export function canEditDisciplinaryAjustesSession(session: Session | null): boolean {
+  return hasPermission(session, "disciplinario.ajustes", "edit");
+}
+
+/** Ajustes disciplinario: SMTP, firma digital. */
+export function canAdminDisciplinaryAjustesSession(session: Session | null): boolean {
+  return hasPermission(session, "disciplinario.ajustes", "admin");
+}
+
+/** Importación: eliminar lotes y operaciones destructivas. */
+export function canAdminDisciplinaryImportSession(session: Session | null): boolean {
+  return hasPermission(session, "disciplinario.import", "admin");
 }
 
 export function canImportEmployeesSession(session: Session | null): boolean {

@@ -117,6 +117,22 @@ export class FeJobRunner {
         }
         return;
       }
+      case "SYNC_FRAPPE": {
+        const { FeFrappeSyncService } = await import("../services/frappe-sync.service");
+        const sync = new FeFrappeSyncService(this.prisma);
+        const companyCode = String(payload.companyCode ?? "");
+        const facturaId = String(payload.facturaId ?? payload.documentId ?? "");
+        if (!facturaId) {
+          throw new Error("SYNC_FRAPPE sin facturaId");
+        }
+        const outcome = await sync.syncFactura(facturaId, companyCode);
+        if (outcome.skipped && outcome.reason === "not_configured") {
+          feLogger.warn("SYNC_FRAPPE: configurar FRAPPE_BASE_URL / FRAPPE_API_KEY / FRAPPE_API_SECRET", {
+            facturaId,
+          });
+        }
+        return;
+      }
       default:
         feLogger.warn("Tipo de job FE desconocido", { jobType });
     }

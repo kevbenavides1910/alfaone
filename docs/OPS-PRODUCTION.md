@@ -2,14 +2,30 @@
 
 ## Despliegue
 
+Preferido (imagen preconstruida en GHCR, sin compilar en el VPS):
+
 ```bash
 cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
-docker compose -f docker-compose.prod.yml up -d --build
+npm run ops:deploy:auto
+# o explícito:
+APP_IMAGE=ghcr.io/kevbenavides1910/alfaone:latest npm run ops:deploy:pull
+# por SHA (recomendado tras un push):
+APP_IMAGE=ghcr.io/kevbenavides1910/alfaone:<git-sha> npm run ops:deploy:pull
 ```
 
-- **App** (`security_contracts_app`): solo red interna Docker, puerto 3000 no publicado al host.
-- **Nginx** (`security_contracts_nginx`): publica `80` y `3000` → proxy a la app.
-- Secretos: solo en `.env.production` (permisos `600`). No duplicar `DATABASE_URL` en `environment:` del compose.
+La imagen la publica el workflow [`.github/workflows/publish-ghcr.yml`](../.github/workflows/publish-ghcr.yml) en cada push a `main` (y `workflow_dispatch`).
+
+Build local en el VPS solo para WIP / árbol sucio:
+
+```bash
+npm run ops:deploy
+```
+
+Detalle: [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+
+- **App** (`security_contracts_app`): puerto 3000 (compose puede publicarlo; nginx delante).
+- **Nginx** (`security_contracts_nginx`): publica `80` → proxy a la app.
+- Secretos: solo en `.env.production` (permisos `600`).
 
 ## Alertas por correo
 

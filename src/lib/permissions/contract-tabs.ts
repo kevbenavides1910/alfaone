@@ -110,22 +110,18 @@ function effectiveTabLevel(
 ): PermissionLevelId {
   const tabKey = CONTRACT_TAB_BY_ID[tab].permissionKey;
   const perms = getSessionPermissions(session);
-  const tabLevel = perms[tabKey] ?? "none";
-  if (tabLevel !== "none") return tabLevel;
-  return perms["presupuestos.contracts"] ?? "none";
+  return perms[tabKey] ?? "none";
 }
 
-/** Ver pestaña: permiso explícito de la pestaña o herencia de `presupuestos.contracts`. */
+/** Ver pestaña: requiere permiso explícito de la pestaña (sin herencia de presupuestos.contracts). */
 export function canViewContractTab(
   session: Session | null | undefined,
   tab: ContractTabId
 ): boolean {
   const s = session ?? null;
-  if (tab === "expenses") {
-    if (levelMeets(effectiveTabLevel(s, tab), "view")) return true;
-    return hasPermission(s, "gastos.expenses", "view");
-  }
-  return levelMeets(effectiveTabLevel(s, tab), "view");
+  if (levelMeets(effectiveTabLevel(s, tab), "view")) return true;
+  if (tab === "expenses") return hasPermission(s, "gastos.expenses", "view");
+  return false;
 }
 
 /** Editar contenido de la pestaña (no incluye crear/eliminar el contrato). */

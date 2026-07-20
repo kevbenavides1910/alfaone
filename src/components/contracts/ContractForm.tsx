@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import Link from "next/link";
 import { Loader2, Plus, Trash2, MapPin, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,8 +38,7 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: session, status } = useSession();
-  const canEdit =
-    session?.user?.role !== undefined && canModifyContracts(session.user.role);
+  const canEdit = canModifyContracts(session ?? null);
 
   const { data: companiesRes, isLoading: companiesLoading } = useCompanies();
   const activeCompanies = (companiesRes?.data ?? []).filter((c) => c.isActive);

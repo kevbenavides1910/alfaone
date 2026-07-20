@@ -46,10 +46,19 @@ export function computeCxcBalance(input: {
     collectibleBase != null ? roundMoney(Math.max(0, collectibleBase - totalRebajos)) : null;
 
   const totalAbonos = sumAbonos(input.abonos);
+  const hasPaymentActivity = totalAbonos > 0 || input.rebajos.length > 0;
+  /** Import/sync SAP: saldo en BD = monto original hasta que haya abonos o rebajos. */
+  const persistedSaldoMatchesTotal =
+    input.total != null &&
+    input.total > 0 &&
+    input.saldo > 0 &&
+    Math.abs(input.saldo - input.total) <= CXC_SALDO_TOLERANCE_CRC;
 
   let remainingBalance: number | null = null;
-  if (input.status === "COBRADO" || input.saldo <= 0) {
+  if (input.status === "COBRADO" || input.saldo <= CXC_SALDO_TOLERANCE_CRC) {
     remainingBalance = 0;
+  } else if (!hasPaymentActivity && persistedSaldoMatchesTotal) {
+    remainingBalance = roundMoney(input.saldo);
   } else if (adjustedCollectible != null) {
     remainingBalance =
       totalAbonos > 0

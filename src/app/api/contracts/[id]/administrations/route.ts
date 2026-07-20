@@ -17,7 +17,10 @@ function serializeAdmin(row: {
   billingPeriodToDay: number | null;
   sortOrder: number;
   zone: { id: string; name: string } | null;
-  billingLines: { billingLineId: string }[];
+  billingLines: {
+    billingLineId: string;
+    monthlyAmount: { toString(): string } | null;
+  }[];
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -32,6 +35,10 @@ function serializeAdmin(row: {
     billingPeriodFromDay: row.billingPeriodFromDay,
     billingPeriodToDay: row.billingPeriodToDay,
     billingLineIds: row.billingLines.map((l) => l.billingLineId),
+    billingLines: row.billingLines.map((l) => ({
+      billingLineId: l.billingLineId,
+      monthlyAmount: l.monthlyAmount ? parseFloat(l.monthlyAmount.toString()) : null,
+    })),
     sortOrder: row.sortOrder,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -58,7 +65,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       include: {
         zone: { select: { id: true, name: true } },
-        billingLines: { select: { billingLineId: true } },
+        billingLines: { select: { billingLineId: true, monthlyAmount: true } },
       },
     });
 

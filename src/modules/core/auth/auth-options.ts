@@ -5,6 +5,8 @@ import { prisma } from "@/modules/core/db/prisma";
 import type { UserRole } from "@prisma/client";
 import { getUserPermissionContext, getRolePermissions } from "@/lib/permissions/resolve";
 import type { PermissionMap } from "@/lib/permissions/resolve";
+import { legacyRoleFromCode } from "@/lib/impersonation/merge-session";
+import { userIsPlatformAdmin } from "@/modules/core/auth/impersonation-admin";
 
 declare module "next-auth" {
   interface Session {
@@ -49,13 +51,6 @@ declare module "next-auth/jwt" {
   }
 }
 
-async function userIsPlatformAdmin(userId: string): Promise<boolean> {
-  const ctx = await getUserPermissionContext(userId);
-  if (!ctx) return false;
-  if (ctx.roleCode === "ADMIN") return true;
-  return (ctx.permissions["plataforma.roles"] ?? "none") === "admin";
-}
-
 async function applyImpersonatedRole(
   token: import("next-auth/jwt").JWT,
   roleId: string,
@@ -76,11 +71,7 @@ async function applyImpersonatedRole(
   token.roleId = role.id;
   token.roleCode = role.code;
   token.permissions = await getRolePermissions(role.id);
-
-  const legacyRoles = ["ADMIN", "SUPERVISOR", "COMPRAS", "COMMERCIAL", "CONSULTA"] as const;
-  if (legacyRoles.includes(role.code as (typeof legacyRoles)[number])) {
-    token.role = role.code as UserRole;
-  }
+  token.role = legacyRoleFromCode(role.code);
 }
 
 async function clearImpersonation(token: import("next-auth/jwt").JWT): Promise<void> {
@@ -94,10 +85,7 @@ async function clearImpersonation(token: import("next-auth/jwt").JWT): Promise<v
       token.roleId = role.id;
       token.roleCode = role.code;
       token.permissions = await getRolePermissions(role.id);
-      const legacyRoles = ["ADMIN", "SUPERVISOR", "COMPRAS", "COMMERCIAL", "CONSULTA"] as const;
-      if (legacyRoles.includes(role.code as (typeof legacyRoles)[number])) {
-        token.role = role.code as UserRole;
-      }
+      token.role = legacyRoleFromCode(role.code);
     } else {
       const ctx = await getUserPermissionContext(userId);
       if (ctx) {
@@ -169,16 +157,18 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Contraseña", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        const email = credentials?.email?.trim().toLowerCase() ?? "";
+        const password = credentials?.password ?? "";
+        if (!email || !password) return null;
 
         try {
           const user = await prisma.user.findUnique({
-            where: { email: credentials.email },
+            where: { email },
           });
 
           if (!user || !user.passwordHash || !user.isActive) return null;
 
-          const valid = await bcrypt.compare(credentials.password, user.passwordHash);
+          const valid = await bcrypt.compare(password, user.passwordHash);
           if (!valid) return null;
 
           const ctx = await getUserPermissionContext(user.id);
@@ -239,6 +229,7 @@ export const authOptions: NextAuthOptions = {
             token.roleId = ctx.roleId;
             token.roleCode = ctx.roleCode;
             token.permissions = ctx.permissions;
+            token.role = legacyRoleFromCode(ctx.roleCode);
           }
         }
       }

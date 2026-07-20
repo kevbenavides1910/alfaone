@@ -53,6 +53,9 @@ export const contractCreateSchema = contractInputSchema
 export const contractUpdateSchema = contractInputSchema
   .partial()
   .omit({ licitacionNo: true })
+  .extend({
+    administrationsCount: z.coerce.number().int().min(1).max(20).optional(),
+  })
   .superRefine((data, ctx) => {
     const L = data.laborPct;
     const S = data.suppliesPct;
@@ -86,6 +89,7 @@ export type PeriodInput = z.infer<typeof periodSchema>;
 export const billingRequirementSchema = z.object({
   description: z.string().min(2, "Descripción requerida"),
   notes: z.string().optional(),
+  requiresEvidence: z.boolean().optional().default(true),
   sortOrder: z.coerce.number().int().optional(),
 });
 
@@ -139,6 +143,11 @@ export const contractBillingLineUpdateSchema = contractBillingLineSchema.partial
 
 export type ContractBillingLineInput = z.infer<typeof contractBillingLineSchema>;
 
+export const contractAdministrationBillingLineSchema = z.object({
+  billingLineId: z.string().min(1),
+  monthlyAmount: z.number().positive().optional().nullable(),
+});
+
 export const contractAdministrationSchema = z.object({
   name: z.string().min(1, "Nombre requerido").max(200),
   managerName: z.string().min(1, "Encargado requerido").max(200),
@@ -151,6 +160,7 @@ export const contractAdministrationSchema = z.object({
   managerPhone: z.string().optional().nullable(),
   zoneId: z.string().nullable().optional(),
   billingLineIds: z.array(z.string()).default([]),
+  billingLines: z.array(contractAdministrationBillingLineSchema).default([]),
   billingPeriodFromDay: z.number().int().min(1).max(31).nullable().optional(),
   billingPeriodToDay: z.number().int().min(1).max(31).nullable().optional(),
   sortOrder: z.coerce.number().int().optional(),

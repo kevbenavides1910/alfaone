@@ -18,3 +18,5 @@ __pycache__/
 *.py[cod]
 cargas/*.csv
 cargas/*.xlsx
+
+.deploy-logs/

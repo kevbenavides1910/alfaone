@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import { formatDateTime } from "@/lib/utils/format";
+import { type TableColumnFilterDef, TableColumnFilterHead } from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 
 type OutOfRouteResponse = {
   data: {
@@ -84,6 +86,19 @@ export default function MarcasFueraRutaPage() {
 
   const filas = data?.data?.filas ?? [];
   const totales = data?.data?.totales;
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+
+  type Row = NonNullable<OutOfRouteResponse["data"]>["filas"][number];
+  const columnDefs: TableColumnFilterDef<Row>[] = [
+    { key: "fecha", label: "Fecha / hora", headerClassName: "px-3 py-2 text-left", getValue: (r) => r.fecha },
+    { key: "telefono", label: "Teléfono", headerClassName: "px-3 py-2 text-left", getValue: (r) => r.imei },
+    { key: "empleado", label: "Empleado", headerClassName: "px-3 py-2 text-left", getValue: (r) => r.employeeName ?? r.employeeCode ?? "" },
+    { key: "tag", label: "Tag NFC", headerClassName: "px-3 py-2 text-left", getValue: (r) => r.nfcTagCode ?? "" },
+    { key: "ruta", label: "Ruta / punto", headerClassName: "px-3 py-2 text-left", getValue: (r) => r.routeCode ?? r.routeName ?? r.pointLabel ?? r.pointCode ?? "" },
+    { key: "horario", label: "Horario prog.", headerClassName: "px-3 py-2 text-left", getValue: (r) => r.horarioProgramado ?? "" },
+    { key: "motivo", label: "Motivo", headerClassName: "px-3 py-2 text-left", getValue: (r) => r.motivoLabel ?? r.motivo ?? "" },
+  ];
+  const displayedRows = filterRowsByColumnFilters(filas, columnFilters, columnDefs);
 
   function runSearch() {
     setQueryDesde(desde);
@@ -197,15 +212,19 @@ export default function MarcasFueraRutaPage() {
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 border-b">
-              <tr>
-                <th className="px-3 py-2 text-left">Fecha / hora</th>
-                <th className="px-3 py-2 text-left">Teléfono</th>
-                <th className="px-3 py-2 text-left">Empleado</th>
-                <th className="px-3 py-2 text-left">Tag NFC</th>
-                <th className="px-3 py-2 text-left">Ruta / punto</th>
-                <th className="px-3 py-2 text-left">Horario prog.</th>
-                <th className="px-3 py-2 text-left">Motivo</th>
-              </tr>
+              <TableColumnFilterHead
+                columns={columnDefs}
+                rows={filas}
+                filters={columnFilters}
+                onFilterChange={(k, v) => {
+                  setColumnFilters((s) => ({ ...s, [k]: v }));
+                  if (k === "telefono") {
+                    setImei(v);
+                    setQueryDesde(queryDesde);
+                    setQueryHasta(queryHasta);
+                  }
+                }}
+              />
             </thead>
             <tbody>
               {isLoading ? (
@@ -227,7 +246,7 @@ export default function MarcasFueraRutaPage() {
                   </td>
                 </tr>
               ) : (
-                filas.map((f) => (
+                displayedRows.map((f) => (
                   <tr key={f.markId} className="border-b hover:bg-muted/20">
                     <td className="px-3 py-2 whitespace-nowrap">
                       <div>{f.fecha}</div>

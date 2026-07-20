@@ -28,3 +28,21 @@ export {
   updateSigDocumentType,
   deleteSigDocumentType,
 } from "./services/catalogs";
+export {
+  auditDetailInclude,
+  createActionPlan,
+  createAudit,
+  createChecklistItem,
+  createFinding,
+  createFollowUp,
+  getAuditDetail,
+  getCurrentAuditQuarter,
+  listAuditQuarterDashboard,
+  updateActionPlan,
+  updateAudit,
+  updateChecklistItem,
+  updateFinding,
+  updateFollowUp,
+  type AuditDetail,
+  type QuarterProcedure,
+} from "./services/audits";

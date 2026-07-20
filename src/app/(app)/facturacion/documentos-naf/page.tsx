@@ -90,12 +90,13 @@ export default function DocumentosNafPage() {
   const [company, setCompany] = useState("ALL");
   const [tipoDoc, setTipoDoc] = useState("ALL");
   const [search, setSearch] = useState("");
+  const [ligadoFilter, setLigadoFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
   const yearOptions = useMemo(() => [currentYear() - 1, currentYear(), currentYear() + 1], []);
 
-  const queryKey = ["facturacion-documentos-naf", periodMonth, periodYear, company, tipoDoc, search, page];
+  const queryKey = ["facturacion-documentos-naf", periodMonth, periodYear, company, tipoDoc, search, ligadoFilter, page];
 
   const { data, isLoading, isFetching, isError, error, refetch, dataUpdatedAt } = useQuery<{
     data: NafDocumentosListResult;
@@ -114,6 +115,7 @@ export default function DocumentosNafPage() {
       if (company !== "ALL") params.set("company", company);
       if (tipoDoc !== "ALL") params.set("tipoDoc", tipoDoc);
       if (search.trim()) params.set("search", search.trim());
+      if (ligadoFilter !== "ALL") params.set("ligadoFilter", ligadoFilter);
       const r = await fetch(`/api/facturacion/documentos-naf?${params}`);
       const json = await r.json();
       if (json.error) throw new Error(json.error.message || "Error al cargar documentos NAF");
@@ -226,6 +228,22 @@ export default function DocumentosNafPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select
+              value={ligadoFilter}
+              onValueChange={(v) => {
+                setLigadoFilter(v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Ligado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos (ligado)</SelectItem>
+                <SelectItem value="LIGADOS">Solo ligados</SelectItem>
+                <SelectItem value="NO_LIGADOS">Solo no ligados</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="relative flex-1 min-w-[220px] max-w-sm">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <Input
@@ -286,7 +304,7 @@ export default function DocumentosNafPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm" data-table-id="facturacion-documentos-naf">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
                       <th className="px-4 py-3 font-medium">Fecha</th>
@@ -298,13 +316,14 @@ export default function DocumentosNafPage() {
                       <th className="px-4 py-3 font-medium text-right">Total</th>
                       <th className="px-4 py-3 font-medium">Clave FE</th>
                       <th className="px-4 py-3 font-medium">Estado</th>
+                      <th className="px-4 py-3 font-medium">Ligado</th>
                       <th className="px-4 py-3 font-medium text-center">PDF</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="p-12 text-center text-slate-400">
+                        <td colSpan={11} className="p-12 text-center text-slate-400">
                           No hay documentos para {monthLabel} {periodYear}.
                         </td>
                       </tr>
@@ -326,12 +345,12 @@ export default function DocumentosNafPage() {
                           <td className="px-4 py-3 tabular-nums">
                             {row.noFisico ?? row.noFactu}
                           </td>
-                          <td className="px-4 py-3 max-w-[220px]">
-                            <div className="truncate" title={row.cliente}>
+                          <td className="px-4 py-3 max-w-none">
+                            <div className="whitespace-nowrap" title={row.cliente}>
                               {row.cliente}
                             </div>
                           </td>
-                          <td className="px-4 py-3 max-w-[180px]">
+                          <td className="px-4 py-3 max-w-none">
                             <div className="truncate text-xs text-slate-600" title={row.contrato ?? ""}>
                               {row.contrato ?? "—"}
                             </div>
@@ -339,13 +358,13 @@ export default function DocumentosNafPage() {
                           <td className="px-4 py-3 text-right tabular-nums font-medium">
                             {formatCurrency(row.total)}
                           </td>
-                          <td className="px-4 py-3 max-w-[160px]">
+                          <td className="px-4 py-3">
                             {row.claveFactura ? (
                               <span
-                                className="text-xs font-mono text-slate-600 truncate block"
+                                className="font-mono text-xs text-slate-600 whitespace-nowrap"
                                 title={row.claveFactura}
                               >
-                                {row.consecutivoFe ?? row.claveFactura.slice(-12)}
+                                {row.claveFactura}
                               </span>
                             ) : (
                               <span className="text-slate-400">—</span>
@@ -361,7 +380,14 @@ export default function DocumentosNafPage() {
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-center">
+                                                    <td className="px-4 py-3">
+                            {row.ligadoAFacturacion ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Sí</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-slate-500">No</Badge>
+                            )}
+                          </td>
+<td className="px-4 py-3 text-center">
                             {canTryPdf(row) ? (
                               <div className="flex flex-col items-center gap-1">
                                 <Button

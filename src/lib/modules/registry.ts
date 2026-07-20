@@ -155,6 +155,20 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     ],
   },
 
+
+  nafOperaciones: {
+    id: "nafOperaciones",
+    label: "Operaciones NAF",
+    description: "Roles, programación y asistencia Forms OP (AROP*).",
+    uiRoutePrefixes: ["/naf-operaciones"],
+    apiRoutePrefixes: ["/api/naf-operaciones"],
+    codePaths: [
+      "src/app/(app)/naf-operaciones",
+      "src/modules/naf-operaciones",
+    ],
+    prismaModels: [],
+  },
+
   empleadosNaf: {
     id: "empleadosNaf",
     label: "Empleados NAF",
@@ -166,6 +180,21 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
       "src/modules/empleados-naf",
     ],
     prismaModels: ["EmpleadoNaf"],
+  },
+
+
+  expedienteDigital: {
+    id: "expedienteDigital",
+    label: "Expediente digital",
+    description: "Documentos de empleados NAF agrupados por cédula.",
+    uiRoutePrefixes: ["/expediente-digital"],
+    apiRoutePrefixes: ["/api/expediente-digital"],
+    codePaths: [
+      "src/app/(app)/expediente-digital",
+      "src/modules/expediente-digital",
+      "src/components/expediente-digital",
+    ],
+    prismaModels: [],
   },
 
   ventas: {
@@ -252,6 +281,10 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
       "SigDocument",
       "SigDocumentVersion",
       "SigDocumentAuditLog",
+      "Audit",
+      "Finding",
+      "ActionPlan",
+      "FollowUp",
     ],
   },
 
@@ -302,7 +335,9 @@ export function resolveModuleFromPath(pathname: string): AppModuleId {
   const order: AppModuleId[] = [
     "disciplinario",
     "empleados",
+    "nafOperaciones",
     "empleadosNaf",
+    "expedienteDigital",
     "sig",
     "recorridos",
     "ticketsTi",

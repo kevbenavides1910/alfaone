@@ -8,6 +8,8 @@ import { BrandingProvider } from "@/components/branding/BrandingProvider";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { ImpersonationProvider } from "@/lib/impersonation/context";
 import { ImpersonationBanner } from "@/components/layout/ImpersonationBanner";
+import { ImpersonationGate } from "@/lib/impersonation/ImpersonationGate";
+import { ThemeProvider } from "@/lib/theme/theme-context";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -23,11 +25,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider refetchOnWindowFocus>
       <QueryClientProvider client={queryClient}>
         <BrandingProvider>
-          <ImpersonationProvider>
-            <ImpersonationBanner />
-            {children}
-            <CommandPalette />
-          </ImpersonationProvider>
+          <ThemeProvider>
+            <ImpersonationProvider>
+              <ImpersonationBanner />
+              <ImpersonationGate>
+                {children}
+                <CommandPalette />
+              </ImpersonationGate>
+            </ImpersonationProvider>
+          </ThemeProvider>
         </BrandingProvider>
         <Toaster />
       </QueryClientProvider>

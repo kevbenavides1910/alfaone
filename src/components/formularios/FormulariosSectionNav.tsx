@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import type { PermissionKey } from "@/lib/permissions/registry";
 import { ModuleSubnav } from "@/components/layout/ModuleSubnav";

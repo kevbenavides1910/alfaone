@@ -2,7 +2,14 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useSession } from "next-auth/react";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
+import { useSession } from "@/lib/auth/client-session";
 import { Plus, Pencil, UserX, UserCheck, KeyRound, X, FileSpreadsheet } from "lucide-react";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import { Topbar } from "@/components/layout/Topbar";
@@ -277,6 +284,16 @@ export default function UsersPage() {
   const users = data?.data ?? [];
   const active = users.filter((u) => u.isActive);
   const inactive = users.filter((u) => !u.isActive);
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const userColumnDefs: TableColumnFilterDef<User>[] = [
+    { key: "name", label: "Nombre", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (u) => u.name },
+    { key: "email", label: "Email", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (u) => u.email },
+    { key: "role", label: "Rol", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (u) => u.roleName ?? u.roleCode ?? "" },
+    { key: "company", label: "Empresa", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (u) => u.company ?? "" },
+    { key: "estado", label: "Estado", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (u) => (u.isActive ? "Activo" : "Inactivo") },
+    { key: "actions", label: "", headerClassName: "px-4 py-3", filterable: false, getValue: () => "" },
+  ];
+  const displayedRows = filterRowsByColumnFilters(users, columnFilters, userColumnDefs);
 
   if (status === "loading") {
     return (
@@ -358,17 +375,15 @@ export default function UsersPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Nombre</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Email</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Rol</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Empresa</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Estado</th>
-                      <th className="px-4 py-3" />
-                    </tr>
+                    <TableColumnFilterHead
+                      columns={userColumnDefs}
+                      rows={users}
+                      filters={columnFilters}
+                      onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                    />
                   </thead>
                   <tbody className="divide-y">
-                    {users.map((u) => (
+                    {displayedRows.map((u) => (
                       <tr key={u.id} className={`hover:bg-muted/50 transition-colors ${!u.isActive ? "opacity-50" : ""}`}>
                         <td className="px-4 py-3 font-medium text-slate-800">{u.name}</td>
                         <td className="px-4 py-3 text-slate-500">{u.email}</td>

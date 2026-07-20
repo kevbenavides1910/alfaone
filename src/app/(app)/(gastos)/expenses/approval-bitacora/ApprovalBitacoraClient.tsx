@@ -9,6 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -169,6 +176,38 @@ export default function ApprovalBitacoraClient() {
     setQDebounced(q);
     setPage(1);
   }
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const decisionFilterCols: TableColumnFilterDef<DecisionRow>[] = [
+    { key: "decidedAt", label: "Fecha decisión", getValue: (r) => r.decidedAt, headerClassName: "px-3 py-2.5" },
+    { key: "stepOrder", label: "Paso", getValue: (r) => String(r.stepOrder), headerClassName: "px-3 py-2.5" },
+    { key: "decision", label: "Decisión", getValue: (r) => r.decision, headerClassName: "px-3 py-2.5" },
+    { key: "approver", label: "Aprobador", getValue: (r) => r.approver.name, headerClassName: "px-3 py-2.5" },
+    { key: "sequentialNo", label: "N° gasto", getValue: (r) => String(r.expense.sequentialNo), headerClassName: "px-3 py-2.5" },
+    { key: "description", label: "Descripción", getValue: (r) => r.expense.description, headerClassName: "px-3 py-2.5" },
+    { key: "type", label: "Tipo", getValue: (r) => r.expense.type, headerClassName: "px-3 py-2.5" },
+    { key: "company", label: "Empresa", getValue: (r) => r.expense.company ?? "", headerClassName: "px-3 py-2.5" },
+    { key: "amount", label: "Monto", getValue: (r) => String(r.expense.amount), headerClassName: "px-3 py-2.5 text-right" },
+    { key: "status", label: "Estado gasto", getValue: (r) => r.expense.approvalStatus, headerClassName: "px-3 py-2.5" },
+    { key: "comment", label: "Comentario", getValue: (r) => r.comment ?? "", headerClassName: "px-3 py-2.5" },
+  ];
+  const submissionFilterCols: TableColumnFilterDef<SubmissionRow>[] = [
+    { key: "submittedAt", label: "Enviado (registro)", getValue: (r) => r.submittedAt, headerClassName: "px-3 py-2.5" },
+    { key: "submittedBy", label: "Registró", getValue: (r) => r.submittedBy.name, headerClassName: "px-3 py-2.5" },
+    { key: "sequentialNo", label: "N° gasto", getValue: (r) => String(r.expense.sequentialNo), headerClassName: "px-3 py-2.5" },
+    { key: "description", label: "Descripción", getValue: (r) => r.expense.description, headerClassName: "px-3 py-2.5" },
+    { key: "type", label: "Tipo", getValue: (r) => r.expense.type, headerClassName: "px-3 py-2.5" },
+    { key: "company", label: "Empresa", getValue: (r) => r.expense.company ?? "", headerClassName: "px-3 py-2.5" },
+    { key: "amount", label: "Monto", getValue: (r) => String(r.expense.amount), headerClassName: "px-3 py-2.5 text-right" },
+    { key: "steps", label: "Pasos", getValue: (r) => String(r.expense.requiredApprovalSteps), headerClassName: "px-3 py-2.5" },
+    { key: "status", label: "Estado", getValue: (r) => r.expense.approvalStatus, headerClassName: "px-3 py-2.5" },
+  ];
+  const currentFilterCols = mode === "decisions" ? decisionFilterCols : submissionFilterCols;
+  const displayedDecisions = data?.mode === "decisions" && (data.data ?? []).length > 0
+    ? filterRowsByColumnFilters(data.data as DecisionRow[], columnFilters, decisionFilterCols)
+    : [];
+  const displayedSubmissions = data?.mode === "submissions" && (data.data ?? []).length > 0
+    ? filterRowsByColumnFilters(data.data as SubmissionRow[], columnFilters, submissionFilterCols)
+    : [];
 
   return (
     <>
@@ -332,29 +371,23 @@ export default function ApprovalBitacoraClient() {
                 <div className="rounded-md border overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/50 text-left text-xs font-semibold text-slate-600">
-                        <th className="px-3 py-2.5">Fecha decisión</th>
-                        <th className="px-3 py-2.5">Paso</th>
-                        <th className="px-3 py-2.5">Decisión</th>
-                        <th className="px-3 py-2.5">Aprobador</th>
-                        <th className="px-3 py-2.5">N° gasto</th>
-                        <th className="px-3 py-2.5">Descripción</th>
-                        <th className="px-3 py-2.5">Tipo</th>
-                        <th className="px-3 py-2.5">Empresa</th>
-                        <th className="px-3 py-2.5 text-right">Monto</th>
-                        <th className="px-3 py-2.5">Estado gasto</th>
-                        <th className="px-3 py-2.5">Comentario</th>
-                      </tr>
+                      <TableColumnFilterHead
+                        columns={decisionFilterCols}
+                        rows={data?.data ?? []}
+                        filters={columnFilters}
+                        onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                        headerRowClassName="border-b bg-muted/50 text-left text-xs font-semibold text-slate-600"
+                      />
                     </thead>
                     <tbody className="divide-y">
-                      {data.data.length === 0 ? (
+                      {displayedDecisions.length === 0 ? (
                         <tr>
                           <td colSpan={11} className="px-3 py-8 text-center text-slate-500">
                             Sin registros con los filtros actuales
                           </td>
                         </tr>
                       ) : (
-                        data.data.map((row) => (
+                        displayedDecisions.map((row: DecisionRow) => (
                           <tr key={row.id} className="hover:bg-muted/50/80">
                             <td className="px-3 py-2 whitespace-nowrap">
                               {new Date(row.decidedAt).toLocaleString("es-CR", {
@@ -402,27 +435,23 @@ export default function ApprovalBitacoraClient() {
                 <div className="rounded-md border overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/50 text-left text-xs font-semibold text-slate-600">
-                        <th className="px-3 py-2.5">Enviado (registro)</th>
-                        <th className="px-3 py-2.5">Registró</th>
-                        <th className="px-3 py-2.5">N° gasto</th>
-                        <th className="px-3 py-2.5">Descripción</th>
-                        <th className="px-3 py-2.5">Tipo</th>
-                        <th className="px-3 py-2.5">Empresa</th>
-                        <th className="px-3 py-2.5 text-right">Monto</th>
-                        <th className="px-3 py-2.5">Pasos</th>
-                        <th className="px-3 py-2.5">Estado</th>
-                      </tr>
+                      <TableColumnFilterHead
+                        columns={submissionFilterCols}
+                        rows={data?.data ?? []}
+                        filters={columnFilters}
+                        onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                        headerRowClassName="border-b bg-muted/50 text-left text-xs font-semibold text-slate-600"
+                      />
                     </thead>
                     <tbody className="divide-y">
-                      {data.data.length === 0 ? (
+                      {displayedSubmissions.length === 0 ? (
                         <tr>
                           <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
                             Sin registros con los filtros actuales
                           </td>
                         </tr>
                       ) : (
-                        data.data.map((row) => (
+                        displayedSubmissions.map((row: SubmissionRow) => (
                           <tr key={row.id} className="hover:bg-muted/50/80">
                             <td className="px-3 py-2 whitespace-nowrap">
                               {new Date(row.submittedAt).toLocaleString("es-CR", {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { Topbar } from "@/components/layout/Topbar";
 import { cn } from "@/lib/utils/cn";
 import { hasPermission } from "@/lib/permissions/check";

@@ -4,7 +4,7 @@ import { Topbar } from "@/components/layout/Topbar";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Building2, FileText, Inbox, Mail, Receipt, Settings, ShoppingCart, Wallet } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { cn } from "@/lib/utils/cn";
 import { hasPermission } from "@/lib/permissions/check";
 import {

@@ -9,7 +9,6 @@ import { FeNotaRepository } from "../repositories/fe-nota.repository";
 import { FeReciboPagoRepository } from "../repositories/fe-recibo-pago.repository";
 import { FePdfService } from "./pdf/pdf.service";
 import { FE_STORAGE_ROOT } from "../utils/fe-storage";
-import { notDeleted } from "../utils/soft-delete";
 
 export class FeAdjuntosDownloadService {
   private readonly facturaRepo: FeFacturaRepository;
@@ -35,19 +34,9 @@ export class FeAdjuntosDownloadService {
       throw new FeDomainError("La factura no tiene comprobante electrónico", "FE_SIN_COMPROBANTE");
     }
 
-    let adjunto = await this.prisma.feAdjuntoPDF.findFirst({
-      where: { comprobanteId: factura.comprobante.id, origen: "GENERADO", ...notDeleted },
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (!adjunto) {
-      const generated = await this.pdf.generarFacturaPdf(factura.comprobante.id, companyCode);
-      adjunto = await this.prisma.feAdjuntoPDF.findFirstOrThrow({
-        where: { comprobanteId: factura.comprobante.id, storagePath: generated.storagePath },
-      });
-    }
-
-    return this.readFileResponse(adjunto.storagePath, adjunto.fileName, adjunto.mimeType);
+    // Regenera siempre para aplicar el diseño vigente del PDF.
+    const generated = await this.pdf.generarFacturaPdf(factura.comprobante.id, companyCode);
+    return this.readFileResponse(generated.storagePath, generated.fileName, "application/pdf");
   }
 
   async resolveFacturaXml(facturaId: string, companyCode: string) {
@@ -61,17 +50,8 @@ export class FeAdjuntosDownloadService {
     const doc = await this.compraRepo.findById(id, empresa.id);
     if (!doc.comprobante) throw new FeDomainError("Sin comprobante", "FE_SIN_COMPROBANTE");
 
-    let adjunto = await this.prisma.feAdjuntoPDF.findFirst({
-      where: { comprobanteId: doc.comprobante.id, origen: "GENERADO", ...notDeleted },
-      orderBy: { createdAt: "desc" },
-    });
-    if (!adjunto) {
-      const generated = await this.pdf.generarFacturaCompraPdf(doc.comprobante.id, companyCode);
-      adjunto = await this.prisma.feAdjuntoPDF.findFirstOrThrow({
-        where: { comprobanteId: doc.comprobante.id, storagePath: generated.storagePath },
-      });
-    }
-    return this.readFileResponse(adjunto.storagePath, adjunto.fileName, adjunto.mimeType);
+    const generated = await this.pdf.generarFacturaCompraPdf(doc.comprobante.id, companyCode);
+    return this.readFileResponse(generated.storagePath, generated.fileName, "application/pdf");
   }
 
   async resolveFacturaCompraXml(id: string, companyCode: string) {
@@ -85,17 +65,8 @@ export class FeAdjuntosDownloadService {
     const doc = await this.reciboRepo.findById(id, empresa.id);
     if (!doc.comprobante) throw new FeDomainError("Sin comprobante", "FE_SIN_COMPROBANTE");
 
-    let adjunto = await this.prisma.feAdjuntoPDF.findFirst({
-      where: { comprobanteId: doc.comprobante.id, origen: "GENERADO", ...notDeleted },
-      orderBy: { createdAt: "desc" },
-    });
-    if (!adjunto) {
-      const generated = await this.pdf.generarReciboPagoPdf(doc.comprobante.id, companyCode);
-      adjunto = await this.prisma.feAdjuntoPDF.findFirstOrThrow({
-        where: { comprobanteId: doc.comprobante.id, storagePath: generated.storagePath },
-      });
-    }
-    return this.readFileResponse(adjunto.storagePath, adjunto.fileName, adjunto.mimeType);
+    const generated = await this.pdf.generarReciboPagoPdf(doc.comprobante.id, companyCode);
+    return this.readFileResponse(generated.storagePath, generated.fileName, "application/pdf");
   }
 
   async resolveReciboPagoXml(id: string, companyCode: string) {
@@ -132,20 +103,11 @@ export class FeAdjuntosDownloadService {
         : await this.notaRepo.findDebitoById(id, empresa.id);
     if (!nota.comprobante) throw new FeDomainError("Sin comprobante", "FE_SIN_COMPROBANTE");
 
-    let adjunto = await this.prisma.feAdjuntoPDF.findFirst({
-      where: { comprobanteId: nota.comprobante.id, origen: "GENERADO", ...notDeleted },
-      orderBy: { createdAt: "desc" },
-    });
-    if (!adjunto) {
-      const generated =
-        kind === "nota_credito"
-          ? await this.pdf.generarNotaCreditoPdf(nota.comprobante.id, companyCode)
-          : await this.pdf.generarNotaDebitoPdf(nota.comprobante.id, companyCode);
-      adjunto = await this.prisma.feAdjuntoPDF.findFirstOrThrow({
-        where: { comprobanteId: nota.comprobante.id, storagePath: generated.storagePath },
-      });
-    }
-    return this.readFileResponse(adjunto.storagePath, adjunto.fileName, adjunto.mimeType);
+    const generated =
+      kind === "nota_credito"
+        ? await this.pdf.generarNotaCreditoPdf(nota.comprobante.id, companyCode)
+        : await this.pdf.generarNotaDebitoPdf(nota.comprobante.id, companyCode);
+    return this.readFileResponse(generated.storagePath, generated.fileName, "application/pdf");
   }
 
   private resolveComprobanteXml(

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Topbar } from "@/components/layout/Topbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -194,12 +194,14 @@ export default function AnnualReportPage() {
   const params = new URLSearchParams();
   if (year > 0) params.set("year", String(year));
   if (companies.length === 1) params.set("company", companies[0]);
+  else if (companies.length > 1) params.set("companies", companies.join(","));
   if (selectedPartida !== "ALL") params.set("partida", selectedPartida);
 
-  const { data, isLoading } = useQuery<{ data: AnnualReport }>({
+  const { data, isLoading, isFetching } = useQuery<{ data: AnnualReport }>({
     queryKey: ["annual-report", year, companies, selectedPartida],
     queryFn: () => fetch(`/api/reports/annual?${params}`).then((r) => r.json()),
-    staleTime: 60000,
+    staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
   });
 
   // Sync year from server response using useEffect (avoids setState-during-render warning)
@@ -215,10 +217,8 @@ export default function AnnualReportPage() {
   const partidaLabel = REPORT_PARTIDA_OPTIONS.find((o) => o.value === partida)?.label ?? "Todas las partidas";
   const effectiveYear = report?.year ?? (year > 0 ? year : new Date().getFullYear());
 
-  // Filter rows by selected companies (client-side for multi)
-  const rows = report?.rows.filter((r) =>
-    companies.length === 0 || companies.includes(r.company)
-  ) ?? [];
+  // El API ya filtra por empresa(s); mantener filtro cliente solo como red de seguridad.
+  const rows = report?.rows ?? [];
 
   // Summary totals
   const totalBilling   = rows.reduce((s, r) => s + r.months.reduce((ms, m) => ms + (m.hasData ? m.monthlyBilling : 0), 0), 0);
@@ -344,6 +344,10 @@ export default function AnnualReportPage() {
             </Select>
           </div>
 
+          {isFetching && report && (
+            <div className="text-xs text-slate-500 self-center pb-1">Actualizando…</div>
+          )}
+
           <div>
             <label className="text-xs font-medium text-slate-600 block mb-1">&nbsp;</label>
             <Button
@@ -421,7 +425,7 @@ export default function AnnualReportPage() {
         {/* Table */}
         <Card>
           <CardContent className="p-0">
-            {isLoading ? (
+            {isLoading && !report ? (
               <div className="p-12 text-center text-slate-400">Calculando reporte...</div>
             ) : rows.length === 0 ? (
               <div className="p-12 text-center text-slate-400">No hay contratos para el período seleccionado</div>

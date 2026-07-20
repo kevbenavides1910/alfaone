@@ -32,6 +32,7 @@ import {
   administrationUsesContractBillingPeriod,
   resolveAdministrationBillingPeriod,
 } from "@/modules/presupuestos/business/administration-billing-period";
+import { sumAdministrationBillingLines } from "@/modules/presupuestos/business/administration-billing-amount";
 import {
   contractBillingLineSchema,
   contractAdministrationSchema,
@@ -58,6 +59,7 @@ interface Administration {
   billingPeriodFromDay: number | null;
   billingPeriodToDay: number | null;
   billingLineIds: string[];
+  billingLines: { billingLineId: string; monthlyAmount: number | null }[];
   sortOrder: number;
 }
 
@@ -155,12 +157,14 @@ export function AdministrationsTab({ contractId, readOnly }: Props) {
       managerPhone: "",
       zoneId: null,
       billingLineIds: [],
+      billingLines: [],
       billingPeriodFromDay: null,
       billingPeriodToDay: null,
     },
   });
 
-  const selectedLineIds = watchAdmin("billingLineIds") ?? [];
+  const selectedBillingLines = watchAdmin("billingLines") ?? [];
+  const selectedLineIds = selectedBillingLines.map((l) => l.billingLineId);
 
   const saveCountMutation = useMutation({
     mutationFn: async (count: number) => {
@@ -232,6 +236,7 @@ export function AdministrationsTab({ contractId, readOnly }: Props) {
           managerEmail: payload.managerEmail?.trim() || undefined,
           billingPeriodFromDay: useContractPeriod ? null : payload.billingPeriodFromDay ?? null,
           billingPeriodToDay: useContractPeriod ? null : payload.billingPeriodToDay ?? null,
+          billingLines: payload.billingLines,
         }),
       });
       const json = await r.json();
@@ -280,6 +285,9 @@ export function AdministrationsTab({ contractId, readOnly }: Props) {
       managerPhone: row.managerPhone ?? "",
       zoneId: row.zoneId,
       billingLineIds: row.billingLineIds,
+      billingLines: row.billingLines.length > 0
+        ? row.billingLines
+        : row.billingLineIds.map((id) => ({ billingLineId: id, monthlyAmount: null })),
       billingPeriodFromDay: inherits ? resolved.fromDay : row.billingPeriodFromDay,
       billingPeriodToDay: inherits ? resolved.toDay : row.billingPeriodToDay,
     });
@@ -301,11 +309,37 @@ export function AdministrationsTab({ contractId, readOnly }: Props) {
   }
 
   function toggleBillingLine(lineId: string) {
-    const current = selectedLineIds;
-    const next = current.includes(lineId)
-      ? current.filter((id) => id !== lineId)
-      : [...current, lineId];
-    setAdminValue("billingLineIds", next, { shouldValidate: true });
+    const current = selectedBillingLines;
+    const exists = current.find((l) => l.billingLineId === lineId);
+    const next = exists
+      ? current.filter((l) => l.billingLineId !== lineId)
+      : [...current, { billingLineId: lineId, monthlyAmount: null }];
+    setAdminValue("billingLines", next, { shouldValidate: true });
+    setAdminValue("billingLineIds", next.map((l) => l.billingLineId), { shouldValidate: true });
+  }
+
+  function setBillingLineAmount(lineId: string, raw: string) {
+    const amount = raw === "" ? null : Number(raw);
+    const next = selectedBillingLines.map((l) =>
+      l.billingLineId === lineId
+        ? { ...l, monthlyAmount: amount != null && Number.isFinite(amount) ? amount : null }
+        : l
+    );
+    setAdminValue("billingLines", next, { shouldValidate: true });
+  }
+
+  function adminMonthlyTotal(admin: Administration): number | null {
+    return sumAdministrationBillingLines({
+      id: admin.id,
+      billingLines: admin.billingLines.map((l) => {
+        const contractLine = billingLines.find((bl) => bl.id === l.billingLineId);
+        return {
+          billingLineId: l.billingLineId,
+          monthlyAmount: l.monthlyAmount,
+          billingLine: contractLine ? { monthlyAmount: contractLine.monthlyAmount } : null,
+        };
+      }),
+    });
   }
 
   function handleSaveCount() {
@@ -448,12 +482,16 @@ export function AdministrationsTab({ contractId, readOnly }: Props) {
           <CardContent className="space-y-4">
             {administrations.map((admin, idx) => {
               const assignedLines = billingLines.filter((l) => admin.billingLineIds.includes(l.id));
+              const monthlyTotal = adminMonthlyTotal(admin);
               return (
                 <div key={admin.id} className="rounded-lg border p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="font-medium">{admin.name || `Administración ${idx + 1}`}</p>
                       <p className="text-xs text-muted-foreground">Administración {idx + 1} de {administrationsCount}</p>
+                      {monthlyTotal != null && (
+                        <p className="text-sm font-medium mt-1">Monto mensual: {formatCurrency(monthlyTotal)}</p>
+                      )}
                     </div>
                     {!readOnly && (
                       <Button type="button" size="sm" variant="outline" onClick={() => openEditAdmin(admin)}>
@@ -488,13 +526,20 @@ export function AdministrationsTab({ contractId, readOnly }: Props) {
                         <p className="text-muted-foreground">Ninguna asignada</p>
                       ) : (
                         <ul className="space-y-0.5">
-                          {assignedLines.map((l) => (
-                            <li key={l.id}>
-                              <span className="font-mono text-xs">{l.lineCode}</span>
-                              {" — "}
-                              {l.description}
-                            </li>
-                          ))}
+                          {assignedLines.map((l) => {
+                            const link = admin.billingLines.find((bl) => bl.billingLineId === l.id);
+                            const amt = link?.monthlyAmount ?? l.monthlyAmount;
+                            return (
+                              <li key={l.id}>
+                                <span className="font-mono text-xs">{l.lineCode}</span>
+                                {" — "}
+                                {l.description}
+                                {amt != null && (
+                                  <span className="text-muted-foreground"> ({formatCurrency(amt)})</span>
+                                )}
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
                     </div>
@@ -640,25 +685,43 @@ export function AdministrationsTab({ contractId, readOnly }: Props) {
                   Primero defina las líneas de facturación del contrato arriba.
                 </p>
               ) : (
-                <div className="mt-2 space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                  {billingLines.map((line) => (
-                    <label key={line.id} className="flex items-start gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="mt-1 rounded border-input"
-                        checked={selectedLineIds.includes(line.id)}
-                        onChange={() => toggleBillingLine(line.id)}
-                      />
-                      <span>
-                        <span className="font-mono text-xs">{line.lineCode}</span>
-                        {" — "}
-                        {line.description}
-                        {line.monthlyAmount != null && (
-                          <span className="text-muted-foreground"> ({formatCurrency(line.monthlyAmount)})</span>
+                <div className="mt-2 space-y-2 max-h-56 overflow-y-auto border rounded-md p-3">
+                  {billingLines.map((line) => {
+                    const selected = selectedLineIds.includes(line.id);
+                    const link = selectedBillingLines.find((l) => l.billingLineId === line.id);
+                    return (
+                      <div key={line.id} className="flex items-start gap-2 text-sm">
+                        <label className="flex items-start gap-2 flex-1 cursor-pointer min-w-0">
+                          <input
+                            type="checkbox"
+                            className="mt-1 rounded border-input shrink-0"
+                            checked={selected}
+                            onChange={() => toggleBillingLine(line.id)}
+                          />
+                          <span className="min-w-0">
+                            <span className="font-mono text-xs">{line.lineCode}</span>
+                            {" — "}
+                            {line.description}
+                            {line.monthlyAmount != null && !selected && (
+                              <span className="text-muted-foreground"> ({formatCurrency(line.monthlyAmount)} ref.)</span>
+                            )}
+                          </span>
+                        </label>
+                        {selected && (
+                          <div className="w-28 shrink-0">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder={line.monthlyAmount != null ? String(line.monthlyAmount) : "Monto"}
+                              value={link?.monthlyAmount != null ? link.monthlyAmount : ""}
+                              onChange={(e) => setBillingLineAmount(line.id, e.target.value)}
+                            />
+                          </div>
                         )}
-                      </span>
-                    </label>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

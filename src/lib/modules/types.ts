@@ -10,11 +10,13 @@ export type AppModuleId =
   | "disciplinario"
   | "empleados"
   | "empleadosNaf"
+  | "nafOperaciones"
   | "sig"
   | "recorridos"
   | "ticketsTi"
   | "formularios"
   | "bandeco"
+  | "expedienteDigital"
   | "plataforma";
 
 export type AppModuleMeta = {

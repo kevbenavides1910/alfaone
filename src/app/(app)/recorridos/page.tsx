@@ -11,6 +11,7 @@ import {
   Settings2,
   Radio,
   FileBarChart,
+  HeartPulse,
   ArrowRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +46,7 @@ type SummaryResponse = {
 const QUICK_LINKS = [
   { href: "/recorridos/mapa", label: "Mapa en vivo", icon: Radio, desc: "GPS y recorridos" },
   { href: "/recorridos/reportes", label: "Reportes de marcas", icon: FileBarChart, desc: "Cumplimiento NFC" },
+  { href: "/recorridos/hombre-vivo", label: "Hombre vivo", icon: HeartPulse, desc: "Alertas y confirmaciones" },
   { href: "/recorridos/rutas", label: "Rutas y puntos", icon: MapPin, desc: "Ventanas horarias" },
   { href: "/recorridos/rutas-permitidas", label: "Asignaciones", icon: CalendarCheck, desc: "Rutas del día" },
   { href: "/recorridos/configuracion", label: "Configuración app", icon: Settings2, desc: "Parámetros de la app móvil" },

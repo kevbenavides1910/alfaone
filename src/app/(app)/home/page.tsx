@@ -1,11 +1,12 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import Link from "next/link";
 import { BarChart3, ChevronRight } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { HomeModuleGrid } from "@/components/home/HomeModuleGrid";
-import { APP_NAME, APP_TAGLINE } from "@/modules/plataforma/branding-constants";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { APP_TAGLINE } from "@/modules/plataforma/branding-constants";
 
 export default function HomePage() {
   const { data: session } = useSession();
@@ -15,49 +16,43 @@ export default function HomePage() {
     <>
       <Topbar title="Inicio" />
       <div className="home-menu-canvas">
-        {/* Saludo */}
-        <header className="relative px-6 pt-10 pb-6 md:px-10 md:pt-12 md:pb-8">
+        <header className="relative px-6 pt-6 pb-5 md:px-10 md:pt-8 md:pb-6">
           <div className="mx-auto w-full max-w-6xl">
-            <div className="flex items-stretch gap-4">
-              <div className="w-0.5 self-stretch bg-red-600 rounded-full shrink-0" />
-              <div>
-                <p className="text-xs font-medium uppercase tracking-widest text-white/30 mb-1">
-                  {APP_NAME}
-                </p>
-                <h1 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
-                  Hola, <span className="text-red-500">{name}</span>
-                </h1>
-                <p className="mt-1 text-sm text-white/40">
-                  {APP_TAGLINE}
-                </p>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+                    Hola, <span className="text-[color:var(--app-primary)]">{name}</span>
+                  </h1>
+                  <ThemeToggle />
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{APP_TAGLINE}</p>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Grid de módulos */}
         <div className="relative px-6 pb-10 md:px-10">
           <div className="mx-auto w-full max-w-6xl">
             <HomeModuleGrid />
 
-            {/* Dashboard ejecutivo */}
-            <div className="mt-6">
+            <div className="mt-4">
               <Link
                 href="/dashboard"
-                className="group flex items-center justify-between gap-4 rounded-2xl border border-white/8 bg-white/4 p-4 backdrop-blur-sm transition-all hover:bg-white/8 hover:border-white/12 md:p-5"
+                className="group flex items-center justify-between gap-4 rounded-2xl bg-white px-4 py-4 shadow-[0_2px_10px_rgba(0,0,0,0.06)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:bg-zinc-900 dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)] dark:hover:shadow-[0_4px_16px_rgba(0,0,0,0.4)] md:px-5 md:py-5"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10">
-                    <BarChart3 className="h-5 w-5 text-white/70" strokeWidth={1.5} />
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#fde2d9] dark:bg-red-950/50">
+                    <BarChart3 className="h-6 w-6 text-[color:var(--app-primary)]" strokeWidth={1.5} />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white/90">Dashboard ejecutivo</p>
-                    <p className="truncate text-xs text-white/40">
+                    <p className="text-sm font-bold text-black dark:text-white">Dashboard ejecutivo</p>
+                    <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
                       Semáforo de rentabilidad y métricas consolidadas
                     </p>
                   </div>
                 </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-white/30 transition-transform group-hover:translate-x-0.5 group-hover:text-white/60" />
+                <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </div>
           </div>

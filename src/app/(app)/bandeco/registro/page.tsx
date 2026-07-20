@@ -1,6 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import {
+  TableColumnFilterHead,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import { Button } from "@/components/ui/button";
@@ -25,6 +31,17 @@ export default function BandecoRegistroPage() {
   });
 
   const rows = data?.data ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const columnDefs: TableColumnFilterDef<ActivacionRow>[] = [
+    { key: "fecha", label: "Fecha/Hora", headerClassName: "px-4 py-2", getValue: (r) => r.activatedAt },
+    { key: "codigo", label: "Código", headerClassName: "px-4 py-2", getValue: (r) => String(r.alarmNumber) },
+    { key: "finca", label: "Finca", headerClassName: "px-4 py-2", getValue: (r) => r.finca },
+    { key: "zona", label: "Zona", headerClassName: "px-4 py-2", getValue: (r) => r.zona },
+    { key: "motorizado", label: "Motorizado", headerClassName: "px-4 py-2", getValue: (r) => r.motorizado ?? "" },
+    { key: "operador", label: "Operador", headerClassName: "px-4 py-2", getValue: (r) => r.operadorName },
+    { key: "tipo", label: "Tipo", headerClassName: "px-4 py-2", getValue: (r) => r.tipoActivacion ?? "" },
+  ];
+  const displayedRows = filterRowsByColumnFilters(rows, columnFilters, columnDefs);
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -68,18 +85,15 @@ export default function BandecoRegistroPage() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-slate-50 text-left text-slate-600">
-                  <th className="px-4 py-2">Fecha/Hora</th>
-                  <th className="px-4 py-2">Código</th>
-                  <th className="px-4 py-2">Finca</th>
-                  <th className="px-4 py-2">Zona</th>
-                  <th className="px-4 py-2">Motorizado</th>
-                  <th className="px-4 py-2">Operador</th>
-                  <th className="px-4 py-2">Tipo</th>
-                </tr>
+                <TableColumnFilterHead
+                  columns={columnDefs}
+                  rows={rows}
+                  filters={columnFilters}
+                  onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                />
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {displayedRows.map((r) => (
                   <tr key={r.id} className="border-b hover:bg-slate-50/50">
                     <td className="px-4 py-2 whitespace-nowrap">
                       {new Date(r.activatedAt).toLocaleString("es-CR")}

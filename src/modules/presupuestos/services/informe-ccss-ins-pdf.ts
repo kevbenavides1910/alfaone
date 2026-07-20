@@ -1,11 +1,10 @@
 import { PDFDocument, rgb } from "pdf-lib";
-import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import {
   extractCcssCedulas,
   extractInsCedulas,
   normalizeCedulaDigits,
 } from "@/modules/presupuestos/business/cedula-normalize";
-import { ensurePdfJsWorker } from "@/modules/presupuestos/services/pdfjs-node-worker";
+import { loadPdfJsForNode } from "@/modules/presupuestos/services/pdfjs-node-setup";
 import { preparePdfBufferForEdit } from "@/modules/presupuestos/services/pdf-decrypt-for-edit";
 
 export type InformeReportType = "auto" | "ccss" | "ins";
@@ -45,6 +44,15 @@ type PdfTextItem = {
   height: number;
 };
 
+type PdfJsPageViewport = {
+  width: number;
+  transform: number[];
+};
+
+type PdfJsUtil = {
+  transform: (m1: number[], m2: number[]) => number[];
+};
+
 function asTextItems(items: unknown[]): PdfTextItem[] {
   return items.filter(
     (i): i is PdfTextItem =>
@@ -72,8 +80,12 @@ function isInsCedulaItem(str: string): boolean {
   return /^\d{9}$/.test(str.trim());
 }
 
-function itemPos(item: PdfTextItem, viewport: pdfjs.PageViewport) {
-  const tx = pdfjs.Util.transform(viewport.transform, item.transform);
+function itemPos(
+  item: PdfTextItem,
+  viewport: PdfJsPageViewport,
+  pdfjsUtil: PdfJsUtil,
+) {
+  const tx = pdfjsUtil.transform(viewport.transform, item.transform);
   const fontHeight = Math.hypot(item.transform[2], item.transform[3]) || 7;
   return {
     x: tx[4],
@@ -130,14 +142,15 @@ function viewportRectToPdfLib(
 
 function findCcssHighlights(
   items: PdfTextItem[],
-  viewport: pdfjs.PageViewport,
+  viewport: PdfJsPageViewport,
   pageIndex: number,
   highlightSet: Set<string>,
   employeeNames: Map<string, string | null>,
+  pdfjsUtil: PdfJsUtil,
 ): HighlightRect[] {
   const rects: HighlightRect[] = [];
   const pageWidth = viewport.width;
-  const positioned = items.map((item) => ({ item, pos: itemPos(item, viewport) }));
+  const positioned = items.map((item) => ({ item, pos: itemPos(item, viewport, pdfjsUtil) }));
 
   const allCedulaYs = positioned
     .filter(({ item }) => isCcssCedulaItem(item.str.trim()))
@@ -192,14 +205,15 @@ function findCcssHighlights(
 
 function findInsHighlights(
   items: PdfTextItem[],
-  viewport: pdfjs.PageViewport,
+  viewport: PdfJsPageViewport,
   pageIndex: number,
   highlightSet: Set<string>,
   employeeNames: Map<string, string | null>,
+  pdfjsUtil: PdfJsUtil,
 ): HighlightRect[] {
   const rects: HighlightRect[] = [];
   const pageWidth = viewport.width;
-  const positioned = items.map((item) => ({ item, pos: itemPos(item, viewport) }));
+  const positioned = items.map((item) => ({ item, pos: itemPos(item, viewport, pdfjsUtil) }));
 
   // Todas las Y de cédulas en la página (para limitar altura del rectángulo).
   const allCedulaYs = positioned
@@ -256,7 +270,7 @@ export async function buildHighlightedInformePdf(input: {
   contractCedulaDigits: Set<string>;
   employeeNames: Map<string, string | null>;
 }): Promise<InformeHighlightResult> {
-  ensurePdfJsWorker(pdfjs);
+  const pdfjs = await loadPdfJsForNode();
   const editableBuffer = await preparePdfBufferForEdit(input.pdfBuffer);
   // pdfjs puede transferir/detach el ArrayBuffer; pdf-lib necesita una copia independiente.
   const pdfjsData = new Uint8Array(editableBuffer);
@@ -294,8 +308,22 @@ export async function buildHighlightedInformePdf(input: {
 
     const pageRects =
       detectedType === "ccss"
-        ? findCcssHighlights(items, viewport, pageNum - 1, highlightSet, input.employeeNames)
-        : findInsHighlights(items, viewport, pageNum - 1, highlightSet, input.employeeNames);
+        ? findCcssHighlights(
+            items,
+            viewport,
+            pageNum - 1,
+            highlightSet,
+            input.employeeNames,
+            pdfjs.Util,
+          )
+        : findInsHighlights(
+            items,
+            viewport,
+            pageNum - 1,
+            highlightSet,
+            input.employeeNames,
+            pdfjs.Util,
+          );
     allRects.push(...pageRects);
   }
 

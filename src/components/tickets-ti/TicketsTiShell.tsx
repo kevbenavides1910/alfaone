@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import type { PermissionKey } from "@/lib/permissions/registry";
 import { Topbar } from "@/components/layout/Topbar";
@@ -31,7 +31,7 @@ const TABS: Tab[] = [
       if (p === "/tickets-ti/mis-tickets") return true;
       const match = p.match(/^\/tickets-ti\/([^/]+)$/);
       if (!match) return false;
-      const staticRoutes = new Set(["nuevo", "admin", "reportes", "mis-tickets"]);
+      const staticRoutes = new Set(["nuevo", "admin", "reportes", "mis-tickets", "visualizador"]);
       return !staticRoutes.has(match[1]);
     },
   },

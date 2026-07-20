@@ -8,7 +8,14 @@ export const ticketListSchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((v) => v === "true"),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  ticketNumber: z.string().optional(),
+  title: z.string().optional(),
+  requester: z.string().optional(),
+  technician: z.string().optional(),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).optional().default(20),
+  /** @deprecated use pageSize */
+  limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 
 import { TICKET_CATEGORY_OTRO_CODE } from "../business/category-codes";

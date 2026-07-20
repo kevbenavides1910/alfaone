@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/api/middleware";
-import { canManageDisciplinary } from "@/modules/core/permissions";
+import { canEditDisciplinaryHistorial, canViewDisciplinary } from "@/modules/core/permissions";
 import { ok, unauthorized, forbidden, badRequest, notFound, serverError } from "@/lib/api/response";
 import { prisma } from "@/modules/core/db/prisma";
 import { calculateVigencia, normalizeLicitacion } from "@/modules/disciplinario/business/disciplinary";
@@ -44,7 +44,7 @@ export async function PATCH(
 ) {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!canManageDisciplinary(session)) return forbidden();
+  if (!canEditDisciplinaryHistorial(session)) return forbidden();
 
   try {
     const { id } = await params;
@@ -146,7 +146,7 @@ export async function DELETE(
 ) {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!canManageDisciplinary(session)) return forbidden();
+  if (!canEditDisciplinaryHistorial(session)) return forbidden();
 
   try {
     const { id } = await params;

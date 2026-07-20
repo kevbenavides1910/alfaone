@@ -144,24 +144,70 @@ export class FeComprobanteRecibidoService {
       updatedById: userId,
     });
 
-    const mensaje = await this.mensajeRepo.create(empresa.id, {
-      puntoVentaId,
-      claveComprobante: clave,
-      cedulaEmisor,
-      tipoMensaje: input.tipoMensaje,
-      detalleMensaje: input.detalleMensaje,
-      montoTotal,
-      montoTotalImpuesto,
-    }, userId);
+    // Reintentos: tras ERROR de envío (p. ej. firma XAdES) ya existe un mensaje ligado
+    // por comprobanteRecibidoId (@unique). Crear otro provoca P2002 "identificación duplicada".
+    const existente = await this.mensajeRepo.findByComprobanteRecibidoId(empresa.id, id);
+    let mensajeId: string;
 
-    await this.prisma.feMensajeReceptor.update({
-      where: { id: mensaje.id },
-      data: { comprobanteRecibidoId: id },
-    });
+    if (existente) {
+      const reutilizable = ["BORRADOR", "ERROR", "PENDIENTE_ENVIO", "ENVIADA"].includes(
+        existente.estado
+      );
+      if (!reutilizable) {
+        // Mensaje ya aceptado/rechazado por Hacienda: sincronizar bandeja y salir
+        const syncEstado = estadoFromTipo(
+          (existente.tipoMensaje === "2" || existente.tipoMensaje === "3"
+            ? existente.tipoMensaje
+            : "1") as "1" | "2" | "3"
+        );
+        return this.recibidoRepo.update(id, {
+          estado: syncEstado,
+          updatedById: userId,
+          detalleError: null,
+        });
+      }
 
-    await this.emision.procesarEnvioMensajeReceptor(mensaje.id, companyCode, userId);
+      const mensaje = await this.mensajeRepo.updateForRetry(
+        existente.id,
+        {
+          puntoVentaId,
+          claveComprobante: clave,
+          cedulaEmisor,
+          tipoMensaje: input.tipoMensaje,
+          detalleMensaje: input.detalleMensaje ?? null,
+          montoTotal: montoTotal ?? null,
+          montoTotalImpuesto: montoTotalImpuesto ?? null,
+          // Vuelve a estado enviable para procesarEnvioMensajeReceptor
+          estado: existente.estado === "ENVIADA" ? existente.estado : "ERROR",
+        },
+        userId
+      );
+      mensajeId = mensaje.id;
+    } else {
+      const mensaje = await this.mensajeRepo.create(
+        empresa.id,
+        {
+          puntoVentaId,
+          claveComprobante: clave,
+          cedulaEmisor,
+          tipoMensaje: input.tipoMensaje,
+          detalleMensaje: input.detalleMensaje,
+          montoTotal,
+          montoTotalImpuesto,
+        },
+        userId
+      );
 
-    const mensajeFinal = await this.mensajeRepo.findById(mensaje.id, empresa.id);
+      await this.prisma.feMensajeReceptor.update({
+        where: { id: mensaje.id },
+        data: { comprobanteRecibidoId: id },
+      });
+      mensajeId = mensaje.id;
+    }
+
+    await this.emision.procesarEnvioMensajeReceptor(mensajeId, companyCode, userId);
+
+    const mensajeFinal = await this.mensajeRepo.findById(mensajeId, empresa.id);
     const esAuto = Boolean(opts?.auto);
     const nuevoEstado: FeComprobanteRecibidoEstado = esAuto
       ? "AUTO_ACEPTADO"

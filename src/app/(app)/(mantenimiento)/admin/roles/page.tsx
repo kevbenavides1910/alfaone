@@ -1,8 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { Plus, Pencil, Trash2, Copy, Shield, Eye } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Button } from "@/components/ui/button";
@@ -119,7 +126,7 @@ export default function RolesPage() {
         toast.error("No se recibió token de vista previa");
         return;
       }
-      window.location.href = `/impersonate/${roleId}?t=${encodeURIComponent(token)}`;
+      window.open(`/impersonate/${roleId}?t=${encodeURIComponent(token)}`, "_blank", "noopener,noreferrer");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -159,6 +166,15 @@ export default function RolesPage() {
   }
 
   const roles = data?.data ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const roleColumnDefs: TableColumnFilterDef<RoleRow>[] = [
+    { key: "name", label: "Nombre", headerClassName: "text-left px-4 py-3 font-semibold", getValue: (r) => r.name },
+    { key: "code", label: "Código", headerClassName: "text-left px-4 py-3 font-semibold", getValue: (r) => r.code },
+    { key: "users", label: "Usuarios", headerClassName: "text-left px-4 py-3 font-semibold", getValue: (r) => String(r.userCount) },
+    { key: "perms", label: "Permisos", headerClassName: "text-left px-4 py-3 font-semibold", getValue: (r) => String(r.permissions.length) },
+    { key: "actions", label: "", headerClassName: "px-4 py-3", filterable: false, getValue: () => "" },
+  ];
+  const displayedRoles = filterRowsByColumnFilters(roles, columnFilters, roleColumnDefs);
 
   if (status === "loading") {
     return (
@@ -205,16 +221,15 @@ export default function RolesPage() {
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left px-4 py-3 font-semibold">Nombre</th>
-                    <th className="text-left px-4 py-3 font-semibold">Código</th>
-                    <th className="text-left px-4 py-3 font-semibold">Usuarios</th>
-                    <th className="text-left px-4 py-3 font-semibold">Permisos</th>
-                    <th className="px-4 py-3" />
-                  </tr>
+                  <TableColumnFilterHead
+                    columns={roleColumnDefs}
+                    rows={roles}
+                    filters={columnFilters}
+                    onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                  />
                 </thead>
                 <tbody className="divide-y">
-                  {roles.map((role) => (
+                  {displayedRoles.map((role) => (
                     <tr key={role.id} className="hover:bg-muted/50">
                       <td className="px-4 py-3 font-medium">
                         {role.name}

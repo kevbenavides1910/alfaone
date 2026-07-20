@@ -26,6 +26,8 @@ export type NafDocumentoRow = {
   fechaIngreso: string | null;
   fechaModifico: string | null;
   pdfDisponible: boolean;
+  ligadoAFacturacion: boolean;
+  ligadoEmisionId: string | null;
 };
 
 export type NafDocumentosListResult = {
@@ -50,6 +52,8 @@ type ListInput = {
   search?: string;
   page: number;
   pageSize: number;
+  /** ALL | LIGADOS | NO_LIGADOS */
+  ligadoFilter?: "ALL" | "LIGADOS" | "NO_LIGADOS";
 };
 
 type OracleRow = Record<string, unknown>;
@@ -97,7 +101,7 @@ async function loadCompanyMap(): Promise<Map<string, { code: string; name: strin
 function mapRow(
   row: OracleRow,
   companyMap: Map<string, { code: string; name: string }>,
-): Omit<NafDocumentoRow, "pdfDisponible"> {
+): Omit<NafDocumentoRow, "pdfDisponible" | "ligadoAFacturacion" | "ligadoEmisionId"> {
   const noCia = asString(row.NO_CIA) ?? "";
   const company = companyMap.get(noCia) ?? companyMap.get(noCia.padStart(2, "0"));
   const noFactu = asString(row.NO_FACTU) ?? "";
@@ -258,9 +262,51 @@ export async function listNafDocuments(input: ListInput): Promise<NafDocumentosL
       pdfDisponible: pdfAvailability.get(row.id) ?? false,
     }));
 
+    const linked =
+      rowsWithPdf.length === 0
+        ? []
+        : await prisma.facturaEmisionNafDocumento.findMany({
+            where: {
+              OR: rowsWithPdf.map((r) => ({
+                nafNoCia: r.noCia,
+                nafTipoDoc: r.tipoDoc,
+                nafNoFactu: r.noFactu,
+              })),
+            },
+            select: {
+              id: true,
+              nafNoCia: true,
+              nafTipoDoc: true,
+              nafNoFactu: true,
+              facturaMensualEmisionId: true,
+            },
+          });
+    const linkedMap = new Map(
+      linked.map((l) => [
+        `${l.nafNoCia}-${l.nafTipoDoc}-${l.nafNoFactu}`,
+        l.facturaMensualEmisionId,
+      ]),
+    );
+
+    let enriched = rowsWithPdf.map((row) => {
+      const emisionId = linkedMap.get(`${row.noCia}-${row.tipoDoc}-${row.noFactu}`) ?? null;
+      return {
+        ...row,
+        ligadoAFacturacion: emisionId != null,
+        ligadoEmisionId: emisionId,
+      };
+    });
+
+    const ligadoFilter = input.ligadoFilter ?? "ALL";
+    if (ligadoFilter === "LIGADOS") {
+      enriched = enriched.filter((r) => r.ligadoAFacturacion);
+    } else if (ligadoFilter === "NO_LIGADOS") {
+      enriched = enriched.filter((r) => !r.ligadoAFacturacion);
+    }
+
     return {
-      rows: rowsWithPdf,
-      total,
+      rows: enriched,
+      total: ligadoFilter === "ALL" ? total : enriched.length,
       page: input.page,
       pageSize: input.pageSize,
       summary: {

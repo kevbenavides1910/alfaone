@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/api/middleware";
-import { canManageDisciplinary } from "@/modules/core/permissions";
+import { canEditDisciplinaryHistorial } from "@/modules/core/permissions";
 import { ok, unauthorized, forbidden, badRequest, notFound, serverError } from "@/lib/api/response";
 import { prisma } from "@/modules/core/db/prisma";
 import {
@@ -22,6 +22,7 @@ import {
   loadDisciplinarySignatureFile,
 } from "@/modules/disciplinario/services/disciplinary-pdf-logo";
 import { getEmployeesForDisciplinaryByCodes } from "@/modules/disciplinario/services/disciplinary-employee-lookup";
+import { normalizeEmployeeCode } from "@/modules/disciplinario/business/disciplinary";
 import {
   loadZoneDisciplinaryDefaultsMap,
   mergeDefaultsForZoneTexts,
@@ -37,7 +38,7 @@ export async function POST(
 ) {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!canManageDisciplinary(session)) return forbidden();
+  if (!canEditDisciplinaryHistorial(session)) return forbidden();
 
   try {
     const { id } = await params;
@@ -57,22 +58,26 @@ export async function POST(
     });
     if (!apercibimiento) return notFound("Apercibimiento no encontrado");
 
-    const [masterMap] = await Promise.all([
-      getEmployeesForDisciplinaryByCodes([parsed.data.codigoEmpleado]),
-    ]);
-
-    const newMaster = masterMap.get(parsed.data.codigoEmpleado);
-    if (!newMaster) {
-      return badRequest("Empleado no encontrado en el sistema");
+    const codigoNuevo = normalizeEmployeeCode(parsed.data.codigoEmpleado);
+    if (!codigoNuevo) {
+      return badRequest("El código del empleado es obligatorio");
     }
 
-    const newNombre = newMaster.nombre?.trim() || `Empleado ${parsed.data.codigoEmpleado}`;
+    const masterMap = await getEmployeesForDisciplinaryByCodes([codigoNuevo]);
+    const newMaster = masterMap.get(codigoNuevo);
+    if (!newMaster) {
+      return badRequest(
+        "Empleado no encontrado en el maestro ni en el Directorio NAF. Sincronice NAF o importe empleados.",
+      );
+    }
+
+    const newNombre = newMaster.nombre?.trim() || `Empleado ${codigoNuevo}`;
 
     await prisma.disciplinaryApercibimiento.update({
       where: { id },
       data: {
-        codigoEmpleado: parsed.data.codigoEmpleado,
-        codigoEmpleadoRaw: parsed.data.codigoEmpleado,
+        codigoEmpleado: codigoNuevo,
+        codigoEmpleadoRaw: parsed.data.codigoEmpleado.trim(),
         nombreEmpleado: newNombre,
       },
     });
@@ -110,7 +115,7 @@ export async function POST(
 
     const pdfBytes = await buildOmisionPdfBytes({
       numero: apercibimiento.numero,
-      codigoEmpleado: parsed.data.codigoEmpleado,
+      codigoEmpleado: codigoNuevo,
       nombreEmpleado: newNombre,
       fechaEmision: apercibimiento.fechaEmision,
       cedula: newMaster?.cedula?.trim() || null,
@@ -138,7 +143,7 @@ export async function POST(
     const subject = renderMailTemplate(settings.emailSubjectTemplate, {
       numero: apercibimiento.numero,
       nombre: newNombre,
-      codigo: parsed.data.codigoEmpleado,
+      codigo: codigoNuevo,
       omisiones_count: apercibimiento.omisiones.length,
       zona: apercibimiento.zona,
       administrador: apercibimiento.administrador,
@@ -146,7 +151,7 @@ export async function POST(
     const text = renderMailTemplate(settings.emailBodyTemplate, {
       numero: apercibimiento.numero,
       nombre: newNombre,
-      codigo: parsed.data.codigoEmpleado,
+      codigo: codigoNuevo,
       omisiones_count: apercibimiento.omisiones.length,
       zona: apercibimiento.zona,
       administrador: apercibimiento.administrador,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,6 +16,13 @@ import { UNIFORM_ITEMS } from "@/lib/utils/constants";
 import { rhfValueAsNumber } from "@/lib/rhf-safe-number";
 import { format, subMonths, addMonths } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 
 interface Props {
   contractId: string;
@@ -37,6 +44,25 @@ export function UniformExpensesTab({ contractId, suppliesBudget }: Props) {
   const currentMonthExpense = expenses.find((e: { periodMonth: string }) =>
     e.periodMonth.startsWith(monthStr)
   );
+
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const onColumnFilterChange = (k: string, v: string) => setColumnFilters((p) => ({ ...p, [k]: v }));
+  const columnDefs = useMemo((): TableColumnFilterDef<{ periodMonth: string; totalCost: number }>[] => {
+    return [
+      { key: "period", label: "Período", getValue: (r) => r.periodMonth },
+      { key: "total", label: "Total", getValue: (r) => String(r.totalCost) },
+    ];
+  }, []);
+  const filteredSummary = useMemo(
+    () =>
+      filterRowsByColumnFilters(
+        expenses,
+        columnFilters,
+        columnDefs.map((c) => ({ key: c.key, getValue: c.getValue, mode: c.mode, filterable: c.filterable }))
+      ),
+    [expenses, columnDefs, columnFilters]
+  );
+  const columnFilterKeys = useMemo(() => columnDefs.map((c) => c.key), [columnDefs]);
 
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<UniformExpenseInput>({
     resolver: zodResolver(uniformExpenseSchema),
@@ -94,15 +120,25 @@ export function UniformExpensesTab({ contractId, suppliesBudget }: Props) {
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
+              {hasActiveColumnFilters(columnFilters) && (
+                <div className="flex justify-end px-3 py-1.5 border-b bg-muted/50">
+                  <button type="button" className="text-red-600 text-xs" onClick={() => setColumnFilters({})}>
+                    Limpiar filtros
+                  </button>
+                </div>
+              )}
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left px-4 py-2">Período</th>
-                    <th className="text-right px-4 py-2">Total</th>
-                  </tr>
+                  <TableColumnFilterHead
+                    columns={columnDefs}
+                    rows={expenses}
+                    filters={columnFilters}
+                    onFilterChange={onColumnFilterChange}
+                    filterRowClassName="bg-muted/50"
+                  />
                 </thead>
                 <tbody>
-                  {expenses.map((e: { periodMonth: string; totalCost: number }) => (
+                  {filteredSummary.map((e: { periodMonth: string; totalCost: number }) => (
                     <tr key={e.periodMonth} className="border-b">
                       <td className="px-4 py-2 capitalize">{formatMonthYear(e.periodMonth)}</td>
                       <td className="px-4 py-2 text-right font-medium">{formatCurrency(e.totalCost)}</td>

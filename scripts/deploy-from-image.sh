@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# Despliega una imagen YA construida (GHCR / registry) sin compilar en el VPS.
+# Flujo típico: CI publica ghcr.io/<org>/alfaone:<sha|latest> → este script hace pull + recreate.
+#
+# Uso:
+#   APP_IMAGE=ghcr.io/kevbenavides1910/alfaone:latest npm run ops:deploy:pull
+#   APP_IMAGE=ghcr.io/kevbenavides1910/alfaone:abc1234 bash scripts/deploy-from-image.sh
+#
+# Requiere: docker login a ghcr.io (una vez) con un PAT que lea packages.
+set -Eeuo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+# Lock ANTES de tee/logs: dos deploys simultáneos se pisan (incidente jul-2026).
+# shellcheck disable=SC1091
+source "$ROOT/scripts/ops/acquire-deploy-lock.sh"
+
+export DB_CONTAINER="${DB_CONTAINER:-security_contracts_db}"
+export COMPOSE_PROJECT_NAME=presupuestos-alfa
+
+APP_CONTAINER="${APP_CONTAINER:-security_contracts_app}"
+APP_SERVICE="${APP_SERVICE:-app}"
+APP_URL_BASE="${APP_URL_BASE:-http://127.0.0.1:3000}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+DEPLOY_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+LOG_DIR="${DEPLOY_LOG_DIR:-$ROOT/.deploy-logs}"
+LOG_FILE="$LOG_DIR/deploy-pull-$DEPLOY_ID.log"
+ROLLBACK_TAG="alfa-one-app-rollback:$DEPLOY_ID"
+PREVIOUS_IMAGE=""
+SERVICE_IMAGE=""
+START_EPOCH="$(date +%s)"
+COMPOSE=(docker compose -f "$COMPOSE_FILE")
+
+DEFAULT_IMAGE="ghcr.io/kevbenavides1910/alfaone:latest"
+export APP_IMAGE="${APP_IMAGE:-$DEFAULT_IMAGE}"
+
+mkdir -p "$LOG_DIR"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "OK: lock de deploy activo (pid=$$ file=${DEPLOY_LOCK_FILE:-/tmp/presupuestos-alfa-deploy.lock})"
+
+section() {
+  echo ""
+  echo "== $1 =="
+}
+
+elapsed() {
+  echo "$(( $(date +%s) - START_EPOCH ))s"
+}
+
+capture_app_logs() {
+  section "Últimos logs de $APP_CONTAINER"
+  docker logs --tail "${DEPLOY_LOG_LINES:-120}" "$APP_CONTAINER" 2>&1 || true
+}
+
+rollback_app() {
+  if [ -z "$PREVIOUS_IMAGE" ] || [ -z "$SERVICE_IMAGE" ]; then
+    echo "Rollback omitido: no había imagen anterior etiquetada."
+    return
+  fi
+
+  section "Rollback a imagen anterior"
+  docker tag "$ROLLBACK_TAG" "$SERVICE_IMAGE"
+  "${COMPOSE[@]}" up -d --no-build --no-deps --force-recreate "$APP_SERVICE"
+  wait_for_container_health || true
+}
+
+on_error() {
+  local exit_code=$?
+  section "DEPLOY FAILED"
+  echo "exit_code=$exit_code elapsed=$(elapsed) log=$LOG_FILE"
+  capture_app_logs
+  rollback_app
+  exit "$exit_code"
+}
+trap on_error ERR
+
+http_check() {
+  local label="$1"
+  local path="$2"
+  local code
+  code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 "$APP_URL_BASE$path")"
+  echo "$label:$code"
+  case "$code" in
+    2*|3*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+wait_for_container_health() {
+  local status
+  for _ in $(seq 1 30); do
+    status="$(docker inspect "$APP_CONTAINER" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}')"
+    echo "health:$status"
+    case "$status" in
+      healthy|no-healthcheck) return 0 ;;
+      unhealthy) return 1 ;;
+    esac
+    sleep 5
+  done
+  return 1
+}
+
+section "Objetivo: pull de imagen preconstruida (sin build en VPS)"
+echo "deploy_id=$DEPLOY_ID"
+echo "log=$LOG_FILE"
+echo "APP_IMAGE=$APP_IMAGE"
+echo "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME"
+
+# Contexto canónico (path/worktree). Anti-drop de fuentes no aplica a pull de imagen remota;
+# el smoke post-recreate sí valida módulos en el contenedor nuevo.
+section "Preflight: contexto de deploy"
+DEPLOY_SKIP_ANTI_DROP=1 bash "$ROOT/scripts/ops/deploy-context-preflight.sh" "$ROOT"
+
+if [ ! -f "$ROOT/.env.production" ]; then
+  echo "ERROR: falta .env.production" >&2
+  exit 1
+fi
+
+set -a
+# shellcheck disable=SC1091
+source "$ROOT/.env.production"
+set +a
+# APP_IMAGE del entorno/CLI tiene prioridad sobre .env.production
+export APP_IMAGE="${APP_IMAGE:-$DEFAULT_IMAGE}"
+
+section "Preflight: protección de base de datos"
+bash "$ROOT/scripts/db-safety-preflight.sh"
+
+if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+  PREVIOUS_IMAGE="$(docker inspect "$APP_CONTAINER" --format '{{.Image}}')"
+  SERVICE_IMAGE="$(docker inspect "$APP_CONTAINER" --format '{{.Config.Image}}')"
+  docker tag "$PREVIOUS_IMAGE" "$ROLLBACK_TAG"
+  echo "rollback_tag=$ROLLBACK_TAG previous=$SERVICE_IMAGE"
+fi
+
+section "Respaldo PostgreSQL (security_contracts)"
+POSTGRES_DB=security_contracts bash "$ROOT/scripts/postgres-backup.sh"
+
+section "Pull imagen"
+docker pull "$APP_IMAGE"
+
+section "Recrear SOLO app (sin build)"
+"${COMPOSE[@]}" up -d --no-build --no-deps --force-recreate --pull never "$APP_SERVICE"
+
+section "Esperando arranque"
+wait_for_container_health
+
+section "Verificación"
+docker inspect "$APP_CONTAINER" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q '^DATABASE_URL='
+echo "DATABASE_URL:present"
+http_check "session" "/api/auth/session"
+http_check "login" "/login"
+# Baseline = imagen previa etiquetada como rollback; exige 0 drops de rutas.
+if [ -n "$ROLLBACK_TAG" ] && docker image inspect "$ROLLBACK_TAG" >/dev/null 2>&1; then
+  export DEPLOY_BASELINE_IMAGE="$ROLLBACK_TAG"
+  bash "$ROOT/scripts/ops/deploy-module-smoke.sh" "$APP_CONTAINER" "$ROLLBACK_TAG"
+else
+  echo "WARN: sin rollback tag — smoke solo valida anclas/deps"
+  bash "$ROOT/scripts/ops/deploy-module-smoke.sh" "$APP_CONTAINER"
+fi
+"${COMPOSE[@]}" ps
+
+section "DEPLOY OK (pull)"
+echo "elapsed=$(elapsed)"
+echo "image=$APP_IMAGE"
+echo "log=$LOG_FILE"
+echo "PostgreSQL intacto — solo se recreó el contenedor app"

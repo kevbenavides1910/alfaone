@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/api/middleware";
-import { canManageDisciplinary } from "@/modules/core/permissions";
+import { canEditDisciplinaryConvocatoriaSession } from "@/modules/core/permissions";
 import { ok, unauthorized, forbidden, badRequest, notFound, serverError } from "@/lib/api/response";
 import { prisma } from "@/modules/core/db/prisma";
 import { normalizeEmployeeCode } from "@/modules/disciplinario/business/disciplinary";
@@ -22,7 +22,7 @@ export async function PUT(
 ) {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!canManageDisciplinary(session)) return forbidden();
+  if (!canEditDisciplinaryConvocatoriaSession(session)) return forbidden();
 
   try {
     const { codigo: codigoRaw } = await params;

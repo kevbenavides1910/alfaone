@@ -2,7 +2,12 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
 import { calcTrafficLight, type ReportPartidaFilter, type TrafficLight } from "@/lib/utils/constants";
 import { effectiveSuppliesPct } from "@/modules/presupuestos/business/profitability";
-import { getEffectiveMonthlyBilling } from "@/modules/presupuestos/business/effectiveBilling";
+import { getEffectiveMonthlyRevenue } from "@/modules/presupuestos/business/effectiveBilling";
+import { applyNafLaborToRubros } from "@/modules/presupuestos/business/naf-labor-rubro";
+import {
+  getNafLaborCostByContractForYear,
+  resolveNafLaborSpendForContractMonth,
+} from "@/modules/empleados-naf/services/naf-labor-report";
 
 export interface MonthCell {
   month: number;
@@ -131,6 +136,7 @@ export async function getAnnualReport(
     directByLine,
     distByLine,
     billingHistRows,
+    specialServicesRows,
   ] = await Promise.all([
     prisma.$queryRaw<RawRow[]>`
       SELECT "contractId" as contractid, EXTRACT(MONTH FROM "periodMonth")::int AS month, CAST(SUM("totalCost") AS TEXT) AS total
@@ -193,6 +199,16 @@ export async function getAnnualReport(
       select: { contractId: true, periodMonth: true, monthlyBilling: true },
       orderBy: { periodMonth: "asc" },
     }),
+    prisma.contractSpecialService.findMany({
+      where: {
+        contractId: { in: ids },
+        periodMonth: {
+          gte: new Date(year, 0, 1),
+          lte: new Date(year, 11, 31, 23, 59, 59, 999),
+        },
+      },
+      select: { contractId: true, periodMonth: true, amount: true },
+    }),
   ]);
 
   const uniformsMap = buildMap(uniforms);
@@ -204,6 +220,11 @@ export async function getAnnualReport(
 
   const directLineMap = buildLineMap(directByLine);
   const distLineMap = buildLineMap(distByLine);
+
+  const { hasNominaData, byContractMonth } = await getNafLaborCostByContractForYear(
+    year,
+    companyFilter,
+  );
 
   const billingHistoryByContract = new Map<
     string,
@@ -219,6 +240,16 @@ export async function getAnnualReport(
     });
   }
 
+  const specialServicesByContract = new Map<
+    string,
+    { periodMonth: Date; amount: (typeof specialServicesRows)[number]["amount"] }[]
+  >();
+  for (const row of specialServicesRows) {
+    const list = specialServicesByContract.get(row.contractId);
+    if (list) list.push({ periodMonth: row.periodMonth, amount: row.amount });
+    else specialServicesByContract.set(row.contractId, [{ periodMonth: row.periodMonth, amount: row.amount }]);
+  }
+
   const rows: AnnualReportRow[] = contracts.map((c) => {
     const defaultBilling = parseFloat(c.monthlyBilling.toString());
     const supPctEff = effectiveSuppliesPct(c);
@@ -229,6 +260,7 @@ export async function getAnnualReport(
     const contractEnd = new Date(c.endDate);
 
     const billingHistForContract = billingHistoryByContract.get(c.id) ?? [];
+    const specialServicesForContract = specialServicesByContract.get(c.id) ?? [];
 
     const months: MonthCell[] = Array.from({ length: 12 }, (_, i) => {
       const mo = i + 1;
@@ -236,8 +268,12 @@ export async function getAnnualReport(
       const monthEnd = new Date(year, i + 1, 0);
       const contractActive = contractStart <= monthEnd && contractEnd >= monthStart;
 
-      /** Misma regla que rentabilidad mensual: cada cambio en historial vale desde ese mes hasta el siguiente cambio. */
-      const billing = getEffectiveMonthlyBilling(defaultBilling, billingHistForContract, monthStart);
+      const { billing } = getEffectiveMonthlyRevenue(
+        defaultBilling,
+        billingHistForContract,
+        specialServicesForContract,
+        monthStart,
+      );
 
       const uniformsM = uniformsMap.get(c.id)?.get(mo) ?? 0;
       const auditM = auditsMap.get(c.id)?.get(mo) ?? 0;
@@ -251,9 +287,21 @@ export async function getAnnualReport(
         (directLineMap.get(c.id)?.get(mo)?.get("NULL") ?? 0) +
         (distLineMap.get(c.id)?.get(mo)?.get("NULL") ?? 0);
 
-      const laborSpend = laborU;
+      const manualLaborSpend = laborU;
       const suppliesSpendTotal = supU + uniformsM + deferredM;
-      const adminSpendTotal = admU + auditM + adminM;
+      const adminSpendBase = admU + auditM + adminM;
+      const nafLaborSpend = resolveNafLaborSpendForContractMonth(
+        byContractMonth,
+        hasNominaData,
+        c.id,
+        mo,
+      );
+      const { laborSpend, adminSpend: adminSpendTotal } = applyNafLaborToRubros(
+        c,
+        nafLaborSpend,
+        manualLaborSpend,
+        adminSpendBase,
+      );
 
       const totalExpenses =
         (directMap.get(c.id)?.get(mo) ?? 0) +

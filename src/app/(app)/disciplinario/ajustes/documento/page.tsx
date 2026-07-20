@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImagePlus, Save, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { isAdmin } from "@/modules/core/permissions";
+import { canEditDisciplinaryAjustesSession } from "@/modules/core/permissions";
 import { toast } from "@/components/ui/toaster";
 
 type Settings = {
@@ -23,7 +23,7 @@ type Settings = {
 
 export default function DisciplinarioAjustesDocumentoPage() {
   const { data: session } = useSession();
-  const readOnly = !session?.user?.role || !isAdmin(session.user.role);
+  const readOnly = !canEditDisciplinaryAjustesSession(session ?? null);
   const sigFileRef = useRef<HTMLInputElement>(null);
   const [signatureCacheBust, setSignatureCacheBust] = useState(0);
   const [form, setForm] = useState<Settings>({

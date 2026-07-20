@@ -11,22 +11,61 @@ const securityHeaders = [
   {
     key: "Content-Security-Policy",
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+  },
+];
+
+/** PDFs inline del expediente: deben poder embeberse en iframe same-origin. */
+const pdfEmbedHeaders = [
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  {
+    key: "Content-Security-Policy",
+    value: "default-src 'none'; frame-ancestors 'self'",
   },
 ];
 
 const nextConfig: NextConfig = {
   /** Requerido para Docker (multi-stage) — genera .next/standalone */
   output: "standalone",
-  serverExternalPackages: ["@prisma/client", "pdf-parse", "mammoth", "pdfjs-dist", "oracledb"],
+  serverExternalPackages: [
+    "@prisma/client",
+    "pdf-parse",
+    "mammoth",
+    "pdfjs-dist",
+    "@napi-rs/canvas",
+    "oracledb",
+    // Firma XAdES (createRequire nativo; deben resolverse fuera del bundle)
+    "xadesjs",
+    "xmldsigjs",
+    "xpath",
+    "@xmldom/xmldom",
+    "xml-core",
+    "tslib",
+  ],
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      // Next fusiona TODAS las reglas que coinciden: hay que excluir el PDF del DENY global.
+      { source: "/api/expediente-digital/:cedula/file", headers: pdfEmbedHeaders },
+      { source: "/api/empleados/contratos/photorec/file", headers: pdfEmbedHeaders },
+      {
+        source:
+          "/:path((?!api/expediente-digital/.+/file$)(?!api/empleados/contratos/photorec/file$).*)*",
+        headers: securityHeaders,
+      },
+    ];
   },
+  // Lint ya corre en CI (`npm run lint`); no duplicar ~60s en cada docker build.
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  // VPS prod tiene ~48 CPUs / 62 GiB; paralelismo acelera compile + traces.
   experimental: {
-    webpackBuildWorker: false,
-    parallelServerCompiles: false,
-    parallelServerBuildTraces: false,
-    staticGenerationMaxConcurrency: 1,
+    webpackBuildWorker: true,
+    parallelServerCompiles: true,
+    parallelServerBuildTraces: true,
+    staticGenerationMaxConcurrency: 8,
   },
 };
 

@@ -8,6 +8,7 @@ import { FeFacturaRepository } from "../../repositories/fe-factura.repository";
 import { notDeleted } from "../../utils/soft-delete";
 import {
   ensureFeDir,
+  feAbsolutePath,
   fePdfDir,
   feRelativePath,
 } from "../../utils/fe-storage";
@@ -145,22 +146,32 @@ export class FePdfService {
     fileName: string;
     pdfInput: Parameters<typeof buildFacturaElectronicaPdf>[0];
   }) {
+    const pdfBytes = await buildFacturaElectronicaPdf(params.pdfInput);
+    const sha256 = createHash("sha256").update(pdfBytes).digest("hex");
+
     const existing = await this.prisma.feAdjuntoPDF.findFirst({
       where: { comprobanteId: params.comprobanteId, origen: "GENERADO", ...notDeleted },
       orderBy: { createdAt: "desc" },
     });
+
+    // Siempre regenera el PDF (p. ej. mejoras de diseño) sobre la misma ruta.
     if (existing) {
-      return { storagePath: existing.storagePath, fileName: existing.fileName, id: existing.id };
+      const absPath = feAbsolutePath(existing.storagePath);
+      await ensureFeDir(path.dirname(absPath));
+      await fs.writeFile(absPath, pdfBytes);
+      await this.prisma.feAdjuntoPDF.update({
+        where: { id: existing.id },
+        data: { sha256, sizeBytes: pdfBytes.length, fileName: params.fileName },
+      });
+      return { storagePath: existing.storagePath, fileName: params.fileName, id: existing.id };
     }
 
-    const pdfBytes = await buildFacturaElectronicaPdf(params.pdfInput);
     const absDir = fePdfDir(params.companyCode, params.comprobanteId);
     await ensureFeDir(absDir);
     const absPath = path.join(absDir, params.fileName);
     await fs.writeFile(absPath, pdfBytes);
 
     const relativePath = feRelativePath(params.companyCode, "pdf", params.comprobanteId, params.fileName);
-    const sha256 = createHash("sha256").update(pdfBytes).digest("hex");
 
     const adjunto = await this.prisma.feAdjuntoPDF.create({
       data: {

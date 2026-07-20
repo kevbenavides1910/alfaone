@@ -9,6 +9,8 @@ import { calcSuppliesBudget } from "@/modules/presupuestos/business/profitabilit
 import { getEffectiveMonthlyBilling } from "@/modules/presupuestos/business/effectiveBilling";
 import { requireCompanyCode } from "@/modules/core/services/companies";
 import { buildContractPrismaUpdate } from "@/modules/presupuestos/services/build-contract-prisma-update";
+import { syncContractAdministrations } from "@/modules/presupuestos/services/sync-contract-administrations";
+import { syncOpenFacturaEmisionesForContract } from "@/modules/presupuestos/services/facturacion-cobro";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -93,6 +95,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       where: { id },
       data: updateData,
     });
+
+    if (parsed.data.administrationsCount !== undefined) {
+      await syncContractAdministrations(
+        prisma,
+        id,
+        parsed.data.administrationsCount,
+        session.user.id,
+      );
+      await syncOpenFacturaEmisionesForContract(prisma, id);
+    }
 
     const data = {
       ...restPatch,

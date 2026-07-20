@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Topbar } from "@/components/layout/Topbar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TrafficLightBadge } from "@/components/shared/TrafficLightBadge";
 import { MetricCard } from "@/components/shared/MetricCard";
-import { formatCurrency, toMonthString } from "@/lib/utils/format";
+import { formatCurrency, toPreviousMonthString } from "@/lib/utils/format";
 import {
   companyDisplayName,
   CLIENT_TYPE_LABELS,
@@ -23,6 +24,24 @@ import type { RubroTrafficSnapshot } from "@/modules/presupuestos/business/profi
 import { useCompanies } from "@/lib/hooks/use-companies";
 import { BarChart3, Download, DollarSign, TrendingUp, AlertTriangle, FileText } from "lucide-react";
 import * as XLSX from "xlsx";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
+import { cn } from "@/lib/utils/cn";
+import {
+  RubroSpendDrilldownDialog,
+  type RubroSpendDrilldownRubro,
+  type RubroSpendDrilldownTarget,
+} from "@/components/reports/RubroSpendDrilldownDialog";
+import { expenseTypeLabel } from "@/lib/utils/expense-type-labels";
+
+const REPORT_TABLE_HEADER_TH =
+  "sticky top-0 z-20 bg-slate-50 align-top border-b border-slate-200 shadow-[0_1px_0_0_rgb(226,232,240)] px-3 py-2";
+const REPORT_TABLE_FILTER_TH =
+  "sticky top-[2.25rem] z-20 bg-muted/50 align-top border-b border-slate-200 px-2 py-1.5";
 
 interface ExpenseTypeColumn {
   type: string;
@@ -44,7 +63,9 @@ interface ProfitabilityRow {
   reportBudgetPct: number;
   uniformsTotal: number; auditTotal: number; deferredTotal: number; adminTotal: number;
   expensesByTypeMerged: Record<string, number>;
-  grandTotal: number; budgetUsagePctFormatted: number; trafficLight: TrafficLight;
+  grandTotal: number;
+  grandTotalAll: number;
+  budgetUsagePct: number; budgetUsagePctFormatted: number; trafficLight: TrafficLight;
   rubroTraffic: {
     LABOR: RubroTrafficSnapshot;
     SUPPLIES: RubroTrafficSnapshot;
@@ -64,6 +85,10 @@ interface ProfitabilityReport {
     totalSuppliesBudget: number;
     totalAdminBudget: number;
     totalProfitBudget: number;
+    totalLaborSpend: number;
+    totalSuppliesSpend: number;
+    totalAdminSpend: number;
+    totalProfitSpend: number;
     totalReportBudget: number;
     totalUniforms: number;
     totalAudit: number;
@@ -75,27 +100,191 @@ interface ProfitabilityReport {
 }
 
 export default function ReportsPage() {
-  const [selectedCompany, setSelectedCompany] = useState("all");
-  const [selectedMonth, setSelectedMonth] = useState(toMonthString(new Date()));
+  const [companyFilter, setCompanyFilter] = useState<string[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState(toPreviousMonthString());
   const [selectedPartida, setSelectedPartida] = useState<ReportPartidaFilter>("ALL");
   const { data: companiesRes } = useCompanies();
   const companyRows = companiesRes?.data ?? [];
 
   const params = new URLSearchParams();
-  if (selectedCompany !== "all") params.set("company", selectedCompany);
+  companyFilter.forEach((c) => params.append("company", c));
   if (selectedMonth) params.set("month", selectedMonth);
   if (selectedPartida !== "ALL") params.set("partida", selectedPartida);
 
-  const { data, isLoading } = useQuery<{ data: ProfitabilityReport }>({
-    queryKey: ["profitability-report", selectedCompany, selectedMonth, selectedPartida],
+  const { data, isLoading, isFetching } = useQuery<{ data: ProfitabilityReport }>({
+    queryKey: ["profitability-report", companyFilter, selectedMonth, selectedPartida],
     queryFn: () => fetch(`/api/reports/profitability?${params}`).then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const report = data?.data;
   const rows = report?.rows ?? [];
-  const totals = report?.totals;
   const expenseTypeColumns = report?.expenseTypeColumns ?? [];
-  const partida = totals?.partida ?? "ALL";
+  const partida = report?.totals?.partida ?? selectedPartida;
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [rubroDrilldown, setRubroDrilldown] = useState<RubroSpendDrilldownTarget | null>(null);
+  const onColumnFilterChange = (k: string, v: string) => setColumnFilters((p) => ({ ...p, [k]: v }));
+
+  const openRubroDrilldown = (
+    row: ProfitabilityRow,
+    rubro: RubroSpendDrilldownRubro,
+  ) => {
+    if (!selectedMonth) return;
+    setRubroDrilldown({
+      contractId: row.contractId,
+      licitacionNo: row.licitacionNo,
+      client: row.client,
+      month: selectedMonth,
+      rubro,
+    });
+  };
+  const columnDefs = useMemo((): TableColumnFilterDef<ProfitabilityRow>[] => {
+    const base = [
+      { key: "licitacion", label: "Licitación", getValue: (r: ProfitabilityRow) => r.licitacionNo },
+      { key: "cliente", label: "Cliente", getValue: (r: ProfitabilityRow) => r.client },
+      { key: "empresa", label: "Empresa", getValue: (r: ProfitabilityRow) => companyDisplayName(r.company, companyRows) },
+      { key: "facturacion", label: "Facturación", getValue: (r: ProfitabilityRow) => String(r.monthlyBilling) },
+    ] as TableColumnFilterDef<ProfitabilityRow>[];
+    if (partida === "ALL") {
+      base.push(
+        { key: "mo", label: "Mano de obra", getValue: (r) => String(r.rubroTraffic.LABOR.spend) },
+        { key: "insumos", label: "Insumos", getValue: (r) => String(r.rubroTraffic.SUPPLIES.spend) },
+        { key: "adm", label: "Administrativo", getValue: (r) => String(r.rubroTraffic.ADMIN.spend) },
+        { key: "util", label: "Utilidad", getValue: (r) => String(r.rubroTraffic.PROFIT.spend) }
+      );
+    } else {
+      base.push({
+        key: "presupuesto",
+        label: "Gasto / presupuesto",
+        getValue: (r) => String(r.grandTotal),
+      });
+    }
+    for (const col of expenseTypeColumns) {
+      base.push({ key: `type_${col.type}`, label: col.label, getValue: (r) => String(r.expensesByTypeMerged[col.type] ?? 0) });
+    }
+    base.push({ key: "total", label: "Total", getValue: (r) => String(r.grandTotal) });
+    base.push({ key: "peor", label: "Peor partida", getValue: (r) => r.trafficLight });
+    return base.map((col) => ({
+      ...col,
+      headerClassName: cn(col.headerClassName, REPORT_TABLE_HEADER_TH),
+      filterClassName: cn(col.filterClassName, REPORT_TABLE_FILTER_TH),
+    }));
+  }, [expenseTypeColumns, partida, companyRows]);
+
+  const displayedRows = useMemo(
+    () =>
+      filterRowsByColumnFilters(
+        rows,
+        columnFilters,
+        columnDefs.map((c) => ({ key: c.key, getValue: c.getValue, mode: c.mode, filterable: c.filterable }))
+      ),
+    [rows, columnDefs, columnFilters]
+  );
+
+  /** Totales alineados con las filas visibles (filtros de columna). */
+  const displayTotals = useMemo(() => {
+    const totalsByType: Record<string, number> = {};
+    for (const col of expenseTypeColumns) {
+      totalsByType[col.type] = displayedRows.reduce(
+        (s, r) => s + (r.expensesByTypeMerged[col.type] ?? 0),
+        0
+      );
+    }
+    return {
+      partida,
+      totalBilling: displayedRows.reduce((s, r) => s + r.monthlyBilling, 0),
+      totalLaborBudget: displayedRows.reduce((s, r) => s + r.laborBudget, 0),
+      totalSuppliesBudget: displayedRows.reduce((s, r) => s + r.suppliesBudget, 0),
+      totalAdminBudget: displayedRows.reduce((s, r) => s + r.adminBudget, 0),
+      totalProfitBudget: displayedRows.reduce((s, r) => s + r.profitBudget, 0),
+      totalLaborSpend: displayedRows.reduce((s, r) => s + r.rubroTraffic.LABOR.spend, 0),
+      totalLaborCargasSpend: displayedRows.reduce(
+        (s, r) => s + (r.rubroTraffic.LABOR.cargasSocialesSpend ?? 0),
+        0
+      ),
+      totalSuppliesSpend: displayedRows.reduce((s, r) => s + r.rubroTraffic.SUPPLIES.spend, 0),
+      totalAdminSpend: displayedRows.reduce((s, r) => s + r.rubroTraffic.ADMIN.spend, 0),
+      totalProfitSpend: displayedRows.reduce((s, r) => s + r.rubroTraffic.PROFIT.spend, 0),
+      totalReportBudget:
+        partida === "ALL"
+          ? 0
+          : displayedRows.reduce((s, r) => s + r.reportBudget, 0),
+      totalUniforms: displayedRows.reduce((s, r) => s + r.uniformsTotal, 0),
+      totalAudit: displayedRows.reduce((s, r) => s + r.auditTotal, 0),
+      totalDeferred: displayedRows.reduce((s, r) => s + r.deferredTotal, 0),
+      totalAdmin: displayedRows.reduce((s, r) => s + r.adminTotal, 0),
+      totalExpenses: displayedRows.reduce((s, r) => s + r.grandTotal, 0),
+      totalSpendAll: displayedRows.reduce((s, r) => s + (r.grandTotalAll ?? r.grandTotal), 0),
+      totalFullBudget: displayedRows.reduce(
+        (s, r) => s + r.laborBudget + r.suppliesBudget + r.adminBudget + r.profitBudget,
+        0
+      ),
+      avgUsagePct:
+        displayedRows.length > 0
+          ? displayedRows.reduce((s, r) => s + r.budgetUsagePct, 0) / displayedRows.length
+          : 0,
+      totalsByType,
+      totalOperatingBudget:
+        partida === "ALL"
+          ? displayedRows.reduce(
+              (s, r) => s + r.laborBudget + r.suppliesBudget + r.adminBudget + r.profitBudget,
+              0
+            )
+          : displayedRows.reduce((s, r) => s + r.reportBudget, 0),
+      budgetVariance:
+        partida === "ALL"
+          ? displayedRows.reduce(
+              (s, r) => s + r.laborBudget + r.suppliesBudget + r.adminBudget + r.profitBudget,
+              0
+            ) - displayedRows.reduce((s, r) => s + (r.grandTotalAll ?? r.grandTotal), 0)
+          : displayedRows.reduce((s, r) => s + r.reportBudget, 0) -
+            displayedRows.reduce((s, r) => s + r.grandTotal, 0),
+      generalBalance:
+        displayedRows.reduce((s, r) => s + r.monthlyBilling, 0) -
+        displayedRows.reduce((s, r) => s + (r.grandTotalAll ?? r.grandTotal), 0),
+    };
+  }, [displayedRows, expenseTypeColumns, partida]);
+
+  const openConsolidatedRubroDrilldown = (rubro: RubroSpendDrilldownRubro) => {
+    if (!selectedMonth || displayedRows.length === 0) return;
+    setRubroDrilldown({
+      consolidated: true,
+      contractIds: displayedRows.map((r) => r.contractId),
+      licitacionNo: `TOTALES (${displayedRows.length} contratos)`,
+      client: "Consolidado del reporte mensual",
+      month: selectedMonth,
+      rubro,
+    });
+  };
+
+  const trafficCounts = useMemo(
+    () =>
+      displayedRows.reduce(
+        (acc, r) => {
+          acc[r.trafficLight]++;
+          return acc;
+        },
+        { GREEN: 0, YELLOW: 0, RED: 0 }
+      ),
+    [displayedRows]
+  );
+
+  const rubroColCount = partida === "ALL" ? 4 : 1;
+  const tableColCount = 4 + rubroColCount + expenseTypeColumns.length + 2;
+
+  const consolidatedExpenseEntries = useMemo(
+    () =>
+      expenseTypeColumns
+        .map((col) => ({
+          type: col.type,
+          label: col.label,
+          amount: (displayTotals.totalsByType ?? {})[col.type] ?? 0,
+        }))
+        .filter((e) => e.amount > 0)
+        .sort((a, b) => b.amount - a.amount),
+    [displayTotals.totalsByType, expenseTypeColumns]
+  );
 
   const partidaLabel =
     REPORT_PARTIDA_OPTIONS.find((o) => o.value === selectedPartida)?.label ?? "Todas las partidas";
@@ -109,8 +298,103 @@ export default function ReportsPage() {
     return `${(toNumPct(amount, billing) * 100).toFixed(1)}%`;
   }
 
+  function spendUsagePct(spend: number, budget: number): string {
+    if (budget <= 0) return "—";
+    return `${((spend / budget) * 100).toFixed(1)}%`;
+  }
+
+  function ConsolidatedSpendChip({
+    label,
+    spend,
+    budget,
+  }: {
+    label: string;
+    spend: number;
+    budget: number;
+  }) {
+    return (
+      <span className="tabular-nums whitespace-nowrap">
+        <span className="text-slate-600">{label}:</span>{" "}
+        <span className="font-semibold text-slate-900">{formatCurrency(spend)}</span>
+        {budget > 0 && (
+          <span className="text-slate-500 ml-1">({spendUsagePct(spend, budget)} del P.)</span>
+        )}
+      </span>
+    );
+  }
+
+  function ReportGeneralBalanceSummary({
+    totals,
+    partida,
+    contractCount,
+  }: {
+    totals: {
+      totalBilling: number;
+      totalExpenses: number;
+      totalSpendAll: number;
+      totalOperatingBudget: number;
+      budgetVariance: number;
+      generalBalance: number;
+    };
+    partida: ReportPartidaFilter;
+    contractCount: number;
+  }) {
+    if (contractCount === 0) return null;
+    const budgetPositive = totals.budgetVariance >= 0;
+    const generalPositive = totals.generalBalance >= 0;
+    return (
+      <div className="border-t-2 border-slate-300 bg-slate-50/90 px-4 py-4">
+        <h4 className="text-sm font-semibold text-slate-800 mb-3">Balance general del mes</h4>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+          <div className="rounded-lg border bg-white px-3 py-2">
+            <p className="text-xs text-slate-500">Gasto total del mes</p>
+            <p className="text-lg font-semibold tabular-nums">{formatCurrency(totals.totalSpendAll)}</p>
+          </div>
+          <div className="rounded-lg border bg-white px-3 py-2">
+            <p className="text-xs text-slate-500">
+              {partida === "ALL" ? "Presupuesto (MO + Insumos + Adm. + Utilidad)" : "Presupuesto partida"}
+            </p>
+            <p className="text-lg font-semibold tabular-nums">{formatCurrency(totals.totalOperatingBudget)}</p>
+          </div>
+          <div
+            className={cn(
+              "rounded-lg border px-3 py-2",
+              budgetPositive ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"
+            )}
+          >
+            <p className="text-xs text-slate-600">{budgetPositive ? "Sobró del presupuesto" : "Faltó del presupuesto"}</p>
+            <p
+              className={cn(
+                "text-lg font-semibold tabular-nums",
+                budgetPositive ? "text-green-800" : "text-red-800"
+              )}
+            >
+              {formatCurrency(Math.abs(totals.budgetVariance))}
+            </p>
+          </div>
+          <div
+            className={cn(
+              "rounded-lg border px-3 py-2",
+              generalPositive ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"
+            )}
+          >
+            <p className="text-xs text-slate-600">Balance general (Facturación − Gastos)</p>
+            <p
+              className={cn(
+                "text-lg font-semibold tabular-nums",
+                generalPositive ? "text-green-800" : "text-red-800"
+              )}
+            >
+              {generalPositive ? "Positivo" : "Negativo"} · {formatCurrency(Math.abs(totals.generalBalance))}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function exportToExcel() {
-    if (!rows.length || !totals) return;
+    if (!displayedRows.length) return;
 
     const buildRow = (r: ProfitabilityRow): Record<string, string | number> => {
       const o: Record<string, string | number> = {
@@ -128,25 +412,31 @@ export default function ReportsPage() {
       };
 
       if (partida === "ALL") {
+        o["Gasto mano de obra"] = r.rubroTraffic.LABOR.spend;
         o["P. mano de obra"] = r.laborBudget;
         o["% P. MO (s/ fact.)"] = pctOfBillingStr(r.laborBudget, r.monthlyBilling);
         o["% ejec. MO"] = `${r.rubroTraffic.LABOR.usagePctFormatted.toFixed(1)}%`;
         o["Sem. MO"] = r.rubroTraffic.LABOR.trafficLight;
+        o["Gasto insumos"] = r.rubroTraffic.SUPPLIES.spend;
         o["P. insumos"] = r.suppliesBudget;
         o["% P. insumos (s/ fact.)"] = pctOfBillingStr(r.suppliesBudget, r.monthlyBilling);
         o["% ejec. insumos"] = `${r.rubroTraffic.SUPPLIES.usagePctFormatted.toFixed(1)}%`;
         o["Sem. insumos"] = r.rubroTraffic.SUPPLIES.trafficLight;
+        o["Gasto administrativo"] = r.rubroTraffic.ADMIN.spend;
         o["P. administrativo"] = r.adminBudget;
         o["% P. adm. (s/ fact.)"] = pctOfBillingStr(r.adminBudget, r.monthlyBilling);
         o["% ejec. adm."] = `${r.rubroTraffic.ADMIN.usagePctFormatted.toFixed(1)}%`;
         o["Sem. adm."] = r.rubroTraffic.ADMIN.trafficLight;
+        o["Gasto utilidad"] = r.rubroTraffic.PROFIT.spend;
         o["P. utilidad"] = r.profitBudget;
         o["% P. utilidad (s/ fact.)"] = pctOfBillingStr(r.profitBudget, r.monthlyBilling);
         o["% ejec. utilidad"] = `${r.rubroTraffic.PROFIT.usagePctFormatted.toFixed(1)}%`;
         o["Sem. utilidad"] = r.rubroTraffic.PROFIT.trafficLight;
       } else {
+        o.Gasto = r.grandTotal;
         o.Presupuesto = r.reportBudget;
         o["% presup. (s/ fact.)"] = `${(r.reportBudgetPct * 100).toFixed(1)}%`;
+        o["% ejec."] = `${r.budgetUsagePctFormatted.toFixed(1)}%`;
       }
 
       for (const col of expenseTypeColumns) {
@@ -159,7 +449,8 @@ export default function ReportsPage() {
       return o;
     };
 
-    const exportData = rows.map(buildRow);
+    const exportData = displayedRows.map(buildRow);
+    const t = displayTotals;
 
     const totalsRow: Record<string, string | number> = {
       "ID contrato": "",
@@ -171,42 +462,64 @@ export default function ReportsPage() {
       Oficiales: "",
       Puestos: "",
       "Equiv. %": "",
-      "Facturación mensual": totals.totalBilling,
+      "Facturación mensual": t.totalBilling,
       "Vista / partida": partidaLabel,
     };
 
     if (partida === "ALL") {
-      totalsRow["P. mano de obra"] = totals.totalLaborBudget;
-      totalsRow["% P. MO (s/ fact.)"] = pctOfBillingStr(totals.totalLaborBudget, totals.totalBilling);
+      totalsRow["Gasto mano de obra"] = t.totalLaborSpend;
+      totalsRow["P. mano de obra"] = t.totalLaborBudget;
+      totalsRow["% P. MO (s/ fact.)"] = pctOfBillingStr(t.totalLaborBudget, t.totalBilling);
       totalsRow["% ejec. MO"] = "";
       totalsRow["Sem. MO"] = "";
-      totalsRow["P. insumos"] = totals.totalSuppliesBudget;
-      totalsRow["% P. insumos (s/ fact.)"] = pctOfBillingStr(totals.totalSuppliesBudget, totals.totalBilling);
+      totalsRow["Gasto insumos"] = t.totalSuppliesSpend;
+      totalsRow["P. insumos"] = t.totalSuppliesBudget;
+      totalsRow["% P. insumos (s/ fact.)"] = pctOfBillingStr(t.totalSuppliesBudget, t.totalBilling);
       totalsRow["% ejec. insumos"] = "";
       totalsRow["Sem. insumos"] = "";
-      totalsRow["P. administrativo"] = totals.totalAdminBudget;
-      totalsRow["% P. adm. (s/ fact.)"] = pctOfBillingStr(totals.totalAdminBudget, totals.totalBilling);
+      totalsRow["Gasto administrativo"] = t.totalAdminSpend;
+      totalsRow["P. administrativo"] = t.totalAdminBudget;
+      totalsRow["% P. adm. (s/ fact.)"] = pctOfBillingStr(t.totalAdminBudget, t.totalBilling);
       totalsRow["% ejec. adm."] = "";
       totalsRow["Sem. adm."] = "";
-      totalsRow["P. utilidad"] = totals.totalProfitBudget;
-      totalsRow["% P. utilidad (s/ fact.)"] = pctOfBillingStr(totals.totalProfitBudget, totals.totalBilling);
+      totalsRow["Gasto utilidad"] = t.totalProfitSpend;
+      totalsRow["P. utilidad"] = t.totalProfitBudget;
+      totalsRow["% P. utilidad (s/ fact.)"] = pctOfBillingStr(t.totalProfitBudget, t.totalBilling);
       totalsRow["% ejec. utilidad"] = "";
       totalsRow["Sem. utilidad"] = "";
     } else {
-      totalsRow.Presupuesto = totals.totalReportBudget;
-      totalsRow["% presup. (s/ fact.)"] = pctOfBillingStr(totals.totalReportBudget, totals.totalBilling);
+      totalsRow.Gasto = t.totalExpenses;
+      totalsRow.Presupuesto = t.totalReportBudget;
+      totalsRow["% presup. (s/ fact.)"] = pctOfBillingStr(t.totalReportBudget, t.totalBilling);
+      totalsRow["% ejec."] = "";
     }
 
     for (const col of expenseTypeColumns) {
-      totalsRow[col.label] = (totals.totalsByType ?? {})[col.type] ?? 0;
+      totalsRow[col.label] = (t.totalsByType ?? {})[col.type] ?? 0;
     }
-    totalsRow["Total gastos"] = totals.totalExpenses;
+    totalsRow["Total gastos"] = t.totalExpenses;
     totalsRow["% ejec. (peor partida)"] =
-      rows.length > 0 ? `${(totals.avgUsagePct * 100).toFixed(1)}%` : "";
+      displayedRows.length > 0 ? `${(t.avgUsagePct * 100).toFixed(1)}%` : "";
     totalsRow["Semáforo peor partida"] = "";
-    totalsRow["Disponible / variación"] = "";
+    totalsRow["Disponible / variación"] = displayedRows.reduce((s, r) => s + r.remaining, 0);
 
     exportData.push(totalsRow);
+
+    exportData.push({
+      "N° Licitación": "BALANCE GENERAL",
+      Cliente: "",
+      "Facturación mensual": t.totalBilling,
+      "Total gastos": t.totalSpendAll,
+      "Disponible / variación": t.budgetVariance,
+      Gasto:
+        partida === "ALL"
+          ? `Presupuesto MO+Ins+Adm+Util: ${t.totalOperatingBudget}`
+          : `Presupuesto partida: ${t.totalOperatingBudget}`,
+      Presupuesto:
+        t.generalBalance >= 0
+          ? `Positivo · ${t.generalBalance}`
+          : `Negativo · ${Math.abs(t.generalBalance)}`,
+    });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
@@ -215,51 +528,144 @@ export default function ReportsPage() {
     XLSX.writeFile(wb, `reporte-mensual-${selectedMonth}-${suffix}.xlsx`);
   }
 
-  /** % del monto respecto a la facturación mensual (misma fila) */
-  function BudgetVsBilling({ amount, billing }: { amount: number; billing: number }) {
-    const pct = billing > 0 ? (amount / billing) * 100 : 0;
-    return (
-      <div className="text-right tabular-nums leading-tight">
-        <div>{formatCurrency(amount)}</div>
-        <div className="text-[10px] text-slate-500 font-normal">{pct.toFixed(1)}%</div>
-      </div>
-    );
-  }
 
-  /** Presupuesto + % sobre facturación, con semáforo de ejecución de ese rubro */
-  function BudgetVsBillingWithLight({
-    amount,
+  /** Gasto real + presupuesto + semáforo de ejecución por rubro */
+  function RubroSpendBudgetCell({
+    budget,
     billing,
     rubro,
+    onSpendClick,
   }: {
-    amount: number;
+    budget: number;
     billing: number;
     rubro: RubroTrafficSnapshot;
+    onSpendClick?: () => void;
   }) {
+    const budgetPct = billing > 0 ? (budget / billing) * 100 : 0;
+    const spendClickable = rubro.spend > 0 && onSpendClick;
     return (
-      <div className="text-right tabular-nums leading-tight space-y-1">
+      <div className="text-right tabular-nums leading-tight space-y-0.5 min-w-[7.5rem]">
         <div className="flex justify-end">
           <TrafficLightBadge light={rubro.trafficLight} pct={rubro.usagePctFormatted} size="sm" />
         </div>
-        <BudgetVsBilling amount={amount} billing={billing} />
+        {spendClickable ? (
+          <button
+            type="button"
+            onClick={onSpendClick}
+            className="font-semibold text-blue-700 hover:text-blue-900 hover:underline underline-offset-2 cursor-pointer"
+            title="Ver desglose de este gasto"
+          >
+            {formatCurrency(rubro.spend)}
+          </button>
+        ) : (
+          <div className="font-semibold text-slate-800">
+            {rubro.spend > 0 ? formatCurrency(rubro.spend) : "—"}
+          </div>
+        )}
+        {(rubro.cargasSocialesSpend ?? 0) > 0 && (
+          <div className="text-[10px] text-amber-700 font-medium">
+            Cargas soc.: {formatCurrency(rubro.cargasSocialesSpend!)}
+          </div>
+        )}
+        <div className="text-[10px] text-slate-500">P: {formatCurrency(budget)}</div>
+        <div className="text-[10px] text-slate-400">{budgetPct.toFixed(1)}% fact.</div>
       </div>
     );
   }
 
-  /** Partida única: usa el % configurado del contrato (coincide con export Excel) */
-  function ReportBudgetCell({ amount, pctOfBilling }: { amount: number; pctOfBilling: number }) {
+  /** Partida única: gasto + presupuesto + % ejecución */
+  function PartidaSpendBudgetCell({
+    spend,
+    budget,
+    pctOfBilling,
+    usagePctFormatted,
+    trafficLight,
+    onSpendClick,
+  }: {
+    spend: number;
+    budget: number;
+    pctOfBilling: number;
+    usagePctFormatted: number;
+    trafficLight: TrafficLight;
+    onSpendClick?: () => void;
+  }) {
+    const spendClickable = spend > 0 && onSpendClick;
     return (
-      <div className="text-right tabular-nums leading-tight">
-        <div>{formatCurrency(amount)}</div>
-        <div className="text-[10px] text-slate-500 font-normal">{(pctOfBilling * 100).toFixed(1)}%</div>
+      <div className="text-right tabular-nums leading-tight space-y-0.5 min-w-[7.5rem]">
+        <div className="flex justify-end">
+          <TrafficLightBadge light={trafficLight} pct={usagePctFormatted} size="sm" />
+        </div>
+        {spendClickable ? (
+          <button
+            type="button"
+            onClick={onSpendClick}
+            className="font-semibold text-blue-700 hover:text-blue-900 hover:underline underline-offset-2 cursor-pointer"
+            title="Ver desglose de este gasto"
+          >
+            {formatCurrency(spend)}
+          </button>
+        ) : (
+          <div className="font-semibold text-slate-800">
+            {spend > 0 ? formatCurrency(spend) : "—"}
+          </div>
+        )}
+        <div className="text-[10px] text-slate-500">P: {formatCurrency(budget)}</div>
+        <div className="text-[10px] text-slate-400">{(pctOfBilling * 100).toFixed(1)}% fact.</div>
       </div>
     );
   }
 
-  const trafficCounts = rows.reduce(
-    (acc, r) => { acc[r.trafficLight]++; return acc; },
-    { GREEN: 0, YELLOW: 0, RED: 0 }
-  );
+  function RubroTotalsCell({
+    spend,
+    budget,
+    billing,
+    cargasSocialesSpend,
+    onSpendClick,
+  }: {
+    spend: number;
+    budget: number;
+    billing: number;
+    cargasSocialesSpend?: number;
+    onSpendClick?: () => void;
+  }) {
+    const budgetPct = billing > 0 ? (budget / billing) * 100 : 0;
+    const spendClickable = spend > 0 && onSpendClick;
+    return (
+      <div className="text-right tabular-nums leading-tight space-y-0.5">
+        {spendClickable ? (
+          <button
+            type="button"
+            onClick={onSpendClick}
+            className="font-semibold text-blue-700 hover:text-blue-900 hover:underline underline-offset-2 cursor-pointer"
+            title="Ver desglose consolidado de este gasto"
+          >
+            {formatCurrency(spend)}
+          </button>
+        ) : (
+          <div className="font-semibold">{formatCurrency(spend)}</div>
+        )}
+        {(cargasSocialesSpend ?? 0) > 0 && (
+          <div className="text-[10px] text-amber-700 font-medium">
+            Cargas soc.: {formatCurrency(cargasSocialesSpend!)}
+          </div>
+        )}
+        <div className="text-[10px] text-slate-500 font-normal">P: {formatCurrency(budget)}</div>
+        <div className="text-[10px] text-slate-400 font-normal">{budgetPct.toFixed(1)}% fact.</div>
+      </div>
+    );
+  }
+
+  function partidaRubro(r: ProfitabilityRow): RubroTrafficSnapshot {
+    if (selectedPartida === "LABOR") return r.rubroTraffic.LABOR;
+    if (selectedPartida === "SUPPLIES") return r.rubroTraffic.SUPPLIES;
+    return r.rubroTraffic.ADMIN;
+  }
+
+  function partidaRubroKey(): RubroSpendDrilldownRubro {
+    if (selectedPartida === "LABOR") return "LABOR";
+    if (selectedPartida === "SUPPLIES") return "SUPPLIES";
+    return "ADMIN";
+  }
 
   return (
     <>
@@ -268,7 +674,13 @@ export default function ReportsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-slate-800">Reporte mensual</h2>
-            <p className="text-sm text-slate-500">{rows.length} contratos analizados · {partidaLabel}</p>
+            <p className="text-sm text-slate-500">
+              {displayedRows.length}
+              {hasActiveColumnFilters(columnFilters) && displayedRows.length !== rows.length
+                ? ` de ${rows.length}`
+                : ""}{" "}
+              contratos analizados · {partidaLabel}
+            </p>
           </div>
           <Button variant="outline" className="gap-2" onClick={exportToExcel}>
             <Download className="h-4 w-4" />
@@ -277,13 +689,18 @@ export default function ReportsPage() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Select value={selectedCompany} onValueChange={setSelectedCompany}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="Empresa" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas las empresas</SelectItem>
-              {companyRows.map((c) => <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <MultiSelect
+            options={companyRows
+              .filter((c) => c.isActive)
+              .map((c) => ({
+                value: c.code,
+                label: companyDisplayName(c.code, companyRows),
+              }))}
+            value={companyFilter}
+            onChange={setCompanyFilter}
+            placeholder="Todas las empresas"
+            className="w-[240px]"
+          />
           <input
             type="month"
             value={selectedMonth}
@@ -300,25 +717,36 @@ export default function ReportsPage() {
           </Select>
         </div>
 
-        {totals && (
+        {report && (
           partida === "ALL" ? (
             <div className="space-y-4">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <MetricCard title="Facturación total" value={formatCurrency(totals.totalBilling)} icon={DollarSign} color="blue" />
-                <MetricCard title="Presupuesto mano de obra" value={formatCurrency(totals.totalLaborBudget)} icon={FileText} color="green" />
-                <MetricCard title="Presupuesto insumos" value={formatCurrency(totals.totalSuppliesBudget)} icon={FileText} color="green" />
-                <MetricCard title="Presupuesto administrativo" value={formatCurrency(totals.totalAdminBudget)} icon={FileText} color="green" />
+                <MetricCard title="Facturación total" value={formatCurrency(displayTotals.totalBilling)} icon={DollarSign} color="blue" />
+                <MetricCard
+                  title="Gasto mano de obra"
+                  value={formatCurrency(displayTotals.totalLaborSpend)}
+                  subtitle={
+                    displayTotals.totalLaborCargasSpend > 0
+                      ? `Cargas soc. ${formatCurrency(displayTotals.totalLaborCargasSpend)} · P. ${formatCurrency(displayTotals.totalLaborBudget)}`
+                      : `Presupuesto ${formatCurrency(displayTotals.totalLaborBudget)}`
+                  }
+                  icon={TrendingUp}
+                  color="purple"
+                />
+                <MetricCard title="Gasto insumos" value={formatCurrency(displayTotals.totalSuppliesSpend)} subtitle={`Presupuesto ${formatCurrency(displayTotals.totalSuppliesBudget)}`} icon={TrendingUp} color="purple" />
+                <MetricCard title="Gasto administrativo" value={formatCurrency(displayTotals.totalAdminSpend)} subtitle={`Presupuesto ${formatCurrency(displayTotals.totalAdminBudget)}`} icon={TrendingUp} color="purple" />
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <MetricCard title="Total gastos (todas las fuentes)" value={formatCurrency(totals.totalExpenses)} subtitle={`${(totals.avgUsagePct * 100).toFixed(1)}% ejecución máx. entre partidas`} icon={TrendingUp} color="purple" />
+                <MetricCard title="Gasto utilidad" value={formatCurrency(displayTotals.totalProfitSpend)} subtitle={`Presupuesto ${formatCurrency(displayTotals.totalProfitBudget)}`} icon={FileText} color="green" />
+                <MetricCard title="Total gastos (todas las fuentes)" value={formatCurrency(displayTotals.totalExpenses)} subtitle={`${(displayTotals.avgUsagePct * 100).toFixed(1)}% ejecución máx. entre partidas`} icon={TrendingUp} color="purple" />
                 <MetricCard title="Contratos en riesgo" value={String(trafficCounts.RED)} subtitle={`${trafficCounts.YELLOW} en precaución`} icon={AlertTriangle} color="red" />
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <MetricCard title="Facturación total" value={formatCurrency(totals.totalBilling)} icon={DollarSign} color="blue" />
-              <MetricCard title={`Presupuesto (${partidaLabel})`} value={formatCurrency(totals.totalReportBudget)} icon={FileText} color="green" />
-              <MetricCard title="Total gastos (partida)" value={formatCurrency(totals.totalExpenses)} subtitle={`${(totals.avgUsagePct * 100).toFixed(1)}% promedio`} icon={TrendingUp} color="purple" />
+              <MetricCard title="Facturación total" value={formatCurrency(displayTotals.totalBilling)} icon={DollarSign} color="blue" />
+              <MetricCard title={`Gasto (${partidaLabel})`} value={formatCurrency(displayTotals.totalExpenses)} subtitle={`Presupuesto ${formatCurrency(displayTotals.totalReportBudget)}`} icon={TrendingUp} color="purple" />
+              <MetricCard title="% ejecución promedio" value={`${(displayTotals.avgUsagePct * 100).toFixed(1)}%`} icon={FileText} color="green" />
               <MetricCard title="Contratos en riesgo" value={String(trafficCounts.RED)} subtitle={`${trafficCounts.YELLOW} en precaución`} icon={AlertTriangle} color="red" />
             </div>
           )
@@ -327,9 +755,9 @@ export default function ReportsPage() {
         <div className="grid grid-cols-3 gap-4">
           {(["GREEN", "YELLOW", "RED"] as TrafficLight[]).map((tl) => {
             const count = trafficCounts[tl];
-            const pct = rows.length > 0 ? (count / rows.length) * 100 : 0;
+            const pct = displayedRows.length > 0 ? (count / displayedRows.length) * 100 : 0;
             const colors = { GREEN: "border-green-200 bg-green-50", YELLOW: "border-yellow-200 bg-yellow-50", RED: "border-red-200 bg-red-50" };
-            const labels = { GREEN: "Normal", YELLOW: "Precaución", RED: "Crítico" };
+            const labels = { GREEN: "Normal (<80%)", YELLOW: "Precaución (80–100%)", RED: "Crítico (>100%)" };
             const dotColors = { GREEN: "bg-green-500", YELLOW: "bg-yellow-500", RED: "bg-red-500" };
             return (
               <Card key={tl} className={`border-2 ${colors[tl]}`}>
@@ -360,35 +788,18 @@ export default function ReportsPage() {
             ) : rows.length === 0 ? (
               <div className="p-8 text-center text-slate-400">No hay datos para mostrar</div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="max-h-[calc(100vh-14rem)] overflow-auto overscroll-contain">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left px-3 py-2 font-semibold text-slate-600">Licitación</th>
-                      <th className="text-left px-3 py-2 font-semibold text-slate-600">Cliente</th>
-                      <th className="text-left px-3 py-2 font-semibold text-slate-600">Empresa</th>
-                      <th className="text-right px-3 py-2 font-semibold text-slate-600">Facturación</th>
-                      {partida === "ALL" ? (
-                        <>
-                          <th className="text-right px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">P. mano de obra</th>
-                          <th className="text-right px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">P. insumos</th>
-                          <th className="text-right px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">P. administrativo</th>
-                          <th className="text-right px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">P. utilidad</th>
-                        </>
-                      ) : (
-                        <th className="text-right px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">Presupuesto</th>
-                      )}
-                      {expenseTypeColumns.map((col) => (
-                        <th key={col.type} className="text-right px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">
-                          {col.label}
-                        </th>
-                      ))}
-                      <th className="text-right px-3 py-2 font-semibold text-slate-600">Total</th>
-                      <th className="text-left px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">Peor partida</th>
-                    </tr>
+                    <TableColumnFilterHead
+                      columns={columnDefs}
+                      rows={rows}
+                      filters={columnFilters}
+                      onFilterChange={onColumnFilterChange}
+                    />
                   </thead>
                   <tbody className="divide-y">
-                    {rows.map((r) => (
+                    {displayedRows.map((r) => (
                       <tr key={r.contractId} className="hover:bg-muted/50">
                         <td className="px-3 py-2">
                           <Link
@@ -408,37 +819,48 @@ export default function ReportsPage() {
                         {partida === "ALL" ? (
                           <>
                             <td className="px-3 py-2">
-                              <BudgetVsBillingWithLight
-                                amount={r.laborBudget}
+                              <RubroSpendBudgetCell
+                                budget={r.laborBudget}
                                 billing={r.monthlyBilling}
                                 rubro={r.rubroTraffic.LABOR}
+                                onSpendClick={() => openRubroDrilldown(r, "LABOR")}
                               />
                             </td>
                             <td className="px-3 py-2">
-                              <BudgetVsBillingWithLight
-                                amount={r.suppliesBudget}
+                              <RubroSpendBudgetCell
+                                budget={r.suppliesBudget}
                                 billing={r.monthlyBilling}
                                 rubro={r.rubroTraffic.SUPPLIES}
+                                onSpendClick={() => openRubroDrilldown(r, "SUPPLIES")}
                               />
                             </td>
                             <td className="px-3 py-2">
-                              <BudgetVsBillingWithLight
-                                amount={r.adminBudget}
+                              <RubroSpendBudgetCell
+                                budget={r.adminBudget}
                                 billing={r.monthlyBilling}
                                 rubro={r.rubroTraffic.ADMIN}
+                                onSpendClick={() => openRubroDrilldown(r, "ADMIN")}
                               />
                             </td>
                             <td className="px-3 py-2">
-                              <BudgetVsBillingWithLight
-                                amount={r.profitBudget}
+                              <RubroSpendBudgetCell
+                                budget={r.profitBudget}
                                 billing={r.monthlyBilling}
                                 rubro={r.rubroTraffic.PROFIT}
+                                onSpendClick={() => openRubroDrilldown(r, "PROFIT")}
                               />
                             </td>
                           </>
                         ) : (
                           <td className="px-3 py-2">
-                            <ReportBudgetCell amount={r.reportBudget} pctOfBilling={r.reportBudgetPct} />
+                            <PartidaSpendBudgetCell
+                              spend={r.grandTotal}
+                              budget={r.reportBudget}
+                              pctOfBilling={r.reportBudgetPct}
+                              usagePctFormatted={r.budgetUsagePctFormatted}
+                              trafficLight={partidaRubro(r).trafficLight}
+                              onSpendClick={() => openRubroDrilldown(r, partidaRubroKey())}
+                            />
                           </td>
                         )}
                         {expenseTypeColumns.map((col) => {
@@ -456,46 +878,179 @@ export default function ReportsPage() {
                       </tr>
                     ))}
                   </tbody>
-                  {totals && (
+                  {displayedRows.length > 0 && (
                     <tfoot>
                       <tr className="border-t-2 bg-muted/50 font-bold">
                         <td colSpan={3} className="px-3 py-2 text-right">TOTALES:</td>
-                        <td className="px-3 py-2 text-right">{formatCurrency(totals.totalBilling)}</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(displayTotals.totalBilling)}</td>
                         {partida === "ALL" ? (
                           <>
                             <td className="px-3 py-2">
-                              <BudgetVsBilling amount={totals.totalLaborBudget} billing={totals.totalBilling} />
+                              <RubroTotalsCell
+                                spend={displayTotals.totalLaborSpend}
+                                budget={displayTotals.totalLaborBudget}
+                                billing={displayTotals.totalBilling}
+                                cargasSocialesSpend={displayTotals.totalLaborCargasSpend}
+                                onSpendClick={() => openConsolidatedRubroDrilldown("LABOR")}
+                              />
                             </td>
                             <td className="px-3 py-2">
-                              <BudgetVsBilling amount={totals.totalSuppliesBudget} billing={totals.totalBilling} />
+                              <RubroTotalsCell
+                                spend={displayTotals.totalSuppliesSpend}
+                                budget={displayTotals.totalSuppliesBudget}
+                                billing={displayTotals.totalBilling}
+                                onSpendClick={() => openConsolidatedRubroDrilldown("SUPPLIES")}
+                              />
                             </td>
                             <td className="px-3 py-2">
-                              <BudgetVsBilling amount={totals.totalAdminBudget} billing={totals.totalBilling} />
+                              <RubroTotalsCell
+                                spend={displayTotals.totalAdminSpend}
+                                budget={displayTotals.totalAdminBudget}
+                                billing={displayTotals.totalBilling}
+                                onSpendClick={() => openConsolidatedRubroDrilldown("ADMIN")}
+                              />
                             </td>
                             <td className="px-3 py-2">
-                              <BudgetVsBilling amount={totals.totalProfitBudget} billing={totals.totalBilling} />
+                              <RubroTotalsCell
+                                spend={displayTotals.totalProfitSpend}
+                                budget={displayTotals.totalProfitBudget}
+                                billing={displayTotals.totalBilling}
+                                onSpendClick={() => openConsolidatedRubroDrilldown("PROFIT")}
+                              />
                             </td>
                           </>
                         ) : (
                           <td className="px-3 py-2">
-                            <BudgetVsBilling amount={totals.totalReportBudget} billing={totals.totalBilling} />
+                            <RubroTotalsCell
+                              spend={displayTotals.totalExpenses}
+                              budget={displayTotals.totalReportBudget}
+                              billing={displayTotals.totalBilling}
+                              onSpendClick={() => openConsolidatedRubroDrilldown(partidaRubroKey())}
+                            />
                           </td>
                         )}
                         {expenseTypeColumns.map((col) => (
                           <td key={col.type} className="px-3 py-2 text-right tabular-nums">
-                            {formatCurrency((totals.totalsByType ?? {})[col.type] ?? 0)}
+                            {formatCurrency((displayTotals.totalsByType ?? {})[col.type] ?? 0)}
                           </td>
                         ))}
-                        <td className="px-3 py-2 text-right">{formatCurrency(totals.totalExpenses)}</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(displayTotals.totalExpenses)}</td>
                         <td className="px-3 py-2" />
+                      </tr>
+                      <tr className="border-t bg-slate-100/90">
+                        <td colSpan={4} className="px-3 py-3 align-top text-sm font-semibold text-slate-800">
+                          Gasto consolidado del mes
+                          <p className="mt-0.5 text-xs font-normal text-slate-500">
+                            {displayedRows.length} contrato{displayedRows.length === 1 ? "" : "s"} · suma de todos
+                          </p>
+                        </td>
+                        <td colSpan={tableColCount - 4} className="px-3 py-3">
+                          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+                            {partida === "ALL" ? (
+                              <>
+                                <span className="tabular-nums whitespace-nowrap">
+                                  <span className="text-slate-600">Mano de obra:</span>{" "}
+                                  <span className="font-semibold text-slate-900">
+                                    {formatCurrency(displayTotals.totalLaborSpend)}
+                                  </span>
+                                  {displayTotals.totalLaborCargasSpend > 0 && (
+                                    <span className="text-amber-700 ml-1 text-xs font-medium">
+                                      (Cargas soc.: {formatCurrency(displayTotals.totalLaborCargasSpend)})
+                                    </span>
+                                  )}
+                                  {displayTotals.totalLaborBudget > 0 && (
+                                    <span className="text-slate-500 ml-1">
+                                      ({spendUsagePct(
+                                        displayTotals.totalLaborSpend,
+                                        displayTotals.totalLaborBudget
+                                      )}{" "}
+                                      del P.)
+                                    </span>
+                                  )}
+                                </span>
+                                <ConsolidatedSpendChip
+                                  label="Insumos"
+                                  spend={displayTotals.totalSuppliesSpend}
+                                  budget={displayTotals.totalSuppliesBudget}
+                                />
+                                <ConsolidatedSpendChip
+                                  label="Administrativo"
+                                  spend={displayTotals.totalAdminSpend}
+                                  budget={displayTotals.totalAdminBudget}
+                                />
+                                <ConsolidatedSpendChip
+                                  label="Utilidad"
+                                  spend={displayTotals.totalProfitSpend}
+                                  budget={displayTotals.totalProfitBudget}
+                                />
+                              </>
+                            ) : (
+                              <ConsolidatedSpendChip
+                                label={partidaLabel}
+                                spend={displayTotals.totalExpenses}
+                                budget={displayTotals.totalReportBudget}
+                              />
+                            )}
+                            <span className="border-l border-slate-300 pl-4 tabular-nums whitespace-nowrap">
+                              <span className="text-slate-600">Total gastos:</span>{" "}
+                              <span className="font-bold text-slate-900">
+                                {formatCurrency(displayTotals.totalSpendAll)}
+                              </span>
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr className="bg-slate-50/90">
+                        <td colSpan={4} className="px-3 py-3 align-top text-sm font-semibold text-slate-800">
+                          ¿En qué se gastó?
+                          <p className="mt-0.5 text-xs font-normal text-slate-500">
+                            Desglose consolidado por concepto
+                          </p>
+                        </td>
+                        <td colSpan={tableColCount - 4} className="px-3 py-3">
+                          <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+                            {consolidatedExpenseEntries.map(({ type, label, amount }) => (
+                              <span key={type} className="tabular-nums whitespace-nowrap">
+                                <span className="text-slate-600">
+                                  {label || expenseTypeLabel(type)}:
+                                </span>{" "}
+                                <span className="font-medium text-slate-900">{formatCurrency(amount)}</span>
+                              </span>
+                            ))}
+                            {consolidatedExpenseEntries.length === 0 && (
+                              <span className="text-slate-500">Sin gastos registrados en el mes</span>
+                            )}
+                          </div>
+                          {partida === "ALL" && displayTotals.totalLaborSpend > 0 && (
+                            <p className="mt-2 text-[11px] text-slate-500">
+                              La mano de obra incluye nómina NAF asignada por asistencia; el detalle por concepto
+                              muestra los gastos registrados en el sistema (planilla, apertura, uniformes, etc.).
+                            </p>
+                          )}
+                        </td>
                       </tr>
                     </tfoot>
                   )}
                 </table>
+                {displayedRows.length > 0 && (
+                  <ReportGeneralBalanceSummary
+                    totals={displayTotals}
+                    partida={partida}
+                    contractCount={displayedRows.length}
+                  />
+                )}
               </div>
             )}
           </CardContent>
         </Card>
+
+        <RubroSpendDrilldownDialog
+          open={!!rubroDrilldown}
+          onOpenChange={(open) => {
+            if (!open) setRubroDrilldown(null);
+          }}
+          target={rubroDrilldown}
+        />
       </div>
     </>
   );

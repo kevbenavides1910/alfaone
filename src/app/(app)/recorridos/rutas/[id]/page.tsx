@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { use, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Pencil, Trash2, Clock } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Clock, HeartPulse } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,8 @@ type RouteDetail = {
   openSchedule: boolean;
   schedules: ScheduleSlot[];
   points: Point[];
+  welfareEnabled: boolean;
+  welfareIntervalMinutes: number;
 };
 
 type RouteForm = {
@@ -86,6 +88,10 @@ export default function RecorridosRutaDetailPage({
     openSchedule: boolean;
     slots: ScheduleSlot[];
   } | null>(null);
+  const [welfareForm, setWelfareForm] = useState<{
+    enabled: boolean;
+    intervalMinutes: number;
+  } | null>(null);
 
   const { data, isLoading } = useQuery<{ data: RouteDetail }>({
     queryKey: ["patrol-route", id],
@@ -121,6 +127,15 @@ export default function RecorridosRutaDetailPage({
             endTime: s.endTime,
             sortOrder: s.sortOrder,
           })),
+        }
+      : null);
+
+  const welfareMeta =
+    welfareForm ??
+    (route
+      ? {
+          enabled: route.welfareEnabled ?? false,
+          intervalMinutes: route.welfareIntervalMinutes ?? 60,
         }
       : null);
 
@@ -195,6 +210,42 @@ export default function RecorridosRutaDetailPage({
       toast.success("Horarios actualizados");
       setScheduleForm(null);
       qc.invalidateQueries({ queryKey: ["patrol-route", id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const saveWelfare = useMutation({
+    mutationFn: async () => {
+      if (!welfareMeta) return;
+      const res = await fetch(`/api/admin/patrol/routes/${id}/welfare`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          welfareEnabled: welfareMeta.enabled,
+          welfareIntervalMinutes: welfareMeta.intervalMinutes,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error?.message ?? "Error al guardar hombre vivo");
+    },
+    onSuccess: () => {
+      toast.success("Configuración de hombre vivo guardada");
+      setWelfareForm(null);
+      qc.invalidateQueries({ queryKey: ["patrol-route", id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const triggerWelfare = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/admin/patrol/routes/${id}/welfare`, { method: "POST" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error?.message ?? "Error al disparar alerta");
+      return j.data as { message?: string };
+    },
+    onSuccess: (data) => {
+      toast.success(data?.message ?? "Alerta enviada");
+      qc.invalidateQueries({ queryKey: ["patrol-welfare-history"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -478,6 +529,67 @@ export default function RecorridosRutaDetailPage({
           </Button>
         </CardContent>
       </Card>
+
+      {welfareMeta && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <HeartPulse className="h-4 w-4" />
+              Hombre vivo
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 max-w-xl">
+            <p className="text-sm text-muted-foreground">
+              Alertas periódicas al guardia durante el horario de la ruta. El dispositivo consulta
+              pendientes y confirma desde la app móvil.
+            </p>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={welfareMeta.enabled}
+                onChange={(e) =>
+                  setWelfareForm({ ...welfareMeta, enabled: e.target.checked })
+                }
+              />
+              Habilitar hombre vivo en esta ruta
+            </label>
+            <div>
+              <Label htmlFor="welfare-interval">Intervalo (minutos)</Label>
+              <Input
+                id="welfare-interval"
+                type="number"
+                min={5}
+                max={480}
+                value={welfareMeta.intervalMinutes}
+                disabled={!welfareMeta.enabled}
+                onChange={(e) =>
+                  setWelfareForm({
+                    ...welfareMeta,
+                    intervalMinutes: Math.min(480, Math.max(5, Number(e.target.value) || 60)),
+                  })
+                }
+              />
+              <p className="text-xs text-muted-foreground mt-1">Entre 5 y 480 minutos.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => saveWelfare.mutate()} disabled={saveWelfare.isPending}>
+                Guardar configuración
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => triggerWelfare.mutate()}
+                disabled={triggerWelfare.isPending || !route.isActive}
+              >
+                Disparar alerta manual
+              </Button>
+              <Link href="/recorridos/hombre-vivo" className="text-sm text-primary underline self-center">
+                Ver historial
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Puntos de marca ({route.points.length})</h2>

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import { ticketsTiEntryPath } from "@/modules/tickets-ti/routes";
 import TicketsTiCentroPage from "./CentroPage";

@@ -1,12 +1,44 @@
 import { prisma } from "@/modules/core/db/prisma";
-import { normalizeZoneCatalogKey } from "@/modules/disciplinario/business/disciplinary-zone-key";
+import {
+  normalizeZoneCatalogKey,
+  sanitizeZoneImportText,
+} from "@/modules/disciplinario/business/disciplinary-zone-key";
 
-export { normalizeZoneCatalogKey } from "@/modules/disciplinario/business/disciplinary-zone-key";
+export {
+  normalizeZoneCatalogKey,
+  sanitizeZoneImportText,
+} from "@/modules/disciplinario/business/disciplinary-zone-key";
 
 export type ZoneDisciplinaryDefaults = {
   administrator: string | null;
   administratorEmail: string | null;
 };
+
+/** Mapa clave normalizada → nombre canónico en catálogo (solo zonas activas). */
+export async function loadZoneCatalogNameByKey(): Promise<Map<string, string>> {
+  const zones = await prisma.zone.findMany({
+    where: { isActive: true },
+    select: { name: true },
+  });
+  const m = new Map<string, string>();
+  for (const z of zones) {
+    const k = normalizeZoneCatalogKey(z.name);
+    if (!k || m.has(k)) continue;
+    m.set(k, z.name);
+  }
+  return m;
+}
+
+/** Devuelve el nombre del catálogo si la zona importada coincide; si no, el texto saneado. */
+export function canonicalZoneLabel(
+  nameByKey: Map<string, string>,
+  raw: string | null | undefined,
+): string | null {
+  const cleaned = sanitizeZoneImportText(raw);
+  if (!cleaned) return null;
+  const k = normalizeZoneCatalogKey(cleaned);
+  return nameByKey.get(k) ?? cleaned;
+}
 
 /** Mapa nombre-de-zona-normalizado → datos disciplinarios (solo zonas activas). */
 export async function loadZoneDisciplinaryDefaultsMap(): Promise<

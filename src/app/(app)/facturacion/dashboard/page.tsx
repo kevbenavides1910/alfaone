@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import {
   BarChart3,
   Banknote,
@@ -29,9 +29,12 @@ import { cn } from "@/lib/utils/cn";
 
 type DashboardResponse = {
   data: FacturacionDashboardData & {
-    cxcRollingBalance: CxcRollingBalanceData;
     permissions: { facturacion: boolean; cxc: boolean };
   };
+};
+
+type RollingBalanceResponse = {
+  data: { year: number; cxcRollingBalance: CxcRollingBalanceData };
 };
 
 function pct(value: number | null) {
@@ -169,7 +172,14 @@ export default function FacturacionDashboardPage() {
     [now]
   );
 
-  const { data, isLoading, isFetching, refetch, isError, error } = useQuery<DashboardResponse>({
+  const {
+    data,
+    isLoading,
+    isFetching,
+    refetch,
+    isError,
+    error,
+  } = useQuery<DashboardResponse>({
     queryKey: ["facturacion-dashboard", year],
     queryFn: async () => {
       const r = await fetch(`/api/facturacion/dashboard?year=${year}`);
@@ -178,6 +188,24 @@ export default function FacturacionDashboardPage() {
       return json;
     },
     enabled: canDashboard,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const {
+    data: rollingData,
+    isLoading: rollingLoading,
+    isFetching: rollingFetching,
+    refetch: refetchRolling,
+  } = useQuery<RollingBalanceResponse>({
+    queryKey: ["facturacion-dashboard-rolling", year],
+    queryFn: async () => {
+      const r = await fetch(`/api/facturacion/dashboard/rolling-balance?year=${year}`);
+      const json = await r.json();
+      if (json.error) throw new Error(json.error.message || "Error al cargar balance CxC");
+      return json;
+    },
+    enabled: canDashboard && canCxc,
+    staleTime: 5 * 60 * 1000,
   });
 
   const dash = data?.data;
@@ -270,7 +298,7 @@ export default function FacturacionDashboardPage() {
     ]) ?? [];
 
   const rollingRows =
-    dash?.cxcRollingBalance?.map((m) => [
+    rollingData?.data?.cxcRollingBalance?.map((m) => [
       m.label,
       formatCurrency(m.openingAmount),
       m.openingCount,
@@ -323,7 +351,7 @@ export default function FacturacionDashboardPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching}>
+          <Button variant="outline" size="icon" onClick={() => { refetch(); refetchRolling(); }} disabled={isFetching || rollingFetching}>
             <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
           </Button>
         </div>
@@ -450,7 +478,11 @@ export default function FacturacionDashboardPage() {
             />
           )}
 
-          {canCxc && rollingRows.length > 0 && (
+          {canCxc && rollingLoading && (
+            <div className="py-8 text-center text-slate-400 text-sm">Cargando balance CxC mes a mes…</div>
+          )}
+
+          {canCxc && !rollingLoading && rollingRows.length > 0 && (
             <SectionTable
               title="Cuentas por cobrar — balance mes a mes"
               description="Evolución del saldo de CxC por mes: documentos existentes al inicio, entradas nuevas, cobros recibidos y saldo al cierre."

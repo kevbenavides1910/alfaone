@@ -20,15 +20,17 @@ function resolveDocumentNumber(
     periodMonth: number;
     documentNumber: string | null;
   },
-  emisionDocumentNumber: string | null | undefined
+  emisionDocumentNumber: string | null | undefined,
+  emisionId?: string
 ): string {
-  const fromFactura = factura.documentNumber?.trim();
-  if (fromFactura) return fromFactura;
-
   const fromEmision = emisionDocumentNumber?.trim();
   if (fromEmision) return fromEmision;
 
-  return `FM-${factura.periodYear}${String(factura.periodMonth).padStart(2, "0")}-${factura.id.slice(-8)}`;
+  const fromFactura = factura.documentNumber?.trim();
+  if (fromFactura && !emisionId) return fromFactura;
+
+  const suffix = emisionId ? emisionId.slice(-8) : factura.id.slice(-8);
+  return `FM-${factura.periodYear}${String(factura.periodMonth).padStart(2, "0")}-${suffix}`;
 }
 
 function resolveInvoiceNumber(
@@ -69,6 +71,8 @@ export async function syncCxcFromFacturaMensual(
           documentNumber: true,
           invoiceNumber: true,
           invoiceReceivedAt: true,
+          totalFacturadoNaf: true,
+          _count: { select: { nafDocumentos: true } },
         },
       },
     },
@@ -95,7 +99,10 @@ export async function syncCxcFromFacturaMensual(
   const companySapCode = normalizeCompanySapCode(company?.sapCode, factura.companyCodeCopied);
   const documentNumber = resolveDocumentNumber(factura, firstEmision?.documentNumber);
   const invoiceNumber = resolveInvoiceNumber(factura.invoiceNumber, firstEmision?.invoiceNumber);
-  const total = toAmount(factura.totalCalculated);
+  const total =
+    firstEmision && firstEmision._count.nafDocumentos > 0 && firstEmision.totalFacturadoNaf != null
+      ? toAmount(firstEmision.totalFacturadoNaf)
+      : toAmount(factura.totalCalculated);
   const cobrado = factura.status === "COBRADO";
   const cxcStatus: CxcDocumentoStatus = cobrado ? "COBRADO" : "PENDIENTE";
   const saldo = cobrado ? 0 : total;
@@ -124,7 +131,7 @@ export async function syncCxcFromFacturaMensual(
     cxcObservations: factura.cxcObservations,
     status: cxcStatus,
     paidAt: cobrado ? factura.paidAt : null,
-    isReajuste: false,
+    isReajuste: factura.isReajuste ?? false,
   };
 
   // 1. Prioridad: registro con la clave exacta (companySapCode, documentNumber).
@@ -153,7 +160,6 @@ export async function syncCxcFromFacturaMensual(
   const existingLinked = await db.cxcDocumento.findFirst({
     where: {
       facturaMensualId: factura.id,
-      isReajuste: false,
       docType: { in: ["FC", "FM"] },
     },
     orderBy: { createdAt: "asc" as const },
@@ -179,6 +185,103 @@ export async function syncCxcFromFacturaMensual(
   }
 
   // 3. Crear nuevo registro.
+  const created = await db.cxcDocumento.create({ data: payload });
+  return { ok: true, cxcDocumentoId: created.id, created: true };
+}
+
+/** Sincroniza CxC para una emisión (administración) cerrada de forma independiente. */
+export async function syncCxcFromFacturaEmision(
+  db: Db,
+  facturaId: string,
+  emisionId: string,
+  emisionTotal: number
+): Promise<SyncCxcFromFacturaResult> {
+  const factura = await db.facturaMensual.findUnique({
+    where: { id: facturaId },
+    include: {
+      emisiones: {
+        where: { id: emisionId },
+        select: {
+          id: true,
+          closedAt: true,
+          documentNumber: true,
+          invoiceNumber: true,
+          invoiceReceivedAt: true,
+          totalFacturadoNaf: true,
+          _count: { select: { nafDocumentos: true } },
+        },
+      },
+    },
+  });
+
+  if (!factura) {
+    return { ok: false, code: "NOT_FOUND", message: "Factura mensual no encontrada" };
+  }
+
+  const emision = factura.emisiones[0];
+  if (!emision?.closedAt) {
+    return {
+      ok: false,
+      code: "NOT_CLOSED",
+      message: "La administración aún no está cerrada",
+    };
+  }
+
+  const company = await db.company.findUnique({
+    where: { code: factura.companyCodeCopied },
+    select: { sapCode: true },
+  });
+
+  const companySapCode = normalizeCompanySapCode(company?.sapCode, factura.companyCodeCopied);
+  const documentNumber = resolveDocumentNumber(factura, emision.documentNumber, emision.id);
+  const invoiceNumber = resolveInvoiceNumber(factura.invoiceNumber, emision.invoiceNumber);
+  const nafTotal =
+    emision._count.nafDocumentos > 0 && emision.totalFacturadoNaf != null
+      ? toAmount(emision.totalFacturadoNaf)
+      : null;
+  const resolvedTotal = nafTotal != null ? nafTotal : emisionTotal;
+  const cobrado = factura.status === "COBRADO";
+  const cxcStatus: CxcDocumentoStatus = cobrado ? "COBRADO" : "PENDIENTE";
+  const saldo = cobrado ? 0 : resolvedTotal;
+  const documentDate = emision.closedAt ?? factura.updatedAt;
+  const invoiceReceivedAt = emision.invoiceReceivedAt ?? factura.invoiceReceivedAt ?? null;
+
+  const payload = {
+    contractId: factura.contractId,
+    facturaMensualId: factura.id,
+    companySapCode,
+    companyCode: factura.companyCodeCopied,
+    documentNumber,
+    invoiceNumber,
+    docType: "FC",
+    documentDate,
+    invoiceReceivedAt,
+    servicePeriodDate: resolveServicePeriodDate(factura),
+    montoOriginal: resolvedTotal,
+    saldo,
+    clientName: factura.clientNameCopied,
+    dueDate: factura.dueDate,
+    cxcExpectedPaymentDate: factura.cxcExpectedPaymentDate ?? factura.dueDate,
+    provisionalReceiptNumber: factura.provisionalReceiptNumber,
+    provisionalPaymentAmount: factura.provisionalPaymentAmount,
+    cxcObservations: factura.cxcObservations,
+    status: cxcStatus,
+    paidAt: cobrado ? factura.paidAt : null,
+    isReajuste: factura.isReajuste ?? false,
+  };
+
+  const existingByKey = await db.cxcDocumento.findUnique({
+    where: {
+      companySapCode_documentNumber: { companySapCode, documentNumber },
+    },
+    select: { id: true },
+  });
+
+  if (existingByKey) {
+    await db.cxcDocumento.update({ where: { id: existingByKey.id }, data: payload });
+    return { ok: true, cxcDocumentoId: existingByKey.id, created: false };
+  }
+
   const created = await db.cxcDocumento.create({ data: payload });
   return { ok: true, cxcDocumentoId: created.id, created: true };
 }

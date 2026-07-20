@@ -12,7 +12,7 @@ export type AssetListFilters = {
 };
 
 export function buildAssetListWhere(filters: AssetListFilters): Prisma.AssetWhereInput {
-  const where: Prisma.AssetWhereInput = {};
+  const where: Prisma.AssetWhereInput = { deletedAt: null };
   if (filters.status) where.status = filters.status;
   if (filters.typeId) where.typeId = filters.typeId;
   if (filters.positionId) where.currentPositionId = filters.positionId;
@@ -28,11 +28,16 @@ export function buildAssetListWhere(filters: AssetListFilters): Prisma.AssetWher
   return where;
 }
 
-export async function listAssets(filters: AssetListFilters) {
+const ASSETS_DEFAULT_LIMIT = 200;
+const ASSETS_MAX_LIMIT = 500;
+
+export async function listAssets(filters: AssetListFilters & { limit?: number }) {
+  const take = Math.min(filters.limit ?? ASSETS_DEFAULT_LIMIT, ASSETS_MAX_LIMIT);
   return prisma.asset.findMany({
     where: buildAssetListWhere(filters),
     include: assetListInclude,
     orderBy: [{ updatedAt: "desc" }],
+    take,
   });
 }
 
@@ -69,7 +74,7 @@ export async function validateAssetIntake(
   if (dupInBatch) return { message: `Código duplicado en el lote: ${dupInBatch}` };
 
   const existing = await prisma.asset.findMany({
-    where: { typeId: data.typeId, code: { in: codes } },
+    where: { typeId: data.typeId, code: { in: codes }, deletedAt: null },
     select: { code: true },
   });
   if (existing.length > 0) {

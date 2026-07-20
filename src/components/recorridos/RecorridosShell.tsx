@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { cn } from "@/lib/utils/cn";
 import { hasPermission } from "@/lib/permissions/check";
 import type { PermissionKey } from "@/lib/permissions/registry";

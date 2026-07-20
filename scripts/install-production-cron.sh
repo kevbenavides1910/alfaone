@@ -14,10 +14,16 @@ RUN_USER="${RUN_USER:-soporte-ti}"
 LOG_DIR="/var/log/alfa-one"
 BACKUP_DIR="/mnt/data/backups/postgres"
 ODOO_BACKUP_DIR="/mnt/data/backups/odoo"
+EXPEDIENTE_BACKUP_DIR="/mnt/data/backups/expediente-digital"
+EXPEDIENTE_BACKUP_ENV="/etc/alfa-one/expediente-backup.env"
 HEALTH_ENV="/etc/alfa-one/health-alert.env"
 
-mkdir -p "$LOG_DIR" "$BACKUP_DIR" "$ODOO_BACKUP_DIR"
+mkdir -p "$LOG_DIR" "$BACKUP_DIR" "$ODOO_BACKUP_DIR" "$EXPEDIENTE_BACKUP_DIR"
 chown "$RUN_USER:$RUN_USER" "$LOG_DIR" 2>/dev/null || true
+if [ ! -f "$EXPEDIENTE_BACKUP_ENV" ] && [ -f "$PROJECT_DIR/config/expediente-backup.env.example" ]; then
+  install -m 640 -o "$RUN_USER" -g root \
+    "$PROJECT_DIR/config/expediente-backup.env.example" "$EXPEDIENTE_BACKUP_ENV"
+fi
 
 CRON_FILE="/etc/cron.d/alfa-one"
 cat > "$CRON_FILE" <<EOF
@@ -51,6 +57,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 # Facturación cobro mensual: correos de recordatorio (08:00 Costa Rica = 14:00 UTC)
 0 14 * * * $RUN_USER BASE_URL=http://127.0.0.1:3000 LOG_DIR=$LOG_DIR $PROJECT_DIR/scripts/cron-facturacion-cobro-emails.sh >> $LOG_DIR/cobro-emails.log 2>&1
+
+# Respaldo Expediente Digital diario 03:30 UTC (21:30 CR) — SSH pull 10.1.1.6 → disco local
+30 3 * * * $RUN_USER EXPEDIENTE_BACKUP_ENV=$EXPEDIENTE_BACKUP_ENV LOG_DIR=$LOG_DIR $PROJECT_DIR/scripts/expediente-digital-backup.sh
 EOF
 
 chmod 644 "$CRON_FILE"
@@ -65,6 +74,9 @@ chmod +x "$PROJECT_DIR/scripts/vps-health-monitor.sh" \
   "$PROJECT_DIR/scripts/cron-fe-jobs.sh" \
   "$PROJECT_DIR/scripts/cron-fe-imap.sh" \
   "$PROJECT_DIR/scripts/cron-facturacion-cobro-emails.sh" \
+  "$PROJECT_DIR/scripts/expediente-digital-backup.sh" \
+  "$PROJECT_DIR/scripts/verify-expediente-digital-backup.sh" \
+  "$PROJECT_DIR/scripts/ops/guard-cifs-path.sh" \
   "$ODOO_BACKUP_SCRIPT" \
   "$PROJECT_DIR/scripts/rotate-postgres-password.sh" \
   "$PROJECT_DIR/scripts/harden-production-env.sh" \

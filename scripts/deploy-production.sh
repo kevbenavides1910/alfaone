@@ -5,7 +5,12 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Lock ANTES de tee/logs: dos deploys simultáneos se pisan (incidente jul-2026).
+# shellcheck disable=SC1091
+source "$ROOT/scripts/ops/acquire-deploy-lock.sh"
+
 export DB_CONTAINER="${DB_CONTAINER:-security_contracts_db}"
+export COMPOSE_PROJECT_NAME=presupuestos-alfa
 
 APP_CONTAINER="${APP_CONTAINER:-security_contracts_app}"
 APP_SERVICE="${APP_SERVICE:-app}"
@@ -22,6 +27,7 @@ COMPOSE=(docker compose -f "$COMPOSE_FILE")
 
 mkdir -p "$LOG_DIR"
 exec > >(tee -a "$LOG_FILE") 2>&1
+echo "OK: lock de deploy activo (pid=$$ file=${DEPLOY_LOCK_FILE:-/tmp/presupuestos-alfa-deploy.lock})"
 
 section() {
   echo ""
@@ -88,6 +94,7 @@ wait_for_container_health() {
 section "Objetivo: desplegar código sin perder información de la BD"
 echo "deploy_id=$DEPLOY_ID"
 echo "log=$LOG_FILE"
+echo "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME"
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "git_sha=$(git rev-parse --short HEAD)"
@@ -95,6 +102,13 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "WARN: árbol git con cambios locales; se desplegará el estado actual del directorio."
   fi
 fi
+
+# Contexto/módulos: NUNCA se salta con DEPLOY_SKIP_CHECKS
+section "Preflight: contexto y anti-drop de módulos"
+bash "$ROOT/scripts/ops/deploy-context-preflight.sh" "$ROOT"
+
+section "Preflight: UI vs stash (no pisar mejoras de otros agentes)"
+bash "$ROOT/scripts/ops/deploy-ui-stash-guard.sh" "$ROOT"
 
 section "Preflight: protección de base de datos"
 bash "$ROOT/scripts/db-safety-preflight.sh"
@@ -104,12 +118,24 @@ if [ ! -f "$ROOT/.env.production" ]; then
   exit 1
 fi
 
-if [ "${DEPLOY_SKIP_CHECKS:-0}" != "1" ]; then
+# Docker Compose interpola ${DATABASE_URL} desde el entorno del shell.
+set -a
+# shellcheck disable=SC1091
+source "$ROOT/.env.production"
+set +a
+
+# Typecheck en host es opt-in: Next ya valida tipos en el build de la imagen.
+# Anti-drop / preflight de contexto SIEMPRE corren arriba.
+if [ "${DEPLOY_FULL_CHECKS:-0}" = "1" ]; then
+  section "Precheck de código (DEPLOY_FULL_CHECKS=1)"
+  npm run deploy:check
+elif [ "${DEPLOY_SKIP_CHECKS:-1}" = "1" ]; then
+  section "Precheck de código omitido"
+  echo "default rápido: sin tsc en host (DEPLOY_FULL_CHECKS=1 para forzar)"
+else
+  # Compat: DEPLOY_SKIP_CHECKS=0 todavía ejecuta el check
   section "Precheck de código"
   npm run deploy:check
-else
-  section "Precheck de código omitido"
-  echo "DEPLOY_SKIP_CHECKS=1"
 fi
 
 if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
@@ -123,6 +149,7 @@ section "Respaldo PostgreSQL (security_contracts)"
 POSTGRES_DB=security_contracts bash "$ROOT/scripts/postgres-backup.sh"
 
 section "Build y reiniciar SOLO app (postgres sin recrear)"
+export APP_IMAGE="${APP_IMAGE_LOCAL:-presupuestos-alfa-app:latest}"
 "${COMPOSE[@]}" up -d --build --no-deps --force-recreate "$APP_SERVICE"
 
 section "Esperando arranque"
@@ -133,9 +160,13 @@ docker inspect "$APP_CONTAINER" --format '{{range .Config.Env}}{{println .}}{{en
 echo "DATABASE_URL:present"
 http_check "session" "/api/auth/session"
 http_check "login" "/login"
+# Baseline = imagen etiquetada ANTES del recreate; smoke exige 0 drops de rutas.
+export DEPLOY_BASELINE_IMAGE="${ROLLBACK_TAG}"
+bash "$ROOT/scripts/ops/deploy-module-smoke.sh" "$APP_CONTAINER" "$ROLLBACK_TAG"
 "${COMPOSE[@]}" ps
 
 section "DEPLOY OK"
 echo "elapsed=$(elapsed)"
 echo "log=$LOG_FILE"
 echo "PostgreSQL intacto en volumen presupuestos-alfa_postgres_data / BD security_contracts"
+echo "Tip: preferir npm run ops:deploy:auto o ops:deploy:pull (GHCR) cuando el SHA esté publicado"

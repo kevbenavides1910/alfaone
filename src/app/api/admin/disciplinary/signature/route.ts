@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { prisma } from "@/modules/core/db/prisma";
-import { getSession, isAdmin } from "@/lib/api/middleware";
+import { getSession } from "@/lib/api/middleware";
+import { hasPermission } from "@/lib/permissions/check";
 import {
   absoluteBrandingFile,
   MAX_LOGO_BYTES,
@@ -18,7 +19,7 @@ import { ensureDisciplinarySettingsRow } from "@/modules/disciplinario/services/
 export async function GET() {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!isAdmin(session)) return forbidden();
+  if (!hasPermission(session, "disciplinario.ajustes", "view")) return forbidden();
 
   try {
     await ensureDisciplinarySettingsRow();
@@ -45,7 +46,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!isAdmin(session)) return forbidden();
+  if (!hasPermission(session, "disciplinario.ajustes", "admin")) return forbidden();
 
   try {
     const row = await ensureDisciplinarySettingsRow();

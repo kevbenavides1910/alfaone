@@ -1,23 +1,21 @@
 "use client";
 
-import { useSession } from "next-auth/react";
 import { Eye, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useImpersonation } from "@/lib/impersonation/context";
 
 export function ImpersonationBanner() {
-  const { data: session, update } = useSession();
-  const { clear } = useImpersonation();
+  const { isImpersonating, roleCode, clear } = useImpersonation();
 
-  const roleId = session?.user?.impersonatedRoleId;
-  const roleCode = session?.user?.impersonatedRoleCode;
+  if (!isImpersonating || !roleCode) return null;
 
-  if (!roleId || !roleCode) return null;
-
-  async function exitImpersonation() {
+  function exitImpersonation() {
     clear();
-    await update({ clearImpersonation: true });
-    window.location.href = "/admin/roles";
+    window.close();
+    // Si el navegador no permite cerrar la pestaña (no fue abierta por script), volver a roles.
+    window.setTimeout(() => {
+      window.location.href = "/admin/roles";
+    }, 200);
   }
 
   return (
@@ -26,8 +24,7 @@ export function ImpersonationBanner() {
         <Eye className="h-4 w-4 shrink-0 text-amber-700" />
         <span>
           Viendo la plataforma como el rol{" "}
-          <strong className="font-semibold">{roleCode}</strong> (solo lectura de menús y permisos
-          asignados).
+          <strong className="font-semibold">{roleCode}</strong> (vista previa en esta pestaña).
         </span>
       </div>
       <Button
@@ -35,7 +32,7 @@ export function ImpersonationBanner() {
         size="sm"
         variant="outline"
         className="shrink-0 border-amber-400 bg-white hover:bg-amber-100"
-        onClick={() => void exitImpersonation()}
+        onClick={() => exitImpersonation()}
       >
         <X className="h-3.5 w-3.5 mr-1" />
         Salir de vista previa

@@ -61,7 +61,7 @@ export function LoginClient({ initialError = null }: Props) {
 
     try {
       const result = await signIn("credentials", {
-        email,
+        email: email.trim().toLowerCase(),
         password,
         callbackUrl: "/home",
         redirect: false,

@@ -2,6 +2,7 @@
 node_modules
 .next
 out
+tsconfig.tsbuildinfo
 
 # entorno y secretos (se pasan por env en el servidor)
 .env
@@ -13,15 +14,27 @@ out
 .git
 .gitignore
 .cursor
+.vscode
 *.md
 !README.md
 
-# logs y OS
+# logs, deploys y OS
 npm-debug.log*
 .DS_Store
 Thumbs.db
+.deploy-logs
+deploy
 
-# tests / cobertura (si existen)
+# tests / cobertura / residuos
 coverage
 .turbo
 _deploy_syntra
+facturacion_cr
+cargas
+uploads
+*.bak*
+patch-server.py
+_patrol_marks_append.prisma
+
+*.DMP
+*.dmp

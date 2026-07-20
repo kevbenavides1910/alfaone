@@ -4,10 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Headset } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { hasPermission } from "@/lib/permissions/check";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { TicketSearchBar } from "@/components/tickets-ti/TicketSearchBar";
 import { TicketOperationCard } from "@/components/tickets-ti/TicketOperationCard";
 import { TicketReportExportDialog } from "@/components/tickets-ti/TicketReportExportDialog";
+import { ReportViewerLauncher } from "@/components/tickets-ti/report-viewer/ReportViewerLauncher";
+import { TicketHistoryTable } from "@/components/tickets-ti/TicketHistoryTable";
 
 type Reports = {
   total: number;
@@ -63,7 +65,12 @@ export default function TicketsTiCentroPage() {
             Cola de trabajo, indicadores y exportación de reportes.
           </p>
         </div>
-        {canExport && <TicketReportExportDialog />}
+        {canExport && (
+          <div className="flex flex-col sm:flex-row gap-2">
+            <TicketReportExportDialog />
+            <ReportViewerLauncher />
+          </div>
+        )}
       </div>
 
       <TicketSearchBar />
@@ -174,6 +181,8 @@ export default function TicketsTiCentroPage() {
           </Card>
         )}
       </div>
+
+      <TicketHistoryTable />
     </div>
   );
 }

@@ -2,6 +2,14 @@
 
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { Topbar } from "@/components/layout/Topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,6 +60,15 @@ export default function SigAprobacionesPage() {
   });
 
   const rows = data?.data.rows ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const pendingColumnDefs: TableColumnFilterDef<PendingRow>[] = [
+    { key: "code", label: "Código", headerClassName: "px-3 py-2", getValue: (r) => r.code },
+    { key: "title", label: "Título", headerClassName: "px-3 py-2", getValue: (r) => r.title },
+    { key: "version", label: "Versión", headerClassName: "px-3 py-2", getValue: (r) => r.pendingVersion?.versionLabel ?? "" },
+    { key: "uploader", label: "Subido por", headerClassName: "px-3 py-2", getValue: (r) => r.pendingVersion?.uploadedBy.name ?? "" },
+    { key: "actions", label: "Acciones", headerClassName: "px-3 py-2", filterable: false, getValue: () => "" },
+  ];
+  const displayedRows = filterRowsByColumnFilters(rows, columnFilters, pendingColumnDefs);
 
   return (
     <>
@@ -61,13 +78,12 @@ export default function SigAprobacionesPage() {
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/40 text-left">
-                  <th className="px-3 py-2">Código</th>
-                  <th className="px-3 py-2">Título</th>
-                  <th className="px-3 py-2">Versión</th>
-                  <th className="px-3 py-2">Subido por</th>
-                  <th className="px-3 py-2">Acciones</th>
-                </tr>
+                <TableColumnFilterHead
+                  columns={pendingColumnDefs}
+                  rows={rows}
+                  filters={columnFilters}
+                  onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                />
               </thead>
               <tbody>
                 {isLoading && (
@@ -77,14 +93,14 @@ export default function SigAprobacionesPage() {
                     </td>
                   </tr>
                 )}
-                {!isLoading && rows.length === 0 && (
+                {!isLoading && displayedRows.length === 0 && (
                   <tr>
                     <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
                       No hay documentos pendientes de aprobación
                     </td>
                   </tr>
                 )}
-                {rows.map((row) => {
+                {displayedRows.map((row) => {
                   const v = row.pendingVersion;
                   if (!v) return null;
                   return (

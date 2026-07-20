@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/api/middleware";
-import { canManageDisciplinary, canViewDisciplinary } from "@/modules/core/permissions";
+import { canEditDisciplinaryHistorial, canViewDisciplinary } from "@/modules/core/permissions";
 import {
   ok,
   unauthorized,
@@ -75,7 +75,7 @@ async function resolveClientByLicitacionNorm(contratoNorm: string): Promise<stri
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!canManageDisciplinary(session)) return forbidden();
+  if (!canEditDisciplinaryHistorial(session)) return forbidden();
 
   try {
     const parsed = postApercibimientoSchema.safeParse(await req.json());

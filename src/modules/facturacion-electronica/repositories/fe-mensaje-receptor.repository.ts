@@ -29,6 +29,39 @@ export class FeMensajeReceptorRepository {
     });
   }
 
+  /** Mensaje ya ligado a un comprobante recibido (reintentos tras ERROR de envío). */
+  findByComprobanteRecibidoId(empresaId: string, comprobanteRecibidoId: string) {
+    return this.prisma.feMensajeReceptor.findFirst({
+      where: { empresaId, comprobanteRecibidoId, ...notDeleted },
+      include,
+    });
+  }
+
+  updateForRetry(
+    id: string,
+    data: {
+      puntoVentaId?: string;
+      claveComprobante?: string;
+      cedulaEmisor?: string;
+      tipoMensaje?: string;
+      detalleMensaje?: string | null;
+      montoTotal?: number | null;
+      montoTotalImpuesto?: number | null;
+      estado?: FeFacturaEstado;
+    },
+    userId?: string
+  ) {
+    return this.prisma.feMensajeReceptor.update({
+      where: { id },
+      data: {
+        ...data,
+        cedulaEmisor: data.cedulaEmisor?.replace(/\D/g, ""),
+        updatedById: userId,
+      },
+      include,
+    });
+  }
+
   async findById(id: string, empresaId: string) {
     const row = await this.prisma.feMensajeReceptor.findFirst({
       where: { id, empresaId, ...notDeleted },

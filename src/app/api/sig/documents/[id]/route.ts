@@ -78,6 +78,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
     const updated = await updateSigDocumentMetadata(id, session.user.id, {
       title: typeof body.title === "string" ? body.title : undefined,
+      documentTypeId: body.documentTypeId !== undefined ? body.documentTypeId : undefined,
       processId: body.processId !== undefined ? body.processId : undefined,
       company: body.company !== undefined ? body.company : undefined,
       revisionIntervalDays:

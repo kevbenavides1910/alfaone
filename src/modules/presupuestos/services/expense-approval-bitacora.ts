@@ -6,12 +6,12 @@ import type {
   Prisma,
 } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
-import { isAdmin } from "@/modules/core/permissions";
+import { isPlatformAdmin } from "@/lib/permissions/check";
 
 export type BitacoraMode = "decisions" | "submissions";
 
 function expenseScopeWhere(session: Session): Prisma.ExpenseWhereInput {
-  if (isAdmin(session.user.role)) return {};
+  if (isPlatformAdmin(session)) return {};
   if (session.user.company) return { company: session.user.company };
   return { id: { in: [] as string[] } };
 }
@@ -57,7 +57,7 @@ export async function listExpenseApprovalBitacora(session: Session, params: Bita
 
   if (params.mode === "decisions") {
     const expenseFilter: Prisma.ExpenseWhereInput = { ...scope };
-    if (params.company && isAdmin(session.user.role)) {
+    if (params.company && isPlatformAdmin(session)) {
       expenseFilter.company = params.company;
     }
     if (params.type) expenseFilter.type = params.type;
@@ -141,7 +141,7 @@ export async function listExpenseApprovalBitacora(session: Session, params: Bita
     ...scope,
     requiredApprovalSteps: { gt: 0 },
   };
-  if (params.company && isAdmin(session.user.role)) {
+  if (params.company && isPlatformAdmin(session)) {
     expenseFilter.company = params.company;
   }
   if (params.type) expenseFilter.type = params.type;

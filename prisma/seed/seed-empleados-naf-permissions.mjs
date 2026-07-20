@@ -1,0 +1,71 @@
+/**
+ * Añade permisos del módulo Empleados NAF al rol ADMIN y SUPERVISOR.
+ * Ejecutar: node prisma/seed-empleados-naf-permissions.mjs
+ */
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
+const KEYS = [
+  "empleadosNaf.list",
+  "empleadosNaf.sync",
+  "empleadosNaf.nomina",
+  "empleadosNaf.revisionPlanilla",
+  "empleadosNaf.sinAsignar",
+  "empleadosNaf.homologacion",
+  "empleadosNaf.cargasSociales",
+  "empleadosNaf.vacacionesPersonal",
+];
+
+const ROLE_LEVELS = {
+  ADMIN: "ADMIN",
+  SUPERVISOR: "EDIT",
+};
+
+async function main() {
+  for (const [roleCode, level] of Object.entries(ROLE_LEVELS)) {
+    const role = await prisma.role.findUnique({ where: { code: roleCode } });
+    if (!role) {
+      console.log(`Rol ${roleCode} no encontrado, omitido`);
+      continue;
+    }
+    for (const permissionKey of KEYS) {
+      const effectiveLevel =
+        roleCode === "SUPERVISOR" && permissionKey.endsWith(".sync") ? "VIEW" : level;
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionKey: { roleId: role.id, permissionKey } },
+        create: { roleId: role.id, permissionKey, level: effectiveLevel },
+        update: { level: effectiveLevel },
+      });
+    }
+    console.log(`Permisos empleados NAF → ${roleCode}`);
+  }
+}
+
+
+async function migrateVacacionesPermission() {
+  const OLD = "nafOperaciones.vacacionesPersonal";
+  const NEW = "empleadosNaf.vacacionesPersonal";
+  const oldRows = await prisma.rolePermission.findMany({ where: { permissionKey: OLD } });
+  for (const row of oldRows) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionKey: { roleId: row.roleId, permissionKey: NEW } },
+      create: { roleId: row.roleId, permissionKey: NEW, level: row.level },
+      update: { level: row.level },
+    });
+  }
+  if (oldRows.length) {
+    await prisma.rolePermission.deleteMany({ where: { permissionKey: OLD } });
+    console.log(`Migrado ${oldRows.length} permiso(s) ${OLD} → ${NEW}`);
+  }
+}
+
+main()
+  .then(() => migrateVacacionesPermission())
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

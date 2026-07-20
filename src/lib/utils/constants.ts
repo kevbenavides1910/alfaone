@@ -79,6 +79,11 @@ export const FACTURA_MENSUAL_STATUS_LABELS: Record<
   COBRADO: "Cobrado",
 };
 
+export const FACTURA_BILLING_KIND_LABELS = {
+  mensual: "Factura mensual",
+  reajuste: "Reajuste",
+} as const;
+
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
   ADMIN: "Administrador",
   SUPERVISOR: "Supervisor",
@@ -87,17 +92,17 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   CONSULTA: "Consulta",
 };
 
-// Traffic light thresholds
+// Traffic light thresholds (% ejecución = gasto / presupuesto)
 export const TRAFFIC_LIGHT = {
-  GREEN_MAX: 0.70,
-  YELLOW_MAX: 0.90,
+  GREEN_MAX: 0.80,
+  YELLOW_MAX: 1.00,
 };
 
 export type TrafficLight = "GREEN" | "YELLOW" | "RED";
 
 export function calcTrafficLight(usagePct: number): TrafficLight {
   if (usagePct < TRAFFIC_LIGHT.GREEN_MAX) return "GREEN";
-  if (usagePct < TRAFFIC_LIGHT.YELLOW_MAX) return "YELLOW";
+  if (usagePct <= TRAFFIC_LIGHT.YELLOW_MAX) return "YELLOW";
   return "RED";
 }
 

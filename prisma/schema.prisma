@@ -232,17 +232,17 @@ model RolePermission {
 }
 
 model User {
-  id                 String    @id @default(cuid())
-  name               String
-  email              String    @unique
-  emailVerified      DateTime?
-  image              String?
-  passwordHash       String?
-  role               UserRole  @default(CONSULTA)
-  roleId             String?
-  roleEntity         Role?     @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  company            String?
-  companyEntity      Company?  @relation(fields: [company], references: [code])
+  id                     String    @id @default(cuid())
+  name                   String
+  email                  String    @unique
+  emailVerified          DateTime?
+  image                  String?
+  passwordHash           String?
+  role                   UserRole  @default(CONSULTA)
+  roleId                 String?
+  roleEntity             Role?     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  company                String?
+  companyEntity          Company?  @relation(fields: [company], references: [code])
   isActive               Boolean   @default(true)
   mustChangePassword     Boolean   @default(false)
   passwordResetToken     String?
@@ -265,12 +265,19 @@ model User {
   sigVersionsApproved                    SigDocumentVersion[]          @relation("SigVersionApprover")
   sigVersionsAssigned                    SigDocumentVersion[]          @relation("SigVersionAssignedApprover")
   sigAuditLogs                           SigDocumentAuditLog[]         @relation("SigAuditActor")
+  auditsCreated                          Audit[]                       @relation("AuditCreator")
+  auditsAssigned                         Audit[]                       @relation("AuditAuditor")
+  findingsCreated                        Finding[]                     @relation("FindingCreator")
+  actionPlansCreated                     ActionPlan[]                  @relation("ActionPlanCreator")
+  followUpsCreated                       FollowUp[]                    @relation("FollowUpCreator")
+  checklistItemsReviewed                 AuditChecklistItem[]          @relation("AuditChecklistReviewer")
   ventasOportunidadesDecididas           VentasOportunidad[]           @relation("VentasOportunidadDecidedBy")
   ventasPresupuestosCreados              VentasPresupuesto[]           @relation("VentasPresupuestoCreatedBy")
   facturasMensualesReturnedForCorrection FacturaMensual[]              @relation("FacturaReturnedForCorrection")
   facturaReturnRequestsSubmitted         FacturaMensual[]              @relation("FacturaReturnRequestedBy")
   facturaReturnRequestsReviewed          FacturaMensual[]              @relation("FacturaReturnReviewedBy")
   facturacionInvoiceModificationSettings AppFacturacionCobroSettings[] @relation("FacturacionInvoiceModifier")
+  facturaEmisionNafLinks                 FacturaEmisionNafDocumento[]    @relation("FacturaEmisionNafLinkedBy")
   formsCreated                           FormDefinition[]              @relation("FormCreator")
   formSubmissions                        FormSubmission[]              @relation("FormSubmissionUser")
 
@@ -282,6 +289,10 @@ model User {
   ticketNotificationsReceived TicketNotification[] @relation("TicketNotificationUser")
   ticketAuditsPerformed       TicketAudit[]        @relation("TicketAuditUser")
   ticketWorkLogs              TicketWorkLog[]      @relation("TicketWorkLogTechnician")
+  assetsDeleted               Asset[]              @relation("AssetDeletedBy")
+  assetsUpdated               Asset[]              @relation("AssetUpdatedBy")
+  expensesDeleted             Expense[]            @relation("ExpenseDeletedBy")
+  expensesUpdated             Expense[]            @relation("ExpenseUpdatedBy")
   ticketTechnicianProfile     TicketTechnician?
 
   @@map("users")
@@ -384,8 +395,10 @@ model Contract {
   expenseDistributions  ExpenseDistribution[]        @relation("ExpenseDistributions")
   locations             ContractLocation[]
   employeePlacements    EmployeePlacement[]
-  employeeContractLinks EmployeeContractLink[]
-  patrolRoutes          PatrolRoute[]
+  employeeContractLinks        EmployeeContractLink[]
+  nafNominaManualAllocations   NafNominaManualAllocation[]
+  monthLaborCaches             ContractMonthLaborCache[]
+  patrolRoutes                 PatrolRoute[]
   demandBilling         ContractDemandBilling[]
   facturasMensuales     FacturaMensual[]
   cxcDocumentos         CxcDocumento[]
@@ -397,6 +410,23 @@ model Contract {
   @@index([deletedAt])
   @@index([endDate])
   @@map("contracts")
+}
+
+/// MO NAF precomputada por contrato/mes (evita Oracle en cada apertura del reporte mensual).
+model ContractMonthLaborCache {
+  id                  String   @id @default(cuid())
+  contractId          String
+  year                Int
+  month               Int
+  laborSpend          Decimal  @db.Decimal(18, 2)
+  cargasSocialesSpend Decimal  @db.Decimal(18, 2)
+  computedAt          DateTime @default(now())
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, year, month])
+  @@index([year, month])
+  @@map("contract_month_labor_cache")
 }
 
 model BillingHistory {
@@ -490,6 +520,8 @@ model FacturaMensual {
   provisionalPaymentAmount       Decimal?                    @db.Decimal(15, 2)
   /// Número fiscal de la factura emitida al cliente.
   invoiceNumber                  String?
+  /// Si es true, la factura se clasifica como reajuste (no facturación mensual regular).
+  isReajuste                     Boolean                     @default(false)
   /// Número de documento asociado a la factura (referencia interna o del cliente).
   documentNumber                 String?
   /// Día de inicio del periodo de servicio copiado del contrato al generar la factura.
@@ -574,17 +606,54 @@ model FacturaMensualEmision {
   invoiceNumber              String?
   documentNumber             String?
   invoiceReceivedAt          DateTime?
+  /// Neto subtotal NAF ligado (FC/ND − NC/AN), snapshot recalculado al ligar/desligar.
+  subtotalFacturadoNaf       Decimal?  @db.Decimal(15, 2)
+  /// Neto total NAF ligado (con IVA), oficial para cierre/CxC.
+  totalFacturadoNaf          Decimal?  @db.Decimal(15, 2)
+  /// Fecha en que se cerró la facturación de esta administración.
+  closedAt                   DateTime?
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 
-  facturaMensual         FacturaMensual          @relation(fields: [facturaMensualId], references: [id], onDelete: Cascade)
-  contractAdministration ContractAdministration? @relation(fields: [contractAdministrationId], references: [id], onDelete: SetNull)
+  facturaMensual         FacturaMensual               @relation(fields: [facturaMensualId], references: [id], onDelete: Cascade)
+  contractAdministration ContractAdministration?      @relation(fields: [contractAdministrationId], references: [id], onDelete: SetNull)
   requisitos             FacturaRequisito[]
+  nafDocumentos          FacturaEmisionNafDocumento[]
 
   @@unique([facturaMensualId, sortOrder])
   @@index([facturaMensualId])
   @@index([contractAdministrationId])
   @@map("factura_mensual_emisiones")
+}
+
+/// Documento NAF (ARFAFE) ligado a una emisión/administración de facturación mensual.
+model FacturaEmisionNafDocumento {
+  id                      String    @id @default(cuid())
+  facturaMensualEmisionId String
+  nafNoCia                String
+  nafTipoDoc              String
+  nafNoFactu              String
+  nafNoFisico             String?
+  nafSerieFisico          String?
+  nafConsecutivoFe        String?
+  nafClaveFactura         String?
+  nafFecha                DateTime?
+  subtotal                Decimal   @db.Decimal(15, 2)
+  impuesto                Decimal   @db.Decimal(15, 2)
+  total                   Decimal   @db.Decimal(15, 2)
+  /// +1 FC/ND, -1 NC/AN
+  amountSign              Int
+  signedTotal             Decimal   @db.Decimal(15, 2)
+  linkedAt                DateTime  @default(now())
+  linkedById              String?
+
+  emision  FacturaMensualEmision @relation(fields: [facturaMensualEmisionId], references: [id], onDelete: Cascade)
+  linkedBy User?                 @relation("FacturaEmisionNafLinkedBy", fields: [linkedById], references: [id], onDelete: SetNull)
+
+  @@unique([nafNoCia, nafTipoDoc, nafNoFactu])
+  @@index([facturaMensualEmisionId])
+  @@index([linkedById])
+  @@map("factura_emision_naf_documentos")
 }
 
 /// Documento de cuentas por cobrar importado desde SAP (una fila por FC/FM).
@@ -637,6 +706,11 @@ model CxcDocumento {
   @@index([status])
   @@index([contractId])
   @@index([docType])
+  @@index([dueDate])
+  @@index([paidAt])
+  @@index([cxcExpectedPaymentDate])
+  @@index([docType, status, dueDate])
+  @@index([isReajuste, docType, dueDate])
   @@map("cxc_documentos")
 }
 
@@ -795,6 +869,8 @@ model ContractAdministration {
 model ContractAdministrationBillingLine {
   administrationId String
   billingLineId    String
+  /// Monto mensual de esta línea para esta administración (si null, usa monthlyAmount de la línea del contrato).
+  monthlyAmount    Decimal? @db.Decimal(15, 2)
 
   administration ContractAdministration @relation(fields: [administrationId], references: [id], onDelete: Cascade)
   billingLine    ContractBillingLine    @relation(fields: [billingLineId], references: [id], onDelete: Cascade)
@@ -915,6 +991,7 @@ model DeferredExpense {
   distributions DeferredDistribution[]
 
   @@index([company])
+  @@index([company, periodMonth])
   @@map("deferred_expenses")
 }
 
@@ -997,6 +1074,7 @@ model AuditLog {
   @@index([userId])
   @@index([contractId])
   @@index([createdAt])
+  @@index([entityType, entityId])
   @@map("audit_logs")
 }
 
@@ -1195,6 +1273,12 @@ model Expense {
   updatedAt                  DateTime              @updatedAt
   createdById                String
   createdBy                  User                  @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  /// Soft-delete: el registro permanece para auditoría; no aparece en listados operativos.
+  deletedAt                  DateTime?
+  deletedById                String?
+  deletedBy                  User?                 @relation("ExpenseDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  updatedById                String?
+  updatedBy                  User?                 @relation("ExpenseUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   distributions              ExpenseDistribution[]
   approvals                  ExpenseApproval[]
   attachments                ExpenseAttachment[]
@@ -1206,6 +1290,9 @@ model Expense {
   @@index([originId])
   @@index([company])
   @@index([approvalStatus])
+  @@index([company, periodMonth])
+  @@index([company, approvalStatus])
+  @@index([deletedAt])
   @@map("expenses")
 }
 
@@ -1265,6 +1352,12 @@ model Asset {
   notes                String?     @db.Text
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
+  /// Soft-delete: el activo permanece en BD con historial de movimientos intacto.
+  deletedAt            DateTime?
+  deletedById          String?
+  deletedBy            User?       @relation("AssetDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  updatedById          String?
+  updatedBy            User?       @relation("AssetUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
   movements AssetMovement[]
 
@@ -1272,10 +1365,11 @@ model Asset {
   @@index([status])
   @@index([currentPositionId])
   @@index([typeId])
+  @@index([deletedAt])
   @@map("assets")
 }
 
-/// Historial de movimientos de un activo.
+/// Historial inmutable de movimientos de un activo (solo INSERT, nunca UPDATE/DELETE).
 model AssetMovement {
   id             String             @id @default(cuid())
   assetId        String
@@ -1655,7 +1749,7 @@ model AppDisciplinarySettings {
 
 /// Configuración global de plataforma (fila única id = default).
 model AppPlatformSettings {
-  id                String    @id @default("default")
+  id                String   @id @default("default")
   /// Correo receptor de notificaciones generales del sistema (alertas, avisos, reportes).
   notificationEmail String?
   /// SMTP para envíos de plataforma: reset de contraseña, alertas, etc.
@@ -1665,7 +1759,7 @@ model AppPlatformSettings {
   smtpUser          String?
   smtpPass          String?
   smtpFrom          String?
-  updatedAt         DateTime  @updatedAt
+  updatedAt         DateTime @updatedAt
 
   @@map("app_platform_settings")
 }
@@ -1787,12 +1881,156 @@ model SigDocument {
 
   versions  SigDocumentVersion[]  @relation("SigDocumentVersions")
   auditLogs SigDocumentAuditLog[]
+  audits    Audit[]
 
   @@index([documentTypeId])
   @@index([processId])
   @@index([status])
   @@index([company])
   @@map("sig_documents")
+}
+
+enum AuditStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum FindingSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FindingStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum ActionPlanStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AuditChecklistResult {
+  PENDING
+  COMPLIES
+  NON_COMPLIES
+  NOT_APPLICABLE
+}
+
+/// Auditoría trimestral asociada a un procedimiento vigente del SIG.
+model Audit {
+  id            String      @id @default(cuid())
+  procedureId   String
+  procedure     SigDocument @relation(fields: [procedureId], references: [id], onDelete: Restrict)
+  year          Int
+  quarter       Int
+  scheduledDate DateTime
+  status        AuditStatus @default(PLANNED)
+  scope         String?     @db.Text
+  objective     String?     @db.Text
+  notes         String?     @db.Text
+  auditorId     String?
+  auditor       User?       @relation("AuditAuditor", fields: [auditorId], references: [id], onDelete: SetNull)
+  createdById   String
+  createdBy     User        @relation("AuditCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  findings       Finding[]
+  checklistItems AuditChecklistItem[]
+
+  @@unique([procedureId, year, quarter])
+  @@index([year, quarter])
+  @@index([status])
+  @@index([auditorId])
+  @@map("sig_audits")
+}
+
+model AuditChecklistItem {
+  id           String               @id @default(cuid())
+  auditId      String
+  audit        Audit                @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  stage        String
+  requirement  String?              @db.Text
+  result       AuditChecklistResult @default(PENDING)
+  notes        String?              @db.Text
+  evidence     String?              @db.Text
+  sortOrder    Int                  @default(0)
+  reviewedAt   DateTime?
+  reviewedById String?
+  reviewedBy   User?                @relation("AuditChecklistReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([auditId])
+  @@index([result])
+  @@map("sig_audit_checklist_items")
+}
+
+model Finding {
+  id          String          @id @default(cuid())
+  auditId     String
+  audit       Audit           @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  title       String
+  description String          @db.Text
+  severity    FindingSeverity @default(MEDIUM)
+  status      FindingStatus   @default(OPEN)
+  createdById String
+  createdBy   User            @relation("FindingCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  actionPlans ActionPlan[]
+
+  @@index([auditId])
+  @@index([status])
+  @@map("sig_audit_findings")
+}
+
+model ActionPlan {
+  id              String           @id @default(cuid())
+  findingId       String
+  finding         Finding          @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  title           String
+  description     String           @db.Text
+  responsibleName String?
+  dueDate         DateTime?
+  status          ActionPlanStatus @default(PENDING)
+  createdById     String
+  createdBy       User             @relation("ActionPlanCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  followUps FollowUp[]
+
+  @@index([findingId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("sig_action_plans")
+}
+
+model FollowUp {
+  id           String           @id @default(cuid())
+  actionPlanId String
+  actionPlan   ActionPlan       @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
+  note         String           @db.Text
+  status       ActionPlanStatus
+  followUpDate DateTime         @default(now())
+  createdById  String
+  createdBy    User             @relation("FollowUpCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([actionPlanId])
+  @@index([followUpDate])
+  @@map("sig_follow_ups")
 }
 
 /// Versión física del documento (archivo en disco bajo sig-documents/).
@@ -2380,6 +2618,203 @@ model NafEmployee {
   @@map("naf_employees")
 }
 
+/// Corrida de sincronización del histórico de nómina NAF (NAF5.ARPLHS).
+model NafNominaSyncRun {
+  id           String    @id @default(cuid())
+  status       String
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  rowsFetched  Int       @default(0)
+  rowsUpserted Int       @default(0)
+  desdeAno     Int?
+  errorMessage String?   @db.Text
+  triggeredBy  String?
+
+  @@index([startedAt])
+  @@map("naf_nomina_sync_runs")
+}
+
+/// Resumen agregado de nómina por empleado × quincena × planilla (desde NAF5.ARPLHS).
+model NafNominaSummary {
+  id           String   @id @default(cuid())
+  noCia        String
+  noEmple      String
+  ano          Int
+  periodo      Int
+  mes          Int
+  codPla       String
+  nominaNombre String?
+  devengado    Decimal  @db.Decimal(18, 2)
+  deducciones  Decimal  @db.Decimal(18, 2)
+  neto         Decimal  @db.Decimal(18, 2)
+  syncedAt     DateTime @default(now())
+
+  @@unique([noCia, ano, periodo, noEmple, codPla])
+  @@index([noCia, ano, periodo])
+  @@index([ano, periodo])
+  @@index([noEmple])
+  @@map("naf_nomina_summary")
+}
+
+/// Metadatos de quincena/planilla por empresa (desde NAF5.ARPLHCP).
+model NafNominaPeriodMeta {
+  id       String    @id @default(cuid())
+  noCia    String
+  codPla   String
+  ano      Int
+  periodo  Int
+  mes      Int
+  fDesde   DateTime?
+  fHasta   DateTime?
+  fCalculo DateTime?
+  tipoEmp  String?
+  descri   String?
+  syncedAt DateTime  @default(now())
+
+  @@unique([noCia, codPla, ano, periodo])
+  @@index([ano, periodo])
+  @@map("naf_nomina_period_meta")
+}
+
+/// Checklist de control por planilla/quincena en Revisión de planilla.
+model NafNominaRevisionChecklist {
+  id          String    @id @default(cuid())
+  noCia       String
+  codPla      String
+  fDesde      DateTime  @db.Date
+  fHasta      DateTime  @db.Date
+  revisada    Boolean   @default(false)
+  generada    Boolean   @default(false)
+  /// Preferir pagadaCk/Dav/Bn; se mantiene por compatibilidad con Acciones NAF.
+  pagada      Boolean   @default(false)
+  pagadaCk    Boolean   @default(false)
+  pagadaDav   Boolean   @default(false)
+  pagadaBn    Boolean   @default(false)
+  aprobadaAt  DateTime?
+  preparadaAt DateTime?
+  pagadaAt    DateTime?
+  aprobadaBy  String?
+  preparadaBy String?
+  pagadaBy    String?
+  /// IND_CK_ACT escrito en ARPLCP al aprobar.
+  indCkActNaf String?
+  updatedBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([noCia, codPla, fDesde, fHasta])
+  @@index([fDesde, fHasta])
+  @@index([noCia, codPla])
+  @@map("naf_nomina_revision_checklist")
+}
+
+/// Lote de preparación de cheques/transferencias (espejo operativo de NAF5.ARPLCK).
+model NafNominaPagoLote {
+  id           String   @id @default(cuid())
+  noCia        String
+  codPla       String
+  fDesde       DateTime @db.Date
+  fHasta       DateTime @db.Date
+  fechaPago    DateTime @db.Date
+  /// Secuencias NAF usadas (JSON array string[]).
+  secuencias   Json
+  estado       String   @default("preparado")
+  totalCheque  Decimal  @db.Decimal(18, 2) @default(0)
+  totalDav     Decimal  @db.Decimal(18, 2) @default(0)
+  totalBn      Decimal  @db.Decimal(18, 2) @default(0)
+  totalOtro    Decimal  @db.Decimal(18, 2) @default(0)
+  totalGeneral Decimal  @db.Decimal(18, 2) @default(0)
+  empleados    Int      @default(0)
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  lineas       NafNominaPagoLinea[]
+
+  @@index([noCia, codPla, fDesde, fHasta])
+  @@map("naf_nomina_pago_lotes")
+}
+
+model NafNominaPagoLinea {
+  id           String   @id @default(cuid())
+  loteId       String
+  lote         NafNominaPagoLote @relation(fields: [loteId], references: [id], onDelete: Cascade)
+  noEmple      String
+  nombre       String?
+  cedula       String?
+  formaPago    String?
+  idCta        String?
+  canal        String
+  bancoDestino String?
+  numCuenta    String?
+  bancoOrigen  String?
+  ctaOrigen    String?
+  noSecuencia  String
+  liquido      Decimal  @db.Decimal(18, 2)
+
+  @@index([loteId])
+  @@index([noEmple])
+  @@map("naf_nomina_pago_lineas")
+}
+
+/// Asignación manual de nómina NAF a contratos cuando no hay asistencia en la quincena.
+model NafNominaManualAllocation {
+  id          String   @id @default(cuid())
+  noCia       String
+  noEmple     String
+  fDesde      DateTime @db.Date
+  fHasta      DateTime @db.Date
+  codPla      String
+  contractId  String
+  contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  devengado   Decimal  @db.Decimal(18, 2)
+  deducciones Decimal  @db.Decimal(18, 2)
+  neto        Decimal  @db.Decimal(18, 2)
+  notes       String?  @db.Text
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([noCia, noEmple, fDesde, fHasta, codPla, contractId])
+  @@index([fDesde, fHasta])
+  @@index([noCia, noEmple])
+  @@index([contractId])
+  @@map("naf_nomina_manual_allocations")
+}
+
+/// Catálogo rol → contrato desde Oracle NAF5.AROPMR.
+model NafRoleContract {
+  id          String   @id @default(cuid())
+  noCiaGrupo  String
+  noRol       String
+  noContrato  String
+  noUbicacion String?
+  estado      String?
+  syncedAt    DateTime @default(now())
+
+  @@unique([noCiaGrupo, noRol, noContrato, noUbicacion])
+  @@index([noRol])
+  @@index([noContrato])
+  @@map("naf_role_contracts")
+}
+
+/// Componentes de cargas sociales por empresa NAF (configurable por NO_CIA).
+model NafCargaSocial {
+  id         String   @id @default(cuid())
+  noCia      String
+  codigo     String
+  nombre     String
+  porcentaje Decimal  @db.Decimal(8, 4)
+  grupo      String
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([noCia, codigo])
+  @@index([noCia])
+  @@map("naf_cargas_sociales")
+}
+
 // ─── Módulo Ventas (pipeline de licitaciones) ─────────────────────────────────
 
 enum VentasOportunidadEstado {
@@ -2465,21 +2900,21 @@ model VentasSalarioCategoria {
 
 /// Esquemas de jornada (MO1, MO2, … y personalizados).
 model VentasJornadaTipo {
-  id                     String              @id @default(cuid())
-  codigo                 String              @unique
+  id                     String   @id @default(cuid())
+  codigo                 String   @unique
   nombre                 String
   descripcion            String?
   horasConfig            Json
   salarioCategoriaCodigo String?
-  costoHoraOrdinaria     Decimal?            @db.Decimal(14, 4)
-  costoHoraExtra         Decimal?            @db.Decimal(14, 4)
-  salarioBaseMensual     Decimal?            @db.Decimal(15, 2)
+  costoHoraOrdinaria     Decimal? @db.Decimal(14, 4)
+  costoHoraExtra         Decimal? @db.Decimal(14, 4)
+  salarioBaseMensual     Decimal? @db.Decimal(15, 2)
   /// Costo MO mensual de referencia (celda E46 de hoja MO, calibrado desde Excel).
-  costoMoReferencia      Decimal?            @db.Decimal(15, 2)
-  sortOrder              Int                 @default(0)
-  isActive               Boolean             @default(true)
-  createdAt              DateTime            @default(now())
-  updatedAt              DateTime            @updatedAt
+  costoMoReferencia      Decimal? @db.Decimal(15, 2)
+  sortOrder              Int      @default(0)
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   @@map("ventas_jornada_tipos")
 }
@@ -2610,30 +3045,30 @@ model VentasPresupuesto {
 
 /// Línea de detalle de presupuesto (hoja DETALLE).
 model VentasPresupuestoLinea {
-  id               String              @id @default(cuid())
+  id               String             @id @default(cuid())
   presupuestoId    String
-  presupuesto      VentasPresupuesto   @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+  presupuesto      VentasPresupuesto  @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
   numeroLinea      String
   descripcion      String
   jornadaCodigo    String
   equipamiento     VentasEquipamiento
   cantidadPuestos  Int
-  factorOficiales  Decimal             @default(1) @db.Decimal(8, 4)
+  factorOficiales  Decimal            @default(1) @db.Decimal(8, 4)
   /// Hoja Excel de insumos (ej. 3,89AF-L) cuando varias variantes comparten eq+factor.
   codigoHojaInsumo String?
-  costoMo          Decimal?            @db.Decimal(15, 2)
-  costoGa          Decimal?            @db.Decimal(15, 2)
-  costoInDirecto   Decimal?            @db.Decimal(15, 2)
-  costoInIndirecto Decimal?            @db.Decimal(15, 2)
-  imprevistos      Decimal?            @db.Decimal(15, 2)
-  margenUtilidad   Decimal?            @db.Decimal(15, 2)
-  precioMensual    Decimal?            @db.Decimal(15, 2)
-  precioAnual      Decimal?            @db.Decimal(15, 2)
-  precioConIva     Decimal?            @db.Decimal(15, 2)
+  costoMo          Decimal?           @db.Decimal(15, 2)
+  costoGa          Decimal?           @db.Decimal(15, 2)
+  costoInDirecto   Decimal?           @db.Decimal(15, 2)
+  costoInIndirecto Decimal?           @db.Decimal(15, 2)
+  imprevistos      Decimal?           @db.Decimal(15, 2)
+  margenUtilidad   Decimal?           @db.Decimal(15, 2)
+  precioMensual    Decimal?           @db.Decimal(15, 2)
+  precioAnual      Decimal?           @db.Decimal(15, 2)
+  precioConIva     Decimal?           @db.Decimal(15, 2)
   desglose         Json?
-  sortOrder        Int                 @default(0)
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  sortOrder        Int                @default(0)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   @@index([presupuestoId])
   @@map("ventas_presupuesto_lineas")
@@ -2653,8 +3088,6 @@ model VentasPresupuestoTolerancia {
 
   @@map("ventas_presupuesto_tolerancia")
 }
-
-
 
 /// Parametrización general de presupuestos (valores por defecto para nuevos presupuestos).
 model VentasPresupuestoConfig {
@@ -2797,6 +3230,7 @@ enum FeJobTipo {
   LIMPIEZA_ERRORES
   GENERACION_LOGS
   PROCESAR_CORREO_ENTRANTE
+  SYNC_FRAPPE
 }
 
 enum FeComprobanteRecibidoEstado {
@@ -3877,7 +4311,6 @@ model TicketDepartment {
 
   @@map("ticket_departments")
 }
-
 
 model TicketCloseReason {
   id        String   @id @default(cuid())

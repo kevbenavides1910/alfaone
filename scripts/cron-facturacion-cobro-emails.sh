@@ -5,24 +5,27 @@
 
 set -u
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
 BASE_URL="${BASE_URL:-http://127.0.0.1:3000}"
 MAX_TIME="${MAX_TIME:-120}"
-LOG_DIR="${LOG_DIR:-/var/log/presupuestos-alfa}"
+LOG_DIR="${LOG_DIR:-/var/log/alfa-one}"
 
 mkdir -p "$LOG_DIR"
 
 if [ -z "${SYNTRA_CRON_SECRET:-}" ]; then
-  if [ -f .env.production ]; then
+  if [ -f "$ROOT/.env.production" ]; then
     # shellcheck disable=SC1091
     set -a
     # shellcheck disable=SC1091
-    source .env.production
+    source "$ROOT/.env.production"
     set +a
-  elif [ -f .env ]; then
+  elif [ -f "$ROOT/.env" ]; then
     # shellcheck disable=SC1091
     set -a
     # shellcheck disable=SC1091
-    source .env
+    source "$ROOT/.env"
     set +a
   fi
 fi

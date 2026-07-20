@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { Mail, Play, Save } from "lucide-react";
+import { Mail, Play, RefreshCw, Save } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toaster";
@@ -207,6 +207,28 @@ export default function FacturacionCobroConfigPage() {
       q.refetch();
     },
     onError: (e: Error) => toast.error(e.message || "No se pudo ejecutar"),
+  });
+
+  const syncCxcMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/admin/facturacion/sync-cxc", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const j = (await r.json()) as {
+        data?: { processed?: number; created?: number; updated?: number; errors?: string[] };
+        error?: { message?: string };
+      };
+      if (!r.ok) throw new Error(j.error?.message ?? "Error al sincronizar CxC");
+      return j.data!;
+    },
+    onSuccess: (data) => {
+      toast.success(
+        `CxC sincronizado: ${data.created ?? 0} creado(s), ${data.updated ?? 0} actualizado(s), ${data.processed ?? 0} procesado(s).` +
+          ((data.errors?.length ?? 0) > 0 ? ` ${data.errors!.length} error(es).` : "")
+      );
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo sincronizar"),
   });
 
   const lastAutoRun = q.data?.lastAutoEmailRunAt as string | null | undefined;
@@ -442,6 +464,30 @@ export default function FacturacionCobroConfigPage() {
             En el VPS: <code className="text-xs bg-slate-100 px-1 rounded">0 8 * * * …/scripts/cron-facturacion-cobro-emails.sh</code>
             {" "}(requiere <code className="text-xs bg-slate-100 px-1 rounded">SYNTRA_CRON_SECRET</code> en el entorno).
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Sincronización CxC</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-slate-600">
+            Crea documentos en Cuentas por cobrar para facturas cerradas (FACTURADO/COBRADO) que aún no
+            tienen registro en CxC.
+          </p>
+          {canEdit && (
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              disabled={syncCxcMutation.isPending || q.isLoading}
+              onClick={() => syncCxcMutation.mutate()}
+            >
+              <RefreshCw className={`h-4 w-4 ${syncCxcMutation.isPending ? "animate-spin" : ""}`} />
+              {syncCxcMutation.isPending ? "Sincronizando…" : "Sincronizar CxC desde facturas"}
+            </Button>
+          )}
         </CardContent>
       </Card>
 

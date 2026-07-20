@@ -25,6 +25,12 @@ export function formatPct(value: number | string | null | undefined): string {
   return `${(num * 100).toFixed(2)}%`;
 }
 
+/** Porcentaje ya expresado en puntos (p. ej. 46.24 → «46.24%»). */
+export function formatPctPoints(value: number | string | null | undefined): string {
+  const num = typeof value === "string" ? parseFloat(value) : (value ?? 0);
+  return `${num.toFixed(2)}%`;
+}
+
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
   const d = new Date(date);
@@ -115,6 +121,11 @@ export function toMonthString(date: Date): string {
   return format(date, "yyyy-MM");
 }
 
+/** Mes calendario anterior (p. ej. reportes de gastos: la nómina NAF suele ir un mes atrás). */
+export function toPreviousMonthString(date: Date = new Date()): string {
+  return toMonthString(new Date(date.getFullYear(), date.getMonth() - 1, 1));
+}
+
 export function fromMonthString(monthStr: string): Date {
   const [year, month] = monthStr.split("-").map(Number);
   return new Date(year, month - 1, 1);
@@ -131,4 +142,56 @@ export function formatBillingPeriodRange(
     return `Del ${from} al ${to}`;
   }
   return `Del ${from} al ${to} de cada mes`;
+}
+
+function clampDayInMonth(year: number, month: number, day: number): number {
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return Math.min(Math.max(1, day), lastDay);
+}
+
+/** Fechas concretas del periodo de servicio para una factura mensual. */
+export function computeServicePeriodForInvoice(
+  periodYear: number,
+  periodMonth: number,
+  fromDay: number,
+  toDay: number
+): { from: Date; to: Date } {
+  const fromD = Math.min(31, Math.max(1, fromDay));
+  const toD = Math.min(31, Math.max(1, toDay));
+
+  if (toD < fromD) {
+    const prevMonth = periodMonth === 1 ? 12 : periodMonth - 1;
+    const prevYear = periodMonth === 1 ? periodYear - 1 : periodYear;
+    return {
+      from: new Date(
+        Date.UTC(prevYear, prevMonth - 1, clampDayInMonth(prevYear, prevMonth, fromD))
+      ),
+      to: new Date(
+        Date.UTC(periodYear, periodMonth - 1, clampDayInMonth(periodYear, periodMonth, toD))
+      ),
+    };
+  }
+
+  return {
+    from: new Date(
+      Date.UTC(periodYear, periodMonth - 1, clampDayInMonth(periodYear, periodMonth, fromD))
+    ),
+    to: new Date(
+      Date.UTC(periodYear, periodMonth - 1, clampDayInMonth(periodYear, periodMonth, toD))
+    ),
+  };
+}
+
+/** Rango legible del periodo de servicio (ej. «14 feb 2026 – 1 mar 2026»). */
+export function formatServicePeriodDates(from: Date | string, to: Date | string): string {
+  const fromDate = typeof from === "string" ? new Date(from) : from;
+  const toDate = typeof to === "string" ? new Date(to) : to;
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("es-CR", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  return `${fmt(fromDate)} – ${fmt(toDate)}`;
 }

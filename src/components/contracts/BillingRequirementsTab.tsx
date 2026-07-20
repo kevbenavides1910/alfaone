@@ -9,6 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toaster";
@@ -22,6 +23,7 @@ interface Requirement {
   id: string;
   description: string;
   notes?: string | null;
+  requiresEvidence: boolean;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -44,27 +46,33 @@ export function BillingRequirementsTab({ contractId, readOnly }: Props) {
 
   const requirements = data?.data ?? [];
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<BillingRequirementInput>({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<BillingRequirementInput>({
     resolver: zodResolver(billingRequirementSchema),
-    defaultValues: { description: "", notes: "" },
+    defaultValues: { description: "", notes: "", requiresEvidence: true },
   });
+
+  const requiresEvidence = watch("requiresEvidence");
 
   function openCreate() {
     setEditing(null);
-    reset({ description: "", notes: "" });
+    reset({ description: "", notes: "", requiresEvidence: true });
     setOpen(true);
   }
 
   function openEdit(row: Requirement) {
     setEditing(row);
-    reset({ description: row.description, notes: row.notes ?? "" });
+    reset({
+      description: row.description,
+      notes: row.notes ?? "",
+      requiresEvidence: row.requiresEvidence,
+    });
     setOpen(true);
   }
 
   function closeDialog() {
     setOpen(false);
     setEditing(null);
-    reset({ description: "", notes: "" });
+    reset({ description: "", notes: "", requiresEvidence: true });
   }
 
   const saveMutation = useMutation({
@@ -132,10 +140,11 @@ export function BillingRequirementsTab({ contractId, readOnly }: Props) {
                 rows: requirements.map((r, i) => ({
                   "#": i + 1,
                   Requisito: r.description,
+                  Evidencia: r.requiresEvidence ? "Requiere archivo" : "Solo confirmación",
                   Notas: r.notes ?? "",
                   "Registrado": formatDate(r.createdAt),
                 })),
-                columnWidths: [6, 40, 40, 16],
+                columnWidths: [6, 40, 18, 40, 16],
               });
             }}
           >
@@ -168,7 +177,12 @@ export function BillingRequirementsTab({ contractId, readOnly }: Props) {
                     {index + 1}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-800">{row.description}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-slate-800">{row.description}</p>
+                      <Badge variant={row.requiresEvidence ? "secondary" : "outline"} className="text-xs">
+                        {row.requiresEvidence ? "Requiere evidencia" : "Solo confirmación"}
+                      </Badge>
+                    </div>
                     {row.notes && (
                       <p className="text-sm text-slate-500 mt-1 whitespace-pre-wrap">{row.notes}</p>
                     )}
@@ -240,6 +254,20 @@ export function BillingRequirementsTab({ contractId, readOnly }: Props) {
                 {...register("notes")}
               />
             </div>
+            <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-3 cursor-pointer hover:bg-slate-50">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                checked={requiresEvidence}
+                onChange={(e) => setValue("requiresEvidence", e.target.checked, { shouldDirty: true })}
+              />
+              <span>
+                <span className="text-sm font-medium text-slate-800">Requiere evidencia adjunta</span>
+                <span className="block text-xs text-slate-500 mt-0.5">
+                  Si se desactiva, en facturación basta marcar el requisito como cumplido sin subir archivo.
+                </span>
+              </span>
+            </label>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={closeDialog}>
                 Cancelar

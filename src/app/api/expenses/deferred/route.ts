@@ -5,6 +5,7 @@ import { ok, created, badRequest, unauthorized, forbidden, serverError } from "@
 import { deferredExpenseSchema } from "@/modules/presupuestos/validations/expense.schema";
 import { fromMonthString } from "@/lib/utils/format";
 import { requireCompanyCode } from "@/modules/core/services/companies";
+import { dbForSession, resolveTenantCompany, assertTenantCompanyAccess } from "@/modules/core/db/db-for-session";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -14,15 +15,21 @@ export async function GET(req: NextRequest) {
   const company = searchParams.get("company");
   const month = searchParams.get("month");
 
+  const db = dbForSession(session);
   const where: Record<string, unknown> = {};
-  if (session.user.company) where.company = session.user.company;
-  else if (company) where.company = company;
+  const effectiveCompany = resolveTenantCompany(session, company);
+  if (effectiveCompany) where.company = effectiveCompany;
   if (month) where.periodMonth = fromMonthString(month);
 
-  const expenses = await prisma.deferredExpense.findMany({
+  const pageParam = parseInt(searchParams.get("page") ?? "1");
+  const pageSizeParam = Math.min(parseInt(searchParams.get("pageSize") ?? "200"), 500);
+
+  const expenses = await db.deferredExpense.findMany({
     where,
     orderBy: [{ periodMonth: "desc" }, { createdAt: "desc" }],
     include: { distributions: { include: { contract: { select: { licitacionNo: true, client: true } } } } },
+    skip: (pageParam - 1) * pageSizeParam,
+    take: pageSizeParam,
   });
 
   return ok(expenses.map((e) => ({
@@ -47,10 +54,13 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
 
     const data = parsed.data;
+    const tenantOk = assertTenantCompanyAccess(session, data.company);
+    if (!tenantOk.ok) return badRequest(tenantOk.message);
     const companyOk = await requireCompanyCode(prisma, data.company, { mustBeActive: true });
     if (!companyOk.ok) return badRequest(companyOk.message);
 
-    const expense = await prisma.deferredExpense.create({
+    const db = dbForSession(session);
+    const expense = await db.deferredExpense.create({
       data: {
         ...data,
         periodMonth: fromMonthString(data.periodMonth),

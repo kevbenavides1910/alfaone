@@ -7,8 +7,9 @@ import {
   recalculateCxcDocumentSaldo,
 } from "@/modules/presupuestos/business/cxc-balance";
 import type { CuentasPorCobrarListInput } from "@/modules/presupuestos/validations/cuentas-por-cobrar.schema";
+import { REAJUSTE_DOC_TYPES } from "@/modules/presupuestos/import/cxc-rows";
 
-type Db = Pick<PrismaClient, "cxcDocumento">;
+type Db = Pick<PrismaClient, "cxcDocumento" | "facturaMensual">;
 
 function toAmount(v: { toString(): string } | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -17,6 +18,19 @@ function toAmount(v: { toString(): string } | number | null | undefined): number
 
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** Reajustes importados desde SAP (tipos RT/ND/NC… sin vínculo a factura mensual). */
+function isSapImportedReajuste(doc: {
+  isReajuste: boolean;
+  facturaMensualId: string | null;
+  docType?: string;
+}): boolean {
+  return (
+    doc.isReajuste &&
+    !doc.facturaMensualId &&
+    REAJUSTE_DOC_TYPES.has(doc.docType ?? "")
+  );
 }
 
 export type BillingContactSnapshot = {
@@ -210,11 +224,40 @@ export const cxcDocumentInclude = {
   rebajos: { orderBy: { sortOrder: "asc" as const } },
 } satisfies Prisma.CxcDocumentoInclude;
 
+/**
+ * CxC visible solo si:
+ * - no está ligado a factura mensual (import SAP / standalone), o
+ * - la factura ligada ya está cerrada (FACTURADO/COBRADO con closedAt).
+ * Nunca mostrar cobro de una factura mensual aún abierta.
+ */
+const cxcVisibleFacturaFilter: Prisma.CxcDocumentoWhereInput = {
+  OR: [
+    { facturaMensualId: null },
+    {
+      facturaMensual: {
+        status: { in: ["FACTURADO", "COBRADO"] },
+        closedAt: { not: null },
+      },
+    },
+  ],
+};
+
 export function cxcListWhere(input: CuentasPorCobrarListInput): Prisma.CxcDocumentoWhereInput {
+  const companies =
+    input.companies && input.companies.length > 0
+      ? input.companies
+      : input.company
+        ? [input.company]
+        : [];
+
   const base: Prisma.CxcDocumentoWhereInput = {
-    isReajuste: false,
     docType: { in: ["FC", "FM"] },
-    ...(input.company ? { companyCode: input.company } : {}),
+    ...cxcVisibleFacturaFilter,
+    ...(companies.length === 1
+      ? { companyCode: companies[0] }
+      : companies.length > 1
+        ? { companyCode: { in: companies } }
+        : {}),
     ...(input.client
       ? { clientName: { contains: input.client, mode: "insensitive" } }
       : {}),
@@ -230,7 +273,7 @@ export function cxcListWhere(input: CuentasPorCobrarListInput): Prisma.CxcDocume
   ].filter(Boolean) as Prisma.CxcDocumentoWhereInput[];
 
   if (dateFilters.length > 0) {
-    base.AND = dateFilters;
+    base.AND = [...(Array.isArray(base.AND) ? base.AND : base.AND ? [base.AND] : []), ...dateFilters];
   }
 
   if (input.filter === "pending") {
@@ -240,6 +283,38 @@ export function cxcListWhere(input: CuentasPorCobrarListInput): Prisma.CxcDocume
     return { ...base, status: "COBRADO" };
   }
   return { ...base, status: { in: ["PENDIENTE", "COBRADO"] } };
+}
+
+/** Solo propaga COBRADO a la factura mensual si ya estaba cerrada (FACTURADO). */
+async function syncFacturaStatusFromCxcPayment(
+  db: Db,
+  facturaMensualId: string | null | undefined,
+  received: boolean,
+  paidAt: Date | null
+): Promise<void> {
+  if (!facturaMensualId) return;
+
+  const factura = await db.facturaMensual.findUnique({
+    where: { id: facturaMensualId },
+    select: { status: true, closedAt: true },
+  });
+  if (!factura?.closedAt) return;
+
+  if (received) {
+    if (factura.status !== "FACTURADO" && factura.status !== "COBRADO") return;
+    await db.facturaMensual.update({
+      where: { id: facturaMensualId },
+      data: { status: "COBRADO", paidAt, lastPaymentReviewAt: paidAt ?? new Date() },
+    });
+    return;
+  }
+
+  if (factura.status === "COBRADO") {
+    await db.facturaMensual.update({
+      where: { id: facturaMensualId },
+      data: { status: "FACTURADO", paidAt: null, lastPaymentReviewAt: new Date() },
+    });
+  }
 }
 
 type CxcMutationResult =
@@ -284,6 +359,13 @@ async function refreshCxcSaldo(db: Db, documentoId: string): Promise<void> {
       provisionalPaymentAmount: null,
     },
   });
+
+  await syncFacturaStatusFromCxcPayment(
+    db,
+    doc.facturaMensualId,
+    recalc.status === "COBRADO",
+    recalc.paidAt
+  );
 }
 
 export type UpdateCxcObservationsResult =
@@ -300,11 +382,11 @@ export async function updateCxcObservations(
     return { ok: false, code: "NOT_FOUND", message: "Documento no encontrado" };
   }
 
-  if (doc.isReajuste) {
+  if (isSapImportedReajuste(doc)) {
     return {
       ok: false,
       code: "INVALID_STATUS",
-      message: "Los reajustes no admiten edición de observaciones desde esta pantalla",
+      message: "Los reajustes importados no admiten edición de observaciones desde esta pantalla",
     };
   }
 
@@ -320,6 +402,7 @@ export async function updateCxcGestion(
   db: Db,
   documentoId: string,
   input: {
+    isReajuste?: boolean;
     invoiceReceivedAt?: string | null;
     cxcExpectedPaymentDate?: string | null;
     provisionalReceiptNumber?: string | null;
@@ -331,11 +414,39 @@ export async function updateCxcGestion(
     return { ok: false, code: "NOT_FOUND", message: "Documento no encontrado" };
   }
 
-  if (doc.isReajuste) {
+  if (input.isReajuste !== undefined) {
+    if (isSapImportedReajuste(doc)) {
+      return {
+        ok: false,
+        code: "INVALID_STATUS",
+        message: "No se puede cambiar el tipo de un reajuste importado desde SAP",
+      };
+    }
+    await db.cxcDocumento.update({
+      where: { id: documentoId },
+      data: { isReajuste: input.isReajuste },
+    });
+    if (doc.facturaMensualId) {
+      await db.facturaMensual.update({
+        where: { id: doc.facturaMensualId },
+        data: { isReajuste: input.isReajuste },
+      });
+    }
+    if (
+      input.invoiceReceivedAt === undefined &&
+      input.cxcExpectedPaymentDate === undefined &&
+      input.provisionalReceiptNumber === undefined &&
+      input.provisionalPaymentAmount === undefined
+    ) {
+      return { ok: true };
+    }
+  }
+
+  if (isSapImportedReajuste(doc)) {
     return {
       ok: false,
       code: "INVALID_STATUS",
-      message: "Los reajustes no admiten edición de gestión de cobro",
+      message: "Los reajustes importados no admiten edición de gestión de cobro",
     };
   }
 
@@ -382,6 +493,17 @@ export async function updateCxcGestion(
   }
 
   await db.cxcDocumento.update({ where: { id: documentoId }, data });
+
+  if (input.provisionalPaymentAmount !== undefined) {
+    const markedCobrado = data.status === "COBRADO";
+    await syncFacturaStatusFromCxcPayment(
+      db,
+      doc.facturaMensualId,
+      Boolean(markedCobrado),
+      markedCobrado ? ((data.paidAt as Date | undefined) ?? new Date()) : null
+    );
+  }
+
   return { ok: true };
 }
 
@@ -399,11 +521,11 @@ export async function confirmFacturaPayment(
     return { ok: false, code: "NOT_FOUND", message: "Documento no encontrado" };
   }
 
-  if (doc.isReajuste) {
+  if (isSapImportedReajuste(doc)) {
     return {
       ok: false,
       code: "INVALID_STATUS",
-      message: "Los reajustes no admiten confirmación de pago desde esta pantalla",
+      message: "Los reajustes importados no admiten confirmación de pago desde esta pantalla",
     };
   }
 
@@ -420,6 +542,7 @@ export async function confirmFacturaPayment(
         provisionalPaymentAmount: null,
       },
     });
+    await syncFacturaStatusFromCxcPayment(db, doc.facturaMensualId, true, now);
   } else {
     await db.cxcDocumento.update({
       where: { id: documentoId },
@@ -429,6 +552,7 @@ export async function confirmFacturaPayment(
         lastPaymentReviewAt: now,
       },
     });
+    await syncFacturaStatusFromCxcPayment(db, doc.facturaMensualId, false, null);
   }
 
   return { ok: true };
@@ -442,7 +566,7 @@ export async function createCxcAbono(
 ): Promise<CxcMutationResult> {
   const doc = await loadDocumentForMutation(db, documentoId);
   if (!doc) return { ok: false, code: "NOT_FOUND", message: "Documento no encontrado" };
-  if (doc.isReajuste || doc.status === "COBRADO") {
+  if (isSapImportedReajuste(doc) || doc.status === "COBRADO") {
     return { ok: false, code: "INVALID_STATUS", message: "El documento no admite abonos" };
   }
 
@@ -568,7 +692,7 @@ export async function createCxcRebajo(
 ): Promise<CxcMutationResult> {
   const doc = await loadDocumentForMutation(db, documentoId);
   if (!doc) return { ok: false, code: "NOT_FOUND", message: "Documento no encontrado" };
-  if (doc.isReajuste || doc.status === "COBRADO") {
+  if (isSapImportedReajuste(doc) || doc.status === "COBRADO") {
     return { ok: false, code: "INVALID_STATUS", message: "El documento no admite rebajos" };
   }
 

@@ -79,6 +79,15 @@ export default function InformeCcssInsPage() {
         method: "POST",
         body: form,
       });
+      const contentType = r.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        const text = await r.text();
+        throw new Error(
+          r.status >= 500
+            ? "Error del servidor al procesar el PDF. Si el problema continúa, contacte al administrador."
+            : text.slice(0, 200) || `Error HTTP ${r.status}`,
+        );
+      }
       const json = await r.json();
       if (json.error) throw new Error(json.error.message || "Error al procesar");
 

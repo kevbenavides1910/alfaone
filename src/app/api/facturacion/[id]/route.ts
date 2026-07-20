@@ -19,6 +19,11 @@ import {
   parseCalendarDateInput,
   serializeFacturaMensual,
 } from "@/modules/presupuestos/services/facturacion-cobro";
+import { facturaListSerializeInclude } from "@/modules/presupuestos/services/facturacion-includes";
+import {
+  syncCxcFromFacturaEmision,
+  syncCxcFromFacturaMensual,
+} from "@/modules/presupuestos/services/sync-cxc-from-factura";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -31,10 +36,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   try {
     const row = await prisma.facturaMensual.findUnique({
       where: { id },
-      include: {
-        contract: { select: { licitacionNo: true } },
-        requisitos: { orderBy: { sortOrder: "asc" } },
-      },
+      include: facturaListSerializeInclude,
     });
     if (!row) return notFound("Factura mensual no encontrada");
     return ok(serializeFacturaMensual(row));
@@ -59,13 +61,19 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
     const isClosed =
       existing.status === "FACTURADO" || existing.status === "COBRADO";
-    const onlyInvoiceNumber =
-      parsed.data.invoiceNumber !== undefined &&
+
+    const metadataFieldsOnly =
       parsed.data.observationLog === undefined &&
       parsed.data.finalNotes === undefined &&
-      parsed.data.dueDate === undefined;
+      parsed.data.dueDate === undefined &&
+      (parsed.data.invoiceNumber !== undefined ||
+        parsed.data.isReajuste !== undefined ||
+        parsed.data.documentNumber !== undefined ||
+        parsed.data.servicePeriodFromDate !== undefined ||
+        parsed.data.servicePeriodToDate !== undefined ||
+        parsed.data.invoiceReceivedAt !== undefined);
 
-    if (isClosed && !onlyInvoiceNumber) {
+    if (isClosed && !metadataFieldsOnly) {
       return badRequest("No se puede editar una factura ya cerrada");
     }
 
@@ -73,13 +81,37 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       observationLog?: string;
       finalNotes?: string;
       invoiceNumber?: string | null;
+      documentNumber?: string | null;
+      servicePeriodFromDate?: Date | null;
+      servicePeriodToDate?: Date | null;
+      invoiceReceivedAt?: Date | null;
+      isReajuste?: boolean;
       dueDate?: Date;
       status?: "EN_PROCESO";
     } = {};
     if (parsed.data.observationLog !== undefined) data.observationLog = parsed.data.observationLog;
     if (parsed.data.finalNotes !== undefined) data.finalNotes = parsed.data.finalNotes;
+    if (parsed.data.isReajuste !== undefined) data.isReajuste = parsed.data.isReajuste;
     if (parsed.data.invoiceNumber !== undefined) {
       data.invoiceNumber = parsed.data.invoiceNumber;
+    }
+    if (parsed.data.documentNumber !== undefined) {
+      data.documentNumber = parsed.data.documentNumber;
+    }
+    if (parsed.data.servicePeriodFromDate !== undefined) {
+      data.servicePeriodFromDate = parsed.data.servicePeriodFromDate
+        ? parseCalendarDateInput(parsed.data.servicePeriodFromDate)
+        : null;
+    }
+    if (parsed.data.servicePeriodToDate !== undefined) {
+      data.servicePeriodToDate = parsed.data.servicePeriodToDate
+        ? parseCalendarDateInput(parsed.data.servicePeriodToDate)
+        : null;
+    }
+    if (parsed.data.invoiceReceivedAt !== undefined) {
+      data.invoiceReceivedAt = parsed.data.invoiceReceivedAt
+        ? parseCalendarDateInput(parsed.data.invoiceReceivedAt)
+        : null;
     }
     if (parsed.data.dueDate !== undefined) {
       data.dueDate = parseCalendarDateInput(parsed.data.dueDate);
@@ -95,11 +127,19 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const updated = await prisma.facturaMensual.update({
       where: { id },
       data,
-      include: {
-        contract: { select: { licitacionNo: true } },
-        requisitos: { orderBy: { sortOrder: "asc" } },
-      },
+      include: facturaListSerializeInclude,
     });
+
+    if (
+      isClosed &&
+      (parsed.data.isReajuste !== undefined ||
+        parsed.data.documentNumber !== undefined ||
+        parsed.data.servicePeriodFromDate !== undefined ||
+        parsed.data.servicePeriodToDate !== undefined ||
+        parsed.data.invoiceReceivedAt !== undefined)
+    ) {
+      await syncCxcFromFacturaMensual(prisma, id);
+    }
 
     return ok(serializeFacturaMensual(updated));
   } catch (e) {
@@ -121,7 +161,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const parsed = cerrarFacturacionSchema.safeParse(body);
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
 
-    const result = await closeFacturaMensual(prisma, id, parsed.data.finalNotes);
+    const result = await closeFacturaMensual(prisma, id, {
+      finalNotes: parsed.data.finalNotes,
+      isReajuste: parsed.data.isReajuste,
+      emisionId: parsed.data.emisionId,
+    });
     if (!result.ok) {
       if (result.code === "NOT_FOUND") return notFound(result.message);
       return badRequest(result.message, result.pending ? { pending: result.pending } : undefined);
@@ -129,13 +173,20 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
     const updated = await prisma.facturaMensual.findUniqueOrThrow({
       where: { id },
-      include: {
-        contract: { select: { licitacionNo: true } },
-        requisitos: { orderBy: { sortOrder: "asc" } },
-      },
+      include: facturaListSerializeInclude,
     });
+    const serialized = serializeFacturaMensual(updated);
 
-    return ok(serializeFacturaMensual(updated));
+    if (result.emisionId) {
+      const emision = serialized.emisiones?.find((e) => e.id === result.emisionId);
+      if (emision?.totalCalculated != null) {
+        await syncCxcFromFacturaEmision(prisma, id, result.emisionId, emision.totalCalculated);
+      }
+    } else if (updated.status === "FACTURADO" || updated.status === "COBRADO") {
+      await syncCxcFromFacturaMensual(prisma, id);
+    }
+
+    return ok(serialized);
   } catch (e) {
     return serverError("Error al cerrar facturación", e);
   }

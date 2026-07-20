@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface TokenPayload {
@@ -12,7 +11,6 @@ interface TokenPayload {
   exp: number;
 }
 
-/** Decodifica el payload de un JWT (base64url + UTF-8) sin verificar la firma. */
 function decodeJwtPayload(token: string): TokenPayload {
   const segment = token.split(".")[1];
   if (!segment) throw new Error("Token inválido");
@@ -30,7 +28,6 @@ export default function ImpersonateRolePage() {
   const params = useParams<{ roleId: string }>();
   const search = useSearchParams();
   const router = useRouter();
-  const { update } = useSession();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,42 +39,26 @@ export default function ImpersonateRolePage() {
       return;
     }
 
-    (async () => {
-      try {
-        const payload = decodeJwtPayload(token);
+    try {
+      const payload = decodeJwtPayload(token);
 
-        if (payload.impersonatedRoleId !== roleId) {
-          throw new Error("Token no corresponde al rol solicitado");
-        }
-        if (payload.exp * 1000 < Date.now()) {
-          throw new Error("Token expirado");
-        }
-
-        sessionStorage.setItem("impersonationToken", token);
-        sessionStorage.setItem("impersonationRoleId", payload.impersonatedRoleId);
-        sessionStorage.setItem("impersonationRoleCode", payload.impersonatedRoleCode);
-
-        // Actualiza la sesión NextAuth para cargar permisos del rol impersonado
-        const updated = await update({
-          impersonatedRoleId: payload.impersonatedRoleId,
-        });
-
-        const applied =
-          (updated as { user?: { impersonatedRoleId?: string } } | null)?.user
-            ?.impersonatedRoleId === payload.impersonatedRoleId;
-
-        if (!applied) {
-          throw new Error(
-            "No se pudo aplicar el rol seleccionado. Recargue la página e intente de nuevo.",
-          );
-        }
-
-        window.location.href = "/home";
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Token inválido");
+      if (payload.impersonatedRoleId !== roleId) {
+        throw new Error("Token no corresponde al rol solicitado");
       }
-    })();
-  }, [params.roleId, search, router, update]);
+      if (payload.exp * 1000 < Date.now()) {
+        throw new Error("Token expirado");
+      }
+
+      sessionStorage.setItem("impersonationToken", token);
+      sessionStorage.setItem("impersonationRoleId", payload.impersonatedRoleId);
+      sessionStorage.setItem("impersonationRoleCode", payload.impersonatedRoleCode);
+
+      // Solo sessionStorage (por pestaña); no mutar el JWT compartido del admin.
+      window.location.replace("/home");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Token inválido");
+    }
+  }, [params.roleId, search, router]);
 
   if (error) {
     return (
@@ -93,7 +74,7 @@ export default function ImpersonateRolePage() {
     <div className="flex min-h-[60vh] items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <CardContent className="p-8 text-center text-slate-600">
-          Conectando como rol {params.roleId ? "…" : ""}
+          Conectando como rol…
         </CardContent>
       </Card>
     </div>

@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
 import { writeSigAuditLog } from "./audit-log";
 import { assertSigApproverUser } from "./approvers";
@@ -277,22 +278,23 @@ export async function updateSigDocumentMetadata(
   actorId: string,
   data: {
     title?: string;
+    documentTypeId?: string | null;
     processId?: string | null;
     company?: string | null;
     revisionIntervalDays?: number | null;
   }
 ) {
   return prisma.$transaction(async (tx) => {
+    const patch: Prisma.SigDocumentUncheckedUpdateInput = {};
+    if (data.title !== undefined) patch.title = data.title.trim().slice(0, 500);
+    if (data.documentTypeId) patch.documentTypeId = data.documentTypeId;
+    if (data.processId !== undefined) patch.processId = data.processId || null;
+    if (data.company !== undefined) patch.company = data.company || null;
+    if (data.revisionIntervalDays !== undefined) patch.revisionIntervalDays = data.revisionIntervalDays;
+
     const updated = await tx.sigDocument.update({
       where: { id: documentId },
-      data: {
-        ...(data.title !== undefined ? { title: data.title.trim().slice(0, 500) } : {}),
-        ...(data.processId !== undefined ? { processId: data.processId || null } : {}),
-        ...(data.company !== undefined ? { company: data.company || null } : {}),
-        ...(data.revisionIntervalDays !== undefined
-          ? { revisionIntervalDays: data.revisionIntervalDays }
-          : {}),
-      },
+      data: patch,
     });
 
     await writeSigAuditLog(tx, {

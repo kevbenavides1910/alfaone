@@ -31,6 +31,9 @@ export function buildContractPrismaUpdate(
   if (parsed.profitPct !== undefined) data.profitPct = parsed.profitPct;
   if (parsed.status !== undefined) data.status = parsed.status;
   if (parsed.notes !== undefined) data.notes = parsed.notes?.trim() ? parsed.notes : null;
+  if (parsed.administrationsCount !== undefined) {
+    data.administrationsCount = parsed.administrationsCount;
+  }
   if (suppliesPct !== undefined) {
     data.suppliesPct = suppliesPct;
     data.suppliesBudgetPct = suppliesPct;

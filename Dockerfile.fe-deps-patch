@@ -1,0 +1,29 @@
+# Parche incremental: añade deps XAdES/tslib a la imagen actual SIN rebuild de Next.
+# Uso:
+#   docker build -f Dockerfile.fe-deps-patch -t presupuestos-alfa-app:latest .
+#   COMPOSE_PROJECT_NAME=presupuestos-alfa docker compose -f docker-compose.prod.yml up -d --no-build --no-deps --force-recreate app
+#
+# syntax=docker/dockerfile:1.7
+FROM node:20-bookworm-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm config set fetch-retries 15 \
+  && npm config set fetch-retry-mintimeout 20000 \
+  && npm config set fetch-retry-maxtimeout 300000 \
+  && npm ci --omit=dev
+
+FROM presupuestos-alfa-app:latest
+USER root
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/xpath /node_modules/xpath
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/xadesjs /node_modules/xadesjs
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/xmldsigjs /node_modules/xmldsigjs
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/xml-core /node_modules/xml-core
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/@xmldom /node_modules/@xmldom
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/asn1js /node_modules/asn1js
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/pkijs /node_modules/pkijs
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/pvtsutils /node_modules/pvtsutils
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/pvutils /node_modules/pvutils
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/tslib /node_modules/tslib
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/bytestreamjs /node_modules/bytestreamjs
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/@noble /node_modules/@noble
+USER nextjs

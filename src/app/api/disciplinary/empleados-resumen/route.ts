@@ -3,6 +3,16 @@ import { getSession } from "@/lib/api/middleware";
 import { ok, unauthorized, forbidden } from "@/lib/api/response";
 import { hasPermission } from "@/lib/permissions/check";
 import { prisma } from "@/modules/core/db/prisma";
+import {
+  getTreatmentFilterKey,
+  parseTreatmentFilterParam,
+} from "@/modules/disciplinario/business/cycle-display";
+import {
+  canonicalZoneLabel,
+  defaultsForZoneText,
+  loadZoneCatalogNameByKey,
+  loadZoneDisciplinaryDefaultsMap,
+} from "@/modules/disciplinario/services/disciplinary-zone-defaults";
 
 /**
  * Resumen por empleado para el seguimiento disciplinario:
@@ -19,6 +29,7 @@ import { prisma } from "@/modules/core/db/prisma";
  *   - zona: contiene.
  *   - administrador: contiene (administrador del último apercibimiento del empleado).
  *   - soloObligacion: "1" para devolver solo empleados con tieneObligacion=true.
+ *   - tratamiento: COBRADO | DADO_DE_BAJA | PENDIENTE | OTRO | SIN_DEFINIR
  */
 
 function parseLocalDate(s: string | null): Date | null {
@@ -49,6 +60,14 @@ interface EmpleadoResumen {
     cobradoDate: string | null;
     convocatoriaEnviadaAt: string | null;
   } | null;
+  /** Datos del último ciclo cerrado (acción de cierre y monto si aplica). */
+  ultimoCierre: {
+    accion: string;
+    accionRaw: string | null;
+    monto: number | null;
+  } | null;
+  /** Suma histórica de montos en ciclos cerrados con acción COBRADO. */
+  totalMontoCobrado: number;
 }
 
 export async function GET(req: NextRequest) {
@@ -65,6 +84,12 @@ export async function GET(req: NextRequest) {
   const convocatoriaHasta = parseLocalDate(sp.get("convocatoriaHasta"));
   // "1" = solo empleados sin fecha de convocatoria definida.
   const sinConvocatoria = sp.get("sinConvocatoria") === "1";
+  const tratamientoFilter = parseTreatmentFilterParam(sp.get("tratamiento"));
+
+  const [zoneDisciplineDefaults, zoneCatalogNames] = await Promise.all([
+    loadZoneDisciplinaryDefaultsMap(),
+    loadZoneCatalogNameByKey(),
+  ]);
 
   // 1) Cargamos TODOS los apercibimientos (campos mínimos) para agregar en memoria.
   //    Esto es razonable para un dataset disciplinario (cientos / pocos miles de filas).
@@ -81,21 +106,41 @@ export async function GET(req: NextRequest) {
     orderBy: [{ codigoEmpleado: "asc" }, { fechaEmision: "asc" }],
   });
 
-  // 2) Cargamos el último cerradoEl por código.
+  // 2) Último ciclo cerrado por código (fecha, acción, monto) y total histórico cobrado.
   const ciclos = await prisma.disciplinaryClosedCycle.findMany({
     where: { cerradoEl: { not: null } },
     select: {
       cerradoEl: true,
+      accion: true,
+      accionRaw: true,
+      monto: true,
       treatment: { select: { codigoEmpleado: true } },
     },
   });
   const ultimoCerradoPorCodigo = new Map<string, Date>();
+  const ultimoCierrePorCodigo = new Map<
+    string,
+    EmpleadoResumen["ultimoCierre"] & { cerradoEl: Date }
+  >();
+  const totalMontoCobradoPorCodigo = new Map<string, number>();
   for (const c of ciclos) {
     if (!c.cerradoEl) continue;
     const code = c.treatment.codigoEmpleado;
     const prev = ultimoCerradoPorCodigo.get(code);
     if (!prev || c.cerradoEl > prev) {
       ultimoCerradoPorCodigo.set(code, c.cerradoEl);
+      ultimoCierrePorCodigo.set(code, {
+        cerradoEl: c.cerradoEl,
+        accion: c.accion,
+        accionRaw: c.accionRaw,
+        monto: c.monto !== null ? Number(c.monto) : null,
+      });
+    }
+    if (c.accion === "COBRADO" && c.monto !== null) {
+      totalMontoCobradoPorCodigo.set(
+        code,
+        (totalMontoCobradoPorCodigo.get(code) ?? 0) + Number(c.monto),
+      );
     }
   }
 
@@ -168,9 +213,19 @@ export async function GET(req: NextRequest) {
         ultimaFechaEmision: null,
         tieneObligacion: false,
         treatment: mapTreatment(tratamientoPorCodigo.get(a.codigoEmpleado)),
+        ultimoCierre: null,
+        totalMontoCobrado: totalMontoCobradoPorCodigo.get(a.codigoEmpleado) ?? 0,
       };
       const ultimoCerrado = ultimoCerradoPorCodigo.get(a.codigoEmpleado);
       if (ultimoCerrado) row.ultimoCerradoEl = ultimoCerrado.toISOString();
+      const cierre = ultimoCierrePorCodigo.get(a.codigoEmpleado);
+      if (cierre) {
+        row.ultimoCierre = {
+          accion: cierre.accion,
+          accionRaw: cierre.accionRaw,
+          monto: cierre.monto,
+        };
+      }
       acc.set(a.codigoEmpleado, row);
     }
 
@@ -211,6 +266,16 @@ export async function GET(req: NextRequest) {
       ultimaFechaEmision: null,
       tieneObligacion: false,
       treatment: mapTreatment(t),
+      ultimoCierre: (() => {
+        const c = ultimoCierrePorCodigo.get(code);
+        if (!c) return null;
+        return {
+          accion: c.accion,
+          accionRaw: c.accionRaw,
+          monto: c.monto,
+        };
+      })(),
+      totalMontoCobrado: totalMontoCobradoPorCodigo.get(code) ?? 0,
     });
   }
 
@@ -248,10 +313,21 @@ export async function GET(req: NextRequest) {
   const zonaLower = zona.toLowerCase();
   const admLower = administrador.toLowerCase();
 
-  let rows = Array.from(acc.values()).map((r) => ({
-    ...r,
-    tieneObligacion: r.vigentesEnCicloActual >= 3,
-  }));
+  let rows = Array.from(acc.values()).map((r) => {
+    const zonaCanon = canonicalZoneLabel(zoneCatalogNames, r.zona);
+    let administrador = r.administrador;
+    if (!administrador?.trim() && zonaCanon) {
+      const zd = defaultsForZoneText(zoneDisciplineDefaults, zonaCanon);
+      if (zd?.administrator) administrador = zd.administrator;
+    }
+    return {
+      ...r,
+      zona: zonaCanon,
+      ubicacion: zonaCanon ?? r.ubicacion,
+      administrador,
+      tieneObligacion: r.vigentesEnCicloActual >= 3,
+    };
+  });
 
   if (q) {
     rows = rows.filter((r) =>
@@ -286,6 +362,22 @@ export async function GET(req: NextRequest) {
       if (desdeMs !== null && ts < desdeMs) return false;
       if (hastaMs !== null && ts > hastaMs) return false;
       return true;
+    });
+  }
+
+  if (tratamientoFilter) {
+    rows = rows.filter((r) => {
+      const key = getTreatmentFilterKey(
+        r.treatment
+          ? {
+              fechaConvocatoria: r.treatment.fechaConvocatoria,
+              accion: r.treatment.accion,
+              cobradoDate: r.treatment.cobradoDate,
+            }
+          : null,
+        r.ultimoCierre,
+      );
+      return key === tratamientoFilter;
     });
   }
 

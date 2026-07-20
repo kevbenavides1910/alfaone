@@ -8,6 +8,7 @@ export const nafDocumentosListSchema = z.object({
   search: z.string().trim().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
+  ligadoFilter: z.enum(["ALL", "LIGADOS", "NO_LIGADOS"]).optional().default("ALL"),
 });
 
 export type NafDocumentosListInput = z.infer<typeof nafDocumentosListSchema>;

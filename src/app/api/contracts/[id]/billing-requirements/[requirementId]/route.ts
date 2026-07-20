@@ -22,9 +22,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const parsed = billingRequirementUpdateSchema.safeParse(body);
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
 
-    const data: { description?: string; notes?: string | null; sortOrder?: number } = {};
+    const data: {
+      description?: string;
+      notes?: string | null;
+      requiresEvidence?: boolean;
+      sortOrder?: number;
+    } = {};
     if (parsed.data.description !== undefined) data.description = parsed.data.description.trim();
     if (parsed.data.notes !== undefined) data.notes = parsed.data.notes?.trim() || null;
+    if (parsed.data.requiresEvidence !== undefined) data.requiresEvidence = parsed.data.requiresEvidence;
     if (parsed.data.sortOrder !== undefined) data.sortOrder = parsed.data.sortOrder;
 
     const updated = await prisma.contractBillingRequirement.update({
@@ -32,10 +38,24 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       data,
     });
 
+    if (parsed.data.requiresEvidence !== undefined) {
+      await prisma.facturaRequisito.updateMany({
+        where: {
+          requirementName: existing.description,
+          facturaMensual: {
+            contractId,
+            status: { notIn: ["FACTURADO", "COBRADO"] },
+          },
+        },
+        data: { requiresEvidenceCopied: updated.requiresEvidence },
+      });
+    }
+
     return ok({
       id: updated.id,
       description: updated.description,
       notes: updated.notes,
+      requiresEvidence: updated.requiresEvidence,
       sortOrder: updated.sortOrder,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),

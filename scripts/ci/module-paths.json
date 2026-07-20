@@ -71,6 +71,12 @@
       "src/app/api/admin/**",
       "src/app/api/users/**",
       "src/components/admin/**"
+    ],
+    "expedienteDigital": [
+      "src/modules/expediente-digital/**",
+      "src/app/(app)/expediente-digital/**",
+      "src/app/api/expediente-digital/**",
+      "src/components/expediente-digital/**"
     ]
   }
 }

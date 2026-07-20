@@ -1,6 +1,6 @@
 import type { Decimal } from "@prisma/client/runtime/library";
 
-function toNum(v: Decimal | number | string): number {
+function toNum(v: Decimal | number | string | { toString(): string }): number {
   return parseFloat(v.toString());
 }
 
@@ -29,4 +29,31 @@ export function getEffectiveMonthlyBilling(
     }
   }
   return bestAmount;
+}
+
+export function sumSpecialServicesForMonth(
+  rows: { periodMonth: Date; amount: { toString(): string } | number | string }[],
+  asOf: Date,
+): number {
+  if (rows.length === 0) return 0;
+  const target = monthStart(asOf).getTime();
+  return rows
+    .filter((row) => monthStart(new Date(row.periodMonth)).getTime() === target)
+    .reduce((sum, row) => sum + toNum(row.amount), 0);
+}
+
+/** Facturación del mes = tarifa base (historial) + servicios especiales del mismo mes. */
+export function getEffectiveMonthlyRevenue(
+  baseBilling: number,
+  history: { periodMonth: Date; monthlyBilling: Decimal | number | string }[],
+  specialServices: { periodMonth: Date; amount: { toString(): string } | number | string }[],
+  asOf: Date = new Date(),
+): { billing: number; baseBilling: number; specialServicesTotal: number } {
+  const base = getEffectiveMonthlyBilling(baseBilling, history, asOf);
+  const specialServicesTotal = sumSpecialServicesForMonth(specialServices, asOf);
+  return {
+    baseBilling: base,
+    specialServicesTotal,
+    billing: base + specialServicesTotal,
+  };
 }

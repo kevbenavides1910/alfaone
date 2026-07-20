@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Eye } from "lucide-react";
 import { hasPermission } from "@/lib/permissions/check";

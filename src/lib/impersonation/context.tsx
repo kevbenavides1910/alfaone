@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { installImpersonationFetchInterceptor } from "@/lib/impersonation/fetch-interceptor";
+import { clearImpersonationPreviewCache } from "@/lib/impersonation/use-effective-session";
 
 interface ImpersonationContextValue {
   isImpersonating: boolean;
@@ -18,31 +20,45 @@ const ImpersonationContext = createContext<ImpersonationContextValue>({
   clear: () => {},
 });
 
+function readStoredImpersonation(): {
+  roleId: string | null;
+  roleCode: string | null;
+  token: string | null;
+} {
+  if (typeof window === "undefined") {
+    return { roleId: null, roleCode: null, token: null };
+  }
+  const token = sessionStorage.getItem("impersonationToken");
+  const roleId = sessionStorage.getItem("impersonationRoleId");
+  const roleCode = sessionStorage.getItem("impersonationRoleCode");
+  if (token && roleId && roleCode) {
+    return { token, roleId, roleCode };
+  }
+  return { roleId: null, roleCode: null, token: null };
+}
+
 export function ImpersonationProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<{
-    roleId: string | null;
-    roleCode: string | null;
-    token: string | null;
-  }>({ roleId: null, roleCode: null, token: null });
+  const [state, setState] = useState(readStoredImpersonation);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const token = sessionStorage.getItem("impersonationToken");
-    const roleId = sessionStorage.getItem("impersonationRoleId");
-    const roleCode = sessionStorage.getItem("impersonationRoleCode");
-    if (token && roleId && roleCode) {
-      setState({ token, roleId, roleCode });
-    }
+    setState(readStoredImpersonation());
   }, []);
 
-  const clear = () => {
+  useEffect(() => {
+    installImpersonationFetchInterceptor(() =>
+      typeof window === "undefined" ? null : sessionStorage.getItem("impersonationToken")
+    );
+  }, []);
+
+  const clear = useCallback(() => {
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("impersonationToken");
       sessionStorage.removeItem("impersonationRoleId");
       sessionStorage.removeItem("impersonationRoleCode");
     }
+    clearImpersonationPreviewCache();
     setState({ roleId: null, roleCode: null, token: null });
-  };
+  }, []);
 
   return (
     <ImpersonationContext.Provider

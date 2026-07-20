@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { TableColumnFilterHead, type TableColumnFilterDef } from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Download, Eye, FileText, Plus, Search } from "lucide-react";
+import { AlertTriangle, Download, Eye, FileText, Pencil, Plus, Search } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import { formatDate } from "@/lib/utils/format";
 
@@ -58,6 +60,9 @@ interface Reminder {
 export default function SigBibliotecaPage() {
   const { data: session } = useSession();
   const canUpload = hasPermission(session, "sig.documentos", "edit");
+  const canEditMetadata =
+    hasPermission(session, "sig.biblioteca", "edit") ||
+    hasPermission(session, "sig.documentos", "edit");
   const [q, setQ] = useState("");
   const [documentTypeId, setDocumentTypeId] = useState("");
   const [processId, setProcessId] = useState("");
@@ -115,6 +120,23 @@ export default function SigBibliotecaPage() {
   const rows = listData?.data.rows ?? [];
   const totalPages = listData?.data.totalPages ?? 1;
   const reminders = remindersData?.data ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+
+  const documentColumnDefs = useMemo((): TableColumnFilterDef<DocumentRow>[] => [
+    { key: "codigo", label: "Código", headerClassName: "px-3 py-2", getValue: (r) => r.code },
+    { key: "titulo", label: "Título", headerClassName: "px-3 py-2", getValue: (r) => r.title },
+    { key: "tipo", label: "Tipo", headerClassName: "px-3 py-2", getValue: (r) => r.documentType.name },
+    { key: "proceso", label: "Proceso", headerClassName: "px-3 py-2", getValue: (r) => r.process?.name ?? "" },
+    { key: "version", label: "Versión", headerClassName: "px-3 py-2", getValue: (r) => r.currentVersion?.versionLabel ?? "" },
+    { key: "ultima", label: "Última revisión", headerClassName: "px-3 py-2", getValue: (r) => r.currentVersion ? formatDate(r.currentVersion.revisionDate) : "" },
+    { key: "estado", label: "Estado", headerClassName: "px-3 py-2", getValue: (r) => STATUS_LABELS[r.status] ?? r.status },
+    { key: "acciones", label: "Acciones", headerClassName: "px-3 py-2 text-right", align: "right", filterable: false, getValue: () => "" },
+  ], []);
+
+  const displayedRows = useMemo(
+    () => filterRowsByColumnFilters(rows, columnFilters, documentColumnDefs),
+    [rows, columnFilters, documentColumnDefs]
+  );
 
   const resetFilters = () => {
     setDocumentTypeId("");
@@ -231,16 +253,12 @@ export default function SigBibliotecaPage() {
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/40 text-left">
-                  <th className="px-3 py-2">Código</th>
-                  <th className="px-3 py-2">Título</th>
-                  <th className="px-3 py-2">Tipo</th>
-                  <th className="px-3 py-2">Proceso</th>
-                  <th className="px-3 py-2">Versión</th>
-                  <th className="px-3 py-2">Última revisión</th>
-                  <th className="px-3 py-2">Estado</th>
-                  <th className="px-3 py-2 text-right">Acciones</th>
-                </tr>
+                <TableColumnFilterHead
+                  columns={documentColumnDefs}
+                  rows={rows}
+                  filters={columnFilters}
+                  onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                />
               </thead>
               <tbody>
                 {isLoading && (
@@ -250,14 +268,14 @@ export default function SigBibliotecaPage() {
                     </td>
                   </tr>
                 )}
-                {!isLoading && rows.length === 0 && (
+                {!isLoading && displayedRows.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
                       No hay documentos con los filtros seleccionados
                     </td>
                   </tr>
                 )}
-                {rows.map((row) => {
+                {displayedRows.map((row) => {
                   const v = row.currentVersion;
                   return (
                     <tr key={row.id} className="border-b hover:bg-muted/20">
@@ -300,6 +318,13 @@ export default function SigBibliotecaPage() {
                           ) : (
                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled title="Sin archivo">
                               <Download className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canEditMetadata && (
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild title="Editar metadatos">
+                              <Link href={`/sig/documentos/${row.id}`}>
+                                <Pencil className="h-4 w-4" />
+                              </Link>
                             </Button>
                           )}
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild title="Ver ficha">

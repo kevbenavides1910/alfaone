@@ -69,7 +69,7 @@ export function getDefaultBillingRequirementsForContract(
 
 type BillingDb = Pick<
   PrismaClient,
-  "contract" | "contractBillingRequirement" | "facturaMensual" | "facturaRequisito"
+  "contract" | "contractBillingRequirement" | "facturaMensual" | "facturaRequisito" | "facturaMensualEmision"
 >;
 
 async function syncOpenFacturaRequisitosForContractLocal(
@@ -92,6 +92,11 @@ async function syncOpenFacturaRequisitosForContractLocal(
   });
 
   for (const factura of openFacturas) {
+    const emisionCount = await db.facturaMensualEmision.count({
+      where: { facturaMensualId: factura.id },
+    });
+    if (emisionCount > 0) continue;
+
     const existing = await db.facturaRequisito.findMany({
       where: { facturaMensualId: factura.id },
       select: { requirementName: true },

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/api/middleware";
-import { canManageDisciplinary } from "@/modules/core/permissions";
+import { canEditDisciplinaryHistorial } from "@/modules/core/permissions";
 import {
   ok,
   unauthorized,
@@ -22,7 +22,7 @@ export async function POST(
 ) {
   const session = await getSession();
   if (!session) return unauthorized();
-  if (!canManageDisciplinary(session)) return forbidden();
+  if (!canEditDisciplinaryHistorial(session)) return forbidden();
 
   try {
     const { id } = await params;

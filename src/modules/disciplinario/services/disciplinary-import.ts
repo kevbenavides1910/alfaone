@@ -17,7 +17,12 @@ import {
   type OmisionEntry,
 } from "@/modules/disciplinario/business/disciplinary";
 import { pickPuntoOmitidoFromRow } from "@/modules/disciplinario/business/disciplinary-punto-omitido";
-import { defaultsForZoneText, loadZoneDisciplinaryDefaultsMap } from "@/modules/disciplinario/services/disciplinary-zone-defaults";
+import {
+  canonicalZoneLabel,
+  defaultsForZoneText,
+  loadZoneCatalogNameByKey,
+  loadZoneDisciplinaryDefaultsMap,
+} from "@/modules/disciplinario/services/disciplinary-zone-defaults";
 
 export interface DisciplinaryImportResult {
   batchId: string;
@@ -211,7 +216,10 @@ export async function importDisciplinaryWorkbook(
     },
   });
 
-  const zoneDisciplineDefaults = await loadZoneDisciplinaryDefaultsMap();
+  const [zoneDisciplineDefaults, zoneCatalogNames] = await Promise.all([
+    loadZoneDisciplinaryDefaultsMap(),
+    loadZoneCatalogNameByKey(),
+  ]);
 
   // ── 2) Procesar Historial (upsert por N°).
   let apInserted = 0;
@@ -278,7 +286,8 @@ export async function importDisciplinaryWorkbook(
           ]),
         ).map((e) => ({ ...e, puntoOmitido: e.puntoOmitido ?? puntoFila }));
 
-        const zonaVal = emptyToNull(pickCell(norm, ["Zona"]));
+        const zonaRaw = emptyToNull(pickCell(norm, ["Zona"]));
+        const zonaVal = canonicalZoneLabel(zoneCatalogNames, zonaRaw);
         let administrador = emptyToNull(pickCell(norm, ["Administrador"]));
         if (!administrador && zonaVal) {
           const zd = defaultsForZoneText(zoneDisciplineDefaults, zonaVal);

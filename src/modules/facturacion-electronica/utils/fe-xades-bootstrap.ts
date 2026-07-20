@@ -31,45 +31,71 @@ export function ensureFeXadesBootstrap(): void {
 
   try {
     const req = getNativeRequire();
-    const bootstrapPath = join(process.cwd(), "scripts/fe-xades-bootstrap.cjs");
+    // Prod (Docker): scripts/fe-xades-bootstrap.cjs
+    // Repo reorganizado: scripts/db/fe-xades-bootstrap.cjs
+    const bootstrapCandidates = [
+      join(process.cwd(), "scripts/fe-xades-bootstrap.cjs"),
+      join(process.cwd(), "scripts/db/fe-xades-bootstrap.cjs"),
+    ];
 
-    try {
-      req(bootstrapPath).ensureFeXadesBootstrap();
-    } catch {
-      // Fallback inline (p. ej. dev sin scripts/ copiado al standalone)
-      const path = req("path") as typeof import("node:path");
-      const { DOMImplementation, DOMParser, XMLSerializer } = req("@xmldom/xmldom") as typeof import("@xmldom/xmldom");
-      const xpath = req("xpath") as typeof import("xpath");
-      type NodeDeps = {
-        DOMParser: typeof DOMParser;
-        XMLSerializer: typeof XMLSerializer;
-        DOMImplementation: typeof DOMImplementation;
-        xpath: typeof xpath;
-      };
-      type XadesRuntime = {
-        setNodeDependencies: (deps: NodeDeps) => void;
-        Application: { setEngine: (name: string, crypto: Crypto) => void };
-      };
-      const xadesjs = req("xadesjs") as XadesRuntime;
-      const xmldsigjs = req("xmldsigjs") as XadesRuntime;
-
-      const deps: NodeDeps = { DOMParser, XMLSerializer, DOMImplementation, xpath };
-      xadesjs.setNodeDependencies(deps);
-
-      for (const pkgName of ["xmldsigjs", "xadesjs"] as const) {
-        try {
-          const pkgRoot = path.dirname(req.resolve(`${pkgName}/package.json`));
-          const utils = req(path.join(pkgRoot, "node_modules/xml-core/build/cjs/utils.js")) as {
-            setNodeDependencies: (d: typeof deps) => void;
-          };
-          utils.setNodeDependencies(deps);
-        } catch {
-          // Sin copia anidada de xml-core
-        }
+    let bootstrapped = false;
+    let lastErr: unknown;
+    for (const bootstrapPath of bootstrapCandidates) {
+      try {
+        req(bootstrapPath).ensureFeXadesBootstrap();
+        bootstrapped = true;
+        break;
+      } catch (e) {
+        lastErr = e;
       }
+    }
 
-      xmldsigjs.Application.setEngine("NodeJS", globalThis.crypto as Crypto);
-      xadesjs.Application.setEngine("NodeJS", globalThis.crypto as Crypto);
+    if (!bootstrapped) {
+      // Fallback inline (p. ej. imagen antigua sin el .cjs)
+      try {
+        const path = req("path") as typeof import("node:path");
+        const { DOMImplementation, DOMParser, XMLSerializer } = req("@xmldom/xmldom") as typeof import("@xmldom/xmldom");
+        const xpath = req("xpath") as typeof import("xpath");
+        type NodeDeps = {
+          DOMParser: typeof DOMParser;
+          XMLSerializer: typeof XMLSerializer;
+          DOMImplementation: typeof DOMImplementation;
+          xpath: typeof xpath;
+        };
+        type XadesRuntime = {
+          setNodeDependencies: (deps: NodeDeps) => void;
+          Application: { setEngine: (name: string, crypto: Crypto) => void };
+        };
+        const xadesjs = req("xadesjs") as XadesRuntime;
+        const xmldsigjs = req("xmldsigjs") as XadesRuntime;
+
+        const deps: NodeDeps = { DOMParser, XMLSerializer, DOMImplementation, xpath };
+        xadesjs.setNodeDependencies(deps);
+
+        for (const pkgName of ["xmldsigjs", "xadesjs"] as const) {
+          try {
+            const pkgRoot = path.dirname(req.resolve(`${pkgName}/package.json`));
+            const utils = req(path.join(pkgRoot, "node_modules/xml-core/build/cjs/utils.js")) as {
+              setNodeDependencies: (d: typeof deps) => void;
+            };
+            utils.setNodeDependencies(deps);
+          } catch {
+            // Sin copia anidada de xml-core
+          }
+        }
+
+        xmldsigjs.Application.setEngine("NodeJS", globalThis.crypto as Crypto);
+        xadesjs.Application.setEngine("NodeJS", globalThis.crypto as Crypto);
+        bootstrapped = true;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+
+    if (!bootstrapped) {
+      throw lastErr instanceof Error
+        ? lastErr
+        : new Error(lastErr != null ? String(lastErr) : "bootstrap XAdES falló");
     }
 
     initialized = true;

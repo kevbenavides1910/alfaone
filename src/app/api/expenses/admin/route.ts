@@ -5,6 +5,7 @@ import { ok, created, badRequest, unauthorized, forbidden, conflict, serverError
 import { adminExpenseSchema } from "@/modules/presupuestos/validations/expense.schema";
 import { fromMonthString } from "@/lib/utils/format";
 import { requireCompanyCode } from "@/modules/core/services/companies";
+import { dbForSession, resolveTenantCompany, assertTenantCompanyAccess } from "@/modules/core/db/db-for-session";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -14,14 +15,20 @@ export async function GET(req: NextRequest) {
   const company = searchParams.get("company");
   const month = searchParams.get("month");
 
+  const db = dbForSession(session);
   const where: Record<string, unknown> = {};
-  if (session.user.company) where.company = session.user.company;
-  else if (company) where.company = company;
+  const effectiveCompany = resolveTenantCompany(session, company);
+  if (effectiveCompany) where.company = effectiveCompany;
   if (month) where.periodMonth = fromMonthString(month);
 
-  const expenses = await prisma.adminExpense.findMany({
+  const pageParam = parseInt(searchParams.get("page") ?? "1");
+  const pageSizeParam = Math.min(parseInt(searchParams.get("pageSize") ?? "200"), 500);
+
+  const expenses = await db.adminExpense.findMany({
     where,
     orderBy: [{ periodMonth: "desc" }],
+    skip: (pageParam - 1) * pageSizeParam,
+    take: pageSizeParam,
   });
 
   return ok(expenses.map((e) => ({
@@ -47,20 +54,23 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
 
     const data = parsed.data;
+    const tenantOk = assertTenantCompanyAccess(session, data.company);
+    if (!tenantOk.ok) return badRequest(tenantOk.message);
     const companyOk = await requireCompanyCode(prisma, data.company, { mustBeActive: true });
     if (!companyOk.ok) return badRequest(companyOk.message);
 
+    const db = dbForSession(session);
     const periodMonth = fromMonthString(data.periodMonth);
 
     // Check duplicate
-    const existing = await prisma.adminExpense.findUnique({
+    const existing = await db.adminExpense.findUnique({
       where: { company_periodMonth: { company: data.company, periodMonth } },
     });
     if (existing) return conflict("Ya existe un registro de gastos administrativos para esta empresa y período");
 
     const totalAmount = data.transport + data.adminCosts + data.phones + data.phoneLines + data.fuel + data.otherAmount;
 
-    const expense = await prisma.adminExpense.create({
+    const expense = await db.adminExpense.create({
       data: { ...data, periodMonth, totalAmount, createdById: session.user.id },
     });
 

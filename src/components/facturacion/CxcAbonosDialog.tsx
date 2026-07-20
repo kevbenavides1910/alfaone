@@ -16,6 +16,7 @@ import { CalendarDateInput } from "@/components/ui/calendar-date-input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
 import { formatCurrency, formatCurrencyPrecise, calendarDateInputValue, formatDate } from "@/lib/utils/format";
+import { calculateMaxNewAbono } from "@/modules/presupuestos/business/cxc-abonos";
 import type { CuentaPorCobrarRow } from "@/app/(app)/facturacion/cuentas-por-cobrar/page";
 
 type AbonoRow = NonNullable<CuentaPorCobrarRow["abonos"]>[number];
@@ -150,8 +151,8 @@ export function CxcAbonosDialog({ row, open, onOpenChange, canEdit }: Props) {
   const busy = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
   const maxNewAbono = useMemo(
-    () => Math.max(0, netoDespuesRebajos - totalAbonos),
-    [netoDespuesRebajos, totalAbonos]
+    () => calculateMaxNewAbono(row),
+    [row]
   );
 
   function startEdit(abono: AbonoRow) {

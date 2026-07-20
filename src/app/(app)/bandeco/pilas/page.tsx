@@ -1,6 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import {
+  TableColumnFilterHead,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CopyTextButton } from "@/components/bandeco/CopyTextButton";
 
@@ -20,6 +26,15 @@ export default function BandecoPilasPage() {
   });
 
   const rows = data?.data ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const columnDefs: TableColumnFilterDef<PilaRow>[] = [
+    { key: "finca", label: "Finca", headerClassName: "px-4 py-2", getValue: (r) => r.finca },
+    { key: "desmane", label: "Desmane", headerClassName: "px-4 py-2", getValue: (r) => r.desmane ?? "" },
+    { key: "paneo", label: "Paneo", headerClassName: "px-4 py-2", getValue: (r) => r.paneo ?? "" },
+    { key: "zona", label: "Zona / Motorizado", headerClassName: "px-4 py-2", getValue: (r) => r.zonaMotorizado ?? "" },
+    { key: "obs", label: "Observaciones", headerClassName: "px-4 py-2", getValue: (r) => r.observaciones ?? "" },
+  ];
+  const displayedRows = filterRowsByColumnFilters(rows, columnFilters, columnDefs);
 
   const mensajePilas = [
     "REPORTE LLENADO DE PILAS ZONA BANDECO",
@@ -54,16 +69,15 @@ export default function BandecoPilasPage() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-slate-50 text-left text-slate-600">
-                  <th className="px-4 py-2">Finca</th>
-                  <th className="px-4 py-2">Desmane</th>
-                  <th className="px-4 py-2">Paneo</th>
-                  <th className="px-4 py-2">Zona / Motorizado</th>
-                  <th className="px-4 py-2">Observaciones</th>
-                </tr>
+                <TableColumnFilterHead
+                  columns={columnDefs}
+                  rows={rows}
+                  filters={columnFilters}
+                  onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+                />
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {displayedRows.map((r) => (
                   <tr key={r.id} className="border-b">
                     <td className="px-4 py-2 font-medium">{r.finca}</td>
                     <td className="px-4 py-2">{r.desmane ?? "—"}</td>

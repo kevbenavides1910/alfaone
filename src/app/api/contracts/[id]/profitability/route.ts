@@ -2,6 +2,10 @@ import { NextRequest } from "next/server";
 import { getSession } from "@/lib/api/middleware";
 import { ok, unauthorized, notFound, serverError } from "@/lib/api/response";
 import { getContractProfitability, mergeLegacyForReportPartida } from "@/modules/presupuestos/business/profitability";
+import {
+  getNafLaborCostByContractForMonth,
+  resolveNafLaborSpendForContract,
+} from "@/modules/empleados-naf/services/naf-labor-report";
 import { prisma } from "@/modules/core/db/prisma";
 import { fromMonthString } from "@/lib/utils/format";
 import { parseReportPartida } from "@/lib/utils/constants";
@@ -24,7 +28,21 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     const periodMonth = monthStr ? fromMonthString(monthStr) : undefined;
     const partida = parseReportPartida(searchParams.get("partida"));
 
-    const result = await getContractProfitability(id, periodMonth, partida);
+    const nafLaborMonth =
+      periodMonth != null
+        ? await getNafLaborCostByContractForMonth(
+            periodMonth.getFullYear(),
+            periodMonth.getMonth() + 1,
+            contract.company,
+          )
+        : null;
+
+    const result = await getContractProfitability(id, periodMonth, partida, {
+      nafLaborSpend:
+        nafLaborMonth != null
+          ? resolveNafLaborSpendForContract(nafLaborMonth, id)
+          : undefined,
+    });
     const expensesByTypeMerged = mergeLegacyForReportPartida(result, partida);
     return ok({ ...result, expensesByTypeMerged, partida });
   } catch (e) {

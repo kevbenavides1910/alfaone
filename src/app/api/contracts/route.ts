@@ -7,6 +7,7 @@ import { recalculateEquivalence, getGlobalPartidaTotals, getGlobalPartidaTotalsF
 import { autoExpireContracts } from "@/modules/presupuestos/business/autoExpire";
 import { buildContractListWhere } from "@/modules/presupuestos/services/contracts-list-where";
 import { enrichContractsListRows } from "@/modules/presupuestos/services/contracts-list-enrichment";
+import { computeContractsListPeriodTotals } from "@/modules/presupuestos/services/contracts-list-period-totals";
 import { requireCompanyCode } from "@/modules/core/services/companies";
 import {
   contractVigenteInMonthWhere,
@@ -84,7 +85,7 @@ export async function GET(req: NextRequest) {
     demandByContractId.set(row.contractId, arr);
   }
 
-  const enriched = period.usePeriodView
+  const enrichedBase = period.usePeriodView
     ? enrichContractsListRows(contracts, pageHistory, globalTotals, {
         periodYear: period.periodYear,
         periodMonth: period.periodMonth,
@@ -92,7 +93,41 @@ export async function GET(req: NextRequest) {
       })
     : enrichContractsListRows(contracts, pageHistory, globalTotals, new Date());
 
-  return ok(enriched, {
+  if (period.usePeriodView) {
+    const allContracts = await prisma.contract.findMany({
+      where,
+      orderBy: [{ company: "asc" }, { client: "asc" }],
+    });
+    const computed = await computeContractsListPeriodTotals(
+      allContracts,
+      period.periodYear,
+      period.periodMonth,
+    );
+    const enriched = enrichedBase.map((row) => {
+      const spend = computed.byContractId.get(row.id);
+      if (!spend) return row;
+      return {
+        ...row,
+        laborSpend: spend.laborSpend,
+        suppliesSpend: spend.suppliesSpend,
+        adminSpend: spend.adminSpend,
+        profitSpend: spend.profitSpend,
+        periodGrandTotal: spend.grandTotal,
+      };
+    });
+    return ok(enriched, {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+      periodYear: period.periodYear,
+      periodMonth: period.periodMonth,
+      usePeriodView: period.usePeriodView,
+      periodTotals: computed.totals,
+    });
+  }
+
+  return ok(enrichedBase, {
     page,
     pageSize,
     total,

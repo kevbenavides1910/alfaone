@@ -28,11 +28,21 @@ function isImpersonating(session: Session | null): boolean {
 
 function isAdminRole(session: Session | null): boolean {
   const s = session as SessionWithPermissions | null;
-  // En vista previa de rol, usar solo el rol efectivo (roleCode), no el enum legacy del usuario real.
+  if (!s?.user) return false;
+
+  // Vista previa de rol: solo el código impersonado cuenta como ADMIN total.
   if (isImpersonating(session)) {
-    return s?.user?.roleCode === "ADMIN";
+    return s.user.roleCode === "ADMIN";
   }
-  return s?.user?.roleCode === "ADMIN" || s?.user?.role === "ADMIN";
+
+  if (s.user.roleCode === "ADMIN") return true;
+
+  // Rol custom (p. ej. analista de marcas): no heredar acceso total del enum legacy ADMIN.
+  if (s.user.roleCode && s.user.roleCode !== "ADMIN") {
+    return false;
+  }
+
+  return s.user.role === "ADMIN";
 }
 
 export function getSessionPermissions(session: Session | null): PermissionMap {
@@ -54,6 +64,10 @@ export function hasPermission(
 /** ADMIN legacy: rol código ADMIN tiene acceso total. */
 export function isPlatformAdmin(session: Session | null): boolean {
   if (isImpersonating(session)) {
+    return hasPermission(session, "plataforma.roles", "admin");
+  }
+  const s = session as SessionWithPermissions | null;
+  if (s?.user?.roleCode && s.user.roleCode !== "ADMIN") {
     return hasPermission(session, "plataforma.roles", "admin");
   }
   if (isAdminRole(session)) return true;

@@ -373,15 +373,86 @@ export const PERMISSION_REGISTRY = {
       },
       contratos: {
         label: "Conciliación contratos",
-        uiRoutes: ["/empleados/contratos"],
+        uiRoutes: [
+          "/empleados/contratos",
+          "/empleados/contratos/photorec",
+          "/empleados/contratos/reconstruccion",
+          "/empleados/contratos/faltantes-e5",
+        ],
         apiPrefixes: ["/api/empleados/contratos"],
         actions: {
-          view: "Ver discrepancias",
-          edit: "Vincular y unificar contratos",
+          view: "Ver discrepancias y revisar PDFs PhotoRec",
+          edit: "Vincular contratos y clasificar PhotoRec",
         },
       },
     },
   },
+
+  nafOperaciones: {
+    label: "Operaciones NAF (OP)",
+    moduleId: "nafOperaciones" as const,
+    screens: {
+      roles: {
+        label: "Roles y programación",
+        uiRoutes: ["/naf-operaciones", "/naf-operaciones/programacion"],
+        apiPrefixes: ["/api/naf-operaciones/roles", "/api/naf-operaciones/contratos", "/api/naf-operaciones/filtros"],
+        actions: { view: "Ver roles y programación OP" },
+      },
+      asistencia: {
+        label: "Asistencia OP",
+        uiRoutes: ["/naf-operaciones/asistencia"],
+        apiPrefixes: ["/api/naf-operaciones/asistencias"],
+        actions: {
+          view: "Ver asistencia y marcas OP",
+          edit: "Marcar asistencia OP en Oracle",
+        },
+      },
+      vacantes: {
+        label: "Vacantes OP",
+        uiRoutes: ["/naf-operaciones/vacantes"],
+        apiPrefixes: ["/api/naf-operaciones/filtros"],
+        actions: { view: "Ver roles vacantes OP" },
+      },
+      programacion: {
+        label: "Edición programación OP",
+        uiRoutes: ["/naf-operaciones/programacion"],
+        apiPrefixes: [
+          "/api/naf-operaciones/roles/upsert",
+          "/api/naf-operaciones/roles/next",
+          "/api/naf-operaciones/contratos",
+        ],
+        actions: {
+          view: "Ver formularios de programación OP",
+          edit: "Crear, programar y reasignar roles OP en Oracle",
+        },
+      },
+    },
+  },
+
+
+  expedienteDigital: {
+    label: "Expediente digital",
+    moduleId: "expedienteDigital" as const,
+    screens: {
+      list: {
+        label: "Consulta de expediente",
+        uiRoutes: ["/expediente-digital"],
+        apiPrefixes: [
+          "/api/expediente-digital/search",
+          "/api/expediente-digital/tipos",
+          "/api/expediente-digital",
+        ],
+        actions: { view: "Ver expedientes por cédula y descargar documentos" },
+      },
+      upload: {
+        label: "Carga de documentos",
+        uiRoutes: ["/expediente-digital"],
+        apiPrefixes: ["/api/expediente-digital"],
+        actions: { edit: "Agregar documentos al expediente digital (share NAF)" },
+      },
+    },
+  },
+
   empleadosNaf: {
     label: "Empleados NAF",
     moduleId: "empleadosNaf" as const,
@@ -395,8 +466,64 @@ export const PERMISSION_REGISTRY = {
       sync: {
         label: "Sincronización NAF",
         uiRoutes: ["/empleados-naf"],
-        apiPrefixes: ["/api/empleados-naf/sync", "/api/empleados-naf/sync-status"],
+        apiPrefixes: [
+          "/api/empleados-naf/sync",
+          "/api/empleados-naf/sync-status",
+          "/api/empleados-naf/nomina/sync",
+          "/api/empleados-naf/nomina/sync-status",
+        ],
         actions: { edit: "Ejecutar sincronización desde Oracle NAF" },
+      },
+      nomina: {
+        label: "Nómina NAF",
+        uiRoutes: ["/empleados-naf/nomina"],
+        apiPrefixes: ["/api/empleados-naf/nomina"],
+        actions: { view: "Ver nómina NAF por quincena" },
+      },
+      homologacion: {
+        label: "Homologación contratos NAF",
+        uiRoutes: ["/empleados-naf/nomina/homologacion"],
+        apiPrefixes: [
+          "/api/empleados-naf/nomina/homologacion",
+          "/api/empleados-naf/nomina/homologacion/vincular",
+        ],
+        actions: {
+          view: "Ver contratos NAF sin vínculo en presupuestos",
+          edit: "Homologar contratos NAF con contratos del sistema",
+        },
+      },
+      sinAsignar: {
+        label: "Asignación manual nómina",
+        uiRoutes: ["/empleados-naf/nomina/sin-asignar"],
+        apiPrefixes: ["/api/empleados-naf/nomina/sin-asignar"],
+        actions: {
+          view: "Ver empleados pagados sin asistencia ni contrato asignado",
+          edit: "Asignar manualmente salario de nómina a contratos",
+        },
+      },
+      revisionPlanilla: {
+        label: "Revisión de planilla NAF",
+        uiRoutes: ["/empleados-naf/nomina/revision-planilla"],
+        apiPrefixes: ["/api/empleados-naf/nomina/revision-planilla"],
+        actions: {
+          view: "Ver revisión de planilla por empresa, ingresos, deducciones y formas de pago",
+          edit: "Marcar planillas como revisada, generada o pagada",
+        },
+      },
+      cargasSociales: {
+        label: "Cargas sociales NAF",
+        uiRoutes: ["/empleados-naf/cargas-sociales"],
+        apiPrefixes: ["/api/empleados-naf/cargas-sociales"],
+        actions: {
+          view: "Ver cargas sociales por empresa NAF",
+          edit: "Editar cargas sociales por empresa NAF",
+        },
+      },
+      vacacionesPersonal: {
+        label: "Vacaciones de personal",
+        uiRoutes: ["/empleados-naf/vacaciones-personal", "/naf-operaciones/vacaciones-personal"],
+        apiPrefixes: ["/api/empleados-naf/vacaciones-personal", "/api/naf-operaciones/vacaciones-personal"],
+        actions: { view: "Consultar vacaciones e incapacidades por cédula" },
       },
     },
   },
@@ -437,6 +564,15 @@ export const PERMISSION_REGISTRY = {
         uiRoutes: ["/sig/bitacora"],
         apiPrefixes: ["/api/sig/bitacora"],
         actions: { view: "Consultar historial de cambios y aprobaciones" },
+      },
+      auditorias: {
+        label: "Auditorías de procedimientos",
+        uiRoutes: ["/sig/auditorias", "/audits"],
+        apiPrefixes: ["/api/sig/audits"],
+        actions: {
+          view: "Ver auditorías trimestrales del SIG",
+          edit: "Crear y actualizar auditorías, hallazgos, planes y seguimientos",
+        },
       },
       procesos: {
         label: "Procesos y tipos",
@@ -494,9 +630,17 @@ export const PERMISSION_REGISTRY = {
       },
       reportes: {
         label: "Reportes",
-        uiRoutes: ["/recorridos/reportes"],
-        apiPrefixes: ["/api/admin/patrol/reports"],
-        actions: { view: "Consultar reportes operativos" },
+        uiRoutes: [
+          "/recorridos/reportes",
+          "/recorridos/hombre-vivo",
+          "/recorridos/mapa",
+          "/recorridos/marcas-fuera-ruta",
+          "/recorridos/auditoria-pendientes",
+          "/recorridos/bitacora",
+          "/recorridos/rutas-permitidas",
+        ],
+        apiPrefixes: ["/api/admin/patrol/reports", "/api/cron/patrol-welfare"],
+        actions: { view: "Consultar reportes operativos", edit: "Ejecutar jobs operativos" },
       },
     },
   },
@@ -740,6 +884,8 @@ export const HOME_MODULE_PERMISSION_GROUPS: {
   { tileId: "tickets_ti", label: "Tickets TI", moduleKeys: ["ticketsTi"] },
   { tileId: "formularios", label: "Formularios", moduleKeys: ["formularios"] },
   { tileId: "empleados_naf", label: "Empleados NAF", moduleKeys: ["empleadosNaf"] },
+  { tileId: "expediente_digital", label: "Expediente digital", moduleKeys: ["expedienteDigital"] },
+  { tileId: "naf_operaciones", label: "Operaciones NAF", moduleKeys: ["nafOperaciones"] },
   { tileId: "bandeco", label: "Monitoreo Bandeco", moduleKeys: ["bandeco"] },
   { tileId: "recorridos", label: "Recorrido de marcas", moduleKeys: ["recorridos"] },
   { tileId: "mantenimiento", label: "Mantenimiento", moduleKeys: ["plataforma"] },

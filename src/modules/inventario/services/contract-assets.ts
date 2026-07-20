@@ -16,7 +16,7 @@ export async function getContractAssetsTree(contractId: string) {
         include: {
           shifts: { orderBy: { sortOrder: "asc" } },
           assets: {
-            where: { status: "ASSIGNED" },
+            where: { status: "ASSIGNED", deletedAt: null },
             include: { type: true },
             orderBy: [{ updatedAt: "desc" }],
           },

@@ -1,6 +1,6 @@
 import { prisma } from "@/modules/core/db/prisma";
 import { Decimal } from "@prisma/client/runtime/library";
-import { getEffectiveMonthlyBilling } from "@/modules/presupuestos/business/effectiveBilling";
+import { getEffectiveMonthlyBilling, getEffectiveMonthlyRevenue } from "@/modules/presupuestos/business/effectiveBilling";
 import {
   contractVigenteInMonthWhere,
   resolveContractMonthlyBilling,
@@ -182,6 +182,30 @@ export async function getGlobalPartidaTotalsForPeriod(
     demandByContract.set(row.contractId, arr);
   }
 
+  const monthStart = new Date(periodYear, periodMonth - 1, 1);
+  const specialServicesRows =
+    ids.length > 0
+      ? await prisma.contractSpecialService.findMany({
+          where: {
+            contractId: { in: ids },
+            periodMonth: {
+              gte: monthStart,
+              lte: new Date(periodYear, periodMonth, 0, 23, 59, 59, 999),
+            },
+          },
+          select: { contractId: true, periodMonth: true, amount: true },
+        })
+      : [];
+  const specialServicesByContract = new Map<
+    string,
+    { periodMonth: Date; amount: (typeof specialServicesRows)[number]["amount"] }[]
+  >();
+  for (const row of specialServicesRows) {
+    const list = specialServicesByContract.get(row.contractId) ?? [];
+    list.push({ periodMonth: row.periodMonth, amount: row.amount });
+    specialServicesByContract.set(row.contractId, list);
+  }
+
   let totalBilling = 0;
   let totalLabor = 0;
   let totalSupplies = 0;
@@ -199,7 +223,12 @@ export async function getGlobalPartidaTotalsForPeriod(
     );
     if (!resolved.amountDefined || resolved.billing === null) continue;
 
-    const eff = resolved.billing;
+    const { billing: eff } = getEffectiveMonthlyRevenue(
+      resolved.billing,
+      hist,
+      specialServicesByContract.get(c.id) ?? [],
+      monthStart,
+    );
     const supPct = effectiveSuppliesPct(c);
     const laborPct = toNum(c.laborPct);
     const adminPct = toNum(c.adminPct);

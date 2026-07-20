@@ -634,9 +634,7 @@ export async function buildFacturacionDashboard(db: Db, year: number) {
     totals.ingresos.expectedInflowCount
   );
 
-  const cxcRollingBalance = await buildCxcRollingBalance(db, year);
-
-  return { year, months, totals, snapshot, cxcRollingBalance };
+  return { year, months, totals, snapshot };
 }
 
 export type FacturacionDashboardData = Awaited<ReturnType<typeof buildFacturacionDashboard>>;

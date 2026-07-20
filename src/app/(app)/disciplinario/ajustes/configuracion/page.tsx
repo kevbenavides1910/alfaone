@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Mail, Save } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { isAdmin } from "@/modules/core/permissions";
+import { canEditDisciplinaryAjustesSession } from "@/modules/core/permissions";
 import { toast } from "@/components/ui/toaster";
 
 type ConfigForm = {
@@ -25,7 +25,7 @@ type ConfigForm = {
 
 export default function DisciplinarioAjustesConfiguracionPage() {
   const { data: session } = useSession();
-  const readOnly = !session?.user?.role || !isAdmin(session.user.role);
+  const readOnly = !canEditDisciplinaryAjustesSession(session ?? null);
   const [form, setForm] = useState<ConfigForm>({
     mailProvider: "CUSTOM_SMTP",
     smtpHost: "",

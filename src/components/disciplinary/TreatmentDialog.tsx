@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toaster";
-import { calendarDateInputValue } from "@/lib/utils/format";
+import { calendarDateInputValue, formatCurrency, formatDate } from "@/lib/utils/format";
+import { formatCycleClosureLabel } from "@/modules/disciplinario/business/cycle-display";
 
 /**
  * Acciones canónicas para el tratamiento del empleado:
@@ -39,11 +40,20 @@ export interface TreatmentEmployeeContext {
   sucursal?: string | null;
 }
 
+export interface TreatmentUltimoCierre {
+  cerradoEl: string | null;
+  accion: string;
+  accionRaw: string | null;
+  monto: number | null;
+}
+
 export interface TreatmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   codigo: string;
   initial: TreatmentInitial | null;
+  ultimoCierre?: TreatmentUltimoCierre | null;
+  totalMontoCobrado?: number;
   employee?: TreatmentEmployeeContext | null;
 }
 
@@ -76,7 +86,15 @@ function formatSentAt(iso: string | null | undefined): string | null {
   return d.toLocaleString("es-CR", { dateStyle: "short", timeStyle: "short" });
 }
 
-export function TreatmentDialog({ open, onOpenChange, codigo, initial, employee }: TreatmentDialogProps) {
+export function TreatmentDialog({
+  open,
+  onOpenChange,
+  codigo,
+  initial,
+  ultimoCierre,
+  totalMontoCobrado,
+  employee,
+}: TreatmentDialogProps) {
   const [fechaConvocatoria, setFechaConvocatoria] = useState("");
   const [horaConvocatoria, setHoraConvocatoria] = useState("");
   const [accionKey, setAccionKey] = useState<AccionKey>("PENDIENTE");
@@ -230,6 +248,40 @@ export function TreatmentDialog({ open, onOpenChange, codigo, initial, employee 
             </div>
           </div>
         </div>
+
+        {totalMontoCobrado != null && totalMontoCobrado > 0 && (
+          <div className="rounded-md border border-blue-200 bg-blue-50/60 px-3 py-2 text-sm">
+            <div className="text-xs font-medium uppercase text-blue-800">Total cobrado (histórico)</div>
+            <div className="font-semibold text-slate-800">{formatCurrency(totalMontoCobrado)}</div>
+          </div>
+        )}
+
+        {ultimoCierre && (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm space-y-1">
+            <div className="text-xs font-medium uppercase text-emerald-800">
+              Último cierre de ciclo
+            </div>
+            <div>
+              <span className="text-slate-500">Acción: </span>
+              <span className="font-medium text-slate-800">
+                {formatCycleClosureLabel(ultimoCierre.accion, ultimoCierre.accionRaw)}
+              </span>
+            </div>
+            {ultimoCierre.monto != null && (
+              <div>
+                <span className="text-slate-500">Monto cobrado: </span>
+                <span className="font-medium text-slate-800">
+                  {formatCurrency(ultimoCierre.monto)}
+                </span>
+              </div>
+            )}
+            {ultimoCierre.cerradoEl && (
+              <div className="text-xs text-slate-600">
+                Cerrado el {formatDate(ultimoCierre.cerradoEl)}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">

@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { TableColumnFilterHead, type TableColumnFilterDef } from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, FileSpreadsheet } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -73,6 +75,16 @@ export function LocationsTab({ readOnly }: { readOnly?: boolean }) {
       return true;
     });
   }, [rows, query, zoneFilter, companyFilter, companyRows]);
+
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const locationColumnDefs: TableColumnFilterDef<LocationRow>[] = [
+    { key: "ubicacion", label: "Ubicación", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => r.name },
+    { key: "contrato", label: "Contrato", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => `${r.contract.client} ${r.contract.licitacionNo}` },
+    { key: "empresa", label: "Empresa", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600 w-32", getValue: (r) => r.contract.company },
+    { key: "puestos", label: "Puestos", headerClassName: "text-center px-4 py-3 font-semibold text-slate-600 w-20", align: "center", getValue: (r) => String(r.positionsCount) },
+    { key: "zona", label: "Zona", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600 w-56", getValue: (r) => r.zone?.name ?? "" },
+  ];
+  const displayed = filterRowsByColumnFilters(filtered, columnFilters, locationColumnDefs);
 
   const setZoneMutation = useMutation({
     mutationFn: async ({ id, zoneId }: { id: string; zoneId: string | null }) => {
@@ -214,16 +226,15 @@ export function LocationsTab({ readOnly }: { readOnly?: boolean }) {
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-muted/50 border-b">
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Ubicación</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Contrato</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600 w-32">Empresa</th>
-                <th className="text-center px-4 py-3 font-semibold text-slate-600 w-20">Puestos</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600 w-56">Zona</th>
-              </tr>
+              <TableColumnFilterHead
+                columns={locationColumnDefs}
+                rows={filtered}
+                filters={columnFilters}
+                onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
+              />
             </thead>
             <tbody className="divide-y">
-              {filtered.map((loc) => (
+              {displayed.map((loc) => (
                 <tr key={loc.id} className="hover:bg-muted/50 transition-colors">
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-800">{loc.name}</div>

@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import Link from "next/link";
 import {
   Edit, Trash2,
@@ -32,7 +32,7 @@ import { ContractExpensesTab } from "@/components/contracts/ContractExpensesTab"
 import { AssetsTab } from "@/components/contracts/AssetsTab";
 import { AdministrationsTab } from "@/components/contracts/AdministrationsTab";
 import { canModifyContracts, canManageExpenses, isAdmin } from "@/modules/core/permissions";
-import { canEditContractTab, canViewContractTab } from "@/lib/permissions/contract-tabs";
+import { canViewContractTab, canEditContractTab } from "@/lib/permissions/contract-tabs";
 import type { ContractStatus, ClientType, ContractHiringType } from "@prisma/client";
 
 interface Contract {
@@ -76,12 +76,20 @@ export default function ContractDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: session } = useSession();
-  const role = session?.user?.role;
-  const canEditContract = role ? canModifyContracts(role) : false;
-  const canEditExpenses = role ? canManageExpenses(role) : false;
-  const canDeleteContract = role ? isAdmin(role) : false;
+  const canEditContract = canModifyContracts(session ?? null);
+  const canEditExpenses = canManageExpenses(session ?? null);
+  const canDeleteContract = isAdmin(session ?? null);
+  const canViewOverview = canViewContractTab(session, "overview");
+  const canViewLocations = canViewContractTab(session, "locations");
+  const canViewAssets = canViewContractTab(session, "assets");
+  const canViewBilling = canViewContractTab(session, "billing");
+  const canViewDemandBilling = canViewContractTab(session, "demand_billing");
+  const canViewBillingRequirements = canViewContractTab(session, "billing_requirements");
   const canViewAdministrations = canViewContractTab(session, "administrations");
   const canEditAdministrations = canEditContractTab(session, "administrations");
+  const canViewClientContacts = canViewContractTab(session, "client_contacts");
+  const canViewPeriods = canViewContractTab(session, "periods");
+  const canViewExpenses = canViewContractTab(session, "expenses");
 
   const { data: companiesRes } = useCompanies();
   const companyRows = companiesRes?.data ?? [];
@@ -117,6 +125,19 @@ export default function ContractDetailPage() {
 
   const contract = contractData?.data;
   if (!contract) return null;
+
+  const visibleTabs = [
+    { value: "overview", label: "Resumen", show: canViewOverview },
+    { value: "locations", label: "Ubicaciones", show: canViewLocations },
+    { value: "assets", label: "Activos", show: canViewAssets },
+    { value: contract.hiringType === "ON_DEMAND" ? "demand-billing" : "billing", label: contract.hiringType === "ON_DEMAND" ? "Facturación por demanda" : "Registro de venta", show: contract.hiringType === "ON_DEMAND" ? canViewDemandBilling : canViewBilling },
+    { value: "billing-requirements", label: "Requisitos de facturación", show: canViewBillingRequirements },
+    { value: "administrations", label: "Administraciones", show: canViewAdministrations },
+    { value: "client-contacts", label: "Contacto del cliente", show: canViewClientContacts },
+    { value: "periods", label: "Prórrogas", show: canViewPeriods },
+    { value: "expenses", label: "Todos los gastos", show: canViewExpenses },
+  ].filter((t) => t.show);
+  const defaultTab = visibleTabs[0]?.value ?? "overview";
 
   const prof = profData?.data;
   const tl = prof?.trafficLight ?? "GREEN";
@@ -238,25 +259,19 @@ export default function ContractDetailPage() {
           />
         </div>
 
-        <Tabs defaultValue="overview" className="carbon-panel mx-4 mt-6 md:mx-6 border-x border-t">
+        {visibleTabs.length === 0 ? (
+          <div className="carbon-panel mx-4 mt-6 md:mx-6 border p-8 text-center text-sm text-slate-500">
+            No tienes permisos para ver las pestañas de este contrato.
+          </div>
+        ) : (
+        <Tabs defaultValue={defaultTab} className="carbon-panel mx-4 mt-6 md:mx-6 border-x border-t">
           <TabsList className="carbon-tabs-list">
-            <TabsTrigger value="overview" className="carbon-tabs-trigger">Resumen</TabsTrigger>
-            <TabsTrigger value="locations" className="carbon-tabs-trigger">Ubicaciones</TabsTrigger>
-            <TabsTrigger value="assets" className="carbon-tabs-trigger">Activos</TabsTrigger>
-            {contract.hiringType === "ON_DEMAND" ? (
-              <TabsTrigger value="demand-billing" className="carbon-tabs-trigger">Facturación por demanda</TabsTrigger>
-            ) : (
-              <TabsTrigger value="billing" className="carbon-tabs-trigger">Registro de venta</TabsTrigger>
-            )}
-            <TabsTrigger value="billing-requirements" className="carbon-tabs-trigger">Requisitos de facturación</TabsTrigger>
-            {canViewAdministrations && (
-              <TabsTrigger value="administrations" className="carbon-tabs-trigger">Administraciones</TabsTrigger>
-            )}
-            <TabsTrigger value="client-contacts" className="carbon-tabs-trigger">Contacto del cliente</TabsTrigger>
-            <TabsTrigger value="periods" className="carbon-tabs-trigger">Prórrogas</TabsTrigger>
-            <TabsTrigger value="expenses" className="carbon-tabs-trigger">Todos los gastos</TabsTrigger>
+            {visibleTabs.map((t) => (
+              <TabsTrigger key={t.value} value={t.value} className="carbon-tabs-trigger">{t.label}</TabsTrigger>
+            ))}
           </TabsList>
 
+          {canViewOverview && (
           <TabsContent value="overview" className="mt-0 p-4 md:p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Expense breakdown */}
@@ -428,20 +443,28 @@ export default function ContractDetailPage() {
               </div>
             </div>
           </TabsContent>
+          )}
 
+          {canViewLocations && (
           <TabsContent value="locations" className="mt-0 p-4 md:p-6">
             <PositionsTab contractId={id} readOnly={!canEditContract} />
           </TabsContent>
+          )}
 
+          {canViewAssets && (
           <TabsContent value="assets" className="mt-0 p-4 md:p-6">
             <AssetsTab contractId={id} readOnly={!canEditExpenses} />
           </TabsContent>
+          )}
 
           {contract.hiringType === "ON_DEMAND" ? (
+            canViewDemandBilling && (
             <TabsContent value="demand-billing" className="mt-0 p-4 md:p-6">
               <OnDemandBillingTab contractId={id} readOnly={!canEditContract} />
             </TabsContent>
+            )
           ) : (
+            canViewBilling && (
             <TabsContent value="billing" className="mt-0 p-4 md:p-6">
               <BillingHistoryTab
                 contractId={id}
@@ -450,11 +473,14 @@ export default function ContractDetailPage() {
                 readOnly={!canEditContract}
               />
             </TabsContent>
+            )
           )}
 
+          {canViewBillingRequirements && (
           <TabsContent value="billing-requirements" className="mt-0 p-4 md:p-6">
             <BillingRequirementsTab contractId={id} readOnly={!canEditContract} />
           </TabsContent>
+          )}
 
           {canViewAdministrations && (
             <TabsContent value="administrations" className="mt-0 p-4 md:p-6">
@@ -462,6 +488,7 @@ export default function ContractDetailPage() {
             </TabsContent>
           )}
 
+          {canViewClientContacts && (
           <TabsContent value="client-contacts" className="mt-0 p-4 md:p-6">
             <ClientContactsTab
               contractId={id}
@@ -472,15 +499,21 @@ export default function ContractDetailPage() {
               billingPeriodToDay={contract.billingPeriodToDay}
             />
           </TabsContent>
+          )}
 
+          {canViewPeriods && (
           <TabsContent value="periods" className="mt-0 p-4 md:p-6">
             <PeriodsTab contractId={id} periods={contract.periods} readOnly={!canEditContract} />
           </TabsContent>
+          )}
 
+          {canViewExpenses && (
           <TabsContent value="expenses" className="mt-0 p-4 md:p-6">
             <ContractExpensesTab contractId={id} canManageExpenses={canEditExpenses} />
           </TabsContent>
+          )}
         </Tabs>
+        )}
       </div>
     </>
   );

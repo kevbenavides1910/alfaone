@@ -21,6 +21,7 @@ import {
   Headphones,
   ClipboardList,
   UsersRound,
+  FolderOpen,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
 
@@ -110,6 +111,20 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     icon: ClipboardList,
     moduleId: "formularios",
     isActive: (p) => p.startsWith("/formularios"),
+  },
+  {
+    href: "/naf-operaciones",
+    label: "Operaciones NAF",
+    icon: ClipboardCheck,
+    moduleId: "nafOperaciones",
+    isActive: (p) => p.startsWith("/naf-operaciones"),
+  },
+  {
+    href: "/expediente-digital",
+    label: "Expediente digital",
+    icon: FolderOpen,
+    moduleId: "expedienteDigital",
+    isActive: (p) => p.startsWith("/expediente-digital"),
   },
   {
     href: "/empleados-naf",

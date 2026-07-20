@@ -20,6 +20,7 @@ import {
   FACTURACION_UPLOAD_ROOT,
 } from "@/modules/presupuestos/services/facturacion-uploads";
 import { serializeFacturaMensual } from "@/modules/presupuestos/services/facturacion-cobro";
+import { facturaListSerializeInclude } from "@/modules/presupuestos/services/facturacion-includes";
 import {
   detectMimeFromBuffer,
   mimeMatchesDeclared,
@@ -102,10 +103,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
     const updated = await prisma.facturaMensual.findUniqueOrThrow({
       where: { id: facturaId },
-      include: {
-        contract: { select: { licitacionNo: true } },
-        requisitos: { orderBy: { sortOrder: "asc" } },
-      },
+      include: facturaListSerializeInclude,
     });
 
     return created(serializeFacturaMensual(updated));

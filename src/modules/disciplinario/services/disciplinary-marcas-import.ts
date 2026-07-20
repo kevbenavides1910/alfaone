@@ -32,6 +32,8 @@ import {
   renderMailTemplate,
 } from "@/modules/disciplinario/services/disciplinary-settings";
 import {
+  canonicalZoneLabel,
+  loadZoneCatalogNameByKey,
   loadZoneDisciplinaryDefaultsMap,
   mergeDefaultsForZoneTexts,
   mergeZoneDisciplinaryDefaults,
@@ -541,15 +543,30 @@ async function loadMarcasImportEnrichment(codigos: string[]) {
   }
 
   const masterByCodigo = await getEmployeesForDisciplinaryByCodes(codigos);
-  const zoneDisciplineDefaults = await loadZoneDisciplinaryDefaultsMap();
-  return { contractClientByLicitacion, masterByCodigo, zoneDisciplineDefaults };
+  const [zoneDisciplineDefaults, zoneCatalogNames] = await Promise.all([
+    loadZoneDisciplinaryDefaultsMap(),
+    loadZoneCatalogNameByKey(),
+  ]);
+  return { contractClientByLicitacion, masterByCodigo, zoneDisciplineDefaults, zoneCatalogNames };
+}
+
+function canonicalizeMarcasZone(
+  zoneCatalogNames: Map<string, string>,
+  ...candidates: (string | null | undefined)[]
+): string | null {
+  for (const candidate of candidates) {
+    const label = canonicalZoneLabel(zoneCatalogNames, candidate);
+    if (label) return label;
+  }
+  return null;
 }
 
 /** Analiza el Excel sin escribir en BD (checksum incluido para validar al confirmar). */
 export async function previewDisciplinaryMarcasWorkbook(buffer: ArrayBuffer): Promise<MarcasPreviewResult> {
   const checksum = sha256Hex(buffer);
   const { sheetRows, inspeccionMode, groups, errors } = parseMarcasWorkbookToGroups(buffer);
-  const { masterByCodigo, zoneDisciplineDefaults } = await loadMarcasImportEnrichment([...groups.keys()]);
+  const { masterByCodigo, zoneDisciplineDefaults, zoneCatalogNames } =
+    await loadMarcasImportEnrichment([...groups.keys()]);
 
   const planned: MarcasPlannedRow[] = [];
   let wouldSkipOmisiones = 0;
@@ -575,7 +592,12 @@ export async function previewDisciplinaryMarcasWorkbook(buffer: ArrayBuffer): Pr
       (master?.nombre && master.nombre.trim()) ||
       `Empleado ${g.codigo}`;
 
-    const effZona = mergeFirst(master?.zona ?? null, g.zona) as string | null;
+    const effZona = canonicalizeMarcasZone(
+      zoneCatalogNames,
+      mergeFirst(master?.zona ?? null, g.zona) as string | null,
+      g.zona,
+      master?.zona ?? null,
+    );
     const zd = mergeDefaultsForZoneTexts(zoneDisciplineDefaults, effZona, g.zona, master?.zona ?? null);
     let administrador = g.administrador;
     if (zd?.administrator) {
@@ -639,7 +661,7 @@ export async function buildMarcasPreviewPdfForCodigo(
   const sortedOm = sortOmisiones(g.omisiones);
   if (sortedOm.length === 0) return null;
 
-  const { contractClientByLicitacion, masterByCodigo, zoneDisciplineDefaults } =
+  const { contractClientByLicitacion, masterByCodigo, zoneDisciplineDefaults, zoneCatalogNames } =
     await loadMarcasImportEnrichment([...groups.keys()]);
 
   const fechaEmision = resolveFechaEmisionDocumento(g.fechaEmisionCandidates, new Date());
@@ -655,12 +677,13 @@ export async function buildMarcasPreviewPdfForCodigo(
     `Empleado ${g.codigo}`;
 
   const baseZona = mergeFirst(master?.zona ?? null, g.zona) as string | null;
-  const pdfZona =
+  const pdfZonaRaw =
     pdfOptions && typeof pdfOptions.zona === "string"
       ? pdfOptions.zona.trim()
         ? pdfOptions.zona.trim()
         : null
       : baseZona;
+  const pdfZona = canonicalizeMarcasZone(zoneCatalogNames, pdfZonaRaw, g.zona, master?.zona ?? null);
   const zd = mergeDefaultsForZoneTexts(zoneDisciplineDefaults, pdfZona, g.zona, master?.zona ?? null);
   let administrador = g.administrador;
   if (zd?.administrator) {
@@ -748,7 +771,7 @@ export async function importDisciplinaryMarcasWorkbook(
   }
 
   const { sheetRows, inspeccionMode, groups, errors } = parseMarcasWorkbookToGroups(buffer);
-  const { contractClientByLicitacion, masterByCodigo, zoneDisciplineDefaults } =
+  const { contractClientByLicitacion, masterByCodigo, zoneDisciplineDefaults, zoneCatalogNames } =
     await loadMarcasImportEnrichment([...groups.keys()]);
 
   const batch = await prisma.disciplinaryImportBatch.create({
@@ -799,11 +822,12 @@ export async function importDisciplinaryMarcasWorkbook(
       (master?.nombre && master.nombre.trim()) ||
       `Empleado ${g.codigo}`;
 
-    const { zona: effZona, sucursal: effSucursal } = effectiveZonaSucursalForMarcas(
+    const { zona: rawZona, sucursal: effSucursal } = effectiveZonaSucursalForMarcas(
       g,
       master,
       options.zoneOverrides,
     );
+    const effZona = canonicalizeMarcasZone(zoneCatalogNames, rawZona, g.zona, master?.zona ?? null);
     const zd = mergeDefaultsForZoneTexts(
       zoneDisciplineDefaults,
       effZona,

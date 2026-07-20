@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { checkRateLimit } from "@/lib/security/rate-limit";
+import { isSelfAuthenticatedCronApi } from "@/lib/api/cron-auth";
 
 const PUBLIC_PATHS = ["/login", "/api/branding"];
 
@@ -66,6 +67,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
   if (isSyntraDeviceRoute(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Cron del VPS: auth Bearer en el handler (empleados NAF, FE, cobro, etc.).
+  if (isSelfAuthenticatedCronApi(pathname)) {
     return NextResponse.next();
   }
 

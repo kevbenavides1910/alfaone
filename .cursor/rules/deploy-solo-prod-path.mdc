@@ -1,0 +1,42 @@
+---
+description: Deploy de Alfa One solo desde el path canónico de producción
+alwaysApply: true
+---
+
+# Deploy — path canónico (obligatorio)
+
+Este VPS corre **Alfa One en producción**. Un deploy desde un worktree, `/tmp`, o un checkout incompleto de `origin/main` puede **eliminar módulos** (p. ej. `audits`, `naf-operaciones`) aunque health/login pasen.
+
+## Path obligatorio
+
+```text
+/mnt/data/projects/alfa-one/code/presupuestos-alfa
+```
+
+## Prohibido
+
+- `npm run ops:deploy` / `ops:deploy:pull` / `ops:deploy:auto` desde worktrees (`git worktree`), `/tmp/*`, o clones parciales
+- Asumir que “build OK + `/login` 200” implica imagen completa
+- Usar `DEPLOY_ALLOW_FOREIGN_ROOT=1` o `DEPLOY_ALLOW_MODULE_DROP=1` sin confirmación explícita del usuario
+- Saltar el smoke de módulos o el preflight de contexto
+- Compilar en el VPS (`ops:deploy`) cuando ya hay imagen GHCR del SHA (usar pull)
+
+## Obligatorio antes/después de deploy
+
+1. `cd` al path canónico (no worktrees).
+2. Dejar que corran `scripts/ops/deploy-context-preflight.sh` y `scripts/ops/deploy-module-smoke.sh` (integrados en los scripts de deploy).
+3. Si el preflight reporta `DROP-RISK`: **restaurar fuentes** o abortar — no forzar el deploy.
+4. Tras un deploy fallido, verificar rollback (`alfa-one-app-rollback:*`) y `docker ps` / módulos en el contenedor.
+
+## Comandos
+
+```bash
+cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
+npm run ops:deploy:ghcr     # OBLIGATORIO para agentes: solo GHCR, sin fallback a build local
+npm run ops:deploy:pull     # pull imagen (si APP_IMAGE ya está definida)
+npm run ops:deploy          # build local SOLO si el usuario lo pide explícitamente
+```
+
+**Agentes:** siempre `ops:deploy:ghcr`. Nunca `ops:deploy` / nunca fallback de `ops:deploy:auto` a build local. Ver `deploy-ghcr-obligatorio.mdc`.
+
+Detalle: `docs/DEPLOYMENT.md` (sección “Path canónico y blindaje”) y regla `deploy-anti-drop-rutas.mdc` (inventario total de rutas).

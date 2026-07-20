@@ -1,35 +1,18 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@/modules/core/db/prisma";
-import { getSession, requirePermission } from "@/lib/api/middleware";
-import { ok, created, badRequest, unauthorized, forbidden, serverError } from "@/lib/api/response";
+import { apiHandler } from "@/lib/api/handler";
+import { ok, created, badRequest } from "@/lib/api/response";
 import { puestoSchema } from "@/modules/bandeco/validations/schemas";
+import { listPuestos, createPuesto } from "@/modules/bandeco/services/catalogs-service";
 
-export async function GET() {
-  const session = await getSession();
-  if (!session) return unauthorized();
-  if (!requirePermission(session, "bandeco.mantenimientos", "view")) return forbidden();
+export const GET = apiHandler(
+  { permission: ["bandeco.mantenimientos", "view"], errorLabel: "Error al listar puestos" },
+  async () => ok(await listPuestos())
+);
 
-  try {
-    const rows = await prisma.bandecoPuesto.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
-    return ok(rows);
-  } catch (e) {
-    return serverError("Error al listar puestos", e);
-  }
-}
-
-export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return unauthorized();
-  if (!requirePermission(session, "bandeco.mantenimientos", "edit")) return forbidden();
-
-  try {
-    const body = await req.json();
-    const parsed = puestoSchema.safeParse(body);
+export const POST = apiHandler(
+  { permission: ["bandeco.mantenimientos", "edit"], errorLabel: "Error al crear puesto" },
+  async ({ req }) => {
+    const parsed = puestoSchema.safeParse(await req.json());
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
-
-    const row = await prisma.bandecoPuesto.create({ data: parsed.data });
-    return created(row);
-  } catch (e) {
-    return serverError("Error al crear puesto", e);
+    return created(await createPuesto(parsed.data));
   }
-}
+);

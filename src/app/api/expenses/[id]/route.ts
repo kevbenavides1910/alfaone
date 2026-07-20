@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/modules/core/db/prisma";
+import { softDeleteExpense } from "@/modules/presupuestos/services/soft-delete-expense";
+import { dbForSession, assertTenantCompanyAccess } from "@/modules/core/db/db-for-session";
 import { getSession, canManageExpenses, isAdmin } from "@/lib/api/middleware";
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { z } from "zod";
@@ -128,7 +130,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     const can = await canViewExpenseDetail(session, id);
     if (!can) return forbidden();
 
-    const expense = await prisma.expense.findUnique({
+    const expense = await dbForSession(session).expense.findUnique({
       where: { id },
       include: expenseInclude,
     });
@@ -146,7 +148,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
   try {
     const { id } = await params;
-    const existing = await prisma.expense.findUnique({ where: { id } });
+    const existing = await dbForSession(session).expense.findUnique({ where: { id } });
     if (!existing) return notFound("Gasto no encontrado");
 
     const body = await req.json();
@@ -157,6 +159,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
       const p = parsed.data;
       if (p.company !== undefined && p.company !== null) {
+        const tenantOk = assertTenantCompanyAccess(session, p.company);
+        if (!tenantOk.ok) return badRequest(tenantOk.message);
         const chk = await requireCompanyCode(prisma, p.company, { mustBeActive: true });
         if (!chk.ok) return badRequest(chk.message);
       }
@@ -224,7 +228,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         }
         const ids = p.deferredIncludeContractIds;
         if (ids.length > 0) {
-          const okIds = await prisma.contract.findMany({
+          const okIds = await dbForSession(session).contract.findMany({
             where: {
               id: { in: ids },
               deletedAt: null,
@@ -253,7 +257,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         return ok(serializeExpense(updated));
       }
 
-      const updated = await prisma.expense.update({
+      const updated = await dbForSession(session).expense.update({
         where: { id },
         data,
         include: expenseInclude,
@@ -290,7 +294,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       }
       const ids = p.deferredIncludeContractIds;
       if (ids.length > 0) {
-        const okIds = await prisma.contract.findMany({
+        const okIds = await dbForSession(session).contract.findMany({
           where: {
             id: { in: ids },
             deletedAt: null,
@@ -325,7 +329,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       return ok(serializeExpense(updated));
     }
 
-    const updated = await prisma.expense.update({
+    const updated = await dbForSession(session).expense.update({
       where: { id },
       data: baseData,
       include: expenseInclude,
@@ -337,17 +341,21 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Ctx) {
+export async function DELETE(req: NextRequest, { params }: Ctx) {
   const session = await getSession();
   if (!session) return unauthorized();
   if (!canManageExpenses(session)) return forbidden();
 
   try {
     const { id } = await params;
-    const expense = await prisma.expense.findUnique({ where: { id } });
-    if (!expense) return notFound("Gasto no encontrado");
+    const ipAddress =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      req.headers.get("x-real-ip") ??
+      null;
 
-    await prisma.expense.delete({ where: { id } });
+    const result = await softDeleteExpense(dbForSession(session), id, session.user.id, ipAddress);
+    if (!result.ok) return notFound(result.message);
+
     return ok({ deleted: true });
   } catch (e) {
     return serverError("Error al eliminar gasto", e);

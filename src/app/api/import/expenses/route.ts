@@ -14,6 +14,7 @@ import type { ExpenseCreateInput } from "@/modules/presupuestos/validations/expe
 import { Prisma, type ExpenseType } from "@prisma/client";
 import { getApprovalStepCountForType, initialApprovalFields } from "@/modules/presupuestos/services/expense-approval";
 import { applyDeferredExpenseDistributions } from "@/modules/presupuestos/services/deferred-expense-distribution";
+import { splitAmountAcrossMonths } from "@/modules/presupuestos/business/expense-proration";
 import { readBoundedUpload } from "@/lib/security/form-upload";
 
 function rowErrorMessage(e: unknown): string {
@@ -22,18 +23,6 @@ function rowErrorMessage(e: unknown): string {
     return m.length > 400 ? `${m.slice(0, 400)}…` : m;
   }
   return "Error al guardar en base de datos";
-}
-
-function splitAmountAcrossMonths(total: number, months: number): number[] {
-  if (months <= 1) return [total];
-  const cents = Math.round(total * 100);
-  const base = Math.floor(cents / months);
-  const remainder = cents - base * months;
-  const out: number[] = [];
-  for (let i = 0; i < months; i++) {
-    out.push((base + (i < remainder ? 1 : 0)) / 100);
-  }
-  return out;
 }
 
 export async function GET() {

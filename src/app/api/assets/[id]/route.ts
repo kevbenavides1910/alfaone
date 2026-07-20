@@ -41,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const validation = await validateAssetPatch(id, existing, parsed.data);
     if (validation) return badRequest(validation.message);
 
-    const updated = await updateAsset(id, buildAssetPatchData(parsed.data));
+    const updated = await updateAsset(id, buildAssetPatchData(parsed.data, session.user.id));
     return ok(updated);
   } catch (e) {
     return serverError("Error al actualizar activo", e);
@@ -58,7 +58,11 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     if (validation?.message === "NOT_FOUND") return notFound();
     if (validation) return badRequest(validation.message);
 
-    await deleteAsset(id);
+    const ipAddress =
+      _req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      _req.headers.get("x-real-ip") ??
+      null;
+    await deleteAsset(id, session.user.id, ipAddress);
     return ok({ deleted: true });
   } catch (e) {
     return serverError("Error al eliminar activo", e);

@@ -43,6 +43,24 @@
     --danger-foreground: 0 0% 100%;
   }
 
+  .dark {
+    color-scheme: dark;
+    --background: 240 6% 10%;
+    --foreground: 0 0% 95%;
+    --card: 240 5% 14%;
+    --card-foreground: 0 0% 95%;
+    --popover: 240 5% 14%;
+    --popover-foreground: 0 0% 95%;
+    --secondary: 240 4% 18%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 240 4% 18%;
+    --muted-foreground: 240 5% 72%;
+    --accent: 240 4% 20%;
+    --accent-foreground: 0 0% 95%;
+    --border: 240 4% 22%;
+    --input: 240 4% 18%;
+  }
+
   * {
     @apply border-border;
   }
@@ -62,19 +80,17 @@
     @apply bg-muted/60 border-b border-border;
   }
 
-  /* Fondo del menú principal (/home) — negro Alfa */
+  .dark .table-head-muted {
+    @apply bg-muted/80;
+  }
+
+  /* Fondo del menú principal (/home) */
   .home-menu-canvas {
-    @apply relative min-h-[calc(100dvh-4rem)] overflow-hidden bg-[#0f0f0f];
+    @apply relative min-h-[calc(100dvh-4rem)] overflow-hidden bg-white dark:bg-background;
   }
 
   .home-menu-canvas::before {
-    content: "";
-    @apply pointer-events-none absolute inset-0;
-    background: radial-gradient(
-      ellipse 70% 40% at 20% 0%,
-      hsl(0 60% 30% / 0.12),
-      transparent 60%
-    );
+    content: none;
   }
 
   .home-menu-canvas::after {
@@ -195,6 +211,59 @@
   .carbon-empty {
     @apply px-6 py-16 text-center text-sm text-[#525252];
   }
+
+  /* ── Modo oscuro: módulo Contratos / Carbon ── */
+  .dark .contracts-canvas,
+  .dark .carbon-page-header {
+    @apply bg-background;
+  }
+
+  .dark .carbon-page-title,
+  .dark .carbon-data-table,
+  .dark .carbon-data-table thead th,
+  .dark .carbon-data-table tfoot tr {
+    @apply text-foreground;
+  }
+
+  .dark .carbon-page-description,
+  .dark .carbon-breadcrumb,
+  .dark .carbon-empty {
+    @apply text-muted-foreground;
+  }
+
+  .dark .carbon-toolbar,
+  .dark .carbon-panel,
+  .dark .carbon-tile,
+  .dark .carbon-tabs-list {
+    @apply bg-card border-border;
+  }
+
+  .dark .carbon-data-table thead {
+    @apply bg-muted border-border;
+  }
+
+  .dark .carbon-table-viewport .carbon-data-table thead th {
+    @apply bg-muted;
+    box-shadow: 0 1px 0 hsl(var(--border));
+  }
+
+  .dark .carbon-data-table tbody tr {
+    @apply bg-card border-border;
+  }
+
+  .dark .carbon-data-table tbody tr:hover {
+    @apply bg-muted/60;
+  }
+
+  .dark .carbon-data-table tfoot tr {
+    @apply bg-muted/40 border-border;
+  }
+
+  .dark .carbon-tabs-trigger {
+    @apply text-muted-foreground border-transparent;
+    @apply data-[state=active]:text-foreground data-[state=active]:border-[#dc2626];
+    @apply hover:bg-muted hover:text-foreground;
+  }
 }
 
 /* Scrollbar oculto — mantiene funcionalidad de scroll */
@@ -240,3 +309,157 @@
 .progress-green { @apply bg-green-500; }
 .progress-yellow { @apply bg-yellow-500; }
 .progress-red { @apply bg-red-500; }
+
+/* ── Modo oscuro global: remapeo de utilidades hardcodeadas en módulos ── */
+@layer utilities {
+  .dark .bg-white {
+    @apply bg-card;
+  }
+
+  .dark .bg-gray-50,
+  .dark .bg-slate-50,
+  .dark .bg-neutral-50 {
+    @apply bg-muted/50;
+  }
+
+  .dark .bg-gray-100,
+  .dark .bg-slate-100 {
+    @apply bg-muted/70;
+  }
+
+  .dark .bg-gray-200,
+  .dark .bg-slate-200 {
+    @apply bg-muted;
+  }
+
+  /* Badges / chips con fondos pastel (tipos de gasto, estados, etc.) */
+  .dark .bg-red-100 { @apply bg-red-950/55; }
+  .dark .text-red-800, .dark .text-red-700 { @apply text-red-300; }
+  .dark .bg-orange-100 { @apply bg-orange-950/55; }
+  .dark .text-orange-800 { @apply text-orange-300; }
+  .dark .bg-amber-100 { @apply bg-amber-950/55; }
+  .dark .text-amber-800, .dark .text-amber-700 { @apply text-amber-300; }
+  .dark .bg-yellow-100 { @apply bg-yellow-950/55; }
+  .dark .text-yellow-800 { @apply text-yellow-200; }
+  .dark .bg-green-100 { @apply bg-green-950/55; }
+  .dark .text-green-800 { @apply text-green-300; }
+  .dark .bg-emerald-100 { @apply bg-emerald-950/55; }
+  .dark .text-emerald-800 { @apply text-emerald-300; }
+  .dark .bg-cyan-100 { @apply bg-cyan-950/55; }
+  .dark .text-cyan-800 { @apply text-cyan-300; }
+  .dark .bg-blue-100 { @apply bg-blue-950/55; }
+  .dark .text-blue-800, .dark .text-blue-700 { @apply text-blue-300; }
+  .dark .bg-indigo-100 { @apply bg-indigo-950/55; }
+  .dark .text-indigo-800 { @apply text-indigo-300; }
+  .dark .bg-purple-100 { @apply bg-purple-950/55; }
+  .dark .text-purple-800 { @apply text-purple-300; }
+  .dark .bg-pink-100 { @apply bg-pink-950/55; }
+  .dark .text-pink-800 { @apply text-pink-300; }
+  .dark .bg-teal-100 { @apply bg-teal-950/55; }
+  .dark .text-teal-800 { @apply text-teal-300; }
+
+  .dark .text-black,
+  .dark .text-gray-900,
+  .dark .text-slate-900,
+  .dark .text-slate-800 {
+    @apply text-foreground;
+  }
+
+  .dark .text-gray-700,
+  .dark .text-slate-700 {
+    @apply text-foreground;
+  }
+
+  /* Secundario con más contraste que muted-foreground puro */
+  .dark .text-gray-600,
+  .dark .text-slate-600 {
+    color: hsl(var(--foreground) / 0.82);
+  }
+
+  .dark .text-gray-500,
+  .dark .text-slate-500 {
+    @apply text-muted-foreground;
+  }
+
+  .dark .text-gray-400,
+  .dark .text-slate-400 {
+    color: hsl(var(--muted-foreground) / 0.95);
+  }
+
+  .dark .text-slate-300 {
+    color: hsl(var(--muted-foreground) / 0.75);
+  }
+
+  /* Encabezados de tabla: siempre legibles sobre fondo muted */
+  .dark thead th,
+  .dark th.font-semibold {
+    color: hsl(var(--foreground) / 0.9);
+  }
+
+  .dark .border-gray-100,
+  .dark .border-gray-200,
+  .dark .border-slate-100,
+  .dark .border-slate-200,
+  .dark .border-slate-300 {
+    @apply border-border;
+  }
+
+  .dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+  .dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+    @apply border-border;
+  }
+
+  .dark .hover\:bg-slate-50:hover,
+  .dark .hover\:bg-gray-50:hover,
+  .dark .hover\:bg-muted\/50:hover {
+    background-color: hsl(var(--muted) / 0.6);
+  }
+
+  .dark .hover\:bg-slate-100:hover,
+  .dark .hover\:bg-gray-100:hover {
+    @apply bg-muted;
+  }
+
+  .dark .hover\:bg-red-50:hover {
+    @apply bg-red-950/40;
+  }
+
+  .dark .hover\:text-slate-700:hover,
+  .dark .hover\:text-slate-800:hover {
+    @apply text-foreground;
+  }
+
+  .dark .shadow-sm {
+    --tw-shadow-color: rgb(0 0 0 / 0.35);
+  }
+
+  .dark .ring-black\/\[0\.03\] {
+    --tw-ring-color: rgb(255 255 255 / 0.05);
+  }
+}
+
+.dark .scrollbar-thin {
+  scrollbar-color: hsl(240 5% 35% / 0.5) transparent;
+}
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: hsl(240 5% 45% / 0.4);
+}
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: hsl(240 5% 45% / 0.6);
+}
+
+/* alfa table column resize */
+th {
+  position: relative;
+}
+.alfa-col-resize-handle {
+  opacity: 0;
+  background: transparent;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+}
+th:hover > .alfa-col-resize-handle,
+.alfa-col-resize-handle:hover,
+.alfa-col-resize-handle:focus {
+  opacity: 1;
+  background: color-mix(in srgb, #dc2626 35%, transparent);
+}

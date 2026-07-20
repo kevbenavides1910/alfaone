@@ -3,6 +3,7 @@ import { authOptions } from "@/modules/core/auth/auth-options";
 import { redirect } from "next/navigation";
 import { PermissionGuard } from "@/components/permissions/PermissionGuard";
 import { SidebarPane } from "@/components/layout/SidebarPane";
+import { EnableTableColumnResize } from "@/components/ui/enable-table-column-resize";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
@@ -16,7 +17,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-auto">
-        <PermissionGuard>{children}</PermissionGuard>
+        <PermissionGuard>
+          <EnableTableColumnResize />
+          {children}
+        </PermissionGuard>
       </div>
     </div>
   );

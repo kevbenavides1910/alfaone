@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, TrendingUp, TrendingDown, Minus, FileSpreadsheet, Pencil, Trash2, Loader2, Sparkles } from "lucide-react";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
@@ -17,6 +17,13 @@ import {
   specialServiceSchema,
   type SpecialServiceInput,
 } from "@/modules/presupuestos/validations/contract.schema";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 
 interface BillingEntry {
   id: string;
@@ -195,6 +202,27 @@ export function BillingHistoryTab({
 
   const entries = data?.data ?? [];
   const services = servicesData?.data ?? [];
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const onColumnFilterChange = (k: string, v: string) => setColumnFilters((p) => ({ ...p, [k]: v }));
+
+  const columnDefs = useMemo((): TableColumnFilterDef<BillingEntry>[] => {
+    return [
+      { key: "period", label: "Período", getValue: (e) => e.periodMonth },
+      { key: "facturacion", label: "Facturación", getValue: (e) => String(e.monthlyBilling) },
+      { key: "notes", label: "Notas", getValue: (e) => e.notes ?? "" },
+    ];
+  }, []);
+
+  const filteredEntries = useMemo(
+    () =>
+      filterRowsByColumnFilters(
+        entries,
+        columnFilters,
+        columnDefs.map((c) => ({ key: c.key, getValue: c.getValue, mode: c.mode, filterable: c.filterable }))
+      ),
+    [entries, columnDefs, columnFilters]
+  );
+  const columnFilterKeys = useMemo(() => columnDefs.map((c) => c.key), [columnDefs]);
   const yearOpts = Array.from({ length: 4 }, (_, i) => now.getFullYear() - i);
   const servicesTotal = services.reduce((s, row) => s + row.amount, 0);
 
@@ -319,35 +347,48 @@ export function BillingHistoryTab({
               <span className="text-xs">Se usa la facturación base del contrato en todos los meses.</span>
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Período</th>
-                  <th className="text-right px-4 py-3 font-semibold text-slate-600">Facturación</th>
-                  <th className="text-right px-4 py-3 font-semibold text-slate-600">vs. Base</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Notas</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {entries.map((e) => {
-                  const diff = e.monthlyBilling - contractBaseBilling;
-                  const pct = contractBaseBilling > 0 ? (diff / contractBaseBilling) * 100 : 0;
-                  return (
-                    <tr key={e.id} className="hover:bg-muted/50">
-                      <td className="px-4 py-3 font-medium">{formatMonthYear(e.periodMonth)}</td>
-                      <td className="px-4 py-3 text-right">{formatCurrency(e.monthlyBilling)}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`inline-flex items-center gap-1 text-xs font-semibold ${diff > 0 ? "text-green-600" : diff < 0 ? "text-red-600" : "text-slate-400"}`}>
-                          {diff > 0 ? <TrendingUp className="h-3 w-3" /> : diff < 0 ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
-                          {diff !== 0 ? `${diff > 0 ? "+" : ""}${pct.toFixed(1)}%` : "Igual"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 text-xs">{e.notes ?? "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <>
+              {hasActiveColumnFilters(columnFilters) && (
+                <div className="flex justify-end px-3 py-1.5 border-b bg-muted/50">
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setColumnFilters(clearColumnFilters(columnFilterKeys))}>
+                    Limpiar filtros
+                  </Button>
+                </div>
+              )}
+              <table className="w-full text-sm">
+                <thead>
+                  <TableColumnFilterHead
+                    columns={columnDefs}
+                    rows={entries}
+                    filters={columnFilters}
+                    onFilterChange={onColumnFilterChange}
+                    filterRowClassName="bg-muted/50"
+                  />
+                </thead>
+                <tbody className="divide-y">
+                  {filteredEntries.map((e) => {
+                    const diff = e.monthlyBilling - contractBaseBilling;
+                    const pct = contractBaseBilling > 0 ? (diff / contractBaseBilling) * 100 : 0;
+                    return (
+                      <tr key={e.id} className="hover:bg-muted/50">
+                        <td className="px-4 py-3 font-medium">{formatMonthYear(e.periodMonth)}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(e.monthlyBilling)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`inline-flex items-center gap-1 text-xs font-semibold ${diff > 0 ? "text-green-600" : diff < 0 ? "text-red-600" : "text-slate-400"}`}>
+                            {diff > 0 ? <TrendingUp className="h-3 w-3" /> : diff < 0 ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                            {diff !== 0 ? `${diff > 0 ? "+" : ""}${pct.toFixed(1)}%` : "Igual"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">{e.notes ?? "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
+          )}
+          {entries.length > 0 && (
+            <div />
           )}
         </CardContent>
       </Card>

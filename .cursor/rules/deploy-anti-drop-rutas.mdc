@@ -1,0 +1,59 @@
+---
+description: Causa raíz y reglas para que un deploy nunca elimine rutas de producción
+alwaysApply: true
+---
+
+# Deploy — anti-drop total de rutas (obligatorio)
+
+## Por qué se “eliminaban módulos”
+
+No era magia de Docker ni un bug de Next. La secuencia real (jul-2026, repetida):
+
+1. **Producción** tenía una imagen **completa** (nómina NAF, cargas, visualizador, audits, etc.).
+2. El **disco en el path canónico** quedó **incompleto**: pantallas/APIs vivían en `git stash` / WIP no restaurado, o se perdió código al mezclar checkouts finos.
+3. Un deploy (`npm run ops:deploy`) construye desde **lo que hay en disco**, no desde la imagen anterior.
+4. El anti-drop antiguo solo miraba **carpetas padre** (`empleados-naf/`) o una **allowlist corta**. Si el padre existía, daba OK aunque faltaran `nomina/`, `cargas-sociales/`, etc.
+5. Health + `/login` 200 **no detectan** pantallas faltantes. El smoke whitelist también podía pasar.
+6. Resultado: imagen nueva **sin** esas rutas; la app “funciona” pero faltan módulos.
+
+## Regla dura
+
+- **Nunca** desplegar si el inventario de rutas en fuentes es menor (en cobertura) que el de la imagen en ejecución.
+- Preflight: `scripts/ops/deploy-context-preflight.sh` compara **todas** las páginas UI y handlers API (`scripts/ops/inventory-next-routes.sh`).
+- Smoke: `scripts/ops/deploy-module-smoke.sh` exige **0 drops** vs la imagen etiquetada como rollback **antes** del recreate.
+- Listas fijas / anclas son **defensa en profundidad**, no el control principal.
+
+## Obligaciones del agente
+
+1. Antes de `ops:deploy` / `ops:deploy:auto`: si hay duda de completitud, correr el preflight; ante `DROP-RISK`, **restaurar fuentes** — no usar `DEPLOY_ALLOW_MODULE_DROP=1`. Preferir `ops:deploy:pull` cuando el SHA ya tiene imagen en GHCR.
+2. No redeployar “solo un fix” desde un árbol parcial (stash a medias, worktree, `/tmp`).
+3. Si un deploy dropea rutas: **rollback inmediato** a `alfa-one-app-rollback:*` y reparar fuentes **antes** de volver a build.
+4. No afirmar “deploy OK” solo por healthcheck: debe pasar el smoke de inventario.
+
+## Overrides (solo con confirmación explícita del usuario)
+
+- `DEPLOY_ALLOW_MODULE_DROP=1` — permite perder rutas (casi nunca).
+- `DEPLOY_SKIP_ANTI_DROP=1` — omite preflight de fuentes (pull GHCR); el smoke post-deploy sigue siendo obligatorio con baseline.
+- `DEPLOY_SKIP_LOCK=1` — omite lock exclusivo (casi nunca).
+
+## Regresiones de UI (esta causa es específica de árboles a medias)
+
+El anti-drop de **rutas** no detecta pisar **contenido** más nuevo:
+
+1. Varios agentes trabajan en el **mismo** path canónico.
+2. Mejoras de UI (Topbar, Shells, home, navigación…) quedan en `git stash` o en disco de otra sesión.
+3. Un agente despliega desde `HEAD`/disco **sin** esas mejoras → prod pierde ThemeToggle, shells, etc. aunque el conteo de rutas sea 463=463.
+
+Guard: `scripts/ops/deploy-ui-stash-guard.sh` aborta si `stash@{0}` tiene mucha UI distinta al disco.
+
+Antes de deploy desde este chat: reconciliar stash UI (sin borrar el PDF FE) o no desplegar.
+
+## Conflictos entre deploys (otra causa de “se quitaron módulos”)
+
+Si **dos** `ops:deploy` / `ops:deploy:pull` / `compose up --build` corren a la vez (dos chats Cursor, dos agentes, CI + manual):
+
+1. Ambos etiquetan rollback / recrean `security_contracts_app`.
+2. El que termina último **pisa** la imagen, a veces a mitad del smoke del otro.
+3. Puede parecer “drop de módulos” aunque el anti-drop de rutas haya pasado en un deploy.
+
+Mitigación obligatoria: `scripts/ops/acquire-deploy-lock.sh` (`flock`) al inicio de `deploy-production.sh` y `deploy-from-image.sh`. Si el lock está tomado → abortar; no lanzar otro deploy.

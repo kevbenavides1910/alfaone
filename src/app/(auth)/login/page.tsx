@@ -64,7 +64,10 @@ function LoginForm({ primary, logoSrc }: { primary: string; logoSrc: string | nu
     setError("");
     try {
       const result = await signIn("credentials", {
-        email, password, callbackUrl: "/home", redirect: false,
+        email: email.trim().toLowerCase(),
+        password,
+        callbackUrl: "/home",
+        redirect: false,
       });
       if (result?.error) { setError(messageForNextAuthError(result.error) ?? "No se pudo iniciar sesión"); return; }
       if (result === undefined) { setError("No hubo respuesta del servidor."); return; }

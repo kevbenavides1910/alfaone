@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { CalendarDateInput } from "@/components/ui/calendar-date-input";
 import { FACTURA_MENSUAL_STATUS_LABELS, HIRING_TYPE_LABELS } from "@/lib/utils/constants";
@@ -91,6 +93,13 @@ export function expandFacturasForList(rows: FacturaMensualRow[]): FacturaListExp
         zoneName: em.zoneName ?? null,
         emisionIndex: idx,
         emisionTotal: emisiones.length,
+        status: em.status ?? factura.status,
+        closedAt: em.closedAt ?? factura.closedAt,
+        invoiceNumber: em.invoiceNumber ?? factura.invoiceNumber,
+        documentNumber: em.documentNumber ?? factura.documentNumber,
+        subtotalCopied: em.subtotalCopied ?? factura.subtotalCopied,
+        totalCalculated: em.totalCalculated ?? factura.totalCalculated,
+        ventaFacturadoDelta: em.ventaFacturadoDelta ?? factura.ventaFacturadoDelta,
       });
     });
   }
@@ -165,6 +174,174 @@ export const EMPTY_CXC_FILTERS: CxcSearchFilters = {
   observations: "",
   paymentStatus: "pending",
 };
+
+function DateRange({
+  label,
+  from,
+  to,
+  onFrom,
+  onTo,
+}: {
+  label: string;
+  from: string;
+  to: string;
+  onFrom: (v: string) => void;
+  onTo: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-slate-500">{label}</Label>
+      <div className="grid grid-cols-2 gap-2">
+        <Input type="date" className="h-9 text-sm" value={from} onChange={(e) => onFrom(e.target.value)} />
+        <Input type="date" className="h-9 text-sm" value={to} onChange={(e) => onTo(e.target.value)} />
+      </div>
+    </div>
+  );
+}
+
+export function FacturacionListFilters({
+  filters,
+  onChange,
+  onClear,
+}: {
+  filters: FacturacionSearchFilters;
+  onChange: (next: FacturacionSearchFilters) => void;
+  onClear: () => void;
+}) {
+  const set = (patch: Partial<FacturacionSearchFilters>) => onChange({ ...filters, ...patch });
+  const hasActive =
+    filters.client.trim() ||
+    filters.licitacion.trim() ||
+    filters.expectedFrom ||
+    filters.expectedTo ||
+    filters.issuedFrom ||
+    filters.issuedTo ||
+    filters.receivedFrom ||
+    filters.receivedTo;
+
+  return (
+    <div className="space-y-3 w-full">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-slate-500">Cliente</Label>
+          <Input
+            className="h-9"
+            placeholder="Buscar por nombre…"
+            value={filters.client}
+            onChange={(e) => set({ client: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-slate-500">Nº licitación</Label>
+          <Input
+            className="h-9"
+            placeholder="Ej. LIC-2024…"
+            value={filters.licitacion}
+            onChange={(e) => set({ licitacion: e.target.value })}
+          />
+        </div>
+        <DateRange
+          label="Fecha esperada de emisión"
+          from={filters.expectedFrom}
+          to={filters.expectedTo}
+          onFrom={(v) => set({ expectedFrom: v })}
+          onTo={(v) => set({ expectedTo: v })}
+        />
+        <DateRange
+          label="Fecha de emisión / cierre"
+          from={filters.issuedFrom}
+          to={filters.issuedTo}
+          onFrom={(v) => set({ issuedFrom: v })}
+          onTo={(v) => set({ issuedTo: v })}
+        />
+        <DateRange
+          label="Recibido conforme"
+          from={filters.receivedFrom}
+          to={filters.receivedTo}
+          onFrom={(v) => set({ receivedFrom: v })}
+          onTo={(v) => set({ receivedTo: v })}
+        />
+      </div>
+      {hasActive ? (
+        <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={onClear}>
+          Limpiar búsqueda
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+export function CxcListFilters({
+  filters,
+  onChange,
+  onClear,
+}: {
+  filters: CxcSearchFilters;
+  onChange: (next: CxcSearchFilters) => void;
+  onClear: () => void;
+}) {
+  const set = (patch: Partial<CxcSearchFilters>) => onChange({ ...filters, ...patch });
+  const hasActive =
+    filters.client.trim() ||
+    filters.licitacion.trim() ||
+    filters.issuedFrom ||
+    filters.issuedTo ||
+    filters.expectedPaymentFrom ||
+    filters.expectedPaymentTo ||
+    filters.receivedFrom ||
+    filters.receivedTo;
+
+  return (
+    <div className="space-y-3 w-full">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-slate-500">Cliente</Label>
+          <Input
+            className="h-9"
+            placeholder="Buscar por nombre…"
+            value={filters.client}
+            onChange={(e) => set({ client: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-slate-500">Nº licitación</Label>
+          <Input
+            className="h-9"
+            placeholder="Ej. LIC-2024…"
+            value={filters.licitacion}
+            onChange={(e) => set({ licitacion: e.target.value })}
+          />
+        </div>
+        <DateRange
+          label="Fecha de emisión"
+          from={filters.issuedFrom}
+          to={filters.issuedTo}
+          onFrom={(v) => set({ issuedFrom: v })}
+          onTo={(v) => set({ issuedTo: v })}
+        />
+        <DateRange
+          label="Pago esperado"
+          from={filters.expectedPaymentFrom}
+          to={filters.expectedPaymentTo}
+          onFrom={(v) => set({ expectedPaymentFrom: v })}
+          onTo={(v) => set({ expectedPaymentTo: v })}
+        />
+        <DateRange
+          label="Recibido conforme"
+          from={filters.receivedFrom}
+          to={filters.receivedTo}
+          onFrom={(v) => set({ receivedFrom: v })}
+          onTo={(v) => set({ receivedTo: v })}
+        />
+      </div>
+      {hasActive ? (
+        <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={onClear}>
+          Limpiar búsqueda
+        </Button>
+      ) : null}
+    </div>
+  );
+}
 
 export const CXC_PAYMENT_STATUS_OPTIONS = [
   { value: "pending", label: "Pendientes de cobro" },

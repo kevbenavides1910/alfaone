@@ -25,9 +25,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toaster";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import { canReconcileEmployeeContractsSession } from "@/modules/core/permissions";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 
 type DiscrepancyStatus =
   | "sin_vinculo"
@@ -133,6 +140,31 @@ export default function EmpleadosContratosPage() {
         (r.linkedLicitacionNo ?? "").toLowerCase().includes(q),
     );
   }, [payload?.discrepancies, filter]);
+
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const onColumnFilterChange = (k: string, v: string) => setColumnFilters((p) => ({ ...p, [k]: v }));
+
+  const columnDefs = useMemo((): TableColumnFilterDef<DiscrepancyRow>[] => {
+    return [
+      { key: "contratoRrhh", label: "Contrato RRHH", getValue: (r) => r.contratoRrhh },
+      { key: "estado", label: "Estado", getValue: (r) => r.status },
+      { key: "empleados", label: "Empleados", getValue: (r) => String(r.employeeCount) },
+      { key: "contratoSistema", label: "Contrato en sistema", getValue: (r) => r.exactLicitacionNo ?? r.linkedLicitacionNo ?? "" },
+      { key: "sugerencias", label: "Sugerencias", getValue: (r) => r.suggestions.map((s) => s.licitacionNo).join(" ") },
+      { key: "actions", label: "", filterable: false, getValue: () => "" },
+    ];
+  }, []);
+
+  const displayedDiscrepancies = useMemo(
+    () =>
+      filterRowsByColumnFilters(
+        payload?.discrepancies ?? [],
+        columnFilters,
+        columnDefs.map((c) => ({ key: c.key, getValue: c.getValue, mode: c.mode, filterable: c.filterable }))
+      ),
+    [payload?.discrepancies, columnDefs, columnFilters]
+  );
+  const columnFilterKeys = useMemo(() => columnDefs.map((c) => c.key), [columnDefs]);
 
   const linkMutation = useMutation({
     mutationFn: async (input: {
@@ -283,21 +315,28 @@ export default function EmpleadosContratosPage() {
               </div>
             )}
 
-            {filteredDiscrepancies.length > 0 && (
-              <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 border-b text-left text-xs uppercase text-slate-500">
-                      <th className="px-3 py-2">Contrato RRHH</th>
-                      <th className="px-3 py-2">Estado</th>
-                      <th className="px-3 py-2">Empleados</th>
-                      <th className="px-3 py-2">Contrato en sistema</th>
-                      <th className="px-3 py-2">Sugerencias</th>
-                      {canEdit && <th className="px-3 py-2 text-right">Acciones</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredDiscrepancies.map((row) => {
+            {displayedDiscrepancies.length > 0 && (
+              <>
+                {hasActiveColumnFilters(columnFilters) && (
+                  <div className="flex justify-end px-3 py-1.5 border-b bg-slate-50">
+                    <button type="button" className="text-red-600 hover:underline text-xs" onClick={() => setColumnFilters({})}>
+                      Limpiar filtros
+                    </button>
+                  </div>
+                )}
+                <div className="overflow-x-auto border rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <TableColumnFilterHead
+                        columns={columnDefs}
+                        rows={payload?.discrepancies ?? []}
+                        filters={columnFilters}
+                        onFilterChange={onColumnFilterChange}
+                        filterRowClassName="bg-slate-50"
+                      />
+                    </thead>
+                    <tbody>
+                      {displayedDiscrepancies.map((row) => {
                       const selection = getSelection(row);
                       return (
                         <tr key={row.contratoRrhh} className="border-b align-top">
@@ -416,6 +455,7 @@ export default function EmpleadosContratosPage() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </CardContent>
         </Card>

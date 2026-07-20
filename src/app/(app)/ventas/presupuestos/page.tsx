@@ -4,13 +4,20 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Calculator, Plus, Settings2 } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { hasPermission } from "@/lib/permissions/check";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { VENTAS_PRESUPUESTO_ESTADO_LABELS } from "@/modules/ventas/client";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 
 type PresupuestoRow = {
   id: string;
@@ -109,6 +116,32 @@ export default function PresupuestosPage() {
 
   const rows = data?.data.rows ?? [];
   const payload = data?.data;
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const onColumnFilterChange = (k: string, v: string) => setColumnFilters((p) => ({ ...p, [k]: v }));
+
+  const columnDefs = useMemo((): TableColumnFilterDef<PresupuestoRow>[] => {
+    return [
+      { key: "licitacion", label: "Licitación", getValue: (r) => r.licitacionNo },
+      { key: "compania", label: "Compañía", getValue: (r) => r.compania },
+      { key: "cliente", label: "Cliente", getValue: (r) => r.oportunidad?.cliente ?? "" },
+      { key: "estado", label: "Estado", getValue: (r) => VENTAS_PRESUPUESTO_ESTADO_LABELS[r.estado] ?? r.estado },
+      { key: "totalMensual", label: "Total mensual", getValue: (r) => (r.totalMensual != null ? String(r.totalMensual) : "") },
+      { key: "conIva", label: "Con IVA", getValue: (r) => (r.totalConIva != null ? String(r.totalConIva) : "") },
+      { key: "lineas", label: "Líneas", getValue: (r) => String(r.lineasCount) },
+      { key: "actualizado", label: "Actualizado", getValue: (r) => formatDate(r.updatedAt) },
+    ];
+  }, [VENTAS_PRESUPUESTO_ESTADO_LABELS]);
+
+  const displayedRows = useMemo(
+    () =>
+      filterRowsByColumnFilters(
+        rows,
+        columnFilters,
+        columnDefs.map((c) => ({ key: c.key, getValue: c.getValue, mode: c.mode, filterable: c.filterable }))
+      ),
+    [rows, columnDefs, columnFilters]
+  );
+  const columnFilterKeys = useMemo(() => columnDefs.map((c) => c.key), [columnDefs]);
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -192,50 +225,56 @@ export default function PresupuestosPage() {
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="overflow-auto max-h-[calc(100vh-16rem)]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-50 border-b">
-                <th className="px-3 py-2 text-left font-medium">Licitación</th>
-                <th className="px-3 py-2 text-left font-medium">Compañía</th>
-                <th className="px-3 py-2 text-left font-medium">Cliente</th>
-                <th className="px-3 py-2 text-left font-medium">Estado</th>
-                <th className="px-3 py-2 text-right font-medium">Total mensual</th>
-                <th className="px-3 py-2 text-right font-medium">Con IVA</th>
-                <th className="px-3 py-2 text-center font-medium">Líneas</th>
-                <th className="px-3 py-2 text-left font-medium">Actualizado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">Cargando…</td>
-                </tr>
-              )}
-              {!isLoading && rows.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
-                    No hay presupuestos. Cree uno desde una oportunidad en estado Participar.
-                  </td>
-                </tr>
-              )}
-              {rows.map((row) => (
-                <tr key={row.id} className="border-t hover:bg-muted/40">
-                  <td className="px-3 py-2">
-                    <Link href={`/ventas/presupuestos/${row.id}`} className="text-red-600 hover:underline font-medium">
-                      {row.licitacionNo}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2">{row.compania}</td>
-                  <td className="px-3 py-2">{row.oportunidad?.cliente ?? "—"}</td>
-                  <td className="px-3 py-2">{estadoBadge(row.estado)}</td>
-                  <td className="px-3 py-2 text-right">{row.totalMensual != null ? formatCurrency(row.totalMensual) : "—"}</td>
-                  <td className="px-3 py-2 text-right">{row.totalConIva != null ? formatCurrency(row.totalConIva) : "—"}</td>
-                  <td className="px-3 py-2 text-center">{row.lineasCount}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{formatDate(row.updatedAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            {hasActiveColumnFilters(columnFilters) && (
+              <div className="flex justify-end px-3 py-1.5 border-b bg-slate-50">
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setColumnFilters(clearColumnFilters(columnFilterKeys))}>
+                  Limpiar filtros de columnas
+                </Button>
+              </div>
+            )}
+            <table className="w-full text-sm">
+              <thead>
+                <TableColumnFilterHead
+                  columns={columnDefs}
+                  rows={rows}
+                  filters={columnFilters}
+                  onFilterChange={onColumnFilterChange}
+                  filterRowClassName="bg-slate-50"
+                />
+              </thead>
+              <tbody>
+                {isLoading && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">Cargando…</td>
+                  </tr>
+                )}
+                {!isLoading && displayedRows.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
+                      No hay presupuestos. Cree uno desde una oportunidad en estado Participar.
+                    </td>
+                  </tr>
+                )}
+                {displayedRows.map((row) => (
+                  <tr key={row.id} className="border-t hover:bg-muted/40">
+                    <td className="px-3 py-2">
+                      <Link href={`/ventas/presupuestos/${row.id}`} className="text-red-600 hover:underline font-medium">
+                        {row.licitacionNo}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2">{row.compania}</td>
+                    <td className="px-3 py-2">{row.oportunidad?.cliente ?? "—"}</td>
+                    <td className="px-3 py-2">{estadoBadge(row.estado)}</td>
+                    <td className="px-3 py-2 text-right">{row.totalMensual != null ? formatCurrency(row.totalMensual) : "—"}</td>
+                    <td className="px-3 py-2 text-right">{row.totalConIva != null ? formatCurrency(row.totalConIva) : "—"}</td>
+                    <td className="px-3 py-2 text-center">{row.lineasCount}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{formatDate(row.updatedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         </div>
       </div>
 

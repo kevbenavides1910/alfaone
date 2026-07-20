@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import {
@@ -37,7 +37,7 @@ const NAV_GROUPS: GroupDef[] = [
   {
     id: "digital",
     label: "Digital",
-    hrefs: ["/facturacion-electronica", "/tickets-ti", "/formularios", "/empleados-naf", "/bandeco", "/recorridos"],
+    hrefs: ["/facturacion-electronica", "/tickets-ti", "/formularios", "/empleados-naf", "/naf-operaciones", "/bandeco", "/recorridos"],
   },
   {
     id: "reportes",

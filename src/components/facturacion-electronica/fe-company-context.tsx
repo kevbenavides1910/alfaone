@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { useCompanies, type CompanyRow } from "@/lib/hooks/use-companies";
 
 const FE_COMPANY_STORAGE_KEY = "fe-selected-company";

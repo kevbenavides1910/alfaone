@@ -1,14 +1,20 @@
 import type { PrismaClient } from "@prisma/client";
+import { syncContractAdministrations } from "@/modules/presupuestos/services/sync-contract-administrations";
 import { getEffectiveMonthlyBilling } from "@/modules/presupuestos/business/effectiveBilling";
 import {
   FACTURA_CLOSED_STATUSES,
   getDemandBillingForPeriod,
 } from "@/modules/presupuestos/business/demandBilling";
 import { resolveAdministrationBillingPeriod } from "@/modules/presupuestos/business/administration-billing-period";
+import { resolveEmisionSubtotals } from "@/modules/presupuestos/business/administration-billing-amount";
+import { resolveContractMonthlyBilling } from "@/modules/presupuestos/business/contractPeriodBilling";
+import { normalizeRequirementKey } from "@/modules/presupuestos/business/contractBillingRequirementsDefaults";
+import { computeServicePeriodForInvoice } from "@/lib/utils/format";
 
 type Db = Pick<
   PrismaClient,
   | "contract"
+  | "contractAdministration"
   | "facturaMensual"
   | "facturaRequisito"
   | "billingHistory"
@@ -131,6 +137,15 @@ export async function syncOpenFacturaEmisionesForContract(
 
   for (const factura of openFacturas) {
     const adminIds = new Set(contract.administrations.map((a) => a.id));
+
+    const legacyOrphans = factura.emisiones.filter((e) => !e.contractAdministrationId);
+    if (legacyOrphans.length > 0 && contract.administrations.length > 0) {
+      await db.facturaMensualEmision.deleteMany({
+        where: { id: { in: legacyOrphans.map((e) => e.id) } },
+      });
+      factura.emisiones = factura.emisiones.filter((e) => e.contractAdministrationId);
+    }
+
     const orphanIds = factura.emisiones
       .filter(
         (e) => e.contractAdministrationId && !adminIds.has(e.contractAdministrationId)
@@ -173,9 +188,11 @@ export async function syncOpenFacturaEmisionesForContract(
         where: { facturaMensualId: factura.id, facturaMensualEmisionId: emisionId },
         select: { requirementName: true },
       });
-      const existingNames = new Set(existingReqs.map((r) => r.requirementName));
+      const existingKeys = new Set(
+        existingReqs.map((r) => normalizeRequirementKey(r.requirementName))
+      );
       const toCreate = contract.billingRequirements.filter(
-        (req) => !existingNames.has(req.description)
+        (req) => !existingKeys.has(normalizeRequirementKey(req.description))
       );
       if (toCreate.length > 0) {
         await db.facturaRequisito.createMany({
@@ -190,12 +207,71 @@ export async function syncOpenFacturaEmisionesForContract(
         });
       }
     }
+
+    await cleanupLegacyFacturaRequisitos(db, factura.id);
+    await dedupeDuplicateFacturaRequisitos(db, factura.id);
   }
 }
 
-type BillingRequirementRow = { description: string; sortOrder: number };
+function requisitoKeepScore(r: {
+  filePath: string | null;
+  status: string;
+}): number {
+  return (r.filePath?.trim() ? 4 : 0) + (r.status === "COMPLETADO" ? 2 : 0);
+}
 
-/** Añade a facturas abiertas los requisitos del contrato que aún no existen en la factura. */
+/** Elimina filas duplicadas (misma emisión + mismo requisito). Conserva la más completa. */
+async function dedupeDuplicateFacturaRequisitos(
+  db: Pick<PrismaClient, "facturaRequisito">,
+  facturaId: string
+): Promise<number> {
+  const requisitos = await db.facturaRequisito.findMany({
+    where: { facturaMensualId: facturaId },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const groups = new Map<string, typeof requisitos>();
+  for (const r of requisitos) {
+    const key = `${r.facturaMensualEmisionId ?? "NULL"}::${normalizeRequirementKey(r.requirementName)}`;
+    const list = groups.get(key) ?? [];
+    list.push(r);
+    groups.set(key, list);
+  }
+
+  const toDelete: string[] = [];
+  for (const group of groups.values()) {
+    if (group.length <= 1) continue;
+    const sorted = [...group].sort((a, b) => {
+      const scoreDiff = requisitoKeepScore(b) - requisitoKeepScore(a);
+      if (scoreDiff !== 0) return scoreDiff;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+    toDelete.push(...sorted.slice(1).map((r) => r.id));
+  }
+
+  if (toDelete.length === 0) return 0;
+  await db.facturaRequisito.deleteMany({ where: { id: { in: toDelete } } });
+  return toDelete.length;
+}
+
+/** Elimina requisitos huérfanos a nivel factura cuando ya hay emisiones por administración. */
+async function cleanupLegacyFacturaRequisitos(
+  db: Pick<PrismaClient, "facturaMensualEmision" | "facturaRequisito">,
+  facturaId: string
+): Promise<void> {
+  const emisionCount = await db.facturaMensualEmision.count({
+    where: { facturaMensualId: facturaId },
+  });
+  if (emisionCount === 0) return;
+
+  await db.facturaRequisito.deleteMany({
+    where: { facturaMensualId: facturaId, facturaMensualEmisionId: null },
+  });
+}
+
+type BillingRequirementRow = { description: string; sortOrder: number; requiresEvidence: boolean };
+
+/** Añade requisitos solo en facturas sin emisiones (contrato con una administración legacy). */
 async function syncRequisitosForOpenFactura(
   db: Db,
   facturaId: string,
@@ -203,13 +279,20 @@ async function syncRequisitosForOpenFactura(
 ): Promise<void> {
   if (billingRequirements.length === 0) return;
 
+  const emisionCount = await db.facturaMensualEmision.count({
+    where: { facturaMensualId: facturaId },
+  });
+  if (emisionCount > 0) return;
+
   const existing = await db.facturaRequisito.findMany({
     where: { facturaMensualId: facturaId },
     select: { requirementName: true },
   });
-  const existingNames = new Set(existing.map((r) => r.requirementName));
+  const existingKeys = new Set(existing.map((r) => normalizeRequirementKey(r.requirementName)));
 
-  const toCreate = billingRequirements.filter((req) => !existingNames.has(req.description));
+  const toCreate = billingRequirements.filter(
+    (req) => !existingKeys.has(normalizeRequirementKey(req.description))
+  );
   if (toCreate.length === 0) return;
 
   await db.facturaRequisito.createMany({
@@ -218,15 +301,18 @@ async function syncRequisitosForOpenFactura(
       requirementName: req.description,
       sortOrder: req.sortOrder ?? index,
       status: "PENDIENTE" as const,
+      requiresEvidenceCopied: req.requiresEvidence,
     })),
   });
 }
 
-/** Sincroniza requisitos en todas las facturas abiertas de un contrato (p. ej. tras agregar requisito). */
+/** Sincroniza requisitos en facturas abiertas del contrato (por emisión si hay administraciones). */
 export async function syncOpenFacturaRequisitosForContract(
   db: Db,
   contractId: string
 ): Promise<void> {
+  await syncOpenFacturaEmisionesForContract(db, contractId);
+
   const contract = await db.contract.findUnique({
     where: { id: contractId },
     select: {
@@ -246,7 +332,41 @@ export async function syncOpenFacturaRequisitosForContract(
 
   for (const factura of openFacturas) {
     await syncRequisitosForOpenFactura(db, factura.id, reqs);
+    await dedupeDuplicateFacturaRequisitos(db, factura.id);
   }
+}
+
+/** Repara requisitos duplicados/huérfanos en facturas abiertas de un contrato. */
+export async function repairOpenFacturaRequisitosForContract(
+  db: Db,
+  contractId: string
+): Promise<{ removedLegacy: number; removedDuplicates: number }> {
+  const openFacturas = await db.facturaMensual.findMany({
+    where: {
+      contractId,
+      status: { notIn: ["FACTURADO", "COBRADO"] },
+    },
+    select: { id: true },
+  });
+
+  let removedLegacy = 0;
+  let removedDuplicates = 0;
+
+  await syncOpenFacturaRequisitosForContract(db, contractId);
+
+  for (const factura of openFacturas) {
+    const legacyBefore = await db.facturaRequisito.count({
+      where: { facturaMensualId: factura.id, facturaMensualEmisionId: null },
+    });
+    await cleanupLegacyFacturaRequisitos(db, factura.id);
+    const legacyAfter = await db.facturaRequisito.count({
+      where: { facturaMensualId: factura.id, facturaMensualEmisionId: null },
+    });
+    removedLegacy += legacyBefore - legacyAfter;
+    removedDuplicates += await dedupeDuplicateFacturaRequisitos(db, factura.id);
+  }
+
+  return { removedLegacy, removedDuplicates };
 }
 
 function resolveSubtotalForContract(
@@ -379,6 +499,13 @@ export async function syncFacturasForPeriod(
         },
       });
 
+      await syncContractAdministrations(
+        db,
+        contract.id,
+        contract.administrationsCount ?? 1,
+        createdById
+      );
+      await syncOpenFacturaEmisionesForContract(db, contract.id);
       await syncRequisitosForOpenFactura(db, existing.id, contract.billingRequirements);
       continue;
     }
@@ -400,15 +527,16 @@ export async function syncFacturasForPeriod(
         billingDayCopied: payload.billingDay,
         hiringTypeCopied: payload.hiringTypeCopied as never,
         createdById,
-        requisitos: {
-          create: contract.billingRequirements.map((req, index) => ({
-            requirementName: req.description,
-            sortOrder: req.sortOrder ?? index,
-            status: "PENDIENTE",
-          })),
-        },
       },
     });
+
+    await syncContractAdministrations(
+      db,
+      contract.id,
+      contract.administrationsCount ?? 1,
+      createdById
+    );
+    await syncOpenFacturaEmisionesForContract(db, contract.id);
   }
 }
 
@@ -424,17 +552,20 @@ export async function generateMonthlyInvoices(
 }
 
 export type CloseFacturaResult =
-  | { ok: true; facturaId: string }
+  | { ok: true; facturaId: string; emisionId?: string }
   | { ok: false; code: "NOT_FOUND" | "ALREADY_CLOSED" | "REQUISITOS_INCOMPLETOS" | "MONTO_PENDIENTE"; message: string; pending?: string[] };
 
 export async function closeFacturaMensual(
   db: Db,
   facturaId: string,
-  finalNotes?: string | null
+  options?: { finalNotes?: string | null; isReajuste?: boolean; emisionId?: string }
 ): Promise<CloseFacturaResult> {
   const factura = await db.facturaMensual.findUnique({
     where: { id: facturaId },
-    include: { requisitos: true },
+    include: {
+      requisitos: true,
+      emisiones: { orderBy: { sortOrder: "asc" } },
+    },
   });
 
   if (!factura) {
@@ -449,16 +580,87 @@ export async function closeFacturaMensual(
     };
   }
 
-  if (factura.status === "FACTURADO" || factura.status === "COBRADO") {
+  if (factura.status === "COBRADO") {
+    return { ok: false, code: "ALREADY_CLOSED", message: "La factura ya fue cobrada" };
+  }
+
+  const hasEmisiones = factura.emisiones.length > 0;
+
+  if (hasEmisiones) {
+    const emisionId = options?.emisionId?.trim();
+    if (!emisionId) {
+      return {
+        ok: false,
+        code: "REQUISITOS_INCOMPLETOS",
+        message: "Indique la administración a cerrar",
+      };
+    }
+
+    const emision = factura.emisiones.find((e) => e.id === emisionId);
+    if (!emision) {
+      return { ok: false, code: "NOT_FOUND", message: "Administración no encontrada en esta factura" };
+    }
+
+    if (emision.closedAt) {
+      return {
+        ok: false,
+        code: "ALREADY_CLOSED",
+        message: "Esta administración ya fue cerrada",
+      };
+    }
+
+    const emisionRequisitos = factura.requisitos.filter((r) => r.facturaMensualEmisionId === emisionId);
+    const pending = emisionRequisitos.filter((r) =>
+      r.requiresEvidenceCopied ? !r.filePath?.trim() : r.status !== "COMPLETADO"
+    );
+    if (pending.length > 0) {
+      return {
+        ok: false,
+        code: "REQUISITOS_INCOMPLETOS",
+        message: "Complete los requisitos de esta administración antes de cerrar",
+        pending: pending.map((r) => r.requirementName),
+      };
+    }
+
+    const closedAt = new Date();
+    await db.facturaMensualEmision.update({
+      where: { id: emisionId },
+      data: { closedAt },
+    });
+
+    const refreshedEmisiones = await db.facturaMensualEmision.findMany({
+      where: { facturaMensualId: facturaId },
+      select: { closedAt: true },
+    });
+    const allClosed = refreshedEmisiones.every((e) => e.closedAt != null);
+
+    await db.facturaMensual.update({
+      where: { id: facturaId },
+      data: {
+        status: allClosed ? "FACTURADO" : "EN_PROCESO",
+        closedAt: allClosed ? closedAt : null,
+        isReajuste: options?.isReajuste ?? factura.isReajuste,
+        ...(allClosed && options?.finalNotes !== undefined
+          ? { finalNotes: options.finalNotes }
+          : {}),
+      },
+    });
+
+    return { ok: true, facturaId, emisionId };
+  }
+
+  if (factura.status === "FACTURADO") {
     return { ok: false, code: "ALREADY_CLOSED", message: "La factura ya fue cerrada" };
   }
 
-  const pending = factura.requisitos.filter((r) => !r.filePath?.trim());
+  const pending = factura.requisitos.filter((r) =>
+    r.requiresEvidenceCopied ? !r.filePath?.trim() : r.status !== "COMPLETADO"
+  );
   if (pending.length > 0) {
     return {
       ok: false,
       code: "REQUISITOS_INCOMPLETOS",
-      message: "Todos los requisitos deben tener un archivo subido antes de cerrar",
+      message: "Todos los requisitos deben estar completos antes de cerrar",
       pending: pending.map((r) => r.requirementName),
     };
   }
@@ -468,7 +670,8 @@ export async function closeFacturaMensual(
     data: {
       status: "FACTURADO",
       closedAt: new Date(),
-      ...(finalNotes !== undefined ? { finalNotes } : {}),
+      isReajuste: options?.isReajuste ?? false,
+      ...(options?.finalNotes !== undefined ? { finalNotes: options.finalNotes } : {}),
     },
   });
 
@@ -571,6 +774,29 @@ export async function applyApprovedAmountChange(
   return { ok: true };
 }
 
+export function resolveServicePeriodDates(row: {
+  periodYear: number;
+  periodMonth: number;
+  billingPeriodFromDayCopied?: number | null;
+  billingPeriodToDayCopied?: number | null;
+  servicePeriodFromDate?: Date | null;
+  servicePeriodToDate?: Date | null;
+}): { from: Date; to: Date } {
+  if (row.servicePeriodFromDate && row.servicePeriodToDate) {
+    return { from: row.servicePeriodFromDate, to: row.servicePeriodToDate };
+  }
+  const computed = computeServicePeriodForInvoice(
+    row.periodYear,
+    row.periodMonth,
+    row.billingPeriodFromDayCopied ?? 1,
+    row.billingPeriodToDayCopied ?? 31
+  );
+  return {
+    from: row.servicePeriodFromDate ?? computed.from,
+    to: row.servicePeriodToDate ?? computed.to,
+  };
+}
+
 export function serializeFacturaMensual(
   row: {
     id: string;
@@ -583,6 +809,13 @@ export function serializeFacturaMensual(
     status: string;
     closedAt?: Date | null;
     invoiceNumber?: string | null;
+    documentNumber?: string | null;
+    billingPeriodFromDayCopied?: number | null;
+    billingPeriodToDayCopied?: number | null;
+    servicePeriodFromDate?: Date | null;
+    servicePeriodToDate?: Date | null;
+    invoiceReceivedAt?: Date | null;
+    isReajuste?: boolean;
     finalNotes: string | null;
     observationLog: string | null;
     subtotalCopied: { toString(): string };
@@ -596,20 +829,52 @@ export function serializeFacturaMensual(
     updatedAt: Date;
     requisitos?: {
       id: string;
+      facturaMensualEmisionId?: string | null;
       requirementName: string;
       status: string;
+      requiresEvidenceCopied: boolean;
       filePath: string | null;
       fileName: string | null;
       mimeType: string | null;
       sortOrder: number;
       uploadedAt: Date | null;
+      emision?: {
+        administrationNameCopied: string | null;
+        sortOrder: number;
+      } | null;
     }[];
     emisiones?: {
       id: string;
+      contractAdministrationId?: string | null;
       administrationNameCopied: string | null;
       managerNameCopied: string | null;
       zoneNameCopied: string | null;
       sortOrder: number;
+      closedAt?: Date | null;
+      invoiceNumber?: string | null;
+      documentNumber?: string | null;
+      invoiceReceivedAt?: Date | null;
+      subtotalFacturadoNaf?: { toString(): string } | number | null;
+      totalFacturadoNaf?: { toString(): string } | number | null;
+      subtotalCopied?: number | null;
+      totalCalculated?: number | null;
+      nafDocumentos?: {
+        id: string;
+        nafNoCia: string;
+        nafTipoDoc: string;
+        nafNoFactu: string;
+        nafNoFisico: string | null;
+        nafSerieFisico: string | null;
+        nafConsecutivoFe: string | null;
+        nafClaveFactura: string | null;
+        nafFecha: Date | null;
+        subtotal: { toString(): string } | number;
+        impuesto: { toString(): string } | number;
+        total: { toString(): string } | number;
+        amountSign: number;
+        signedTotal: { toString(): string } | number;
+        linkedAt: Date;
+      }[];
     }[];
     correctionReturnCount?: number;
     returnRequestStatus?: string | null;
@@ -618,7 +883,23 @@ export function serializeFacturaMensual(
     lastCorrectionType?: string | null;
     lastCorrectionPreviousSubtotal?: { toString(): string } | number | null;
     lastCorrectionReason?: string | null;
-    contract?: { licitacionNo?: string; client?: string; company?: string; hiringType?: string };
+    contract?: {
+      licitacionNo?: string;
+      client?: string;
+      company?: string;
+      hiringType?: string;
+      monthlyBilling?: { toString(): string };
+      billingHistory?: { periodMonth: Date; monthlyBilling: { toString(): string } }[];
+      demandBilling?: { periodYear: number; periodMonth: number; monthlyBilling: { toString(): string } }[];
+      administrations?: {
+        id: string;
+        billingLines: {
+          billingLineId: string;
+          monthlyAmount: { toString(): string } | null;
+          billingLine?: { monthlyAmount: { toString(): string } | null } | null;
+        }[];
+      }[];
+    };
   }
 ) {
   const amountDefined = row.status !== "PENDIENTE_DEFINIR";
@@ -628,6 +909,57 @@ export function serializeFacturaMensual(
     closedAtRaw != null ? facturaClosedOnTime(closedAtRaw, row.expectedIssueDate) : null;
   const closeDaysLate =
     closedAtRaw != null ? facturaCloseDaysLate(closedAtRaw, row.expectedIssueDate) : null;
+
+  const contractSubtotal = amountDefined ? toNum(row.subtotalCopied) : null;
+  const ivaPct = toNum(row.ivaPctCopied);
+  const administrations = row.contract?.administrations ?? [];
+  const emisiones = row.emisiones ?? [];
+  const emisionSubtotalsByAdmin = new Map<string, number>();
+  if (amountDefined && contractSubtotal != null && administrations.length > 0) {
+    const subs = resolveEmisionSubtotals(contractSubtotal, administrations, administrations.length);
+    administrations.forEach((a, i) => {
+      if (subs[i] != null) emisionSubtotalsByAdmin.set(a.id, subs[i]!);
+    });
+  }
+
+  const servicePeriod = resolveServicePeriodDates(row);
+
+  const contractVenta =
+    row.contract != null
+      ? resolveContractMonthlyBilling(
+          {
+            hiringType: row.contract.hiringType ?? row.hiringTypeCopied ?? "FIXED",
+            monthlyBilling: row.contract.monthlyBilling ?? row.subtotalCopied,
+          },
+          row.contract.billingHistory ?? [],
+          row.contract.demandBilling ?? [],
+          row.periodYear,
+          row.periodMonth
+        )
+      : { billing: null, amountDefined: false };
+  const contractVentaSubtotal =
+    contractVenta.amountDefined && contractVenta.billing != null ? contractVenta.billing : null;
+  const contractVentaTotal =
+    contractVentaSubtotal != null ? calculateInvoiceTotal(contractVentaSubtotal, ivaPct) : null;
+  const nafParentSubtotal = (() => {
+    const withNaf = emisiones.filter(
+      (e) => e.nafDocumentos && e.nafDocumentos.length > 0 && e.subtotalFacturadoNaf != null
+    );
+    if (withNaf.length === 0) return null;
+    // If any emisión has NAF links, official facturado is parent subtotal (already recomputed)
+    // or sum of NAF nets for linked + contract for unlinked — parent is source of truth after recompute.
+    return amountDefined ? toNum(row.subtotalCopied) : null;
+  })();
+  const facturadoSubtotal =
+    nafParentSubtotal != null
+      ? nafParentSubtotal
+      : amountDefined
+        ? toNum(row.subtotalCopied)
+        : null;
+  const ventaFacturadoDelta =
+    facturadoSubtotal != null && contractVentaSubtotal != null
+      ? Math.round((facturadoSubtotal - contractVentaSubtotal) * 100) / 100
+      : null;
 
   return {
     id: row.id,
@@ -644,11 +976,35 @@ export function serializeFacturaMensual(
     amountDefined,
     hiringTypeCopied: row.hiringTypeCopied ?? row.contract?.hiringType ?? "FIXED",
     invoiceNumber: row.invoiceNumber ?? null,
+    documentNumber: row.documentNumber ?? null,
+    billingPeriodFromDayCopied: row.billingPeriodFromDayCopied ?? 1,
+    billingPeriodToDayCopied: row.billingPeriodToDayCopied ?? 31,
+    servicePeriodFromDate: servicePeriod.from.toISOString(),
+    servicePeriodToDate: servicePeriod.to.toISOString(),
+    invoiceReceivedAt: row.invoiceReceivedAt?.toISOString() ?? null,
+    isReajuste: row.isReajuste ?? false,
     finalNotes: row.finalNotes,
     observationLog: row.observationLog,
     subtotalCopied: amountDefined ? toNum(row.subtotalCopied) : null,
     ivaPctCopied: toNum(row.ivaPctCopied),
     totalCalculated: amountDefined ? toNum(row.totalCalculated) : null,
+    contractVentaSubtotal,
+    contractVentaTotal,
+    ventaFacturadoDelta,
+    totalFacturadoNaf: (() => {
+      const vals = emisiones
+        .map((e) => (e.totalFacturadoNaf != null ? toNum(e.totalFacturadoNaf) : null))
+        .filter((v): v is number => v != null);
+      if (vals.length === 0) return null;
+      return Math.round(vals.reduce((a, b) => a + b, 0) * 100) / 100;
+    })(),
+    subtotalFacturadoNaf: (() => {
+      const vals = emisiones
+        .map((e) => (e.subtotalFacturadoNaf != null ? toNum(e.subtotalFacturadoNaf) : null))
+        .filter((v): v is number => v != null);
+      if (vals.length === 0) return null;
+      return Math.round(vals.reduce((a, b) => a + b, 0) * 100) / 100;
+    })(),
     clientNameCopied: row.clientNameCopied,
     companyCodeCopied: row.companyCodeCopied,
     billingDayCopied: row.billingDayCopied,
@@ -657,21 +1013,87 @@ export function serializeFacturaMensual(
     licitacionNo: row.contract?.licitacionNo,
     requisitos: (row.requisitos ?? []).map((r) => ({
       id: r.id,
+      facturaMensualEmisionId: r.facturaMensualEmisionId ?? null,
+      administrationName: r.emision?.administrationNameCopied ?? null,
       requirementName: r.requirementName,
       status: r.status,
+      requiresEvidence: r.requiresEvidenceCopied,
       fileName: r.fileName,
       hasFile: Boolean(r.filePath),
+      isComplete: r.requiresEvidenceCopied
+        ? Boolean(r.filePath)
+        : r.status === "COMPLETADO",
       sortOrder: r.sortOrder,
       uploadedAt: r.uploadedAt?.toISOString() ?? null,
       downloadUrl: r.filePath ? `/api/facturacion/${row.id}/requisitos/${r.id}/archivo` : null,
     })),
-    emisiones: (row.emisiones ?? []).map((e) => ({
-      id: e.id,
-      administrationName: e.administrationNameCopied,
-      managerName: e.managerNameCopied,
-      zoneName: e.zoneNameCopied,
-      sortOrder: e.sortOrder,
-    })),
+    emisiones: emisiones.map((e, idx) => {
+      const nafLinks = (e.nafDocumentos ?? []).map((n) => ({
+        id: n.id,
+        nafNoCia: n.nafNoCia,
+        nafTipoDoc: n.nafTipoDoc,
+        nafNoFactu: n.nafNoFactu,
+        nafNoFisico: n.nafNoFisico,
+        nafSerieFisico: n.nafSerieFisico,
+        nafConsecutivoFe: n.nafConsecutivoFe,
+        nafClaveFactura: n.nafClaveFactura,
+        nafFecha: n.nafFecha?.toISOString() ?? null,
+        subtotal: toNum(n.subtotal),
+        impuesto: toNum(n.impuesto),
+        total: toNum(n.total),
+        amountSign: n.amountSign,
+        signedTotal: toNum(n.signedTotal),
+        linkedAt: n.linkedAt.toISOString(),
+      }));
+      const hasNaf = nafLinks.length > 0;
+      const nafSubtotal = e.subtotalFacturadoNaf != null ? toNum(e.subtotalFacturadoNaf) : null;
+      const nafTotal = e.totalFacturadoNaf != null ? toNum(e.totalFacturadoNaf) : null;
+      const contractEmSubtotal =
+        (e.contractAdministrationId
+          ? emisionSubtotalsByAdmin.get(e.contractAdministrationId)
+          : undefined) ??
+        (emisionSubtotalsByAdmin.size > 0
+          ? [...emisionSubtotalsByAdmin.values()][idx]
+          : undefined) ??
+        null;
+      const emSubtotal = hasNaf && nafSubtotal != null ? nafSubtotal : contractEmSubtotal;
+      const emTotal =
+        hasNaf && nafTotal != null
+          ? nafTotal
+          : emSubtotal != null
+            ? calculateInvoiceTotal(emSubtotal, ivaPct)
+            : null;
+      const ventaDelta =
+        emSubtotal != null && contractEmSubtotal != null
+          ? Math.round((emSubtotal - contractEmSubtotal) * 100) / 100
+          : null;
+      return {
+        id: e.id,
+        administrationName: e.administrationNameCopied,
+        managerName: e.managerNameCopied,
+        zoneName: e.zoneNameCopied,
+        sortOrder: e.sortOrder,
+        closedAt: e.closedAt?.toISOString() ?? null,
+        invoiceNumber: e.invoiceNumber ?? null,
+        documentNumber: e.documentNumber ?? null,
+        invoiceReceivedAt: e.invoiceReceivedAt?.toISOString() ?? null,
+        status:
+          row.status === "COBRADO"
+            ? "COBRADO"
+            : e.closedAt
+              ? "FACTURADO"
+              : row.status,
+        subtotalCopied: emSubtotal,
+        totalCalculated: emTotal,
+        subtotalFacturadoNaf: nafSubtotal,
+        totalFacturadoNaf: nafTotal,
+        contractVentaSubtotal: contractEmSubtotal,
+        contractVentaTotal:
+          contractEmSubtotal != null ? calculateInvoiceTotal(contractEmSubtotal, ivaPct) : null,
+        ventaFacturadoDelta: ventaDelta,
+        nafLinks,
+      };
+    }),
     returnRequestStatus: (row.returnRequestStatus as "PENDING" | "APPROVED" | "REJECTED" | null) ?? null,
     returnRequestType: (row.returnRequestType as "DOCUMENTATION" | "AMOUNT" | null) ?? null,
     returnRequestRequestedSubtotal:

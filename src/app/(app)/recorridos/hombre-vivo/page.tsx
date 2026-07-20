@@ -1,13 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { TableColumnFilterHead, type TableColumnFilterDef } from "@/components/ui/table-column-filters";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { useQuery } from "@tanstack/react-query";
-import { HeartPulse, Search } from "lucide-react";
+import { HeartPulse, Search, FileSpreadsheet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/utils/format";
+import { exportRowsToExcel } from "@/lib/utils/excel-export";
 
 type WelfareHistoryResponse = {
   data: {
@@ -78,12 +81,43 @@ export default function HombreVivoHistorialPage() {
 
   const filas = data?.data.filas ?? [];
   const totales = data?.data.totales;
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  type Row = NonNullable<WelfareHistoryResponse["data"]>["filas"][number];
+  const columnDefs: TableColumnFilterDef<Row>[] = [
+    { key: "programada", label: "Programada", headerClassName: "py-2 pr-3", getValue: (r) => r.scheduledAt },
+    { key: "confirmada", label: "Confirmada", headerClassName: "py-2 pr-3", getValue: (r) => r.acknowledgedAt ?? "" },
+    { key: "ruta", label: "Ruta", headerClassName: "py-2 pr-3", getValue: (r) => r.routeCode ?? r.routeName ?? "" },
+    { key: "imei", label: "IMEI", headerClassName: "py-2 pr-3", getValue: (r) => r.imei },
+    { key: "empleado", label: "Empleado", headerClassName: "py-2 pr-3", getValue: (r) => r.employeeCode ?? "" },
+    { key: "origen", label: "Origen", headerClassName: "py-2 pr-3", getValue: (r) => r.sourceLabel ?? r.source ?? "" },
+    { key: "estado", label: "Estado", headerClassName: "py-2", getValue: (r) => r.statusLabel ?? r.status ?? "" },
+  ];
+  const displayedRows = filterRowsByColumnFilters(filas, columnFilters, columnDefs);
 
   function runSearch() {
     setQueryDesde(desde);
     setQueryHasta(hasta);
     setQueryImei(imei.trim());
     setQueryStatus(status);
+  }
+
+  function handleExport() {
+    if (filas.length === 0) return;
+    exportRowsToExcel({
+      filename: "recorridos_hombre_vivo",
+      sheetName: "Historial",
+      rows: filas.map((f) => ({
+        Programada: formatDateTime(f.scheduledAt),
+        Confirmada: f.acknowledgedAt ? formatDateTime(f.acknowledgedAt) : "",
+        Ruta: f.routeCode,
+        "Nombre ruta": f.routeName,
+        IMEI: f.imei,
+        Empleado: f.employeeCode ?? "",
+        Origen: f.sourceLabel,
+        Estado: f.statusLabel,
+      })),
+      columnWidths: [18, 18, 12, 24, 18, 12, 12, 14],
+    });
   }
 
   return (
@@ -140,6 +174,10 @@ export default function HombreVivoHistorialPage() {
           <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
             Actualizar
           </Button>
+          <Button variant="outline" onClick={handleExport} disabled={filas.length === 0}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Exportar Excel
+          </Button>
         </CardContent>
       </Card>
 
@@ -166,18 +204,24 @@ export default function HombreVivoHistorialPage() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="py-2 pr-3">Programada</th>
-                  <th className="py-2 pr-3">Confirmada</th>
-                  <th className="py-2 pr-3">Ruta</th>
-                  <th className="py-2 pr-3">IMEI</th>
-                  <th className="py-2 pr-3">Empleado</th>
-                  <th className="py-2 pr-3">Origen</th>
-                  <th className="py-2">Estado</th>
-                </tr>
+                <TableColumnFilterHead
+                  columns={columnDefs}
+                  rows={filas}
+                  filters={columnFilters}
+                  onFilterChange={(k, v) => {
+                    setColumnFilters((s) => ({ ...s, [k]: v }));
+                    if (k === "imei") {
+                      setQueryImei(v);
+                      setImei(v);
+                    } else if (k === "estado") {
+                      setQueryStatus(v);
+                      setStatus(v);
+                    }
+                  }}
+                />
               </thead>
               <tbody>
-                {filas.map((f) => (
+                {displayedRows.map((f) => (
                   <tr key={f.id} className="border-b border-border/60">
                     <td className="py-2 pr-3 whitespace-nowrap">{formatDateTime(f.scheduledAt)}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">

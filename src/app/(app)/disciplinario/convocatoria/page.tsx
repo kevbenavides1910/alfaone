@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
 import { addDays, format, parseISO, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils/cn";
-import { hasPermission } from "@/lib/permissions/check";
+import { canEditDisciplinaryConvocatoriaSession } from "@/modules/core/permissions";
 import {
   ConvocatoriaAgendaDialog,
   type ConvocatoriaAgendaEvent,
@@ -56,9 +56,7 @@ export default function DisciplinarioConvocatoriaPage() {
   const [week, setWeek] = useState(() => mondayIso(new Date()));
   const [editEvent, setEditEvent] = useState<ConvocatoriaAgendaEvent | null>(null);
   const { data: session } = useSession();
-  const canManage = session
-    ? hasPermission(session, "disciplinario.empleados", "edit")
-    : false;
+  const canManage = canEditDisciplinaryConvocatoriaSession(session ?? null);
 
   const { data, isLoading, isError, error } = useQuery<AgendaResponse>({
     queryKey: ["disciplinary-convocatoria-agenda", week],

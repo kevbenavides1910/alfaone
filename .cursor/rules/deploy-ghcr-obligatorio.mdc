@@ -1,0 +1,37 @@
+---
+description: Al pedir deploy, Cursor debe usar solo GHCR (nunca build local)
+alwaysApply: true
+---
+
+# Deploy — solo GHCR (obligatorio para agentes)
+
+Cuando el usuario pida **desplegar / deploy / subir a prod** Alfa One:
+
+## Comando permitido
+
+```bash
+cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
+npm run ops:deploy:ghcr
+```
+
+Equivale a pull estricto (`scripts/deploy-ghcr-only.sh`): **nunca** ejecuta `ops:deploy` (build local).
+
+## Flujo obligatorio del agente
+
+1. Path canónico únicamente (ver `deploy-solo-prod-path.mdc`).
+2. Si hay cambios sin commit/push: **commitear solo si el usuario lo pidió**; luego `git push origin HEAD` a `main`/`master`.
+3. Esperar imagen en GHCR del SHA (`docker manifest inspect` o workflow Publish GHCR).
+4. Si no hay login GHCR: `npm run ops:ghcr-login` (requiere `GHCR_TOKEN` con `read:packages`) — **no** inventar tokens; pedir al usuario.
+5. Correr `npm run ops:deploy:ghcr`.
+6. Si falla (dirty tree, sin imagen, denied): **abortar y explicar**. No hacer fallback a `ops:deploy`.
+
+## Prohibido
+
+- `npm run ops:deploy` (build local en el VPS)
+- `ops:deploy:auto` si puede caer a build local
+- Desplegar WIP sin push + imagen publicada
+- Afirmar “deploy OK” sin smoke/health del script
+
+## Excepción
+
+Solo si el usuario dice explícitamente: **“build local”** / **“compilar en el VPS”** / **`ops:deploy`**.

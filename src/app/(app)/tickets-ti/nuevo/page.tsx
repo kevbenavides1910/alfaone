@@ -17,7 +17,8 @@ import {
 import { TICKETS_ATTACHMENT_CONFIG } from "@/modules/tickets-ti/config/tickets.config.client";
 import { ticketsTiBackPath } from "@/modules/tickets-ti/routes";
 import { TICKET_CATEGORY_OTRO_CODE } from "@/modules/tickets-ti/business/category-codes";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client-session";
+import { TicketHistoryTable } from "@/components/tickets-ti/TicketHistoryTable";
 
 type Catalogs = {
   categories: { code: string; name: string }[];
@@ -90,7 +91,7 @@ export default function NuevoTicketPage() {
     (!requiresCategoryDetail || categoryDetail.trim());
 
   return (
-    <div className="p-6 max-w-2xl space-y-4">
+    <div className="p-6 max-w-6xl space-y-6">
       <Button variant="ghost" size="sm" asChild className="gap-1 -ml-2">
         <Link href={backHref}>
           <ArrowLeft className="h-4 w-4" />
@@ -102,7 +103,7 @@ export default function NuevoTicketPage() {
         <CardHeader>
           <CardTitle>Nuevo ticket</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 max-w-2xl">
           {isLoading ? (
             <p className="text-sm text-slate-500">Cargando catálogos…</p>
           ) : (
@@ -202,6 +203,8 @@ export default function NuevoTicketPage() {
           )}
         </CardContent>
       </Card>
+
+      <TicketHistoryTable personColumn="technician" />
     </div>
   );
 }
