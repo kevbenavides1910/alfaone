@@ -1,6 +1,11 @@
 /**
  * Siembra roles del sistema y permisos según el registro.
  * Ejecutar: npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed-roles.ts
+ *
+ * IMPORTANTE (producción):
+ * - Actualiza definiciones de Role / RolePermission.
+ * - NO reasigna usuarios que ya tienen roleId (roles personalizados).
+ * - Nunca ejecutar en prod sin confirmación explícita.
  */
 import { PrismaClient, PermissionLevel, UserRole } from "@prisma/client";
 
@@ -235,19 +240,21 @@ async function main() {
       });
     }
 
+    // Nunca sobrescribir roleId ya asignado (roles personalizados: ENCARGADO_*, SIG, etc.).
+    // Solo vincular usuarios del enum legacy que aún no tienen roleId.
     const updated = await prisma.user.updateMany({
-      where: { role: def.legacyRole },
+      where: { role: def.legacyRole, roleId: null },
       data: { roleId: role.id },
     });
-    console.log(`  ${def.code}: ${updated.count} usuario(s) vinculados`);
+    console.log(`  ${def.code}: ${updated.count} usuario(s) vinculados (solo roleId null)`);
   }
 
-  const adminRole = await prisma.role.findUnique({ where: { code: "ADMIN" } });
-  if (adminRole) {
-    await prisma.user.updateMany({
-      where: { roleId: null },
-      data: { roleId: adminRole.id },
-    });
+  // No asignar ADMIN a usuarios sin roleId: dejar null para revisión manual.
+  const orphans = await prisma.user.count({ where: { roleId: null } });
+  if (orphans > 0) {
+    console.warn(
+      `  Aviso: ${orphans} usuario(s) sin roleId. Asignar perfil en Mantenimiento → Usuarios.`,
+    );
   }
 
   console.log("Done.");

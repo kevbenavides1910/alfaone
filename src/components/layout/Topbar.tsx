@@ -4,13 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "@/lib/auth/client-session";
-import { LayoutGrid, LogOut, Menu } from "lucide-react";
+import { Bell, LayoutGrid, LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 import { loginCallbackUrl } from "@/lib/auth/logout";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
-import { NotificationCenterBell } from "@/components/notifications/NotificationCenterBell";
 
 interface TopbarProps {
   title?: string;
@@ -98,7 +97,18 @@ export function Topbar({
             {session?.user?.name}
           </span>
           {!onHome && <ThemeToggle />}
-          <NotificationCenterBell />
+          <button
+            type="button"
+            className={cn(
+              "relative flex items-center justify-center h-8 w-8 rounded-md transition-colors",
+              "text-muted-foreground hover:text-foreground hover:bg-muted",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            )}
+            aria-label="Notificaciones"
+          >
+            <Bell className="h-4 w-4" />
+            <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-red-500 ring-1 ring-card" />
+          </button>
           <Button
             variant="ghost"
             size="sm"

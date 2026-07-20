@@ -364,6 +364,18 @@ export const PERMISSION_REGISTRY = {
       },
     },
   },
+  solicitudesRrhh: {
+    label: "Solicitudes RRHH",
+    moduleId: "solicitudesRrhh" as const,
+    screens: {
+      ajustes: {
+        label: "Ajustes de constancias",
+        uiRoutes: ["/solicitudes-rrhh/ajustes"],
+        apiPrefixes: ["/api/solicitudes-rrhh/settings"],
+        actions: { view: "Ver ajustes", edit: "Configurar documentos y correo OTP" },
+      },
+    },
+  },
   empleados: {
     label: "Empleados",
     moduleId: "empleados" as const,
@@ -721,39 +733,45 @@ export const PERMISSION_REGISTRY = {
       },
     },
   },
-  bandeco: {
-    label: "Bandeco",
-    moduleId: "bandeco" as const,
+  monitoreo: {
+    label: "Monitoreo",
+    moduleId: "monitoreo" as const,
     screens: {
       consulta: {
         label: "Consulta de códigos",
-        uiRoutes: ["/bandeco"],
-        apiPrefixes: ["/api/bandeco/consulta"],
+        uiRoutes: ["/monitoreo"],
+        apiPrefixes: ["/api/monitoreo/consulta"],
         actions: { view: "Consultar códigos de alarma" },
       },
       operacion: {
         label: "Operación",
         uiRoutes: [
-          "/bandeco/activaciones",
-          "/bandeco/aperturas-cierres",
-          "/bandeco/eventos",
-          "/bandeco/pilas",
+          "/monitoreo/activaciones",
+          "/monitoreo/aperturas-cierres",
+          "/monitoreo/eventos",
+          "/monitoreo/pilas",
         ],
-        apiPrefixes: ["/api/bandeco/activaciones", "/api/bandeco/aperturas-cierres", "/api/bandeco/eventos"],
+        apiPrefixes: [
+          "/api/monitoreo/activaciones",
+          "/api/monitoreo/aperturas-cierres",
+          "/api/monitoreo/eventos",
+          "/api/monitoreo/pilas-llenado",
+          "/api/monitoreo/imagenes",
+        ],
         actions: { view: "Ver operaciones", edit: "Registrar operaciones" },
       },
       registros: {
         label: "Registros e informes",
-        uiRoutes: ["/bandeco/registro", "/bandeco/informe-semanal"],
-        apiPrefixes: ["/api/bandeco/informe-semanal"],
+        uiRoutes: ["/monitoreo/registro", "/monitoreo/informe-semanal"],
+        apiPrefixes: ["/api/monitoreo/informe-semanal"],
         actions: { view: "Consultar registros e informe semanal" },
       },
       mantenimientos: {
         label: "Mantenimientos",
-        uiRoutes: ["/bandeco/mantenimientos"],
-        apiPrefixes: ["/api/bandeco"],
+        uiRoutes: ["/monitoreo/mantenimientos"],
+        apiPrefixes: ["/api/monitoreo"],
         actions: {
-          view: "Ver catálogos Bandeco",
+          view: "Ver catálogos de monitoreo",
           edit: "Editar catálogos",
           admin: "Importar y eliminar registros",
         },
@@ -882,6 +900,7 @@ export const HOME_MODULE_PERMISSION_GROUPS: {
   { tileId: "gastos", label: "Gastos", moduleKeys: ["gastos"] },
   { tileId: "disciplinario", label: "Disciplinario", moduleKeys: ["disciplinario"] },
   { tileId: "empleados", label: "Empleados", moduleKeys: ["empleados"] },
+  { tileId: "solicitudes_rrhh", label: "Solicitudes RRHH", moduleKeys: ["solicitudesRrhh"] },
   { tileId: "inventario", label: "Inventario", moduleKeys: ["inventario"] },
   { tileId: "sig", label: "SIG", moduleKeys: ["sig"] },
   { tileId: "ventas", label: "Ventas", moduleKeys: ["ventas"] },
@@ -895,7 +914,7 @@ export const HOME_MODULE_PERMISSION_GROUPS: {
   { tileId: "empleados_naf", label: "Empleados NAF", moduleKeys: ["empleadosNaf"] },
   { tileId: "expediente_digital", label: "Expediente digital", moduleKeys: ["expedienteDigital"] },
   { tileId: "naf_operaciones", label: "Operaciones NAF", moduleKeys: ["nafOperaciones"] },
-  { tileId: "bandeco", label: "Monitoreo Bandeco", moduleKeys: ["bandeco"] },
+  { tileId: "monitoreo", label: "Monitoreo", moduleKeys: ["monitoreo"] },
   { tileId: "recorridos", label: "Recorrido de marcas", moduleKeys: ["recorridos"] },
   { tileId: "mantenimiento", label: "Mantenimiento", moduleKeys: ["plataforma"] },
 ];

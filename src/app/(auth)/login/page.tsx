@@ -265,8 +265,14 @@ function LoginPageContent() {
           )}
         </div>
 
-        <p className="mt-6 text-center text-xs text-gray-600">
-          {APP_NAME} · Grupo Corporativo Alfa
+        <p className="mt-6 text-center text-xs text-gray-600 space-y-2">
+          <span className="block">{APP_NAME} · Grupo Corporativo Alfa</span>
+          <Link
+            href="/solicitudes-rrhh"
+            className="inline-block text-gray-500 hover:text-red-400 transition-colors"
+          >
+            Solicitar constancias RRHH
+          </Link>
         </p>
       </div>
     </div>

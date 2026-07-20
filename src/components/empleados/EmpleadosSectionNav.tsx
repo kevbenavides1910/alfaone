@@ -34,27 +34,6 @@ const TABS: Tab[] = [
     href: "/empleados/contratos",
     label: "Conciliación contratos",
     permission: "empleados.contratos",
-    isActive: (p) =>
-      p === "/empleados/contratos" ||
-      (p.startsWith("/empleados/contratos/") &&
-        !p.startsWith("/empleados/contratos/photorec") &&
-        !p.startsWith("/empleados/contratos/reconstruccion") &&
-        !p.startsWith("/empleados/contratos/faltantes-e5")),
-  },
-  {
-    href: "/empleados/contratos/photorec",
-    label: "Revisión PhotoRec",
-    permission: "empleados.contratos",
-  },
-  {
-    href: "/empleados/contratos/reconstruccion",
-    label: "E5 reconstruidos",
-    permission: "empleados.contratos",
-  },
-  {
-    href: "/empleados/contratos/faltantes-e5",
-    label: "Sin E5 por zona",
-    permission: "empleados.contratos",
   },
   {
     href: "/empleados-naf",

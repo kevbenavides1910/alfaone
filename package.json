@@ -30,7 +30,7 @@
     "db:fix-user-role-enum": "prisma db execute --file prisma/fix-user-role-enum.sql --schema prisma/schema.prisma",
     "db:migrate": "prisma migrate dev",
     "db:seed": "ts-node prisma/seed/seed.ts",
-    "db:seed-roles": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed/seed-roles.ts",
+    "db:seed-roles": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed-roles.ts",
     "db:seed-syntra": "node prisma/seed/seed-syntra-device.mjs",
     "db:reset-admin-passwords": "node prisma/tools/reset-admin-password.js",
     "db:clear-business": "ts-node prisma/tools/clear-business-data.ts",

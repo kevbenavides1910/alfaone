@@ -15,8 +15,9 @@ export type AppModuleId =
   | "recorridos"
   | "ticketsTi"
   | "formularios"
-  | "bandeco"
+  | "monitoreo"
   | "expedienteDigital"
+  | "solicitudesRrhh"
   | "plataforma";
 
 export type AppModuleMeta = {

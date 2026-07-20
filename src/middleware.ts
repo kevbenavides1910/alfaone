@@ -6,6 +6,18 @@ import { isSelfAuthenticatedCronApi } from "@/lib/api/cron-auth";
 
 const PUBLIC_PATHS = ["/login", "/api/branding"];
 
+/** APIs públicas de constancias RRHH (OTP + descarga). Settings queda autenticado. */
+const HR_DOC_PUBLIC_API = [
+  "/api/solicitudes-rrhh/lookup",
+  "/api/solicitudes-rrhh/request-otp",
+  "/api/solicitudes-rrhh/verify-otp",
+  "/api/solicitudes-rrhh/download",
+];
+
+function isHrDocumentPublicApi(pathname: string): boolean {
+  return HR_DOC_PUBLIC_API.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
 function isSyntraPublicRoute(pathname: string): boolean {
   return pathname === "/api/syntra/auth/login";
 }
@@ -23,7 +35,8 @@ function isNextAuthPublicRoute(pathname: string): boolean {
 function isPublicPath(pathname: string): boolean {
   return (
     PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
-    isNextAuthPublicRoute(pathname)
+    isNextAuthPublicRoute(pathname) ||
+    isHrDocumentPublicApi(pathname)
   );
 }
 
@@ -59,6 +72,10 @@ export async function middleware(req: NextRequest) {
     if (req.method !== "GET" && req.method !== "HEAD") {
       return NextResponse.json({ error: { message: "Método no permitido" } }, { status: 405 });
     }
+    return NextResponse.next();
+  }
+
+  if (isHrDocumentPublicApi(pathname)) {
     return NextResponse.next();
   }
 

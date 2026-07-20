@@ -95,11 +95,6 @@ export function expandFacturasForList(rows: FacturaMensualRow[]): FacturaListExp
         emisionTotal: emisiones.length,
         status: em.status ?? factura.status,
         closedAt: em.closedAt ?? factura.closedAt,
-        invoiceNumber: em.invoiceNumber ?? factura.invoiceNumber,
-        documentNumber: em.documentNumber ?? factura.documentNumber,
-        subtotalCopied: em.subtotalCopied ?? factura.subtotalCopied,
-        totalCalculated: em.totalCalculated ?? factura.totalCalculated,
-        ventaFacturadoDelta: em.ventaFacturadoDelta ?? factura.ventaFacturadoDelta,
       });
     });
   }

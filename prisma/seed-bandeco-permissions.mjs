@@ -1,5 +1,5 @@
 /**
- * Añade permisos del módulo Bandeco al rol ADMIN y SUPERVISOR.
+ * Añade permisos del módulo Monitoreo al rol ADMIN y SUPERVISOR.
  * Ejecutar: node prisma/seed-bandeco-permissions.mjs
  */
 import { PrismaClient } from "@prisma/client";
@@ -7,10 +7,10 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 const KEYS = [
-  "bandeco.consulta",
-  "bandeco.operacion",
-  "bandeco.registros",
-  "bandeco.mantenimientos",
+  "monitoreo.consulta",
+  "monitoreo.operacion",
+  "monitoreo.registros",
+  "monitoreo.mantenimientos",
 ];
 
 const ROLE_LEVELS = {
@@ -32,7 +32,7 @@ async function main() {
         update: { level },
       });
     }
-    console.log(`Permisos bandeco → ${roleCode} (${level})`);
+    console.log(`Permisos monitoreo → ${roleCode} (${level})`);
   }
 }
 

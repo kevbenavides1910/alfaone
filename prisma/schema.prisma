@@ -1783,6 +1783,48 @@ model AppPlatformSettings {
   @@map("app_platform_settings")
 }
 
+/// Ajustes de solicitudes públicas de documentos RRHH (fila única id = default).
+model HrDocumentRequestSettings {
+  id                    String   @id @default("default")
+  signerName            String   @default("LOURDES CAMBRONERO JIMENEZ")
+  signerTitle           String   @default("DEPARTAMENTO DE RECURSOS HUMANOS")
+  companyLegalName      String   @default("GRUPO CORPORATIVO SEGURIDAD ALFA S.A.")
+  companyIdNumber       String   @default("3-101-295842")
+  companyAddress        String   @default("RIO SEGUNDO ALAJUELA, FRENTE HOTEL LAS PALMAS")
+  companyPhone          String   @default("TEL: 4101-0800 EXT 120")
+  /// Párrafo de empresas del grupo (carta FCL).
+  corporateGroupText    String   @default("La compañía Consorcio Seguridad Alfa S.A., Servicios Múltiples Bena S.A., Seguridad Tango S.A., Seguridad Alfa S.A., Servicio de Monitoreo Electrónico Alfa S.A., Alfatronic S.A., Servicio Control y Vigilancia Joben S.A., Servicios Vigilancia Operativo Benlo, Bebidas del Rancho S.A., Asesoría y Capacitaciones Empresarial S.A., Alfa Secure S.A. pertenecen a Grupo Corporativo Seguridad Alfa S.A.") @db.Text
+  emailFixedCc          String?  @db.Text
+  otpSubjectTemplate    String   @default("Código de verificación — {{tramite}}")
+  otpBodyTemplate       String   @default("Hola,\n\nTu código de verificación para {{tramite}} es: {{codigo}}\n\nExpira en 10 minutos. Si no solicitaste este documento, ignora este mensaje.\n\nAlfa One · Recursos Humanos") @db.Text
+  updatedAt             DateTime @updatedAt
+
+  @@map("hr_document_request_settings")
+}
+
+/// Sesión OTP / descarga de solicitud pública de documentos RRHH.
+model HrDocumentRequestSession {
+  id                  String    @id @default(cuid())
+  cedulaNormalizada   String
+  tramite             String
+  email               String
+  codeHash            String
+  expiresAt           DateTime
+  verifiedAt          DateTime?
+  downloadTokenHash   String?
+  downloadExpiresAt   DateTime?
+  downloadUsedAt      DateTime?
+  /// Snapshot del empleo al solicitar (nombre, fechas, puesto, empresa, etc.).
+  empleoSnapshot      Json
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([cedulaNormalizada, createdAt])
+  @@index([downloadTokenHash])
+  @@index([expiresAt])
+  @@map("hr_document_request_sessions")
+}
+
 /// Ajustes de correo de cobro (fila única id = default): plantillas y SMTP.
 model AppFacturacionCobroSettings {
   id                                  String    @id @default("default")
@@ -2411,7 +2453,7 @@ model PatrolGpsTrack {
   @@map("patrol_gps_tracks")
 }
 
-// ─── Módulo Bandeco (monitoreo de alarmas) ────────────────────────────────────
+// ─── Módulo Monitoreo (alarmas; tablas históricas bandeco_*) ──────────────────
 
 /// Catálogo principal: código de alarma → finca, zona, motorizado, contactos.
 model BandecoAlarmCode {
@@ -2496,7 +2538,32 @@ model BandecoPilaFinca {
   zonaMotorizado String?
   observaciones  String?
 
+  llenados BandecoPilaLlenado[]
+
   @@map("bandeco_pila_fincas")
+}
+
+/// Registro diario de llenado de pilas (operación).
+model BandecoPilaLlenado {
+  id               String          @id @default(cuid())
+  fecha            DateTime        @db.Date
+  finca            String
+  pilaFincaId      String?
+  pilaFinca        BandecoPilaFinca? @relation(fields: [pilaFincaId], references: [id], onDelete: SetNull)
+  desmane          String?
+  paneo            String?
+  observaciones    String?
+  recomendaciones  String?         @db.Text
+  operadorName     String
+  operadorId       String?
+  imagenes         Json?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([fecha, finca])
+  @@index([fecha])
+  @@index([finca])
+  @@map("bandeco_pila_llenados")
 }
 
 /// Registro de activaciones (hoja REGISTRO).
@@ -2519,6 +2586,7 @@ model BandecoActivacion {
   informe         String?           @db.Text
   mensaje         String?           @db.Text
   tipoActivacion  String?
+  imagenes        Json?
 
   @@index([activatedAt])
   @@index([alarmNumber])
@@ -2554,6 +2622,7 @@ model BandecoEvento {
   motivo       String?
   informe      String   @db.Text
   operadorName String
+  imagenes     Json?
   createdAt    DateTime @default(now())
 
   @@index([fecha])

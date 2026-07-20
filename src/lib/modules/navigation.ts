@@ -22,6 +22,7 @@ import {
   ClipboardList,
   UsersRound,
   FolderOpen,
+  ScrollText,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
 
@@ -76,6 +77,13 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     icon: UserCircle,
     moduleId: "empleados",
     isActive: (p) => p.startsWith("/empleados") && !p.startsWith("/empleados-naf"),
+  },
+  {
+    href: "/solicitudes-rrhh/ajustes",
+    label: "Solicitudes RRHH",
+    icon: ScrollText,
+    moduleId: "solicitudesRrhh",
+    isActive: (p) => p.startsWith("/solicitudes-rrhh"),
   },
   {
     href: "/sig",
@@ -134,11 +142,11 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     isActive: (p) => p.startsWith("/empleados-naf"),
   },
   {
-    href: "/bandeco",
-    label: "Monitoreo Bandeco",
+    href: "/monitoreo",
+    label: "Monitoreo",
     icon: Bell,
-    moduleId: "bandeco",
-    isActive: (p) => p.startsWith("/bandeco"),
+    moduleId: "monitoreo",
+    isActive: (p) => p.startsWith("/monitoreo"),
   },
   {
     href: "/recorridos",

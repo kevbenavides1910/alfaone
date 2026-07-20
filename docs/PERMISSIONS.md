@@ -49,5 +49,6 @@ Ver `allPermissionKeys()` en el registro. Ejemplos:
 - `presupuestos.contracts`
 - `gastos.expenses`, `gastos.expenses_approvals`, `gastos.reports_monthly`
 - `disciplinario.import`, `disciplinario.empleados`
+- `solicitudesRrhh.ajustes` — configuración de constancias públicas (FCL / carta de servicio)
 - `inventario.assets`
 - `plataforma.users`, `plataforma.roles`, `plataforma.catalogs`

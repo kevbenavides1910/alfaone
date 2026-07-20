@@ -7,6 +7,7 @@ export interface PlatformMailOptions {
   subject: string;
   html: string;
   text?: string;
+  cc?: string | string[];
 }
 
 /** Lee la configuración SMTP de plataforma y envía un correo. */
@@ -33,6 +34,7 @@ export async function sendPlatformMail(opts: PlatformMailOptions) {
   await transport.sendMail({
     from: cfg.smtpFrom,
     to: opts.to,
+    cc: opts.cc,
     subject: opts.subject,
     html: opts.html,
     text: opts.text,

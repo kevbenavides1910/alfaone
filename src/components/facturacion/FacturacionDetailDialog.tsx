@@ -7,9 +7,7 @@ import {
   CheckCircle2,
   Circle,
   ExternalLink,
-  Link2,
   Loader2,
-  Trash2,
   Upload,
   XCircle,
 } from "lucide-react";
@@ -85,34 +83,10 @@ export type FacturaMensualRow = {
     zoneName?: string | null;
     sortOrder?: number;
     closedAt?: string | null;
-    invoiceNumber?: string | null;
-    documentNumber?: string | null;
-    invoiceReceivedAt?: string | null;
     status?: keyof typeof FACTURA_MENSUAL_STATUS_LABELS;
     subtotalCopied?: number | null;
     totalCalculated?: number | null;
-    subtotalFacturadoNaf?: number | null;
-    totalFacturadoNaf?: number | null;
-    contractVentaSubtotal?: number | null;
-    contractVentaTotal?: number | null;
-    ventaFacturadoDelta?: number | null;
-    nafLinks?: {
-      id: string;
-      nafNoCia: string;
-      nafTipoDoc: string;
-      nafNoFactu: string;
-      nafNoFisico: string | null;
-      nafConsecutivoFe?: string | null;
-      subtotal: number;
-      impuesto: number;
-      total: number;
-      amountSign: number;
-      signedTotal: number;
-      linkedAt: string;
-    }[];
   }[];
-  totalFacturadoNaf?: number | null;
-  subtotalFacturadoNaf?: number | null;
   returnRequestStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   returnRequestType?: "DOCUMENTATION" | "AMOUNT" | null;
   returnRequestRequestedSubtotal?: number | null;
@@ -159,8 +133,6 @@ export function FacturacionDetailDialog({
   const [servicePeriodToDate, setServicePeriodToDate] = useState("");
   const [invoiceReceivedAt, setInvoiceReceivedAt] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [invoiceReceivedAtDirty, setInvoiceReceivedAtDirty] = useState(false);
-  const [dueDateDirty, setDueDateDirty] = useState(false);
   const [isReajuste, setIsReajuste] = useState(false);
   const [returnReason, setReturnReason] = useState("");
   const [requestedSubtotal, setRequestedSubtotal] = useState("");
@@ -168,58 +140,24 @@ export function FacturacionDetailDialog({
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [viewEmisionId, setViewEmisionId] = useState<string | null>(null);
-  const [nafSearch, setNafSearch] = useState("");
-  const [nafCandidates, setNafCandidates] = useState<
-    {
-      noCia: string;
-      tipoDoc: string;
-      noFactu: string;
-      noFisico: string | null;
-      consecutivoFe?: string | null;
-      cliente: string;
-      total: number;
-      fecha: string;
-      yaLigado?: boolean;
-    }[]
-  >([]);
-  const [nafLoading, setNafLoading] = useState(false);
-  const [nafBusyId, setNafBusyId] = useState<string | null>(null);
-
-  // Seed form only when opening / switching factura — avoid wiping unsaved dates on NAF invalidate.
-  useEffect(() => {
-    if (!open || !factura) return;
-    setObservationLog(factura.observationLog ?? "");
-    setFinalNotes(factura.finalNotes ?? "");
-    setInvoiceNumber(factura.invoiceNumber ?? "");
-    setDocumentNumber(factura.documentNumber ?? "");
-    setServicePeriodFromDate(calendarDateInputValue(factura.servicePeriodFromDate ?? ""));
-    setServicePeriodToDate(calendarDateInputValue(factura.servicePeriodToDate ?? ""));
-    setInvoiceReceivedAt(calendarDateInputValue(factura.invoiceReceivedAt ?? ""));
-    setDueDate(calendarDateInputValue(factura.dueDate));
-    setInvoiceReceivedAtDirty(false);
-    setDueDateDirty(false);
-    setIsReajuste(factura.isReajuste ?? false);
-  }, [open, factura?.id]);
 
   useEffect(() => {
-    if (!open || !factura) return;
-    const em =
-      (viewEmisionId || focusedEmisionId)
-        ? factura.emisiones?.find((e) => e.id === (viewEmisionId || focusedEmisionId))
-        : null;
-    if (!em) return;
-    setInvoiceNumber(em.invoiceNumber ?? factura.invoiceNumber ?? "");
-    setDocumentNumber(em.documentNumber ?? factura.documentNumber ?? "");
-    if (em.invoiceReceivedAt) {
-      setInvoiceReceivedAt(calendarDateInputValue(em.invoiceReceivedAt));
+    if (factura) {
+      setObservationLog(factura.observationLog ?? "");
+      setFinalNotes(factura.finalNotes ?? "");
+      setInvoiceNumber(factura.invoiceNumber ?? "");
+      setDocumentNumber(factura.documentNumber ?? "");
+      setServicePeriodFromDate(calendarDateInputValue(factura.servicePeriodFromDate ?? ""));
+      setServicePeriodToDate(calendarDateInputValue(factura.servicePeriodToDate ?? ""));
+      setInvoiceReceivedAt(calendarDateInputValue(factura.invoiceReceivedAt ?? ""));
+      setDueDate(calendarDateInputValue(factura.dueDate));
+      setIsReajuste(factura.isReajuste ?? false);
     }
-  }, [open, factura?.id, viewEmisionId, focusedEmisionId]);
+  }, [factura]);
 
   useEffect(() => {
     if (!open) {
       setViewEmisionId(null);
-      setNafSearch("");
-      setNafCandidates([]);
       return;
     }
     if (focusedEmisionId) {
@@ -456,127 +394,6 @@ export function FacturacionDetailDialog({
     activeRequisitos.length === 0 ||
     activeRequisitos.every((r) => r.isComplete);
 
-
-  const nafLinks = focusedEmision?.nafLinks ?? [];
-  const hasNafLinks = nafLinks.length > 0;
-  const emisionIdForNaf =
-    effectiveFocusedEmisionId ?? (!hasEmisiones ? null : factura?.emisiones?.[0]?.id ?? null);
-
-  async function searchNafCandidates() {
-    if (!factura || !emisionIdForNaf) return;
-    setNafLoading(true);
-    try {
-      const params = new URLSearchParams({
-        includeSearch: "1",
-        periodMonth: String(factura.periodMonth),
-        periodYear: String(factura.periodYear),
-      });
-      if (nafSearch.trim()) params.set("search", nafSearch.trim());
-      const r = await fetch(
-        `/api/facturacion/${factura.id}/emisiones/${emisionIdForNaf}/naf-docs?${params}`
-      );
-      const json = await r.json();
-      if (json.error) throw new Error(json.error.message || "Error al buscar NAF");
-      setNafCandidates(json.data?.candidates?.rows ?? []);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al buscar NAF");
-    } finally {
-      setNafLoading(false);
-    }
-  }
-
-  async function linkNafDoc(doc: {
-    noCia: string;
-    tipoDoc: string;
-    noFactu: string;
-    noFisico?: string | null;
-    consecutivoFe?: string | null;
-  }) {
-    if (!factura || !emisionIdForNaf) return;
-    const key = `${doc.noCia}-${doc.tipoDoc}-${doc.noFactu}`;
-    setNafBusyId(key);
-    try {
-      const r = await fetch(
-        `/api/facturacion/${factura.id}/emisiones/${emisionIdForNaf}/naf-docs`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            noCia: doc.noCia,
-            tipoDoc: doc.tipoDoc,
-            noFactu: doc.noFactu,
-            // Only send dates the user explicitly changed; otherwise NAF FECHA/PLAZO apply
-            ...(invoiceReceivedAtDirty && invoiceReceivedAt
-              ? { invoiceReceivedAt }
-              : {}),
-            ...(dueDateDirty && dueDate && !isClosed ? { dueDate } : {}),
-          }),
-        }
-      );
-      const json = await r.json();
-      if (json.error) throw new Error(json.error.message || "Error al ligar");
-      const data = json.data as {
-        link?: {
-          nafNoFisico?: string | null;
-          nafConsecutivoFe?: string | null;
-        };
-        invoiceNumber?: string | null;
-        documentNumber?: string | null;
-        invoiceReceivedAt?: string | null;
-        dueDate?: string | null;
-      };
-      const electronic =
-        data.invoiceNumber?.trim() ||
-        data.link?.nafConsecutivoFe?.trim() ||
-        doc.consecutivoFe?.trim() ||
-        "";
-      const physical =
-        data.documentNumber?.trim() ||
-        data.link?.nafNoFisico?.trim() ||
-        doc.noFisico?.trim() ||
-        "";
-      if (electronic) setInvoiceNumber(electronic);
-      if (physical) setDocumentNumber(physical);
-      if (!invoiceReceivedAtDirty && data.invoiceReceivedAt) {
-        setInvoiceReceivedAt(calendarDateInputValue(data.invoiceReceivedAt));
-      }
-      if (!dueDateDirty && data.dueDate && !isClosed) {
-        setDueDate(calendarDateInputValue(data.dueDate));
-      }
-      qc.invalidateQueries({ queryKey: ["facturacion"] });
-      qc.invalidateQueries({ queryKey: ["facturacion-documentos-naf"] });
-      toast.success("Documento NAF ligado");
-      setNafCandidates((prev) =>
-        prev.filter((c) => !(c.noCia === doc.noCia && c.tipoDoc === doc.tipoDoc && c.noFactu === doc.noFactu))
-      );
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al ligar");
-    } finally {
-      setNafBusyId(null);
-    }
-  }
-
-  async function unlinkNafDoc(linkId: string) {
-    if (!factura || !emisionIdForNaf) return;
-    setNafBusyId(linkId);
-    try {
-      const r = await fetch(
-        `/api/facturacion/${factura.id}/emisiones/${emisionIdForNaf}/naf-docs?linkId=${encodeURIComponent(linkId)}`,
-        { method: "DELETE" }
-      );
-      const json = await r.json();
-      if (json.error) throw new Error(json.error.message || "Error al desligar");
-      qc.invalidateQueries({ queryKey: ["facturacion"] });
-      qc.invalidateQueries({ queryKey: ["facturacion-documentos-naf"] });
-      toast.success("Documento NAF desligado");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al desligar");
-    } finally {
-      setNafBusyId(null);
-    }
-  }
-
-
   if (!factura) return null;
 
   return (
@@ -613,199 +430,30 @@ export function FacturacionDetailDialog({
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm bg-slate-50 rounded-lg p-3">
+        <div className="grid grid-cols-3 gap-3 text-sm bg-slate-50 rounded-lg p-3">
           <div>
-            <p className="text-xs text-slate-500">Venta contrato</p>
+            <p className="text-xs text-slate-500">Subtotal</p>
             <p className="font-semibold">
-              {(focusedEmision?.contractVentaSubtotal ?? factura.contractVentaSubtotal) != null
-                ? formatCurrency(focusedEmision?.contractVentaSubtotal ?? factura.contractVentaSubtotal!)
-                : "—"}
+              {factura.amountDefined &&
+              (focusedEmision?.subtotalCopied != null || factura.subtotalCopied != null)
+                ? formatCurrency(focusedEmision?.subtotalCopied ?? factura.subtotalCopied!)
+                : "Pendiente de definir"}
             </p>
           </div>
           <div>
-            <p className="text-xs text-slate-500">Facturado NAF (neto)</p>
-            <p className="font-semibold">
-              {(focusedEmision?.subtotalFacturadoNaf ??
-                focusedEmision?.subtotalCopied ??
-                factura.subtotalFacturadoNaf ??
-                factura.subtotalCopied) != null
-                ? formatCurrency(
-                    focusedEmision?.subtotalFacturadoNaf ??
-                      focusedEmision?.subtotalCopied ??
-                      factura.subtotalFacturadoNaf ??
-                      factura.subtotalCopied!
-                  )
-                : "Pendiente"}
-            </p>
+            <p className="text-xs text-slate-500">IVA</p>
+            <p className="font-semibold">{factura.ivaPctCopied.toFixed(2)}%</p>
           </div>
           <div>
-            <p className="text-xs text-slate-500">Diferencia</p>
-            <p
-              className={`font-semibold ${
-                (focusedEmision?.ventaFacturadoDelta ?? factura.ventaFacturadoDelta ?? 0) === 0
-                  ? "text-slate-700"
-                  : (focusedEmision?.ventaFacturadoDelta ?? factura.ventaFacturadoDelta ?? 0) > 0
-                    ? "text-amber-700"
-                    : "text-rose-700"
-              }`}
-            >
-              {(focusedEmision?.ventaFacturadoDelta ?? factura.ventaFacturadoDelta) != null
-                ? formatCurrency(focusedEmision?.ventaFacturadoDelta ?? factura.ventaFacturadoDelta!)
-                : "—"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Total c/IVA</p>
+            <p className="text-xs text-slate-500">Total</p>
             <p className="font-semibold text-slate-700">
-              {(focusedEmision?.totalFacturadoNaf ??
-                focusedEmision?.totalCalculated ??
-                factura.totalFacturadoNaf ??
-                factura.totalCalculated) != null
-                ? formatCurrency(
-                    focusedEmision?.totalFacturadoNaf ??
-                      focusedEmision?.totalCalculated ??
-                      factura.totalFacturadoNaf ??
-                      factura.totalCalculated!
-                  )
+              {factura.amountDefined &&
+              (focusedEmision?.totalCalculated != null || factura.totalCalculated != null)
+                ? formatCurrency(focusedEmision?.totalCalculated ?? factura.totalCalculated!)
                 : "—"}
             </p>
           </div>
         </div>
-
-
-        {emisionIdForNaf && (
-          <div className="rounded-lg border border-slate-200 p-4 space-y-3">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-                  <Link2 className="h-4 w-4" />
-                  Documentos NAF ligados
-                </h4>
-                <p className="text-xs text-slate-500">
-                  FC/ND suman; NC/AN restan. El neto actualiza el monto facturado oficial.
-                </p>
-              </div>
-            </div>
-
-            {nafLinks.length === 0 ? (
-              <p className="text-sm text-slate-500">Ningún documento NAF ligado a esta administración.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 rounded-md border border-slate-100">
-                {nafLinks.map((link) => (
-                  <li key={link.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline">{link.nafTipoDoc}</Badge>
-                        <span className="font-medium tabular-nums">
-                          {link.nafNoFisico ?? link.nafNoFactu}
-                        </span>
-                        <span
-                          className={`tabular-nums font-medium ${
-                            link.amountSign < 0 ? "text-rose-700" : "text-emerald-700"
-                          }`}
-                        >
-                          {link.amountSign < 0 ? "−" : "+"}
-                          {formatCurrency(Math.abs(link.signedTotal))}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 truncate">
-                        {link.nafNoCia} · {link.nafNoFactu}
-                      </p>
-                    </div>
-                    {canEdit && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 text-slate-500 hover:text-rose-700"
-                        disabled={nafBusyId === link.id}
-                        onClick={() => unlinkNafDoc(link.id)}
-                        title="Quitar vínculo"
-                      >
-                        {nafBusyId === link.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {canEdit && (
-              <div className="space-y-2 pt-1">
-                <div className="flex gap-2">
-                  <Input
-                    value={nafSearch}
-                    onChange={(e) => setNafSearch(e.target.value)}
-                    placeholder="Buscar cliente, nº físico, clave FE…"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void searchNafCandidates();
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={nafLoading}
-                    onClick={() => void searchNafCandidates()}
-                  >
-                    {nafLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buscar"}
-                  </Button>
-                </div>
-                {nafCandidates.length > 0 && (
-                  <ul className="max-h-48 overflow-y-auto divide-y divide-slate-100 rounded-md border border-slate-100">
-                    {nafCandidates.map((c) => {
-                      const key = `${c.noCia}-${c.tipoDoc}-${c.noFactu}`;
-                      const already = nafLinks.some(
-                        (l) =>
-                          l.nafNoCia === c.noCia &&
-                          l.nafTipoDoc === c.tipoDoc &&
-                          l.nafNoFactu === c.noFactu
-                      );
-                      return (
-                        <li key={key} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline">{c.tipoDoc}</Badge>
-                              <span className="font-medium">{c.noFisico ?? c.noFactu}</span>
-                              {c.consecutivoFe ? (
-                                <span className="text-xs text-slate-500 tabular-nums">
-                                  FE {c.consecutivoFe}
-                                </span>
-                              ) : null}
-                              <span className="tabular-nums text-slate-600">{formatCurrency(c.total)}</span>
-                            </div>
-                            <p className="text-xs text-slate-500 truncate">{c.cliente}</p>
-                          </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            disabled={already || c.yaLigado || nafBusyId === key}
-                            onClick={() => void linkNafDoc(c)}
-                          >
-                            {nafBusyId === key ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : already ? (
-                              "Ligado"
-                            ) : (
-                              "Ligar"
-                            )}
-                          </Button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="rounded-lg border border-slate-200 p-4 space-y-4">
           <div>
@@ -822,17 +470,12 @@ export function FacturacionDetailDialog({
               </Label>
               <Input
                 id="invoiceNumber"
-                disabled={!canEdit || hasNafLinks}
+                disabled={!canEdit}
                 value={invoiceNumber}
                 onChange={(e) => setInvoiceNumber(e.target.value)}
-                placeholder={hasNafLinks ? "Consecutivo FE desde NAF" : "Ej. A-12345"}
+                placeholder="Ej. A-12345"
                 maxLength={100}
               />
-              {hasNafLinks && (
-                <p className="text-[11px] text-slate-500">
-                  Se toma del consecutivo electrónico (F_ELECTRONICA) del FC ligado.
-                </p>
-              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="documentNumber" className="text-xs text-slate-500 font-normal">
@@ -840,17 +483,12 @@ export function FacturacionDetailDialog({
               </Label>
               <Input
                 id="documentNumber"
-                disabled={!canEdit || hasNafLinks}
+                disabled={!canEdit}
                 value={documentNumber}
                 onChange={(e) => setDocumentNumber(e.target.value)}
-                placeholder={hasNafLinks ? "Nº físico desde NAF" : "Ej. DOC-2026-001"}
+                placeholder="Ej. DOC-2026-001"
                 maxLength={100}
               />
-              {hasNafLinks && (
-                <p className="text-[11px] text-slate-500">
-                  Se toma del número físico (NO_FISICO) del FC ligado.
-                </p>
-              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="invoiceReceivedAt" className="text-xs text-slate-500 font-normal">
@@ -861,10 +499,7 @@ export function FacturacionDetailDialog({
                 type="date"
                 disabled={!canEdit}
                 value={invoiceReceivedAt}
-                onChange={(e) => {
-                  setInvoiceReceivedAt(e.target.value);
-                  setInvoiceReceivedAtDirty(true);
-                }}
+                onChange={(e) => setInvoiceReceivedAt(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
@@ -900,10 +535,7 @@ export function FacturacionDetailDialog({
                 type="date"
                 disabled={!canEdit || isClosed}
                 value={dueDate}
-                onChange={(e) => {
-                  setDueDate(e.target.value);
-                  setDueDateDirty(true);
-                }}
+                onChange={(e) => setDueDate(e.target.value)}
               />
             </div>
           </div>

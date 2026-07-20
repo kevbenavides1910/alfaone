@@ -43,6 +43,12 @@ Este entorno es **producción real**: Next.js + Prisma + PostgreSQL en el VPS **
 3. Para fixes de datos: proponer script **reversible** o UPDATE con `WHERE id = …` documentado, nunca “arreglar todo” en bloque.
 4. Tras cambios que toquen escritura en BD: mencionar cómo verificar (conteo antes/después, registro de prueba) sin asumir que el usuario ya hizo backup.
 
+## Seeds y roles de usuario
+
+- **Prohibido** en producción: `npm run db:seed`, `db:seed-roles` o cualquier script que haga `user.updateMany` masivo de `role` / `roleId`, salvo confirmación explícita del usuario.
+- `prisma/seed-roles.ts` solo puede **rellenar** `roleId` cuando es `null`. Nunca debe reasignar perfiles personalizados (ENCARGADO_*, SIG, etc.) a CONSULTA u otros roles de sistema.
+- Si hace falta actualizar permisos de un rol: upsert de `role_permissions` por `roleId` + `permissionKey`, sin tocar la tabla `users`.
+
 ## Ejemplos
 
 ```typescript

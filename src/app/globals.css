@@ -447,19 +447,3 @@
 .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: hsl(240 5% 45% / 0.6);
 }
-
-/* alfa table column resize */
-th {
-  position: relative;
-}
-.alfa-col-resize-handle {
-  opacity: 0;
-  background: transparent;
-  transition: opacity 0.12s ease, background-color 0.12s ease;
-}
-th:hover > .alfa-col-resize-handle,
-.alfa-col-resize-handle:hover,
-.alfa-col-resize-handle:focus {
-  opacity: 1;
-  background: color-mix(in srgb, #dc2626 35%, transparent);
-}

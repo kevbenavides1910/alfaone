@@ -77,6 +77,14 @@
       "src/app/(app)/expediente-digital/**",
       "src/app/api/expediente-digital/**",
       "src/components/expediente-digital/**"
+    ],
+    "solicitudesRrhh": [
+      "src/modules/solicitudes-rrhh/**",
+      "src/app/(auth)/solicitudes-rrhh/**",
+      "src/app/(app)/solicitudes-rrhh/**",
+      "src/app/api/solicitudes-rrhh/**",
+      "src/components/solicitudes-rrhh/**",
+      "prisma/migrations/*hr_document*"
     ]
   }
 }

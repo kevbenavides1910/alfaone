@@ -25,6 +25,7 @@ export const STORAGE_DIRS = {
   feElectronica: "fe-electronica",
   disciplinaryEvidence: "disciplinary-evidence",
   ticketsTi: "tickets-ti",
+  monitoreo: "monitoreo-uploads",
   /** Exportaciones / temporales generados (futuro) */
   exports: "exports",
 } as const;
@@ -57,6 +58,12 @@ export function ticketsTiUploadRoot(): string {
   const explicit = process.env.TICKETS_TI_UPLOAD_DIR?.trim();
   if (explicit) return path.resolve(explicit);
   return path.join(appDataRoot(), STORAGE_DIRS.ticketsTi);
+}
+
+export function monitoreoUploadRoot(): string {
+  const explicit = process.env.MONITOREO_UPLOAD_DIR?.trim();
+  if (explicit) return path.resolve(explicit);
+  return path.join(appDataRoot(), STORAGE_DIRS.monitoreo);
 }
 
 /** Ruta dentro del contenedor cuando se monta APP_DATA_HOST → /data */

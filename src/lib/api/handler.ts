@@ -8,7 +8,7 @@
  * Uso básico (sin params de ruta):
  * ```ts
  * export const GET = apiHandler(
- *   { permission: ["bandeco.mantenimientos", "view"] },
+ *   { permission: ["monitoreo.mantenimientos", "view"] },
  *   async ({ req, session }) => ok(await listAlarmCodes(req.nextUrl.searchParams.get("q")))
  * );
  * ```
@@ -16,7 +16,7 @@
  * Con params de ruta dinámica (Next.js 15 los pasa como Promise):
  * ```ts
  * export const PATCH = apiHandler(
- *   { permission: ["bandeco.mantenimientos", "edit"] },
+ *   { permission: ["monitoreo.mantenimientos", "edit"] },
  *   async ({ req, session, params }) => {
  *     const { id } = await params;
  *     ...

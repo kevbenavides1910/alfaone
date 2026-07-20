@@ -22,11 +22,12 @@ Carpetas para **lógica de dominio** (servicios, reglas, validaciones). Las ruta
 | `recorridos` | — | Recorridos de patrulla, mapas (código en `src/app/api/recorridos/`) | Parcial |
 | `ticketsTi` | [`tickets-ti/`](./tickets-ti/) | Sistema de tickets internos de TI | Migrado |
 | `formularios` | [`formularios/`](./formularios/) | Formularios dinámicos | Parcial |
-| `bandeco` | [`bandeco/`](./bandeco/) | Alarmas Bandeco, cámaras, aperturas/cierres, eventos | Migrado |
+| `monitoreo` | [`monitoreo/`](./monitoreo/) | Alarmas, pilas, aperturas/cierres, eventos | Migrado |
 | `syntra` | [`syntra/`](./syntra/) | API móvil de patrulla Syntra (JWT device auth) | Migrado |
 | `naf-documentos` | [`naf-documentos/`](./naf-documentos/) | Documentos y archivos NAF | Migrado |
+| `solicitudesRrhh` | [`solicitudes-rrhh/`](./solicitudes-rrhh/) | Constancias públicas FCL / carta de servicio (OTP) | Migrado |
 
-> El módulo `syntra` y `naf-documentos` no están en el registry principal pero sí en `src/modules/`. Ver `src/lib/modules/registry.ts` para el registry oficial de 16 IDs.
+> El módulo `syntra` y `naf-documentos` no están en el registry principal pero sí en `src/modules/`. Ver `src/lib/modules/registry.ts` para el registry oficial.
 
 ## Cómo agregar lógica a un módulo
 

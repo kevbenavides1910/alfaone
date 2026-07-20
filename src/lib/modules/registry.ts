@@ -250,18 +250,29 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     prismaModels: [],
   },
 
-  bandeco: {
-    id: "bandeco",
-    label: "Bandeco",
+  monitoreo: {
+    id: "monitoreo",
+    label: "Monitoreo",
     description: "Monitoreo de alarmas, operaciones y catálogos.",
-    uiRoutePrefixes: ["/bandeco"],
-    apiRoutePrefixes: ["/api/bandeco"],
+    uiRoutePrefixes: ["/monitoreo"],
+    apiRoutePrefixes: ["/api/monitoreo"],
     codePaths: [
-      "src/app/(app)/bandeco",
-      "src/components/bandeco",
-      "src/modules/bandeco",
+      "src/app/(app)/monitoreo",
+      "src/components/monitoreo",
+      "src/modules/monitoreo",
     ],
-    prismaModels: [],
+    prismaModels: [
+      "BandecoAlarmCode",
+      "BandecoPantalla",
+      "BandecoPuesto",
+      "BandecoCamara",
+      "BandecoAperturaCuenta",
+      "BandecoPilaFinca",
+      "BandecoPilaLlenado",
+      "BandecoActivacion",
+      "BandecoAperturaCierre",
+      "BandecoEvento",
+    ],
   },
 
   sig: {
@@ -308,6 +319,22 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     ],
   },
 
+  solicitudesRrhh: {
+    id: "solicitudesRrhh",
+    label: "Solicitudes RRHH",
+    description: "Constancias públicas (FCL, carta de servicio) con OTP por correo.",
+    uiRoutePrefixes: ["/solicitudes-rrhh"],
+    apiRoutePrefixes: ["/api/solicitudes-rrhh"],
+    codePaths: [
+      "src/app/(auth)/solicitudes-rrhh",
+      "src/app/(app)/solicitudes-rrhh",
+      "src/app/api/solicitudes-rrhh",
+      "src/modules/solicitudes-rrhh",
+      "src/components/solicitudes-rrhh",
+    ],
+    prismaModels: ["HrDocumentRequestSettings", "HrDocumentRequestSession"],
+  },
+
   plataforma: {
     id: "plataforma",
     label: "Plataforma",
@@ -338,11 +365,12 @@ export function resolveModuleFromPath(pathname: string): AppModuleId {
     "nafOperaciones",
     "empleadosNaf",
     "expedienteDigital",
+    "solicitudesRrhh",
     "sig",
     "recorridos",
     "ticketsTi",
     "formularios",
-    "bandeco",
+    "monitoreo",
     "facturacionElectronica",
     "ventas",
     "facturacion",
