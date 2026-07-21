@@ -307,17 +307,17 @@ export default function DocumentosNafPage() {
                 <table className="w-full text-sm" data-table-id="facturacion-documentos-naf">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
-                      <th className="px-4 py-3 font-medium">Fecha</th>
-                      <th className="px-4 py-3 font-medium">Compañía</th>
-                      <th className="px-4 py-3 font-medium">Tipo</th>
-                      <th className="px-4 py-3 font-medium">Nº fiscal</th>
-                      <th className="px-4 py-3 font-medium">Cliente</th>
-                      <th className="px-4 py-3 font-medium">Contrato / licitación</th>
-                      <th className="px-4 py-3 font-medium text-right">Total</th>
-                      <th className="px-4 py-3 font-medium">Clave FE</th>
-                      <th className="px-4 py-3 font-medium">Estado</th>
-                      <th className="px-4 py-3 font-medium">Ligado</th>
-                      <th className="px-4 py-3 font-medium text-center">PDF</th>
+                      <th data-col-key="fecha" className="px-4 py-3 font-medium" style={{ width: 100 }}>Fecha</th>
+                      <th data-col-key="compania" className="px-4 py-3 font-medium" style={{ width: 140 }}>Compañía</th>
+                      <th data-col-key="tipo" className="px-4 py-3 font-medium" style={{ width: 70 }}>Tipo</th>
+                      <th data-col-key="noFiscal" className="px-4 py-3 font-medium" style={{ width: 120 }}>Nº fiscal</th>
+                      <th data-col-key="cliente" className="px-4 py-3 font-medium" style={{ width: 180 }}>Cliente</th>
+                      <th data-col-key="contrato" className="px-4 py-3 font-medium" style={{ width: 160 }}>Contrato / licitación</th>
+                      <th data-col-key="total" className="px-4 py-3 font-medium text-right" style={{ width: 110 }}>Total</th>
+                      <th data-col-key="claveFe" className="px-4 py-3 font-medium" style={{ width: 180 }}>Clave FE</th>
+                      <th data-col-key="estado" className="px-4 py-3 font-medium" style={{ width: 100 }}>Estado</th>
+                      <th data-col-key="ligado" className="px-4 py-3 font-medium" style={{ width: 100 }}>Ligado</th>
+                      <th data-col-key="pdf" className="px-4 py-3 font-medium text-center" style={{ width: 70 }}>PDF</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -170,9 +170,19 @@ export default function ExpedienteDigitalPage() {
       {rows.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
           <div className="max-h-[min(70vh,720px)] overflow-auto">
-            <table className="min-w-full text-left text-sm">
+            <table data-table-id="expediente-digital-listado" className="min-w-full text-left text-sm">
               <thead>
                 <TableColumnFilterHead
+                  tableId="expediente-digital-listado"
+                  defaultColumnWidths={{
+                    nombre: 200,
+                    cedula: 140,
+                    codigo: 120,
+                    cia: 100,
+                    estado: 100,
+                    empleos: 90,
+                    actions: 90,
+                  }}
                   columns={columnDefs}
                   rows={rows}
                   filters={columnFilters}

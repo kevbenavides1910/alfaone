@@ -1,4 +1,4 @@
-import type { CxcDocumentoStatus, PrismaClient } from "@prisma/client";
+import type { CxcDocumentoStatus, Prisma, PrismaClient } from "@prisma/client";
 
 type Db = Pick<PrismaClient, "facturaMensual" | "facturaMensualEmision" | "cxcDocumento" | "company">;
 
@@ -12,25 +12,28 @@ export function normalizeCompanySapCode(raw: string | null | undefined, fallback
   return trimmed || "0";
 }
 
+/** Números inventados por Alfa One (`FM-YYYYMM-<cuid>`); no son NO_FISICO de NAF. */
+export function isSyntheticFmDocumentNumber(value: string | null | undefined): boolean {
+  const v = value?.trim();
+  if (!v) return false;
+  return /^FM-\d{6}-/i.test(v);
+}
+
+/**
+ * Nº documento = NO_FISICO de NAF (copiado en factura/emisión al ligar).
+ * Nunca inventa `FM-…`.
+ */
 function resolveDocumentNumber(
-  factura: {
-    id: string;
-    contractId: string;
-    periodYear: number;
-    periodMonth: number;
-    documentNumber: string | null;
-  },
-  emisionDocumentNumber: string | null | undefined,
-  emisionId?: string
-): string {
+  factura: { documentNumber: string | null },
+  emisionDocumentNumber: string | null | undefined
+): string | null {
   const fromEmision = emisionDocumentNumber?.trim();
-  if (fromEmision) return fromEmision;
+  if (fromEmision && !isSyntheticFmDocumentNumber(fromEmision)) return fromEmision;
 
   const fromFactura = factura.documentNumber?.trim();
-  if (fromFactura && !emisionId) return fromFactura;
+  if (fromFactura && !isSyntheticFmDocumentNumber(fromFactura)) return fromFactura;
 
-  const suffix = emisionId ? emisionId.slice(-8) : factura.id.slice(-8);
-  return `FM-${factura.periodYear}${String(factura.periodMonth).padStart(2, "0")}-${suffix}`;
+  return null;
 }
 
 function resolveInvoiceNumber(
@@ -51,11 +54,123 @@ function resolveServicePeriodDate(factura: {
 
 export type SyncCxcFromFacturaResult =
   | { ok: true; cxcDocumentoId: string; created: boolean }
-  | { ok: false; code: "NOT_FOUND" | "NOT_CLOSED"; message: string };
+  | {
+      ok: false;
+      code: "NOT_FOUND" | "NOT_CLOSED" | "NO_DOCUMENT_NUMBER" | "DOCUMENT_NUMBER_COLLISION";
+      message: string;
+    };
+
+type CxcPayload = {
+  contractId: string;
+  facturaMensualId: string;
+  companySapCode: string;
+  companyCode: string;
+  documentNumber: string;
+  invoiceNumber: string | null;
+  docType: string;
+  documentDate: Date;
+  invoiceReceivedAt: Date | null;
+  servicePeriodDate: Date;
+  montoOriginal: number;
+  saldo: number;
+  clientName: string;
+  dueDate: Date | null;
+  cxcExpectedPaymentDate: Date | null;
+  provisionalReceiptNumber: string | null;
+  provisionalPaymentAmount: Prisma.Decimal | number | null;
+  cxcObservations: string | null;
+  status: CxcDocumentoStatus;
+  paidAt: Date | null;
+  isReajuste: boolean;
+};
+
+/**
+ * Crea o actualiza CxC con la clave NAF. Si ya existía con otra clave (p. ej. FM-…),
+ * migra `documentNumber` / `companySapCode` al valor real.
+ */
+async function upsertCxcDocumento(
+  db: Db,
+  payload: CxcPayload
+): Promise<SyncCxcFromFacturaResult> {
+  const { companySapCode, documentNumber, facturaMensualId } = payload;
+
+  const existingByKey = await db.cxcDocumento.findUnique({
+    where: {
+      companySapCode_documentNumber: { companySapCode, documentNumber },
+    },
+    select: { id: true, facturaMensualId: true },
+  });
+
+  const existingLinked = await db.cxcDocumento.findFirst({
+    where: {
+      facturaMensualId,
+      docType: { in: ["FC", "FM"] },
+    },
+    orderBy: { createdAt: "asc" as const },
+    select: { id: true, documentNumber: true, companySapCode: true },
+  });
+
+  if (existingByKey) {
+    if (existingLinked && existingLinked.id !== existingByKey.id) {
+      // Colisión: ya hay fila SAP/CxC con el NO_FISICO y otra ligada (p. ej. FM-).
+      // Fusionar en la clave real y eliminar la sintética.
+      await db.cxcDocumento.update({
+        where: { id: existingByKey.id },
+        data: payload,
+      });
+      if (isSyntheticFmDocumentNumber(existingLinked.documentNumber)) {
+        await db.cxcDocumento.delete({ where: { id: existingLinked.id } });
+      }
+      return { ok: true, cxcDocumentoId: existingByKey.id, created: false };
+    }
+
+    await db.cxcDocumento.update({
+      where: { id: existingByKey.id },
+      data: payload,
+    });
+    return { ok: true, cxcDocumentoId: existingByKey.id, created: false };
+  }
+
+  if (existingLinked) {
+    const sameKey =
+      existingLinked.documentNumber === documentNumber &&
+      existingLinked.companySapCode === companySapCode;
+
+    if (sameKey) {
+      await db.cxcDocumento.update({
+        where: { id: existingLinked.id },
+        data: payload,
+      });
+      return { ok: true, cxcDocumentoId: existingLinked.id, created: false };
+    }
+
+    // Migrar clave (FM- → NO_FISICO u otro cambio de NAF).
+    try {
+      await db.cxcDocumento.update({
+        where: { id: existingLinked.id },
+        data: payload,
+      });
+      return { ok: true, cxcDocumentoId: existingLinked.id, created: false };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("Unique constraint") || msg.includes("unique")) {
+        return {
+          ok: false,
+          code: "DOCUMENT_NUMBER_COLLISION",
+          message: `Ya existe un CxC con documento ${documentNumber} (empresa ${companySapCode})`,
+        };
+      }
+      throw e;
+    }
+  }
+
+  const created = await db.cxcDocumento.create({ data: payload });
+  return { ok: true, cxcDocumentoId: created.id, created: true };
+}
 
 /**
  * Crea o actualiza un documento FC en CxC a partir de una factura mensual cerrada.
- * Las filas CxC importadas desde SAP se vinculan por companySapCode + documentNumber.
+ * Requiere Nº documento real (NO_FISICO de NAF); no inventa FM-….
  */
 export async function syncCxcFromFacturaMensual(
   db: Db,
@@ -98,6 +213,15 @@ export async function syncCxcFromFacturaMensual(
   const firstEmision = factura.emisiones[0];
   const companySapCode = normalizeCompanySapCode(company?.sapCode, factura.companyCodeCopied);
   const documentNumber = resolveDocumentNumber(factura, firstEmision?.documentNumber);
+  if (!documentNumber) {
+    return {
+      ok: false,
+      code: "NO_DOCUMENT_NUMBER",
+      message:
+        "Sin Nº documento de NAF (NO_FISICO). Ligar el documento NAF antes de sincronizar CxC.",
+    };
+  }
+
   const invoiceNumber = resolveInvoiceNumber(factura.invoiceNumber, firstEmision?.invoiceNumber);
   const total =
     firstEmision && firstEmision._count.nafDocumentos > 0 && firstEmision.totalFacturadoNaf != null
@@ -110,7 +234,7 @@ export async function syncCxcFromFacturaMensual(
   const invoiceReceivedAt =
     factura.invoiceReceivedAt ?? firstEmision?.invoiceReceivedAt ?? null;
 
-  const payload = {
+  const payload: CxcPayload = {
     contractId: factura.contractId,
     facturaMensualId: factura.id,
     companySapCode,
@@ -134,59 +258,7 @@ export async function syncCxcFromFacturaMensual(
     isReajuste: factura.isReajuste ?? false,
   };
 
-  // 1. Prioridad: registro con la clave exacta (companySapCode, documentNumber).
-  //    Así evitamos conflictos de unicidad al actualizar un registro "linked" que
-  //    tiene un documentNumber distinto.
-  const existingByKey = await db.cxcDocumento.findUnique({
-    where: {
-      companySapCode_documentNumber: {
-        companySapCode,
-        documentNumber,
-      },
-    },
-    select: { id: true, facturaMensualId: true },
-  });
-
-  if (existingByKey) {
-    await db.cxcDocumento.update({
-      where: { id: existingByKey.id },
-      data: payload,
-    });
-    return { ok: true, cxcDocumentoId: existingByKey.id, created: false };
-  }
-
-  // 2. Registro vinculado por facturaMensualId (puede tener distinto documentNumber).
-  //    Actualizamos sin tocar la clave única para evitar conflictos.
-  const existingLinked = await db.cxcDocumento.findFirst({
-    where: {
-      facturaMensualId: factura.id,
-      docType: { in: ["FC", "FM"] },
-    },
-    orderBy: { createdAt: "asc" as const },
-    select: { id: true, documentNumber: true, companySapCode: true },
-  });
-
-  if (existingLinked) {
-    // Si el documentNumber cambió, actualizar sin modificar la clave única para no
-    // colisionar con otro registro; en su lugar, la clave queda como estaba.
-    const sameKey =
-      existingLinked.documentNumber === documentNumber &&
-      existingLinked.companySapCode === companySapCode;
-
-    const updateData = sameKey
-      ? payload
-      : { ...payload, documentNumber: existingLinked.documentNumber, companySapCode: existingLinked.companySapCode };
-
-    await db.cxcDocumento.update({
-      where: { id: existingLinked.id },
-      data: updateData,
-    });
-    return { ok: true, cxcDocumentoId: existingLinked.id, created: false };
-  }
-
-  // 3. Crear nuevo registro.
-  const created = await db.cxcDocumento.create({ data: payload });
-  return { ok: true, cxcDocumentoId: created.id, created: true };
+  return upsertCxcDocumento(db, payload);
 }
 
 /** Sincroniza CxC para una emisión (administración) cerrada de forma independiente. */
@@ -233,7 +305,16 @@ export async function syncCxcFromFacturaEmision(
   });
 
   const companySapCode = normalizeCompanySapCode(company?.sapCode, factura.companyCodeCopied);
-  const documentNumber = resolveDocumentNumber(factura, emision.documentNumber, emision.id);
+  const documentNumber = resolveDocumentNumber(factura, emision.documentNumber);
+  if (!documentNumber) {
+    return {
+      ok: false,
+      code: "NO_DOCUMENT_NUMBER",
+      message:
+        "Sin Nº documento de NAF (NO_FISICO). Ligar el documento NAF antes de sincronizar CxC.",
+    };
+  }
+
   const invoiceNumber = resolveInvoiceNumber(factura.invoiceNumber, emision.invoiceNumber);
   const nafTotal =
     emision._count.nafDocumentos > 0 && emision.totalFacturadoNaf != null
@@ -246,7 +327,7 @@ export async function syncCxcFromFacturaEmision(
   const documentDate = emision.closedAt ?? factura.updatedAt;
   const invoiceReceivedAt = emision.invoiceReceivedAt ?? factura.invoiceReceivedAt ?? null;
 
-  const payload = {
+  const payload: CxcPayload = {
     contractId: factura.contractId,
     facturaMensualId: factura.id,
     companySapCode,
@@ -270,26 +351,14 @@ export async function syncCxcFromFacturaEmision(
     isReajuste: factura.isReajuste ?? false,
   };
 
-  const existingByKey = await db.cxcDocumento.findUnique({
-    where: {
-      companySapCode_documentNumber: { companySapCode, documentNumber },
-    },
-    select: { id: true },
-  });
-
-  if (existingByKey) {
-    await db.cxcDocumento.update({ where: { id: existingByKey.id }, data: payload });
-    return { ok: true, cxcDocumentoId: existingByKey.id, created: false };
-  }
-
-  const created = await db.cxcDocumento.create({ data: payload });
-  return { ok: true, cxcDocumentoId: created.id, created: true };
+  return upsertCxcDocumento(db, payload);
 }
 
 export async function syncAllMissingCxcFromFacturas(db: Db): Promise<{
   processed: number;
   created: number;
   updated: number;
+  skipped: number;
   errors: string[];
 }> {
   const facturas = await db.facturaMensual.findMany({
@@ -300,23 +369,23 @@ export async function syncAllMissingCxcFromFacturas(db: Db): Promise<{
 
   let created = 0;
   let updated = 0;
+  let skipped = 0;
   const errors: string[] = [];
 
   for (const factura of facturas) {
-    // Necesita sync si: no tiene CxC vinculado, O bien tiene CxC vinculado pero
-    // todos están COBRADO/saldo=0 y la factura sigue en FACTURADO (no cobrada aún).
     const linked = await db.cxcDocumento.findFirst({
       where: {
         facturaMensualId: factura.id,
         isReajuste: false,
         docType: { in: ["FC", "FM"] },
       },
-      select: { id: true, status: true, saldo: true },
+      select: { id: true, status: true, saldo: true, documentNumber: true },
       orderBy: { createdAt: "asc" as const },
     });
 
     const needsSync =
       !linked ||
+      isSyntheticFmDocumentNumber(linked.documentNumber) ||
       (factura.status === "FACTURADO" &&
         linked.status === "COBRADO" &&
         parseFloat(linked.saldo?.toString() ?? "0") <= 0);
@@ -325,6 +394,10 @@ export async function syncAllMissingCxcFromFacturas(db: Db): Promise<{
 
     const result = await syncCxcFromFacturaMensual(db, factura.id);
     if (!result.ok) {
+      if (result.code === "NO_DOCUMENT_NUMBER") {
+        skipped += 1;
+        continue;
+      }
       errors.push(`${factura.id}: ${result.message}`);
       continue;
     }
@@ -332,5 +405,5 @@ export async function syncAllMissingCxcFromFacturas(db: Db): Promise<{
     else updated += 1;
   }
 
-  return { processed: facturas.length, created, updated, errors };
+  return { processed: facturas.length, created, updated, skipped, errors };
 }

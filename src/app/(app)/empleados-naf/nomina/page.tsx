@@ -816,7 +816,7 @@ export default function EmpleadosNafNominaPage() {
                 Excel
               </Button>
             </div>
-            <table className="premium-table w-full text-sm">
+            <table data-table-id="empleados-naf-nomina-por-contrato" className="premium-table w-full text-sm">
               <thead>
                 <tr className="border-b bg-slate-50">
                   <th className="p-3 text-left font-medium">Contrato</th>
@@ -909,7 +909,7 @@ export default function EmpleadosNafNominaPage() {
                 Excel
               </Button>
             </div>
-            <table className="premium-table w-full text-sm">
+            <table data-table-id="empleados-naf-nomina-por-empresa" className="premium-table w-full text-sm">
               <thead>
                 <tr className="border-b bg-slate-50">
                   <th className="p-3 text-left font-medium">Empresa</th>
@@ -988,7 +988,7 @@ export default function EmpleadosNafNominaPage() {
                 Excel ({detalle.asistenciaDetalle.length})
               </Button>
             </div>
-            <table className="premium-table w-full text-sm min-w-[1200px]">
+            <table data-table-id="empleados-naf-nomina-asistencia" className="premium-table w-full text-sm min-w-[1200px]">
               <thead className="sticky top-0 z-10 bg-slate-50">
                 <tr className="border-b bg-slate-50">
                   <th className="p-3 text-left font-medium">Empresa</th>
@@ -1057,9 +1057,28 @@ export default function EmpleadosNafNominaPage() {
               Excel ({displayedRows.length})
             </Button>
           </div>
-          <table className="premium-table w-full text-sm min-w-[1100px]">
+          <table data-table-id="empleados-naf-nomina" className="premium-table w-full text-sm min-w-[1100px]">
             <thead className="sticky top-0 z-10 bg-slate-50">
               <TableColumnFilterHead
+                tableId="empleados-naf-nomina"
+                defaultColumnWidths={{
+                  _expand: 40,
+                  companyLabel: 160,
+                  noEmple: 110,
+                  nombre: 200,
+                  noRol: 90,
+                  contrato: 140,
+                  client: 180,
+                  nominaNombre: 160,
+                  contratosAsistenciaCount: 100,
+                  diasAsistenciaTotal: 90,
+                  horasAsistenciaTotal: 90,
+                  devengado: 110,
+                  cargasSocialesPct: 100,
+                  brutoConCargasSociales: 120,
+                  deducciones: 110,
+                  neto: 110,
+                }}
                 columns={columnDefs}
                 rows={empleados}
                 filters={columnFilters}
@@ -1173,7 +1192,7 @@ export default function EmpleadosNafNominaPage() {
                       <tr className="border-b bg-slate-50/70">
                         <td />
                         <td colSpan={columnDefs.length} className="p-3">
-                          <table className="w-full text-xs border rounded-md overflow-hidden bg-white">
+                          <table data-table-id="empleados-naf-nomina-detalle-contratos" className="w-full text-xs border rounded-md overflow-hidden bg-white">
                             <thead>
                               <tr className="bg-slate-100">
                                 <th className="p-2 text-left font-medium">Contrato</th>

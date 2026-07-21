@@ -271,7 +271,7 @@ export function TicketHistoryTable({ personColumn = "requester" }: TicketHistory
       </CardHeader>
       <CardContent className="p-0">
         <div className="max-h-[480px] overflow-auto border-t border-slate-200">
-          <table className="w-full text-sm min-w-[640px]">
+          <table data-table-id="tickets-ti-historial" className="w-full text-sm min-w-[640px]">
             <thead>
               {hasActiveColumnFilters(columnFilters) && (
                 <tr>
@@ -283,6 +283,15 @@ export function TicketHistoryTable({ personColumn = "requester" }: TicketHistory
                 </tr>
               )}
               <TableColumnFilterHead
+                tableId="tickets-ti-historial"
+                defaultColumnWidths={{
+                  ticketNumber: 120,
+                  title: 220,
+                  status: 110,
+                  priority: 100,
+                  openedAt: 110,
+                  actions: 90,
+                }}
                 columns={columnDefs}
                 rows={rows}
                 filters={columnFilters}

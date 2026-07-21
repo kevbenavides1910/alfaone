@@ -136,6 +136,7 @@ export function AlarmCodesTab() {
         <Loading />
       ) : (
         <DataTable
+          tableId="monitoreo-alarm-codes"
           headers={["Código", "Finca", "Zona", "Motorizado", "Bodycam", "Grupo WSP", "Encargado", "Tel.", ""]}
           rows={rows.map((r) => [
             r.alarmNumber,

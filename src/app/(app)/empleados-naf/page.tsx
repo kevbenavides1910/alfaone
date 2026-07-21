@@ -317,9 +317,45 @@ export default function EmpleadosNafPage() {
 
         <Card>
           <CardContent className="p-0 overflow-x-auto">
-            <table className="premium-table w-full text-sm min-w-[3600px]">
+            <table data-table-id="empleados-naf-listado" className="premium-table w-full text-sm min-w-[3600px]">
               <thead>
                 <TableColumnFilterHead
+                  tableId="empleados-naf-listado"
+                  defaultColumnWidths={{
+                    noCia: 160,
+                    contrato: 140,
+                    ubicacionCode: 140,
+                    ubicacionNombre: 180,
+                    zona: 140,
+                    puesto: 140,
+                    noEmple: 110,
+                    nombre: 200,
+                    cedula: 140,
+                    asegu: 140,
+                    noRol: 160,
+                    formaPago: 140,
+                    tipoCuenta: 140,
+                    numCuenta: 160,
+                    tituloCode: 200,
+                    tituloNombre: 160,
+                    clase: 140,
+                    categoria: 140,
+                    nominaCode: 140,
+                    nominaNombre: 160,
+                    fIngreso: 110,
+                    fNacimi: 110,
+                    correoElectronico: 180,
+                    telefono: 160,
+                    sexo: 140,
+                    direccion: 200,
+                    indOficial: 140,
+                    eCivil: 140,
+                    jornada: 140,
+                    nacion: 140,
+                    banco: 140,
+                    estado: 100,
+                    actions: 90,
+                  }}
                   columns={columnDefs}
                   rows={rows}
                   filters={columnFilters}

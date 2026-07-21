@@ -399,9 +399,22 @@ export default function ResumenEmpleadosPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table data-table-id="disciplinario-empleados-resumen" className="w-full text-sm">
                 <thead className="bg-muted/50 border-b">
                   <TableColumnFilterHead
+                    tableId="disciplinario-empleados-resumen"
+                    defaultColumnWidths={{
+                      codigo: 120,
+                      empleado: 200,
+                      zona: 120,
+                      administrador: 160,
+                      ciclo: 100,
+                      noanulados: 100,
+                      ultimocierre: 110,
+                      totalcobrado: 110,
+                      tratamiento: 140,
+                      actions: 90,
+                    }}
                     columns={resumenColumnDefs}
                     rows={rows}
                     filters={columnFilters}

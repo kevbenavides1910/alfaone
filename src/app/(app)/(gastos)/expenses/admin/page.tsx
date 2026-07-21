@@ -145,9 +145,23 @@ export default function AdminExpensesPage() {
             ) : expenses.length === 0 ? (
               <div className="p-8 text-center text-slate-400">No hay registros de gastos administrativos</div>
             ) : (
-              <table className="w-full text-sm">
+              <table data-table-id="gastos-admin-config" className="w-full text-sm">
                 <thead>
                   <TableColumnFilterHead
+                    tableId="gastos-admin-config"
+                    defaultColumnWidths={{
+                      transport: 100,
+                      adminCosts: 100,
+                      phones: 100,
+                      phoneLines: 100,
+                      fuel: 100,
+                      otherAmount: 100,
+                      company: 140,
+                      period: 100,
+                      total: 110,
+                      state: 100,
+                      actions: 90,
+                    }}
                     columns={columnDefs}
                     rows={expenses}
                     filters={columnFilters}

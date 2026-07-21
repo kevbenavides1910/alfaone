@@ -1,6 +1,8 @@
 /**
  * Backfill CxC desde facturas mensuales — ejecutable con node en el contenedor de producción.
  * Uso: node scripts/sync-cxc-from-facturas.mjs
+ *
+ * Nº documento: solo NO_FISICO de NAF (factura/emisión). Nunca inventa FM-….
  */
 const { PrismaClient } = require("@prisma/client");
 
@@ -15,12 +17,18 @@ function normalizeCompanySapCode(raw, fallback) {
   return trimmed || "0";
 }
 
+function isSyntheticFmDocumentNumber(value) {
+  const v = value?.trim();
+  if (!v) return false;
+  return /^FM-\d{6}-/i.test(v);
+}
+
 function resolveDocumentNumber(factura, emisionDocumentNumber) {
-  const fromFactura = factura.documentNumber?.trim();
-  if (fromFactura) return fromFactura;
   const fromEmision = emisionDocumentNumber?.trim();
-  if (fromEmision) return fromEmision;
-  return `FM-${factura.periodYear}${String(factura.periodMonth).padStart(2, "0")}-${factura.id.slice(-8)}`;
+  if (fromEmision && !isSyntheticFmDocumentNumber(fromEmision)) return fromEmision;
+  const fromFactura = factura.documentNumber?.trim();
+  if (fromFactura && !isSyntheticFmDocumentNumber(fromFactura)) return fromFactura;
+  return null;
 }
 
 function resolveInvoiceNumber(facturaInvoice, emisionInvoice) {
@@ -44,9 +52,9 @@ async function syncCxcFromFacturaMensual(facturaId) {
     },
   });
 
-  if (!factura) return { ok: false, message: "Factura no encontrada" };
+  if (!factura) return { ok: false, code: "NOT_FOUND", message: "Factura no encontrada" };
   if (factura.status !== "FACTURADO" && factura.status !== "COBRADO") {
-    return { ok: false, message: "Factura no cerrada" };
+    return { ok: false, code: "NOT_CLOSED", message: "Factura no cerrada" };
   }
 
   const company = await prisma.company.findUnique({
@@ -57,6 +65,14 @@ async function syncCxcFromFacturaMensual(facturaId) {
   const firstEmision = factura.emisiones[0];
   const companySapCode = normalizeCompanySapCode(company?.sapCode, factura.companyCodeCopied);
   const documentNumber = resolveDocumentNumber(factura, firstEmision?.documentNumber);
+  if (!documentNumber) {
+    return {
+      ok: false,
+      code: "NO_DOCUMENT_NUMBER",
+      message: "Sin Nº documento de NAF (NO_FISICO)",
+    };
+  }
+
   const invoiceNumber = resolveInvoiceNumber(factura.invoiceNumber, firstEmision?.invoiceNumber);
   const total = toAmount(factura.totalCalculated);
   const cobrado = factura.status === "COBRADO";
@@ -89,27 +105,34 @@ async function syncCxcFromFacturaMensual(facturaId) {
     isReajuste: false,
   };
 
+  const existingByKey = await prisma.cxcDocumento.findUnique({
+    where: { companySapCode_documentNumber: { companySapCode, documentNumber } },
+    select: { id: true },
+  });
+
   const existingLinked = await prisma.cxcDocumento.findFirst({
     where: {
       facturaMensualId: factura.id,
       isReajuste: false,
       docType: { in: ["FC", "FM"] },
     },
-    select: { id: true },
-  });
-
-  if (existingLinked) {
-    await prisma.cxcDocumento.update({ where: { id: existingLinked.id }, data: payload });
-    return { ok: true, created: false };
-  }
-
-  const existingByKey = await prisma.cxcDocumento.findUnique({
-    where: { companySapCode_documentNumber: { companySapCode, documentNumber } },
-    select: { id: true },
+    select: { id: true, documentNumber: true, companySapCode: true },
   });
 
   if (existingByKey) {
+    if (existingLinked && existingLinked.id !== existingByKey.id) {
+      await prisma.cxcDocumento.update({ where: { id: existingByKey.id }, data: payload });
+      if (isSyntheticFmDocumentNumber(existingLinked.documentNumber)) {
+        await prisma.cxcDocumento.delete({ where: { id: existingLinked.id } });
+      }
+      return { ok: true, created: false };
+    }
     await prisma.cxcDocumento.update({ where: { id: existingByKey.id }, data: payload });
+    return { ok: true, created: false };
+  }
+
+  if (existingLinked) {
+    await prisma.cxcDocumento.update({ where: { id: existingLinked.id }, data: payload });
     return { ok: true, created: false };
   }
 
@@ -125,6 +148,7 @@ async function main() {
 
   let created = 0;
   let updated = 0;
+  let skipped = 0;
   const errors = [];
 
   for (const factura of facturas) {
@@ -134,12 +158,16 @@ async function main() {
         isReajuste: false,
         docType: { in: ["FC", "FM"] },
       },
-      select: { id: true },
+      select: { id: true, documentNumber: true },
     });
-    if (hasCxc) continue;
+    if (hasCxc && !isSyntheticFmDocumentNumber(hasCxc.documentNumber)) continue;
 
     const result = await syncCxcFromFacturaMensual(factura.id);
     if (!result.ok) {
+      if (result.code === "NO_DOCUMENT_NUMBER") {
+        skipped += 1;
+        continue;
+      }
       errors.push(`${factura.id}: ${result.message}`);
       continue;
     }
@@ -150,6 +178,7 @@ async function main() {
   console.log(`Facturas revisadas: ${facturas.length}`);
   console.log(`Documentos CxC creados: ${created}`);
   console.log(`Documentos CxC actualizados: ${updated}`);
+  console.log(`Omitidos (sin NO_FISICO NAF): ${skipped}`);
   if (errors.length) {
     console.log("Errores:");
     for (const err of errors) console.log(`  - ${err}`);

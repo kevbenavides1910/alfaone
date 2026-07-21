@@ -176,7 +176,6 @@ export function FacturacionDetailDialog({
       observationLog?: string;
       finalNotes?: string;
       invoiceNumber?: string | null;
-      documentNumber?: string | null;
       servicePeriodFromDate?: string | null;
       servicePeriodToDate?: string | null;
       invoiceReceivedAt?: string | null;
@@ -479,15 +478,16 @@ export function FacturacionDetailDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="documentNumber" className="text-xs text-slate-500 font-normal">
-                Número de documento
+                Número de documento (NAF)
               </Label>
               <Input
                 id="documentNumber"
-                disabled={!canEdit}
+                disabled
+                readOnly
                 value={documentNumber}
-                onChange={(e) => setDocumentNumber(e.target.value)}
-                placeholder="Ej. DOC-2026-001"
+                placeholder="Se asigna al ligar el documento NAF"
                 maxLength={100}
+                title="Solo lectura: proviene del NO_FISICO de NAF"
               />
             </div>
             <div className="space-y-1.5">
@@ -555,7 +555,6 @@ export function FacturacionDetailDialog({
               onClick={() =>
                 saveMutation.mutate({
                   invoiceNumber: invoiceNumber.trim() || null,
-                  documentNumber: documentNumber.trim() || null,
                   servicePeriodFromDate: servicePeriodFromDate || null,
                   servicePeriodToDate: servicePeriodToDate || null,
                   invoiceReceivedAt: invoiceReceivedAt || null,

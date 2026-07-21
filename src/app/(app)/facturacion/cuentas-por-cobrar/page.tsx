@@ -392,14 +392,34 @@ export default function CuentasPorCobrarPage() {
                   </Button>
                 </div>
               )}
-              <table className="w-full text-sm">
+              <table data-table-id="facturacion-cuentas-por-cobrar" className="w-full text-sm">
               <thead>
                 <TableColumnFilterHead
+                  tableId="facturacion-cuentas-por-cobrar"
                   columns={columnDefs}
                   rows={rows}
                   filters={columnFilters}
                   onFilterChange={onColumnFilterChange}
                   filterRowClassName="bg-slate-50"
+                  defaultColumnWidths={{
+                    cliente: 200,
+                    contacto: 160,
+                    periodo: 80,
+                    tipo: 100,
+                    total: 110,
+                    abonoSaldo: 120,
+                    nroFactura: 180,
+                    nroDocumento: 120,
+                    emision: 100,
+                    vencimiento: 120,
+                    pagoEsperado: 140,
+                    recibidoConforme: 120,
+                    reciboProvisional: 140,
+                    correos: 90,
+                    observaciones: 160,
+                    estado: 120,
+                    actions: 170,
+                  }}
                 />
               </thead>
               <tbody>
@@ -487,8 +507,12 @@ export default function CuentasPorCobrarPage() {
                           <span className="text-slate-400">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{row.invoiceNumber ?? "—"}</td>
-                      <td className="px-4 py-3 text-slate-600">{row.documentNumber ?? "—"}</td>
+                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap tabular-nums" title={row.invoiceNumber ?? undefined}>
+                        {row.invoiceNumber ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap" title={row.documentNumber ?? undefined}>
+                        {row.documentNumber ?? "—"}
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap text-slate-600">
                         {formatDate(row.closedAt ?? row.expectedIssueDate)}
                       </td>

@@ -146,9 +146,19 @@ export default function DeferredExpensesPage() {
             ) : expenses.length === 0 ? (
               <div className="p-8 text-center text-slate-400">No hay gastos diferidos registrados</div>
             ) : (
-              <table className="w-full text-sm">
+              <table data-table-id="gastos-deferred" className="w-full text-sm">
                 <thead>
                   <TableColumnFilterHead
+                    tableId="gastos-deferred"
+                    defaultColumnWidths={{
+                      description: 220,
+                      company: 140,
+                      category: 120,
+                      period: 100,
+                      amount: 110,
+                      status: 100,
+                      actions: 90,
+                    }}
                     columns={filterCols}
                     rows={expenses}
                     filters={columnFilters}

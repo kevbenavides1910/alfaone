@@ -601,14 +601,36 @@ export default function ContractsPage() {
                 </Button>
               </div>
             )}
-            <table className="carbon-data-table">
+            <table data-table-id="contracts-listado" className="carbon-data-table">
               <thead>
                 <TableColumnFilterHead
+                  tableId="contracts-listado"
                   columns={contractColumnDefs}
                   rows={contracts}
                   filters={columnFilters}
                   onFilterChange={onColumnFilterChange}
                   filterRowClassName="bg-[#f4f4f4] border-b border-[#e0e0e0]"
+                  defaultColumnWidths={{
+                    licitacion: 120,
+                    cliente: 200,
+                    empresa: 140,
+                    tipoCliente: 100,
+                    contratacion: 110,
+                    facturacion: 110,
+                    mo: 90,
+                    insumos: 90,
+                    adm: 90,
+                    util: 90,
+                    pgFact: 80,
+                    pgMo: 80,
+                    pgIns: 80,
+                    pgAdm: 80,
+                    pgUtil: 80,
+                    ejecucion: 90,
+                    vencimiento: 110,
+                    estado: 100,
+                    actions: 80,
+                  }}
                 />
               </thead>
               <tbody>

@@ -219,9 +219,17 @@ export default function RolesPage() {
             {isLoading ? (
               <div className="p-12 text-center text-slate-400">Cargando roles…</div>
             ) : (
-              <table className="w-full text-sm">
+              <table data-table-id="admin-roles" className="w-full text-sm">
                 <thead>
                   <TableColumnFilterHead
+                    tableId="admin-roles"
+                    defaultColumnWidths={{
+                      name: 180,
+                      code: 140,
+                      users: 90,
+                      perms: 90,
+                      actions: 90,
+                    }}
                     columns={roleColumnDefs}
                     rows={roles}
                     filters={columnFilters}

@@ -8,7 +8,17 @@ import {
 } from "@/components/ui/table-column-filters";
 import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 
-export function DataTable({ headers, rows }: { headers: string[]; rows: (string | number | React.ReactNode)[][] }) {
+export function DataTable({
+  headers,
+  rows,
+  tableId,
+  defaultColumnWidths,
+}: {
+  headers: string[];
+  rows: (string | number | React.ReactNode)[][];
+  tableId?: string;
+  defaultColumnWidths?: Record<string, number>;
+}) {
   const columnDefs = useMemo((): TableColumnFilterDef<(string | number | React.ReactNode)[]>[] => {
     return headers.map((h, idx) => {
       const sample = rows.find((r) => r[idx] !== undefined)?.[idx];
@@ -29,6 +39,17 @@ export function DataTable({ headers, rows }: { headers: string[]; rows: (string 
   const onColumnFilterChange = (k: string, v: string) => setColumnFilters((p) => ({ ...p, [k]: v }));
   const columnFilterKeys = columnDefs.filter((c) => c.filterable !== false).map((c) => c.key);
 
+  const resolvedWidths = useMemo(() => {
+    if (defaultColumnWidths) return defaultColumnWidths;
+    if (!tableId) return undefined;
+    const widths: Record<string, number> = {};
+    headers.forEach((_, idx) => {
+      const isLast = idx === headers.length - 1;
+      widths[`col_${idx}`] = isLast && headers[idx] === "" ? 90 : idx === 0 ? 120 : 160;
+    });
+    return widths;
+  }, [defaultColumnWidths, tableId, headers]);
+
   const filtered = useMemo(
     () =>
       filterRowsByColumnFilters(
@@ -46,12 +67,14 @@ export function DataTable({ headers, rows }: { headers: string[]; rows: (string 
       {Object.values(columnFilters).some((v) => v.trim().length > 0) && (
         <div className="px-4 py-2 bg-slate-50 border-b text-xs text-slate-700 flex items-center justify-between">
           <span>Mostrando <strong>{filtered.length}</strong> de <strong>{rows.length}</strong> registros tras filtros.</span>
-          <button type="button" onClick={() => setColumnFilters({})} className="text-red-600 hover:underline text-xs">Limpiar filtros</button>
+          <button type="button" onClick={() => setColumnFilters(clearColumnFilters(columnFilterKeys))} className="text-red-600 hover:underline text-xs">Limpiar filtros</button>
         </div>
       )}
-      <table className="w-full text-sm">
+      <table {...(tableId ? { "data-table-id": tableId } : {})} className="w-full text-sm">
         <thead>
           <TableColumnFilterHead
+            tableId={tableId}
+            defaultColumnWidths={resolvedWidths}
             columns={columnDefs}
             rows={rows}
             filters={columnFilters}
@@ -72,4 +95,3 @@ export function DataTable({ headers, rows }: { headers: string[]; rows: (string 
     </>
   );
 }
-

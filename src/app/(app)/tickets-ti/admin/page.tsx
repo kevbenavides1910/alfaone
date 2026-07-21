@@ -279,9 +279,18 @@ export default function TicketsTiAdminPage() {
             {!isTechnicianTab ? (
               <>
                 <div className="overflow-x-auto rounded-md border border-slate-200">
-                  <table className="w-full text-sm">
+                  <table data-table-id="tickets-ti-admin-estandares" className="w-full text-sm">
                   <thead className="bg-slate-50 text-left">
                     <TableColumnFilterHead
+                      tableId="tickets-ti-admin-estandares"
+                      defaultColumnWidths={{
+                        code: 120,
+                        name: 200,
+                        order: 80,
+                        sla: 90,
+                        activo: 90,
+                        actions: 90,
+                      }}
                       columns={standardColumnDefs}
                       rows={standardRows}
                       filters={columnFilters}

@@ -58,9 +58,17 @@ export default function SigBitacoraPage() {
       <div className="p-4 max-w-5xl mx-auto">
         <Card>
           <CardContent className="p-0 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table data-table-id="sig-bitacora" className="w-full text-sm">
               <thead>
                 <TableColumnFilterHead
+                  tableId="sig-bitacora"
+                  defaultColumnWidths={{
+                    fecha: 120,
+                    documento: 200,
+                    accion: 140,
+                    usuario: 160,
+                    notas: 200,
+                  }}
                   columns={bitacoraColumnDefs}
                   rows={rows}
                   filters={columnFilters}

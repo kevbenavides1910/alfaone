@@ -59,6 +59,7 @@ export function PuestosTab() {
     <CatalogShell title={`${rows.length} puestos`} onAdd={() => { setEdit(null); setName(""); setShow(true); }}>
       {isLoading ? <Loading /> : (
         <DataTable
+          tableId="monitoreo-puestos"
           headers={["Puesto / Motorizado", ""]}
           rows={rows.map((r) => [r.name, <ActionButtons key={r.id} onEdit={() => { setEdit(r); setName(r.name); setShow(true); }} onDelete={() => del.mutate(r.id)} />])}
         />

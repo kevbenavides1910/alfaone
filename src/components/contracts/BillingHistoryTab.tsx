@@ -355,9 +355,15 @@ export function BillingHistoryTab({
                   </Button>
                 </div>
               )}
-              <table className="w-full text-sm">
+              <table data-table-id="contract-billing-history" className="w-full text-sm">
                 <thead>
                   <TableColumnFilterHead
+                    tableId="contract-billing-history"
+                    defaultColumnWidths={{
+                      period: 110,
+                      facturacion: 120,
+                      notes: 220,
+                    }}
                     columns={columnDefs}
                     rows={entries}
                     filters={columnFilters}

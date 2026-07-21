@@ -313,9 +313,20 @@ export function ContractExpensesTab({
                 </Button>
               </div>
             )}
-            <table className="w-full text-sm">
+            <table data-table-id="contract-expenses" className="w-full text-sm">
               <thead>
                 <TableColumnFilterHead
+                  tableId="contract-expenses"
+                  defaultColumnWidths={{
+                    tipo: 120,
+                    descripcion: 220,
+                    origen: 140,
+                    periodo: 100,
+                    registrado: 110,
+                    monto: 110,
+                    estado: 100,
+                    actions: 90,
+                  }}
                   columns={columnDefs}
                   rows={displayedExpenses}
                   filters={columnFilters}

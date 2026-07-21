@@ -210,9 +210,19 @@ export default function MarcasFueraRutaPage() {
           <CardTitle className="text-base">Detalle ({filas.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
-          <table className="w-full text-sm">
+          <table data-table-id="recorridos-marcas-fuera-ruta" className="w-full text-sm">
             <thead className="bg-muted/50 border-b">
               <TableColumnFilterHead
+                tableId="recorridos-marcas-fuera-ruta"
+                defaultColumnWidths={{
+                  fecha: 110,
+                  telefono: 130,
+                  empleado: 180,
+                  tag: 120,
+                  ruta: 160,
+                  horario: 110,
+                  motivo: 180,
+                }}
                 columns={columnDefs}
                 rows={filas}
                 filters={columnFilters}

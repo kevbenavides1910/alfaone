@@ -60,6 +60,7 @@ export function AperturasTab() {
     <CatalogShell title={`${rows.length} cuentas`} onAdd={() => { setEdit(null); setForm({ finca: "", cuentaNum: "", nombreCuenta: "" }); setShow(true); }}>
       {isLoading ? <Loading /> : (
         <DataTable
+          tableId="monitoreo-aperturas"
           headers={["Finca", "# Cuenta", "Nombre cuenta", ""]}
           rows={rows.map((r) => [r.finca, r.cuentaNum, r.nombreCuenta, <ActionButtons key={r.id} onEdit={() => { setEdit(r); setForm({ finca: r.finca, cuentaNum: String(r.cuentaNum), nombreCuenta: r.nombreCuenta }); setShow(true); }} onDelete={() => del.mutate(r.id)} />])}
         />

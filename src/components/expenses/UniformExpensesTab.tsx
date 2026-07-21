@@ -127,9 +127,14 @@ export function UniformExpensesTab({ contractId, suppliesBudget }: Props) {
                   </button>
                 </div>
               )}
-              <table className="w-full text-sm">
+              <table data-table-id="gastos-uniformes-resumen" className="w-full text-sm">
                 <thead>
                   <TableColumnFilterHead
+                    tableId="gastos-uniformes-resumen"
+                    defaultColumnWidths={{
+                      period: 120,
+                      total: 110,
+                    }}
                     columns={columnDefs}
                     rows={expenses}
                     filters={columnFilters}

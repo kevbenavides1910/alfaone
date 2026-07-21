@@ -386,9 +386,19 @@ export default function ExpedienteDigitalDetallePage() {
               ) : (
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                   <div className="max-h-[min(65vh,680px)] overflow-auto">
-                    <table className="min-w-full text-left text-sm">
+                    <table data-table-id="expediente-digital-detalle" className="min-w-full text-left text-sm">
                       <thead>
                         <TableColumnFilterHead
+                          tableId="expediente-digital-detalle"
+                          defaultColumnWidths={{
+                            tipoDoc: 140,
+                            desc: 220,
+                            noEmple: 120,
+                            version: 90,
+                            estado: 100,
+                            vigencia: 110,
+                            actions: 90,
+                          }}
                           columns={columnDefs}
                           rows={docs}
                           filters={columnFilters}

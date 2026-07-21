@@ -1011,9 +1011,24 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                     </Button>
                   </div>
                 )}
-                <table className="w-full text-sm">
+                <table data-table-id="gastos-expenses" className="w-full text-sm">
                   <thead>
                     <TableColumnFilterHead
+                      tableId="gastos-expenses"
+                      defaultColumnWidths={{
+                        sequentialNo: 110,
+                        type: 120,
+                        budgetLine: 140,
+                        company: 140,
+                        description: 220,
+                        originRef: 140,
+                        contract: 140,
+                        period: 100,
+                        createdAt: 110,
+                        amount: 110,
+                        status: 110,
+                        actions: 90,
+                      }}
                       columns={expenseColumnDefs}
                       rows={expenses}
                       filters={columnFilters}

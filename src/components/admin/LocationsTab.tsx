@@ -224,9 +224,17 @@ export function LocationsTab({ readOnly }: { readOnly?: boolean }) {
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+          <table data-table-id="admin-locations" className="w-full text-sm">
             <thead>
               <TableColumnFilterHead
+                tableId="admin-locations"
+                defaultColumnWidths={{
+                  ubicacion: 180,
+                  contrato: 140,
+                  empresa: 140,
+                  puestos: 90,
+                  zona: 120,
+                }}
                 columns={locationColumnDefs}
                 rows={filtered}
                 filters={columnFilters}

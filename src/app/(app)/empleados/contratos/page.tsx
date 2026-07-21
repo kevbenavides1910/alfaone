@@ -325,9 +325,18 @@ export default function EmpleadosContratosPage() {
                   </div>
                 )}
                 <div className="overflow-x-auto border rounded-lg">
-                  <table className="w-full text-sm">
+                  <table data-table-id="empleados-contratos-homologacion" className="w-full text-sm">
                     <thead>
                       <TableColumnFilterHead
+                        tableId="empleados-contratos-homologacion"
+                        defaultColumnWidths={{
+                          contratoRrhh: 160,
+                          estado: 100,
+                          empleados: 100,
+                          contratoSistema: 180,
+                          sugerencias: 160,
+                          actions: 90,
+                        }}
                         columns={columnDefs}
                         rows={payload?.discrepancies ?? []}
                         filters={columnFilters}

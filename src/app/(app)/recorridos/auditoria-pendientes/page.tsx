@@ -170,9 +170,17 @@ export default function AuditoriaPendientesPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table data-table-id="recorridos-auditoria-pendientes" className="w-full text-sm">
               <thead>
                 <TableColumnFilterHead
+                  tableId="recorridos-auditoria-pendientes"
+                  defaultColumnWidths={{
+                    localId: 140,
+                    type: 120,
+                    tag: 140,
+                    fecha: 110,
+                    estado: 100,
+                  }}
                   columns={missingColumnDefs}
                   rows={report.missingOnServer}
                   filters={columnFilters}

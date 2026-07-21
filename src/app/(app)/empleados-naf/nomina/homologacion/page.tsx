@@ -404,9 +404,18 @@ export default function NafHomologacionPage() {
                 </div>
               )}
               <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full text-sm">
+                <table data-table-id="empleados-naf-homologacion" className="w-full text-sm">
                   <thead>
                     <TableColumnFilterHead
+                      tableId="empleados-naf-homologacion"
+                      defaultColumnWidths={{
+                        contratoNaf: 160,
+                        estado: 100,
+                        planillas: 100,
+                        impacto: 100,
+                        contratoSistema: 180,
+                        actions: 90,
+                      }}
                       columns={columnDefs}
                       rows={filteredDiscrepancies}
                       filters={columnFilters}

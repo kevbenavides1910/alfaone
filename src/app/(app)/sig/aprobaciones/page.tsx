@@ -76,9 +76,17 @@ export default function SigAprobacionesPage() {
       <div className="p-4 max-w-5xl mx-auto space-y-4">
         <Card>
           <CardContent className="p-0 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table data-table-id="sig-aprobaciones" className="w-full text-sm">
               <thead>
                 <TableColumnFilterHead
+                  tableId="sig-aprobaciones"
+                  defaultColumnWidths={{
+                    code: 120,
+                    title: 220,
+                    version: 90,
+                    uploader: 160,
+                    actions: 90,
+                  }}
                   columns={pendingColumnDefs}
                   rows={rows}
                   filters={columnFilters}

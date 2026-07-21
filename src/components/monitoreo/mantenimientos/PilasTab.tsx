@@ -60,6 +60,7 @@ export function PilasTab() {
     <CatalogShell title={`${rows.length} fincas`} onAdd={() => { setEdit(null); setForm({ finca: "", desmane: "", paneo: "", zonaMotorizado: "", observaciones: "" }); setShow(true); }}>
       {isLoading ? <Loading /> : (
         <DataTable
+          tableId="monitoreo-pilas"
           headers={["Finca", "Desmane", "Paneo", "Zona", "Observaciones", ""]}
           rows={rows.map((r) => [r.finca, r.desmane ?? "—", r.paneo ?? "—", r.zonaMotorizado ?? "—", r.observaciones ?? "—", <ActionButtons key={r.id} onEdit={() => { setEdit(r); setForm({ finca: r.finca, desmane: r.desmane ?? "", paneo: r.paneo ?? "", zonaMotorizado: r.zonaMotorizado ?? "", observaciones: r.observaciones ?? "" }); setShow(true); }} onDelete={() => del.mutate(r.id)} />])}
         />

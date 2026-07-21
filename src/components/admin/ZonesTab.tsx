@@ -201,9 +201,20 @@ export function ZonesTab({ readOnly }: { readOnly?: boolean }) {
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+          <table data-table-id="admin-zones" className="w-full text-sm">
             <thead>
               <TableColumnFilterHead
+                tableId="admin-zones"
+                defaultColumnWidths={{
+                  name: 160,
+                  description: 200,
+                  admin: 160,
+                  email: 180,
+                  ubicaciones: 100,
+                  estado: 100,
+                  orden: 80,
+                  actions: 90,
+                }}
                 columns={zoneColumnDefs}
                 rows={rows}
                 filters={columnFilters}

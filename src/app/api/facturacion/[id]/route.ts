@@ -68,7 +68,6 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       parsed.data.dueDate === undefined &&
       (parsed.data.invoiceNumber !== undefined ||
         parsed.data.isReajuste !== undefined ||
-        parsed.data.documentNumber !== undefined ||
         parsed.data.servicePeriodFromDate !== undefined ||
         parsed.data.servicePeriodToDate !== undefined ||
         parsed.data.invoiceReceivedAt !== undefined);
@@ -95,9 +94,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (parsed.data.invoiceNumber !== undefined) {
       data.invoiceNumber = parsed.data.invoiceNumber;
     }
-    if (parsed.data.documentNumber !== undefined) {
-      data.documentNumber = parsed.data.documentNumber;
-    }
+    // documentNumber solo se escribe desde NAF (ligar documento); se ignora en PATCH.
     if (parsed.data.servicePeriodFromDate !== undefined) {
       data.servicePeriodFromDate = parsed.data.servicePeriodFromDate
         ? parseCalendarDateInput(parsed.data.servicePeriodFromDate)
@@ -133,12 +130,18 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (
       isClosed &&
       (parsed.data.isReajuste !== undefined ||
-        parsed.data.documentNumber !== undefined ||
         parsed.data.servicePeriodFromDate !== undefined ||
         parsed.data.servicePeriodToDate !== undefined ||
         parsed.data.invoiceReceivedAt !== undefined)
     ) {
-      await syncCxcFromFacturaMensual(prisma, id);
+      const syncResult = await syncCxcFromFacturaMensual(prisma, id);
+      if (
+        !syncResult.ok &&
+        syncResult.code !== "NO_DOCUMENT_NUMBER"
+      ) {
+        // No fallar el PATCH por sync CxC; el número solo llega vía NAF.
+        console.warn(`[facturacion PATCH] sync CxC: ${syncResult.message}`);
+      }
     }
 
     return ok(serializeFacturaMensual(updated));
@@ -180,10 +183,21 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     if (result.emisionId) {
       const emision = serialized.emisiones?.find((e) => e.id === result.emisionId);
       if (emision?.totalCalculated != null) {
-        await syncCxcFromFacturaEmision(prisma, id, result.emisionId, emision.totalCalculated);
+        const syncResult = await syncCxcFromFacturaEmision(
+          prisma,
+          id,
+          result.emisionId,
+          emision.totalCalculated
+        );
+        if (!syncResult.ok && syncResult.code !== "NO_DOCUMENT_NUMBER") {
+          console.warn(`[facturacion cerrar] sync CxC emisión: ${syncResult.message}`);
+        }
       }
     } else if (updated.status === "FACTURADO" || updated.status === "COBRADO") {
-      await syncCxcFromFacturaMensual(prisma, id);
+      const syncResult = await syncCxcFromFacturaMensual(prisma, id);
+      if (!syncResult.ok && syncResult.code !== "NO_DOCUMENT_NUMBER") {
+        console.warn(`[facturacion cerrar] sync CxC: ${syncResult.message}`);
+      }
     }
 
     return ok(serialized);

@@ -194,9 +194,18 @@ export function AssetTypesTab({ readOnly }: { readOnly?: boolean }) {
         <div className="p-8 text-center text-slate-400 border rounded-lg">Sin tipos definidos.</div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+          <table data-table-id="admin-asset-types" className="w-full text-sm">
             <thead>
               <TableColumnFilterHead
+                tableId="admin-asset-types"
+                defaultColumnWidths={{
+                  code: 120,
+                  name: 180,
+                  fields: 90,
+                  estado: 100,
+                  orden: 80,
+                  actions: 90,
+                }}
                 columns={assetTypeColumnDefs}
                 rows={rows}
                 filters={columnFilters}

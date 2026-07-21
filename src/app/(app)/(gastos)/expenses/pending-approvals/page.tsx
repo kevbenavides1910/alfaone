@@ -318,9 +318,20 @@ export default function PendingApprovalsPage() {
               <div className="p-12 text-center text-slate-500">No tiene aprobaciones pendientes.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table data-table-id="gastos-pending-approvals" className="w-full text-sm">
                   <thead>
                     <TableColumnFilterHead
+                      tableId="gastos-pending-approvals"
+                      defaultColumnWidths={{
+                        sequentialNo: 110,
+                        type: 120,
+                        description: 220,
+                        company: 140,
+                        period: 100,
+                        amount: 110,
+                        progress: 100,
+                        actions: 90,
+                      }}
                       columns={filterCols}
                       rows={rows}
                       filters={columnFilters}

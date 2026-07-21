@@ -239,9 +239,18 @@ export default function EmpleadosPage() {
             )}
             {rows.length > 0 && (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table data-table-id="empleados-listado" className="w-full text-sm">
                   <thead>
                     <TableColumnFilterHead
+                      tableId="empleados-listado"
+                      defaultColumnWidths={{
+                        empleado: 200,
+                        contacto: 160,
+                        contrato: 140,
+                        zona: 120,
+                        estado: 100,
+                        acciones: 90,
+                      }}
                       columns={empleadoColumns}
                       rows={rows}
                       filters={columnFilters}

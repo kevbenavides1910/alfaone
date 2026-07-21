@@ -251,9 +251,20 @@ export default function SigBibliotecaPage() {
 
         <Card>
           <CardContent className="p-0 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table data-table-id="sig-documentos" className="w-full text-sm">
               <thead>
                 <TableColumnFilterHead
+                  tableId="sig-documentos"
+                  defaultColumnWidths={{
+                    codigo: 120,
+                    titulo: 220,
+                    tipo: 120,
+                    proceso: 140,
+                    version: 90,
+                    ultima: 110,
+                    estado: 100,
+                    acciones: 90,
+                  }}
                   columns={documentColumnDefs}
                   rows={rows}
                   filters={columnFilters}

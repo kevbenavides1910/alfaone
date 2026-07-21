@@ -626,9 +626,25 @@ export default function DisciplinarioListPage() {
                   </Button>
                 </div>
               )}
-              <table className="w-full text-sm">
+              <table data-table-id="disciplinario-historial" className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <TableColumnFilterHead
+                    tableId="disciplinario-historial"
+                    defaultColumnWidths={{
+                      numero: 100,
+                      fecha: 110,
+                      codigo: 120,
+                      nombre: 180,
+                      zona: 120,
+                      omisiones: 100,
+                      administrador: 160,
+                      estado: 100,
+                      vigencia: 110,
+                      contrato: 140,
+                      cliente: 180,
+                      adjuntos: 90,
+                      actions: 90,
+                    }}
                     columns={historialColumnDefs}
                     rows={rows}
                     filters={mergedColumnFilters}

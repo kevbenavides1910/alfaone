@@ -311,13 +311,26 @@ export async function recomputeEmisionFromNafLinks(
   });
 
   if (links.length === 0) {
-    await db.facturaMensualEmision.update({
+    const emptied = await db.facturaMensualEmision.update({
       where: { id: emisionId },
       data: {
         subtotalFacturadoNaf: null,
         totalFacturadoNaf: null,
+        invoiceNumber: null,
+        documentNumber: null,
       },
+      select: { facturaMensualId: true },
     });
+    // Limpiar números en el padre solo si ninguna emisión conserva NAF.
+    const siblingsWithLinks = await db.facturaEmisionNafDocumento.count({
+      where: { emision: { facturaMensualId: emptied.facturaMensualId } },
+    });
+    if (siblingsWithLinks === 0) {
+      await db.facturaMensual.update({
+        where: { id: emptied.facturaMensualId },
+        data: { invoiceNumber: null, documentNumber: null },
+      });
+    }
     await recomputeFacturaMensualFromEmisiones(db, emisionId);
     return {
       subtotalFacturadoNaf: null,
@@ -376,24 +389,25 @@ export async function recomputeEmisionFromNafLinks(
   const emisionData: {
     subtotalFacturadoNaf: Prisma.Decimal;
     totalFacturadoNaf: Prisma.Decimal;
-    invoiceNumber?: string;
-    documentNumber?: string;
+    invoiceNumber: string | null;
+    documentNumber: string | null;
     invoiceReceivedAt?: Date;
   } = {
     subtotalFacturadoNaf: new Prisma.Decimal(signedSubtotal.toFixed(2)),
     totalFacturadoNaf: new Prisma.Decimal(signedTotal.toFixed(2)),
+    invoiceNumber: picked.invoiceNumber,
+    documentNumber: picked.documentNumber,
   };
-  if (picked.invoiceNumber) emisionData.invoiceNumber = picked.invoiceNumber;
-  if (picked.documentNumber) emisionData.documentNumber = picked.documentNumber;
 
   const parentData: {
     invoiceNumber?: string | null;
     documentNumber?: string | null;
     invoiceReceivedAt?: Date;
     dueDate?: Date;
-  } = {};
-  if (picked.invoiceNumber) parentData.invoiceNumber = picked.invoiceNumber;
-  if (picked.documentNumber) parentData.documentNumber = picked.documentNumber;
+  } = {
+    invoiceNumber: picked.invoiceNumber,
+    documentNumber: picked.documentNumber,
+  };
 
   if (applyNafDates && picked.nafFecha) {
     const hasReceived =

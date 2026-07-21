@@ -233,9 +233,20 @@ export default function PresupuestosPage() {
                 </Button>
               </div>
             )}
-            <table className="w-full text-sm">
+            <table data-table-id="ventas-presupuestos" className="w-full text-sm">
               <thead>
                 <TableColumnFilterHead
+                  tableId="ventas-presupuestos"
+                  defaultColumnWidths={{
+                    licitacion: 120,
+                    compania: 140,
+                    cliente: 200,
+                    estado: 100,
+                    totalMensual: 110,
+                    conIva: 110,
+                    lineas: 80,
+                    actualizado: 110,
+                  }}
                   columns={columnDefs}
                   rows={rows}
                   filters={columnFilters}

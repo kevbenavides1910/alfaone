@@ -383,15 +383,32 @@ export default function FacturacionPage() {
                     </Button>
                   </div>
                 )}
-              <table className="w-full text-sm">
+              <table data-table-id="facturacion-listado" className="w-full text-sm">
                 <thead>
                   <TableColumnFilterHead
+                    tableId="facturacion-listado"
                     columns={facturaColumnDefs}
                     rows={expandedListRows}
                     filters={columnFilters}
                     onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
                     headerRowClassName="border-b border-slate-200 bg-slate-50"
                     filterRowClassName="border-b bg-slate-50/80"
+                    defaultColumnWidths={{
+                      cliente: 200,
+                      administracion: 150,
+                      contratacion: 110,
+                      subtotal: 110,
+                      iva: 70,
+                      total: 110,
+                      ventaContrato: 110,
+                      diferenciaVenta: 100,
+                      fechaEsperada: 110,
+                      cierre: 100,
+                      recibidoConforme: 120,
+                      ultPrecio: 110,
+                      estado: 110,
+                      actions: 80,
+                    }}
                   />
                 </thead>
                 <tbody>

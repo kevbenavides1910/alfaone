@@ -160,9 +160,18 @@ export default function RecorridosRutasPage() {
               {q ? "Sin resultados para ese filtro." : "No hay rutas registradas. Cree la primera con «Nueva ruta»."}
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table data-table-id="recorridos-rutas" className="w-full text-sm">
               <thead>
                 <TableColumnFilterHead
+                  tableId="recorridos-rutas"
+                  defaultColumnWidths={{
+                    code: 120,
+                    name: 200,
+                    puesto: 160,
+                    points: 90,
+                    estado: 100,
+                    actions: 90,
+                  }}
                   columns={columnDefs}
                   rows={rows}
                   filters={columnFilters}

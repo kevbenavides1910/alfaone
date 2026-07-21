@@ -369,9 +369,23 @@ export default function ApprovalBitacoraClient() {
             ) : data?.mode === "decisions" ? (
               <>
                 <div className="rounded-md border overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table data-table-id="gastos-approval-bitacora-decisiones" className="w-full text-sm">
                     <thead>
                       <TableColumnFilterHead
+                        tableId="gastos-approval-bitacora-decisiones"
+                        defaultColumnWidths={{
+                          decidedAt: 120,
+                          stepOrder: 80,
+                          decision: 110,
+                          approver: 180,
+                          sequentialNo: 110,
+                          description: 220,
+                          type: 120,
+                          company: 140,
+                          amount: 110,
+                          status: 120,
+                          comment: 180,
+                        }}
                         columns={decisionFilterCols}
                         rows={data?.data ?? []}
                         filters={columnFilters}
@@ -433,9 +447,21 @@ export default function ApprovalBitacoraClient() {
             ) : data?.mode === "submissions" ? (
               <>
                 <div className="rounded-md border overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table data-table-id="gastos-approval-bitacora-envios" className="w-full text-sm">
                     <thead>
                       <TableColumnFilterHead
+                        tableId="gastos-approval-bitacora-envios"
+                        defaultColumnWidths={{
+                          submittedAt: 130,
+                          submittedBy: 160,
+                          sequentialNo: 110,
+                          description: 220,
+                          type: 120,
+                          company: 140,
+                          amount: 110,
+                          steps: 80,
+                          status: 110,
+                        }}
                         columns={submissionFilterCols}
                         rows={data?.data ?? []}
                         filters={columnFilters}

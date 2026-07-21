@@ -789,9 +789,23 @@ export default function ReportsPage() {
               <div className="p-8 text-center text-slate-400">No hay datos para mostrar</div>
             ) : (
               <div className="max-h-[calc(100vh-14rem)] overflow-auto overscroll-contain">
-                <table className="w-full text-xs">
+                <table data-table-id="gastos-reports-profitability" className="w-full text-xs">
                   <thead>
                     <TableColumnFilterHead
+                      tableId="gastos-reports-profitability"
+                      defaultColumnWidths={{
+                        licitacion: 120,
+                        cliente: 200,
+                        empresa: 140,
+                        facturacion: 110,
+                        mo: 90,
+                        insumos: 90,
+                        adm: 90,
+                        util: 90,
+                        presupuesto: 110,
+                        total: 110,
+                        peor: 100,
+                      }}
                       columns={columnDefs}
                       rows={rows}
                       filters={columnFilters}

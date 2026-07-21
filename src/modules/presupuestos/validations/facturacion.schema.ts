@@ -45,7 +45,6 @@ export const facturaMensualUpdateSchema = z.object({
   finalNotes: z.string().max(5000).optional(),
   isReajuste: z.boolean().optional(),
   invoiceNumber: optionalTrimmedString(100),
-  documentNumber: optionalTrimmedString(100),
   servicePeriodFromDate: optionalCalendarDate,
   servicePeriodToDate: optionalCalendarDate,
   invoiceReceivedAt: optionalCalendarDate,

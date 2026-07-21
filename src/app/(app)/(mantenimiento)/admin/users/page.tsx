@@ -373,9 +373,18 @@ export default function UsersPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table data-table-id="admin-users" className="w-full text-sm">
                   <thead>
                     <TableColumnFilterHead
+                      tableId="admin-users"
+                      defaultColumnWidths={{
+                        name: 180,
+                        email: 200,
+                        role: 140,
+                        company: 140,
+                        estado: 100,
+                        actions: 90,
+                      }}
                       columns={userColumnDefs}
                       rows={users}
                       filters={columnFilters}

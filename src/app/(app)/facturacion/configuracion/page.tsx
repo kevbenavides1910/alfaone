@@ -216,7 +216,13 @@ export default function FacturacionCobroConfigPage() {
         credentials: "same-origin",
       });
       const j = (await r.json()) as {
-        data?: { processed?: number; created?: number; updated?: number; errors?: string[] };
+        data?: {
+          processed?: number;
+          created?: number;
+          updated?: number;
+          skipped?: number;
+          errors?: string[];
+        };
         error?: { message?: string };
       };
       if (!r.ok) throw new Error(j.error?.message ?? "Error al sincronizar CxC");
@@ -224,7 +230,7 @@ export default function FacturacionCobroConfigPage() {
     },
     onSuccess: (data) => {
       toast.success(
-        `CxC sincronizado: ${data.created ?? 0} creado(s), ${data.updated ?? 0} actualizado(s), ${data.processed ?? 0} procesado(s).` +
+        `CxC sincronizado: ${data.created ?? 0} creado(s), ${data.updated ?? 0} actualizado(s), ${data.skipped ?? 0} omitido(s sin NAF), ${data.processed ?? 0} procesado(s).` +
           ((data.errors?.length ?? 0) > 0 ? ` ${data.errors!.length} error(es).` : "")
       );
     },

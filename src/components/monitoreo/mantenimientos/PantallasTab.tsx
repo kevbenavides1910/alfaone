@@ -76,6 +76,7 @@ export function PantallasTab() {
     <CatalogShell title={`${rows.length} pantallas`} onAdd={() => { setEdit(null); setForm({ alarmCodeId: "", finca: "", zona: "", pantalla: "", camara: "", zonaExterna: "", pantalla2: "", camara2: "" }); setShow(true); }}>
       {isLoading ? <Loading /> : (
         <DataTable
+          tableId="monitoreo-pantallas"
           headers={["Código", "Finca", "Zona", "Pant.", "Cam.", "Zona ext.", "2ª Pant.", "2ª Cam.", ""]}
           rows={rows.map((r) => [
             r.alarmCode?.alarmNumber ?? "—",

@@ -60,6 +60,7 @@ export function CamarasTab() {
     <CatalogShell title={`${rows.length} cámaras`} onAdd={() => { setEdit(null); setForm({ pantallaNum: "", camaraNum: "", descripcion: "" }); setShow(true); }}>
       {isLoading ? <Loading /> : (
         <DataTable
+          tableId="monitoreo-camaras"
           headers={["Pantalla #", "Cámara #", "Descripción", ""]}
           rows={rows.map((r) => [r.pantallaNum, r.camaraNum, r.descripcion, <ActionButtons key={r.id} onEdit={() => { setEdit(r); setForm({ pantallaNum: String(r.pantallaNum), camaraNum: String(r.camaraNum), descripcion: r.descripcion }); setShow(true); }} onDelete={() => del.mutate(r.id)} />])}
         />

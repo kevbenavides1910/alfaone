@@ -83,9 +83,19 @@ export default function BandecoRegistroPage() {
           ) : rows.length === 0 ? (
             <p className="p-8 text-center text-slate-400">Sin registros aún.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table data-table-id="monitoreo-registro" className="w-full text-sm">
               <thead>
                 <TableColumnFilterHead
+                  tableId="monitoreo-registro"
+                  defaultColumnWidths={{
+                    fecha: 110,
+                    codigo: 120,
+                    finca: 180,
+                    zona: 120,
+                    motorizado: 160,
+                    operador: 160,
+                    tipo: 120,
+                  }}
                   columns={columnDefs}
                   rows={rows}
                   filters={columnFilters}

@@ -202,9 +202,19 @@ export default function HombreVivoHistorialPage() {
           ) : filas.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sin registros en el período.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table data-table-id="recorridos-hombre-vivo" className="w-full text-sm">
               <thead>
                 <TableColumnFilterHead
+                  tableId="recorridos-hombre-vivo"
+                  defaultColumnWidths={{
+                    programada: 110,
+                    confirmada: 110,
+                    ruta: 160,
+                    imei: 160,
+                    empleado: 180,
+                    origen: 120,
+                    estado: 100,
+                  }}
                   columns={columnDefs}
                   rows={filas}
                   filters={columnFilters}
