@@ -50,6 +50,12 @@ export function relativeDisciplinarySignaturePath(mime: string): string {
   return `branding/disciplinary-signature.${ext}`;
 }
 
+/** Firma de la encargada de RRHH para constancias públicas. */
+export function relativeHrDocumentSignaturePath(mime: string): string {
+  const ext = extensionForMime(mime);
+  return `branding/hr-document-signature.${ext}`;
+}
+
 export async function ensureBrandingRow() {
   return prisma.appBranding.upsert({
     where: { id: "default" },

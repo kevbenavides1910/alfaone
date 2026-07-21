@@ -12,6 +12,11 @@ import {
   sanitizePdfText,
 } from "@/modules/solicitudes-rrhh/services/pdf-common";
 import { loadBrandingLogoFile } from "@/modules/disciplinario/services/disciplinary-pdf-logo";
+import {
+  drawCenteredSignature,
+  embedHrSignature,
+  loadHrSignatureFile,
+} from "@/modules/solicitudes-rrhh/services/pdf-signature";
 import type { EmpleoSnapshot } from "@/modules/solicitudes-rrhh/services/empleo-lookup";
 import {
   formatDateShort,
@@ -35,8 +40,9 @@ export async function buildCartaFclPdf(input: CartaFclPdfInput): Promise<Uint8Ar
   const page = pdf.addPage([PAGE_W, PAGE_H]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const logoFile = await loadBrandingLogoFile();
+  const [logoFile, signatureFile] = await Promise.all([loadBrandingLogoFile(), loadHrSignatureFile()]);
   const logo = await embedLogo(pdf, logoFile);
+  const signature = await embedHrSignature(pdf, signatureFile);
 
   drawWatermark(page, logo);
   let y = drawHeader(page, {
@@ -136,14 +142,13 @@ export async function buildCartaFclPdf(input: CartaFclPdfInput): Promise<Uint8Ar
     color: TEXT,
   });
 
-  y -= 48;
+  y -= 24;
+  y = drawCenteredSignature(page, signature, y, PAGE_W, 170, 60);
+
+  y -= 4;
   const stampX = PAGE_W - MARGIN - 160;
-  const stampLines = [
-    input.companyLegalName,
-    input.companyIdNumber,
-    "RECURSOS HUMANOS",
-  ];
-  let sy = y;
+  const stampLines = [input.companyLegalName, input.companyIdNumber, "RECURSOS HUMANOS"];
+  let sy = y + 40;
   for (const line of stampLines) {
     page.drawText(sanitizePdfText(line), {
       x: stampX,
@@ -155,7 +160,7 @@ export async function buildCartaFclPdf(input: CartaFclPdfInput): Promise<Uint8Ar
     sy -= 11;
   }
 
-  y -= 40;
+  y -= 12;
   const signerBlock = [
     input.signerName,
     input.signerTitle,

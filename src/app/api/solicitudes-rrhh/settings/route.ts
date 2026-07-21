@@ -44,10 +44,21 @@ export async function PATCH(req: NextRequest) {
     if (body.emailFixedCc !== undefined) updates.emailFixedCc = cleanNullable(body.emailFixedCc);
     if (body.otpSubjectTemplate !== undefined) updates.otpSubjectTemplate = body.otpSubjectTemplate;
     if (body.otpBodyTemplate !== undefined) updates.otpBodyTemplate = body.otpBodyTemplate;
+    if (body.clearDocumentSignature === true) updates.documentSignaturePath = null;
 
     if (Object.keys(updates).length === 0) return badRequest("No hay cambios para guardar");
 
     await ensureHrDocumentSettingsRow();
+    const existing = await prisma.hrDocumentRequestSettings.findUnique({ where: { id: "default" } });
+    if (body.clearDocumentSignature === true && existing?.documentSignaturePath) {
+      try {
+        const { unlink } = await import("fs/promises");
+        const { absoluteBrandingFile } = await import("@/modules/plataforma/services/app-branding");
+        await unlink(absoluteBrandingFile(existing.documentSignaturePath));
+      } catch {
+        /* ignore */
+      }
+    }
     const row = await prisma.hrDocumentRequestSettings.update({
       where: { id: "default" },
       data: updates,

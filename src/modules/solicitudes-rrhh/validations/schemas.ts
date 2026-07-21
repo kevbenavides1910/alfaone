@@ -35,4 +35,5 @@ export const settingsPatchSchema = z.object({
   emailFixedCc: z.string().trim().max(4000).optional().nullable(),
   otpSubjectTemplate: z.string().trim().min(3).max(300).optional(),
   otpBodyTemplate: z.string().trim().min(10).max(8000).optional(),
+  clearDocumentSignature: z.boolean().optional(),
 });

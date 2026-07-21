@@ -12,10 +12,13 @@ import {
   sanitizePdfText,
 } from "@/modules/solicitudes-rrhh/services/pdf-common";
 import { loadBrandingLogoFile } from "@/modules/disciplinario/services/disciplinary-pdf-logo";
-import type { EmpleoSnapshot } from "@/modules/solicitudes-rrhh/services/empleo-lookup";
 import {
-  formatDateLongEs,
-} from "@/modules/solicitudes-rrhh/business/format";
+  drawCenteredSignature,
+  embedHrSignature,
+  loadHrSignatureFile,
+} from "@/modules/solicitudes-rrhh/services/pdf-signature";
+import type { EmpleoSnapshot } from "@/modules/solicitudes-rrhh/services/empleo-lookup";
+import { formatDateLongEs } from "@/modules/solicitudes-rrhh/business/format";
 
 export type CartaServicioPdfInput = {
   empleo: EmpleoSnapshot;
@@ -33,8 +36,9 @@ export async function buildCartaServicioPdf(input: CartaServicioPdfInput): Promi
   const page = pdf.addPage([PAGE_W, PAGE_H]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const logoFile = await loadBrandingLogoFile();
+  const [logoFile, signatureFile] = await Promise.all([loadBrandingLogoFile(), loadHrSignatureFile()]);
   const logo = await embedLogo(pdf, logoFile);
+  const signature = await embedHrSignature(pdf, signatureFile);
 
   drawWatermark(page, logo);
   let y = drawHeader(page, {
@@ -110,12 +114,11 @@ export async function buildCartaServicioPdf(input: CartaServicioPdfInput): Promi
     color: TEXT,
   });
 
-  y -= 56;
-  const stampLines = [
-    input.companyLegalName,
-    input.companyIdNumber,
-    "RECURSOS HUMANOS",
-  ];
+  y -= 28;
+  y = drawCenteredSignature(page, signature, y, PAGE_W, 170, 60);
+
+  y -= 8;
+  const stampLines = [input.companyLegalName, input.companyIdNumber, "RECURSOS HUMANOS"];
   for (const line of stampLines) {
     const t = sanitizePdfText(line);
     page.drawText(t, {
@@ -128,7 +131,7 @@ export async function buildCartaServicioPdf(input: CartaServicioPdfInput): Promi
     y -= 12;
   }
 
-  y -= 28;
+  y -= 20;
   const signerBlock = [
     input.signerName,
     input.signerTitle,

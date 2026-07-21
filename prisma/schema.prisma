@@ -1797,6 +1797,8 @@ model HrDocumentRequestSettings {
   emailFixedCc          String?  @db.Text
   otpSubjectTemplate    String   @default("Código de verificación — {{tramite}}")
   otpBodyTemplate       String   @default("Hola,\n\nTu código de verificación para {{tramite}} es: {{codigo}}\n\nExpira en 10 minutos. Si no solicitaste este documento, ignora este mensaje.\n\nAlfa One · Recursos Humanos") @db.Text
+  /// Firma de la encargada de RRHH (PNG/JPEG bajo branding/).
+  documentSignaturePath String?
   updatedAt             DateTime @updatedAt
 
   @@map("hr_document_request_settings")

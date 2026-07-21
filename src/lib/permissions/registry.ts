@@ -371,8 +371,8 @@ export const PERMISSION_REGISTRY = {
       ajustes: {
         label: "Ajustes de constancias",
         uiRoutes: ["/solicitudes-rrhh/ajustes"],
-        apiPrefixes: ["/api/solicitudes-rrhh/settings"],
-        actions: { view: "Ver ajustes", edit: "Configurar documentos y correo OTP" },
+        apiPrefixes: ["/api/solicitudes-rrhh/settings", "/api/solicitudes-rrhh/signature"],
+        actions: { view: "Ver ajustes", edit: "Configurar documentos, firma y correo OTP" },
       },
     },
   },
