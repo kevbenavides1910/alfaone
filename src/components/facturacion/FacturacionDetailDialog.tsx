@@ -478,16 +478,16 @@ export function FacturacionDetailDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="documentNumber" className="text-xs text-slate-500 font-normal">
-                Número de documento (NAF)
+                Número de documento (Codisa NO_FACTU)
               </Label>
               <Input
                 id="documentNumber"
                 disabled
                 readOnly
                 value={documentNumber}
-                placeholder="Se asigna al ligar el documento NAF"
+                placeholder="Se asigna al ligar el documento NAF (NO_FACTU)"
                 maxLength={100}
-                title="Solo lectura: proviene del NO_FISICO de NAF"
+                title="Solo lectura: número interno Codisa (NO_FACTU en NAF)"
               />
             </div>
             <div className="space-y-1.5">

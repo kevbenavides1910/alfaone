@@ -261,13 +261,14 @@ export async function listLinkableNafDocs(input: {
 
 type NafLinkNumberSource = {
   nafTipoDoc: string;
+  nafNoFactu: string | null;
   nafNoFisico: string | null;
   nafConsecutivoFe: string | null;
   nafFecha: Date | null;
   total: number;
 };
 
-/** Prefer FC with highest total: electronic consecutive → invoice #, physical → document #. */
+/** Prefer FC with highest total: FE consecutive → invoice #, Codisa NO_FACTU → document #. */
 function pickInvoiceFieldsFromLinks(links: NafLinkNumberSource[]): {
   invoiceNumber: string | null;
   documentNumber: string | null;
@@ -278,13 +279,13 @@ function pickInvoiceFieldsFromLinks(links: NafLinkNumberSource[]): {
   const pool = fcs.length > 0 ? fcs : ranked;
 
   const withElectronic = pool.find((l) => l.nafConsecutivoFe?.trim());
-  const withPhysical = pool.find((l) => l.nafNoFisico?.trim());
-  const primary = withElectronic ?? withPhysical ?? pool[0] ?? null;
+  const withCodisaDoc = pool.find((l) => l.nafNoFactu?.trim());
+  const primary = withElectronic ?? withCodisaDoc ?? pool[0] ?? null;
 
   return {
     invoiceNumber: primary?.nafConsecutivoFe?.trim() || null,
-    documentNumber: primary?.nafNoFisico?.trim() || withPhysical?.nafNoFisico?.trim() || null,
-    nafFecha: primary?.nafFecha ?? withPhysical?.nafFecha ?? null,
+    documentNumber: primary?.nafNoFactu?.trim() || withCodisaDoc?.nafNoFactu?.trim() || null,
+    nafFecha: primary?.nafFecha ?? withCodisaDoc?.nafFecha ?? null,
   };
 }
 
@@ -353,6 +354,7 @@ export async function recomputeEmisionFromNafLinks(
   const picked = pickInvoiceFieldsFromLinks(
     links.map((l) => ({
       nafTipoDoc: l.nafTipoDoc,
+      nafNoFactu: l.nafNoFactu,
       nafNoFisico: l.nafNoFisico,
       nafConsecutivoFe: l.nafConsecutivoFe,
       nafFecha: l.nafFecha,

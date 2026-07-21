@@ -310,7 +310,7 @@ export default function DocumentosNafPage() {
                       <th data-col-key="fecha" className="px-4 py-3 font-medium" style={{ width: 100 }}>Fecha</th>
                       <th data-col-key="compania" className="px-4 py-3 font-medium" style={{ width: 140 }}>Compañía</th>
                       <th data-col-key="tipo" className="px-4 py-3 font-medium" style={{ width: 70 }}>Tipo</th>
-                      <th data-col-key="noFiscal" className="px-4 py-3 font-medium" style={{ width: 120 }}>Nº fiscal</th>
+                      <th data-col-key="noFactu" className="px-4 py-3 font-medium" style={{ width: 120 }}>Nº Codisa (NO_FACTU)</th>
                       <th data-col-key="cliente" className="px-4 py-3 font-medium" style={{ width: 180 }}>Cliente</th>
                       <th data-col-key="contrato" className="px-4 py-3 font-medium" style={{ width: 160 }}>Contrato / licitación</th>
                       <th data-col-key="total" className="px-4 py-3 font-medium text-right" style={{ width: 110 }}>Total</th>
@@ -343,7 +343,10 @@ export default function DocumentosNafPage() {
                             <Badge variant="outline">{labelTipoDoc(row.tipoDoc)}</Badge>
                           </td>
                           <td className="px-4 py-3 tabular-nums">
-                            {row.noFisico ?? row.noFactu}
+                            {row.noFactu}
+                            {row.noFisico && row.noFisico !== row.noFactu ? (
+                              <div className="text-xs text-slate-400">Físico: {row.noFisico}</div>
+                            ) : null}
                           </td>
                           <td className="px-4 py-3 max-w-none">
                             <div className="whitespace-nowrap" title={row.cliente}>

@@ -2,7 +2,7 @@
  * Backfill CxC desde facturas mensuales — ejecutable con node en el contenedor de producción.
  * Uso: node scripts/sync-cxc-from-facturas.mjs
  *
- * Nº documento: solo NO_FISICO de NAF (factura/emisión). Nunca inventa FM-….
+ * Nº documento: solo NO_FACTU de Codisa (factura/emisión). Nunca inventa FM-….
  */
 const { PrismaClient } = require("@prisma/client");
 
@@ -69,7 +69,7 @@ async function syncCxcFromFacturaMensual(facturaId) {
     return {
       ok: false,
       code: "NO_DOCUMENT_NUMBER",
-      message: "Sin Nº documento de NAF (NO_FISICO)",
+      message: "Sin Nº documento de Codisa (NO_FACTU)",
     };
   }
 

@@ -12,7 +12,7 @@ export function normalizeCompanySapCode(raw: string | null | undefined, fallback
   return trimmed || "0";
 }
 
-/** Números inventados por Alfa One (`FM-YYYYMM-<cuid>`); no son NO_FISICO de NAF. */
+/** Números inventados por Alfa One (`FM-YYYYMM-<cuid>`); no son el Nº Codisa (NO_FACTU). */
 export function isSyntheticFmDocumentNumber(value: string | null | undefined): boolean {
   const v = value?.trim();
   if (!v) return false;
@@ -20,7 +20,8 @@ export function isSyntheticFmDocumentNumber(value: string | null | undefined): b
 }
 
 /**
- * Nº documento = NO_FISICO de NAF (copiado en factura/emisión al ligar).
+ * Nº documento = número interno Codisa (`NO_FACTU` en NAF),
+ * copiado a factura/emisión al ligar el documento.
  * Nunca inventa `FM-…`.
  */
 function resolveDocumentNumber(
@@ -112,7 +113,7 @@ async function upsertCxcDocumento(
 
   if (existingByKey) {
     if (existingLinked && existingLinked.id !== existingByKey.id) {
-      // Colisión: ya hay fila SAP/CxC con el NO_FISICO y otra ligada (p. ej. FM-).
+      // Colisión: ya hay fila SAP/CxC con el NO_FACTU y otra ligada (p. ej. FM-).
       // Fusionar en la clave real y eliminar la sintética.
       await db.cxcDocumento.update({
         where: { id: existingByKey.id },
@@ -144,7 +145,7 @@ async function upsertCxcDocumento(
       return { ok: true, cxcDocumentoId: existingLinked.id, created: false };
     }
 
-    // Migrar clave (FM- → NO_FISICO u otro cambio de NAF).
+    // Migrar clave (FM- / NO_FISICO erróneo → NO_FACTU Codisa).
     try {
       await db.cxcDocumento.update({
         where: { id: existingLinked.id },
@@ -170,7 +171,7 @@ async function upsertCxcDocumento(
 
 /**
  * Crea o actualiza un documento FC en CxC a partir de una factura mensual cerrada.
- * Requiere Nº documento real (NO_FISICO de NAF); no inventa FM-….
+ * Requiere Nº documento real (NO_FACTU de Codisa/NAF); no inventa FM-….
  */
 export async function syncCxcFromFacturaMensual(
   db: Db,
@@ -218,7 +219,7 @@ export async function syncCxcFromFacturaMensual(
       ok: false,
       code: "NO_DOCUMENT_NUMBER",
       message:
-        "Sin Nº documento de NAF (NO_FISICO). Ligar el documento NAF antes de sincronizar CxC.",
+        "Sin Nº documento de Codisa (NO_FACTU en NAF). Ligar el documento NAF antes de sincronizar CxC.",
     };
   }
 
@@ -311,7 +312,7 @@ export async function syncCxcFromFacturaEmision(
       ok: false,
       code: "NO_DOCUMENT_NUMBER",
       message:
-        "Sin Nº documento de NAF (NO_FISICO). Ligar el documento NAF antes de sincronizar CxC.",
+        "Sin Nº documento de Codisa (NO_FACTU en NAF). Ligar el documento NAF antes de sincronizar CxC.",
     };
   }
 

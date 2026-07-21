@@ -200,7 +200,7 @@ export default function CuentasPorCobrarPage() {
             : "",
       },
       { key: "nroFactura", label: "Nº factura", getValue: (r) => r.invoiceNumber ?? "" },
-      { key: "nroDocumento", label: "Nº documento", getValue: (r) => r.documentNumber ?? "" },
+      { key: "nroDocumento", label: "Nº documento (Codisa)", getValue: (r) => r.documentNumber ?? "" },
       { key: "emision", label: "Emisión", getValue: (r) => formatDate(r.closedAt ?? r.expectedIssueDate) },
       { key: "vencimiento", label: "Vencimiento", getValue: (r) => r.dueDate },
       {
@@ -267,7 +267,7 @@ export default function CuentasPorCobrarPage() {
         Saldo: row.remainingBalance ?? "",
         Abono: row.totalAbonos ?? row.provisionalPaymentAmount ?? "",
         "Nº factura": row.invoiceNumber ?? "",
-        "Nº documento": row.documentNumber ?? "",
+        "Nº documento (Codisa)": row.documentNumber ?? "",
         Emisión: formatDate(row.closedAt ?? row.expectedIssueDate),
         Vencimiento: formatDate(row.dueDate),
         "Pago esperado": row.cxcExpectedPaymentDate ? formatDate(row.cxcExpectedPaymentDate) : "",
