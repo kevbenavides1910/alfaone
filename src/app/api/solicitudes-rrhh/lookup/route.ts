@@ -3,7 +3,7 @@ import { ok, badRequest, notFound, serverError } from "@/lib/api/response";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { lookupSchema } from "@/modules/solicitudes-rrhh/validations/schemas";
 import { resolveEmpleoByCedula } from "@/modules/solicitudes-rrhh/services/empleo-lookup";
-import { maskPersonName } from "@/modules/solicitudes-rrhh/business/format";
+import { maskEmail, maskPersonName } from "@/modules/solicitudes-rrhh/business/format";
 import { HR_TRAMITE_LABELS, HR_TRAMITES } from "@/modules/solicitudes-rrhh/business/tramites";
 import { normalizeCedula } from "@/modules/empleados/business/employee-identity";
 
@@ -46,6 +46,8 @@ export async function POST(req: NextRequest) {
     return ok({
       found: true,
       nombreEnmascarado: maskPersonName(empleo.nombre),
+      emailEnmascarado: empleo.email ? maskEmail(empleo.email) : null,
+      tieneCorreo: Boolean(empleo.email),
       tramites: [
         { id: HR_TRAMITES.CARTA_SERVICIO, label: HR_TRAMITE_LABELS.CARTA_SERVICIO },
         { id: HR_TRAMITES.CARTA_FCL, label: HR_TRAMITE_LABELS.CARTA_FCL },

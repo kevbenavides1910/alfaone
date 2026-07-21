@@ -17,19 +17,40 @@ export type EmpleoSnapshot = {
   empresaNombre: string;
   noCia: string | null;
   estado: string | null;
+  /** Correo registrado (NAF / RRHH). Null si no hay. */
+  email: string | null;
 };
 
-function pickCanonicalEmpleo<T extends { estado: string | null; fEgreso: Date | null; fIngreso: Date | null; syncedAt: Date }>(
+function pickCanonicalEmpleo<T extends {
+  estado: string | null;
+  fEgreso: Date | null;
+  fIngreso: Date | null;
+  syncedAt: Date;
+  correoElectronico?: string | null;
+}>(
   rows: T[],
 ): T | null {
   if (rows.length === 0) return null;
   const activos = rows.filter((r) => (r.estado ?? "").trim().toUpperCase() === "A");
   const pool = activos.length > 0 ? activos : rows;
   return [...pool].sort((a, b) => {
+    const aMail = a.correoElectronico?.trim() ? 1 : 0;
+    const bMail = b.correoElectronico?.trim() ? 1 : 0;
+    if (bMail !== aMail) return bMail - aMail;
     const aEnd = a.fEgreso?.getTime() ?? a.fIngreso?.getTime() ?? a.syncedAt.getTime();
     const bEnd = b.fEgreso?.getTime() ?? b.fIngreso?.getTime() ?? b.syncedAt.getTime();
     return bEnd - aEnd;
   })[0];
+}
+
+function firstRegisteredEmail(
+  rows: { correoElectronico?: string | null; email?: string | null }[],
+): string | null {
+  for (const r of rows) {
+    const raw = (r.correoElectronico ?? r.email ?? "").trim().toLowerCase();
+    if (raw.includes("@")) return raw;
+  }
+  return null;
 }
 
 function digitsMatch(cedula: string | null | undefined, target: string): boolean {
@@ -94,6 +115,9 @@ export async function resolveEmpleoByCedula(rawCedula: string): Promise<EmpleoSn
       [naf.apePat, naf.apeMat, naf.nombrePila].filter(Boolean).join(" ").trim() ||
       "SIN NOMBRE";
     const puesto = (naf.puesto || naf.tituloNombre || "NO ESPECIFICADO").trim();
+    const email =
+      firstRegisteredEmail([naf, ...nafRows]) ??
+      null;
     return {
       nombre: nombre.toUpperCase(),
       cedula,
@@ -104,6 +128,7 @@ export async function resolveEmpleoByCedula(rawCedula: string): Promise<EmpleoSn
       empresaNombre: empresaNombre.toUpperCase(),
       noCia: naf.noCia,
       estado: naf.estado,
+      email,
     };
   }
 
@@ -145,5 +170,6 @@ export async function resolveEmpleoByCedula(rawCedula: string): Promise<EmpleoSn
     empresaNombre: empresaNombre.toUpperCase(),
     noCia: emp.companySapCode,
     estado: emp.estado,
+    email: firstRegisteredEmail([{ email: emp.email }, ...empCandidates.map((e) => ({ email: e.email }))]),
   };
 }

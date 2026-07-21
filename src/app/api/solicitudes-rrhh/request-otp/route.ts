@@ -4,6 +4,7 @@ import { checkRateLimit } from "@/lib/security/rate-limit";
 import { requestOtpSchema } from "@/modules/solicitudes-rrhh/validations/schemas";
 import { resolveEmpleoByCedula } from "@/modules/solicitudes-rrhh/services/empleo-lookup";
 import { createOtpSession } from "@/modules/solicitudes-rrhh/services/otp";
+import { maskEmail } from "@/modules/solicitudes-rrhh/business/format";
 import { normalizeCedula } from "@/modules/empleados/business/employee-identity";
 
 function clientIp(req: NextRequest): string {
@@ -46,18 +47,25 @@ export async function POST(req: NextRequest) {
     if (!empleo) {
       return notFound("No se encontró un registro laboral con esa cédula.");
     }
+    if (!empleo.email) {
+      return badRequest(
+        "No hay un correo registrado para esta cédula. Contacte a Recursos Humanos para actualizarlo.",
+      );
+    }
 
     const { sessionId, mailed } = await createOtpSession({
       cedulaNormalizada: cedula,
       tramite: parsed.data.tramite,
-      email: parsed.data.email,
+      email: empleo.email,
       empleo,
     });
 
+    const masked = maskEmail(empleo.email);
     return ok({
       sessionId,
+      emailEnmascarado: masked,
       message: mailed
-        ? "Se envió un código de verificación al correo indicado."
+        ? `Se envió un código de verificación a ${masked}.`
         : "No se pudo enviar el correo (SMTP no configurado). Contacte a Recursos Humanos.",
       mailed,
     });

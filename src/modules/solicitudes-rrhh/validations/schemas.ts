@@ -14,7 +14,6 @@ export const requestOtpSchema = z.object({
     .trim()
     .regex(/^\d{5,20}$/, "Ingrese solo dígitos (sin espacios ni guiones)"),
   tramite: z.enum([HR_TRAMITES.CARTA_FCL, HR_TRAMITES.CARTA_SERVICIO]),
-  email: z.string().trim().email("Correo inválido").max(240),
 });
 
 export const verifyOtpSchema = z.object({

@@ -156,8 +156,8 @@ export default function SolicitudesRrhhAjustesPage() {
         <CardHeader>
           <CardTitle>Correo OTP</CardTitle>
           <CardDescription>
-            Placeholders: {"{{codigo}}"}, {"{{tramite}}"}, {"{{nombre}}"}. El correo destino lo
-            escribe el solicitante en el portal.
+            Placeholders: {"{{codigo}}"}, {"{{tramite}}"}, {"{{nombre}}"}. El código se envía
+            al correo registrado del empleado en NAF/RRHH.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

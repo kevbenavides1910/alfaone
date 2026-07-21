@@ -16,9 +16,10 @@ export default function SolicitudesRrhhPage() {
   const [step, setStep] = useState<Step>("cedula");
   const [cedula, setCedula] = useState("");
   const [nombre, setNombre] = useState("");
+  const [emailMasked, setEmailMasked] = useState("");
+  const [tieneCorreo, setTieneCorreo] = useState(false);
   const [tramites, setTramites] = useState<TramiteOpt[]>([]);
   const [tramite, setTramite] = useState("");
-  const [email, setEmail] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [code, setCode] = useState("");
   const [downloadToken, setDownloadToken] = useState("");
@@ -46,7 +47,12 @@ export default function SolicitudesRrhhPage() {
         body: JSON.stringify({ cedula: digits }),
       });
       const json = (await res.json()) as {
-        data?: { nombreEnmascarado: string; tramites: TramiteOpt[] };
+        data?: {
+          nombreEnmascarado: string;
+          emailEnmascarado: string | null;
+          tieneCorreo: boolean;
+          tramites: TramiteOpt[];
+        };
         error?: { message?: string };
       };
       if (!res.ok || !json.data) {
@@ -54,6 +60,8 @@ export default function SolicitudesRrhhPage() {
         return;
       }
       setNombre(json.data.nombreEnmascarado);
+      setEmailMasked(json.data.emailEnmascarado ?? "");
+      setTieneCorreo(Boolean(json.data.tieneCorreo));
       setTramites(json.data.tramites);
       setTramite(json.data.tramites[0]?.id ?? "");
       setStep("tramite");
@@ -73,10 +81,15 @@ export default function SolicitudesRrhhPage() {
       const res = await fetch("/api/solicitudes-rrhh/request-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cedula, tramite, email }),
+        body: JSON.stringify({ cedula, tramite }),
       });
       const json = (await res.json()) as {
-        data?: { sessionId: string; message: string; mailed: boolean };
+        data?: {
+          sessionId: string;
+          message: string;
+          mailed: boolean;
+          emailEnmascarado?: string;
+        };
         error?: { message?: string };
       };
       if (!res.ok || !json.data) {
@@ -84,6 +97,7 @@ export default function SolicitudesRrhhPage() {
         return;
       }
       setSessionId(json.data.sessionId);
+      if (json.data.emailEnmascarado) setEmailMasked(json.data.emailEnmascarado);
       setInfo(json.data.message);
       setStep("otp");
     } catch {
@@ -126,9 +140,10 @@ export default function SolicitudesRrhhPage() {
     setStep("cedula");
     setCedula("");
     setNombre("");
+    setEmailMasked("");
+    setTieneCorreo(false);
     setTramites([]);
     setTramite("");
-    setEmail("");
     setSessionId("");
     setCode("");
     setDownloadToken("");
@@ -178,7 +193,7 @@ export default function SolicitudesRrhhPage() {
             )}
             <h2 className="text-base font-semibold text-white">
               {step === "cedula" && "Identificación"}
-              {step === "tramite" && "Trámite y correo"}
+              {step === "tramite" && "Trámite"}
               {step === "otp" && "Código de verificación"}
               {step === "download" && "Descargar documento"}
             </h2>
@@ -237,6 +252,15 @@ export default function SolicitudesRrhhPage() {
               <p className="text-gray-400 text-sm">
                 Registro encontrado: <span className="text-white font-medium">{nombre}</span>
               </p>
+              {tieneCorreo && emailMasked ? (
+                <p className="text-gray-400 text-sm">
+                  El código se enviará a: <span className="text-white font-medium">{emailMasked}</span>
+                </p>
+              ) : (
+                <p className="text-amber-400/90 text-sm">
+                  No hay correo registrado para esta cédula. Contacte a Recursos Humanos.
+                </p>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="tramite" className="text-gray-400 text-xs font-medium uppercase tracking-wide">
                   Trámite
@@ -255,26 +279,9 @@ export default function SolicitudesRrhhPage() {
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-gray-400 text-xs font-medium uppercase tracking-wide">
-                  Correo para el código
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="correo@ejemplo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="bg-[#0a0a0a] border-gray-700 text-white placeholder:text-gray-600 focus:border-red-600"
-                />
-                <p className="text-xs text-gray-500">
-                  Puede usar el correo que prefiera; allí llegará el código de confirmación.
-                </p>
-              </div>
               <Button
                 type="submit"
-                disabled={loading || !tramite || !email}
+                disabled={loading || !tramite || !tieneCorreo}
                 className="w-full font-semibold text-white"
                 style={{ backgroundColor: primary }}
               >
@@ -292,7 +299,8 @@ export default function SolicitudesRrhhPage() {
           {step === "otp" && (
             <form onSubmit={handleVerify} className="space-y-5">
               <p className="text-gray-400 text-sm leading-relaxed">
-                Ingrese el código de 6 dígitos enviado a <span className="text-white">{email}</span>
+                Ingrese el código de 6 dígitos enviado a{" "}
+                <span className="text-white">{emailMasked || "su correo registrado"}</span>
                 {tramiteLabel ? (
                   <>
                     {" "}
