@@ -106,6 +106,19 @@ export function calcTrafficLight(usagePct: number): TrafficLight {
   return "RED";
 }
 
+/**
+ * Semáforo por margen: (ingresos − gastos) / ingresos.
+ * `expectedProfitPct` es la utilidad esperada del contrato (fracción 0–1).
+ */
+export function calcMarginTrafficLight(
+  marginPct: number,
+  expectedProfitPct: number,
+): TrafficLight {
+  if (marginPct < 0) return "RED";
+  if (marginPct < expectedProfitPct) return "YELLOW";
+  return "GREEN";
+}
+
 export const TRAFFIC_LIGHT_LABELS: Record<TrafficLight, string> = {
   GREEN: "Normal",
   YELLOW: "Precaución",

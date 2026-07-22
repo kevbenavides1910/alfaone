@@ -1,8 +1,13 @@
 import type { Contract, ExpenseBudgetLine } from "@prisma/client";
 import type { Decimal } from "@prisma/client/runtime/library";
 import { prisma } from "@/modules/core/db/prisma";
-import { TrafficLight, type ReportPartidaFilter, calcTrafficLight } from "@/lib/utils/constants";
-import { getEffectiveMonthlyBilling, getEffectiveMonthlyRevenue } from "@/modules/presupuestos/business/effectiveBilling";
+import {
+  TrafficLight,
+  type ReportPartidaFilter,
+  calcTrafficLight,
+  calcMarginTrafficLight,
+} from "@/lib/utils/constants";
+import { getEffectiveMonthlyRevenue } from "@/modules/presupuestos/business/effectiveBilling";
 import { applyNafLaborToRubros } from "@/modules/presupuestos/business/naf-labor-rubro";
 import {
   calcSuppliesBudget,
@@ -378,6 +383,10 @@ export function computeContractProfitability(
   const budgetUsagePctFormatted = budgetUsagePct * 100;
 
   let lifetime: ProfitabilityResult["lifetime"] = undefined;
+  let marginPct: number | undefined;
+  let marginPctFormatted: number | undefined;
+  let rubroTraffic: ProfitabilityResult["rubroTraffic"];
+
   if (!periodMonth) {
     const now = new Date();
     const contractEnd = new Date(contract.endDate);
@@ -388,7 +397,10 @@ export function computeContractProfitability(
     const endM = limitDate.getMonth();
 
     let totalBilled = 0;
-    let totalBudget = 0;
+    let laborBudgetAccum = 0;
+    let suppliesBudgetAccum = 0;
+    let adminBudgetAccum = 0;
+    let profitBudgetAccum = 0;
     let totalMonths = 0;
 
     let y = startY;
@@ -402,8 +414,10 @@ export function computeContractProfitability(
         monthAsOf,
       );
       totalBilled += monthRevenue.billing;
-      totalBudget +=
-        monthRevenue.billing * (laborPct + suppliesPctEff + adminPct + profitPct);
+      laborBudgetAccum += monthRevenue.billing * laborPct;
+      suppliesBudgetAccum += monthRevenue.billing * suppliesPctEff;
+      adminBudgetAccum += monthRevenue.billing * adminPct;
+      profitBudgetAccum += monthRevenue.billing * profitPct;
       totalMonths++;
       m++;
       if (m > 11) {
@@ -412,10 +426,16 @@ export function computeContractProfitability(
       }
     }
 
+    const totalBudget =
+      laborBudgetAccum + suppliesBudgetAccum + adminBudgetAccum + profitBudgetAccum;
     const totalSpecialServices = specialServicesRows.reduce(
       (s, row) => s + toNum(row.amount),
       0,
     );
+
+    const computedMargin = totalBilled > 0 ? (totalBilled - grandTotalAll) / totalBilled : 0;
+    marginPct = computedMargin;
+    marginPctFormatted = computedMargin * 100;
 
     lifetime = {
       totalBilled,
@@ -424,19 +444,63 @@ export function computeContractProfitability(
       totalExpenses: grandTotalAll,
       totalMonths,
       surplus: totalBudget - grandTotalAll,
+      laborBudget: laborBudgetAccum,
+      suppliesBudget: suppliesBudgetAccum,
+      adminBudget: adminBudgetAccum,
+      profitBudget: profitBudgetAccum,
+      marginPct: computedMargin,
+      marginPctFormatted: computedMargin * 100,
+    };
+
+    // Lifetime: semáforo y % del badge por margen; rubros vs presupuesto acumulado por partida.
+    if (partida === "ALL") {
+      budgetUsagePct = computedMargin;
+      trafficLight = calcMarginTrafficLight(computedMargin, profitPct);
+      isOverBudget = computedMargin < 0;
+      remaining = totalBilled - grandTotalAll;
+    } else {
+      const line = partida;
+      const b =
+        line === "LABOR"
+          ? laborBudgetAccum
+          : line === "SUPPLIES"
+            ? suppliesBudgetAccum
+            : adminBudgetAccum;
+      const spend =
+        line === "LABOR"
+          ? laborSpend
+          : line === "SUPPLIES"
+            ? suppliesSpendTotal
+            : adminSpendTotal;
+      budgetUsagePct = usageRatio(spend, b);
+      trafficLight = calcTrafficLight(budgetUsagePct);
+      isOverBudget = spend > b;
+      remaining = b - spend;
+      reportBudget = b;
+    }
+
+    rubroTraffic = {
+      LABOR: rubroSnapshot(
+        laborSpend,
+        laborBudgetAccum,
+        options?.nafLaborSpend != null ? (options.nafLaborCargasSpend ?? 0) : undefined,
+      ),
+      SUPPLIES: rubroSnapshot(suppliesSpendTotal, suppliesBudgetAccum),
+      ADMIN: rubroSnapshot(adminSpendTotal, adminBudgetAccum),
+      PROFIT: rubroSnapshot(profitSpend, profitBudgetAccum),
+    };
+  } else {
+    rubroTraffic = {
+      LABOR: rubroSnapshot(
+        laborSpend,
+        laborBudget,
+        options?.nafLaborSpend != null ? (options.nafLaborCargasSpend ?? 0) : undefined,
+      ),
+      SUPPLIES: rubroSnapshot(suppliesSpendTotal, suppliesBudget),
+      ADMIN: rubroSnapshot(adminSpendTotal, adminBudget),
+      PROFIT: rubroSnapshot(profitSpend, profitBudget),
     };
   }
-
-  const rubroTraffic = {
-    LABOR: rubroSnapshot(
-      laborSpend,
-      laborBudget,
-      options?.nafLaborSpend != null ? (options.nafLaborCargasSpend ?? 0) : undefined,
-    ),
-    SUPPLIES: rubroSnapshot(suppliesSpendTotal, suppliesBudget),
-    ADMIN: rubroSnapshot(adminSpendTotal, adminBudget),
-    PROFIT: rubroSnapshot(profitSpend, profitBudget),
-  };
 
   return {
     contractId,
@@ -463,9 +527,12 @@ export function computeContractProfitability(
     grandTotal,
     grandTotalAll,
     budgetUsagePct,
-    budgetUsagePctFormatted,
+    budgetUsagePctFormatted: budgetUsagePct * 100,
     remaining,
     trafficLight,
+    ...(marginPct != null
+      ? { marginPct, marginPctFormatted }
+      : {}),
     rubroTraffic,
     isOverBudget,
     lifetime,

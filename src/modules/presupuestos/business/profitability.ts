@@ -61,6 +61,9 @@ export interface ProfitabilityResult {
   budgetUsagePctFormatted: number;
   remaining: number;
   trafficLight: TrafficLight;
+  /** Margen (ingresos − gastos) / ingresos; solo en vista lifetime (sin mes). */
+  marginPct?: number;
+  marginPctFormatted?: number;
   /** Desglose por línea de presupuesto (siempre calculado con los mismos gastos vs presupuesto del período). */
   rubroTraffic: {
     LABOR: RubroTrafficSnapshot;
@@ -76,6 +79,12 @@ export interface ProfitabilityResult {
     totalExpenses: number;
     totalMonths: number;
     surplus: number;
+    laborBudget: number;
+    suppliesBudget: number;
+    adminBudget: number;
+    profitBudget: number;
+    marginPct: number;
+    marginPctFormatted: number;
   };
 }
 

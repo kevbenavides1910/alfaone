@@ -19,7 +19,8 @@ import { BudgetBar } from "@/components/shared/BudgetBar";
 import { TrafficLightBadge } from "@/components/shared/TrafficLightBadge";
 import { toast } from "@/components/ui/toaster";
 import { formatCurrency, formatDate, formatPct, formatBillingPeriodRange } from "@/lib/utils/format";
-import { companyDisplayName, CLIENT_TYPE_LABELS, CONTRACT_STATUS_LABELS, HIRING_TYPE_LABELS, TrafficLight, calcTrafficLight } from "@/lib/utils/constants";
+import { companyDisplayName, CLIENT_TYPE_LABELS, CONTRACT_STATUS_LABELS, HIRING_TYPE_LABELS, EXPENSE_BUDGET_LINE_LABELS, TrafficLight, calcTrafficLight } from "@/lib/utils/constants";
+import type { ExpenseBudgetLine } from "@prisma/client";
 import { useCompanies } from "@/lib/hooks/use-companies";
 // calcTrafficLight used in BudgetBar lifetime section
 import { PeriodsTab } from "@/components/contracts/PeriodsTab";
@@ -52,6 +53,13 @@ interface Contract {
   periods: { id: string; periodNumber: number; startDate: string; endDate: string; monthlyBilling: number }[];
 }
 
+interface RubroTrafficSnapshot {
+  spend: number;
+  usagePct: number;
+  usagePctFormatted: number;
+  trafficLight: TrafficLight;
+}
+
 interface Profitability {
   suppliesBudget: number;
   uniformsTotal: number; auditTotal: number; deferredTotal: number; adminTotal: number;
@@ -61,6 +69,14 @@ interface Profitability {
   expensesByType: Record<string, number>;
   grandTotal: number;
   budgetUsagePctFormatted: number; trafficLight: TrafficLight; remaining: number;
+  marginPct?: number;
+  marginPctFormatted?: number;
+  rubroTraffic?: {
+    LABOR: RubroTrafficSnapshot;
+    SUPPLIES: RubroTrafficSnapshot;
+    ADMIN: RubroTrafficSnapshot;
+    PROFIT: RubroTrafficSnapshot;
+  };
   lifetime?: {
     totalBilled: number;
     totalSpecialServices?: number;
@@ -68,6 +84,12 @@ interface Profitability {
     totalExpenses: number;
     totalMonths: number;
     surplus: number;
+    laborBudget?: number;
+    suppliesBudget?: number;
+    adminBudget?: number;
+    profitBudget?: number;
+    marginPct?: number;
+    marginPctFormatted?: number;
   };
 }
 
@@ -166,7 +188,17 @@ export default function ContractDetailPage() {
               <Badge variant="outline" className="rounded-sm border-[#c6c6c6] font-normal">
                 {companyDisplayName(contract.company, companyRows)}
               </Badge>
-              {prof && <TrafficLightBadge light={tl} pct={prof.budgetUsagePctFormatted} />}
+              {prof && (
+                <div className="flex items-center gap-1.5" title="Margen = (ingresos − gastos) ÷ ingresos">
+                  <TrafficLightBadge
+                    light={tl}
+                    pct={prof.marginPctFormatted ?? prof.budgetUsagePctFormatted}
+                  />
+                  {prof.marginPctFormatted != null && (
+                    <span className="text-[10px] uppercase tracking-wide text-[#525252]">margen</span>
+                  )}
+                </div>
+              )}
             </div>
             {canEditContract && (
               <Link href={`/contracts/${id}/edit`}>
@@ -203,10 +235,11 @@ export default function ContractDetailPage() {
         {prof?.lifetime && (() => {
           const lt = prof.lifetime!;
           const usagePct = lt.totalBudget > 0 ? lt.totalExpenses / lt.totalBudget : 0;
-          const isOver = lt.surplus < 0;
-          const isGood = lt.surplus >= 0;
+          const margin = lt.marginPct ?? (lt.totalBilled > 0 ? (lt.totalBilled - lt.totalExpenses) / lt.totalBilled : 0);
+          const isOver = margin < 0;
+          const isGood = margin >= 0;
           return (
-            <div className="grid grid-cols-1 gap-0 border-y border-[#e0e0e0] md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-0 border-y border-[#e0e0e0] md:grid-cols-3">
               <CarbonStatTile
                 label="Facturado desde inicio"
                 value={formatCurrency(lt.totalBilled)}
@@ -223,8 +256,16 @@ export default function ContractDetailPage() {
                 label="Gastos acumulados"
                 value={formatCurrency(lt.totalExpenses)}
                 helper={`${(usagePct * 100).toFixed(1)}% del presupuesto · ${
-                  isGood ? "+" : ""
+                  lt.surplus >= 0 ? "+" : ""
                 }${formatCurrency(lt.surplus)}`}
+                icon={lt.surplus < 0 ? TrendingDown : TrendingUp}
+                accent={lt.surplus < 0 ? "red" : "green"}
+                className="border-x-0 border-t-0 border-b md:border-b-0 md:border-r"
+              />
+              <CarbonStatTile
+                label="Margen total"
+                value={`${(margin * 100).toFixed(1)}%`}
+                helper={`${isGood ? "+" : ""}${formatCurrency(lt.totalBilled - lt.totalExpenses)} · ingresos − gastos`}
                 icon={isOver ? TrendingDown : isGood ? TrendingUp : Minus}
                 accent={isOver ? "red" : "green"}
                 className="border-x-0 border-t-0"
@@ -364,6 +405,74 @@ export default function ContractDetailPage() {
 
               {/* Contract info */}
               <div className="space-y-4">
+                {prof?.rubroTraffic && (
+                  <Card className="rounded-none border-[#e0e0e0] shadow-none">
+                    <CardHeader className="border-b border-[#e0e0e0] bg-[#f4f4f4] py-4">
+                      <CardTitle className="text-sm font-semibold text-[#161616]">
+                        Rentabilidad por partida
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 p-4">
+                      {(
+                        [
+                          "LABOR",
+                          "SUPPLIES",
+                          "ADMIN",
+                          "PROFIT",
+                        ] as ExpenseBudgetLine[]
+                      ).map((line) => {
+                        const rubro = prof.rubroTraffic![line];
+                        const budget =
+                          line === "LABOR"
+                            ? (prof.lifetime?.laborBudget ?? 0)
+                            : line === "SUPPLIES"
+                              ? (prof.lifetime?.suppliesBudget ?? 0)
+                              : line === "ADMIN"
+                                ? (prof.lifetime?.adminBudget ?? 0)
+                                : (prof.lifetime?.profitBudget ?? 0);
+                        return (
+                          <div key={line} className="border-b border-[#e0e0e0] pb-3 last:border-0 last:pb-0">
+                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium text-[#161616]">
+                                {EXPENSE_BUDGET_LINE_LABELS[line]}
+                              </span>
+                              <TrafficLightBadge
+                                light={rubro.trafficLight}
+                                pct={rubro.usagePctFormatted}
+                                size="sm"
+                              />
+                            </div>
+                            <div className="mb-1.5 flex justify-between text-xs text-[#525252]">
+                              <span>Gasto {formatCurrency(rubro.spend)}</span>
+                              <span>Ppto. {formatCurrency(budget)}</span>
+                            </div>
+                            <BudgetBar
+                              pct={Math.min(rubro.usagePctFormatted, 100)}
+                              light={rubro.trafficLight}
+                              showLabel={false}
+                              height="sm"
+                            />
+                          </div>
+                        );
+                      })}
+                      {prof.lifetime && prof.marginPctFormatted != null && (
+                        <div className="flex justify-between border-t border-[#e0e0e0] pt-3 text-sm">
+                          <span className="text-[#525252]">Margen total</span>
+                          <span
+                            className={
+                              (prof.marginPct ?? 0) >= 0
+                                ? "font-semibold text-green-700"
+                                : "font-semibold text-red-600"
+                            }
+                          >
+                            {prof.marginPctFormatted.toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
                 <Card className="rounded-none border-[#e0e0e0] shadow-none">
                   <CardHeader className="border-b border-[#e0e0e0] bg-[#f4f4f4] py-4">
                     <CardTitle className="text-sm font-semibold text-[#161616]">Datos del contrato</CardTitle>
