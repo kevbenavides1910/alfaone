@@ -54,6 +54,8 @@ Overrides de velocidad en build local:
 
 - Por defecto **no** corre `tsc` en el host (`DEPLOY_FULL_CHECKS=1` para forzar).
 - Lint dentro de `next build` está desactivado (`eslint.ignoreDuringBuilds`); lint sigue en CI.
+- En imagen Docker (`DOCKER_BUILD=1`): también se omite typecheck; CI sigue tipando con `npm run build`.
+- Cache BuildKit de `/app/.next/cache` entre publishes en el runner self-hosted.
 
 ---
 
@@ -70,15 +72,24 @@ npm run dev
 
 ### Producción (Docker) — camino rápido
 
-1. Commit + push a `main` → workflow **Publish GHCR** sube `ghcr.io/kevbenavides1910/alfaone:<sha>` y `:latest`.
-2. En el VPS (path canónico):
+1. Commit + push a `main` → workflow **Publish GHCR** (self-hosted) construye la imagen.
+2. En el VPS (path canónico), **sin esperar a mano**:
 
 ```bash
 cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
 npm run ops:ghcr-login   # una vez
-npm run ops:deploy:auto
-# o: APP_IMAGE=ghcr.io/kevbenavides1910/alfaone:<sha> npm run ops:deploy:pull
+npm run ops:deploy:ghcr  # espera la imagen del SHA (local o GHCR) y recrea la app
 ```
+
+Tiempos típicos tras estas optimizaciones:
+
+| Fase | Antes | Ahora (objetivo) |
+|------|-------|------------------|
+| Publish GHCR (`next build`) | ~3–5 min (compile + typecheck) | ~1.5–3 min (sin typecheck en Docker + cache `.next`) |
+| Esperar imagen + pull | polling manual del agente | `ops:deploy:ghcr` espera solo (imagen local del runner suele listo antes del push) |
+| Recreate app + smoke | ~30–60 s | igual |
+
+Variables útiles: `DEPLOY_GHCR_WAIT_SECONDS` (default 900), `DEPLOY_GHCR_POLL_SECONDS` (default 5).
 
 ### Producción — WIP local (sin push)
 

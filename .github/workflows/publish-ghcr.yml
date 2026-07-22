@@ -70,4 +70,5 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           provenance: false
           # Sin cache-to registry (mode=max): en el 1er run subía GB y sumaba ~10+ min.
-          # Con driver docker las capas deps/ora/apt se reutilizan solas en el host.
+          # Con driver docker: capas deps/ora/apt + cache mount /.next/cache entre runs.
+          # DOCKER_BUILD=1 omite typecheck en next build (~60s); CI sigue tipando.

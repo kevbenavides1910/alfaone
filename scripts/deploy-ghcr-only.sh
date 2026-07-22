@@ -2,6 +2,10 @@
 # Deploy estricto por GHCR: NUNCA hace build local en el VPS.
 # Uso: npm run ops:deploy:ghcr
 #      APP_IMAGE=ghcr.io/kevbenavides1910/alfaone:<sha> npm run ops:deploy:ghcr
+#
+# Si la imagen del SHA aún no está, espera (poll local + GHCR) en lugar de fallar al instante.
+# El runner Publish GHCR corre en el mismo daemon Docker → a menudo la imagen local
+# aparece antes de que el push a ghcr.io termine.
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,6 +13,9 @@ cd "$ROOT"
 
 DEFAULT_IMAGE_REPO="${GHCR_IMAGE_REPO:-ghcr.io/kevbenavides1910/alfaone}"
 ALLOW_LATEST="${DEPLOY_GHCR_ALLOW_LATEST:-0}"
+# Espera por Publish GHCR (build ~2–5 min). 0 = no esperar (comportamiento antiguo).
+WAIT_SECS="${DEPLOY_GHCR_WAIT_SECONDS:-900}"
+POLL_SECS="${DEPLOY_GHCR_POLL_SECONDS:-5}"
 
 section() {
   echo ""
@@ -17,9 +24,21 @@ section() {
 
 die() {
   echo "ERROR: $*" >&2
-  echo "Hint: push a main → esperar Publish GHCR → npm run ops:ghcr-login (si denied) → reintentar." >&2
+  echo "Hint: push a main → npm run ops:deploy:ghcr (espera Publish GHCR solo). Login: npm run ops:ghcr-login" >&2
   echo "Build local solo con confirmación explícita del usuario: npm run ops:deploy" >&2
   exit 1
+}
+
+image_present() {
+  local img="$1"
+  # Mismo host que el self-hosted runner: la imagen local basta (no esperar push).
+  if docker image inspect "$img" >/dev/null 2>&1; then
+    return 0
+  fi
+  if docker manifest inspect "$img" >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
 }
 
 section "Deploy GHCR-only (sin build local)"
@@ -57,23 +76,36 @@ if [ -z "$RESOLVED" ]; then
   CANDIDATES=(
     "${DEFAULT_IMAGE_REPO}:${SHA}"
     "${DEFAULT_IMAGE_REPO}:${SHORT_SHA}"
+    "${DEFAULT_IMAGE_REPO}:sha-${SHORT_SHA}"
   )
   if [ "$ALLOW_LATEST" = "1" ] || [ "$ALLOW_LATEST" = "true" ]; then
     CANDIDATES+=("${DEFAULT_IMAGE_REPO}:latest")
   fi
 
-  section "Buscando imagen GHCR para ${SHORT_SHA}"
-  for img in "${CANDIDATES[@]}"; do
-    echo "probe: $img"
-    if docker manifest inspect "$img" >/dev/null 2>&1; then
-      RESOLVED="$img"
+  section "Buscando imagen para ${SHORT_SHA} (espera hasta ${WAIT_SECS}s)"
+  START_TS="$(date +%s)"
+  while true; do
+    for img in "${CANDIDATES[@]}"; do
+      if image_present "$img"; then
+        RESOLVED="$img"
+        echo "OK: $img"
+        break 2
+      fi
+    done
+
+    NOW="$(date +%s)"
+    ELAPSED=$((NOW - START_TS))
+    if [ "$WAIT_SECS" -le 0 ] || [ "$ELAPSED" -ge "$WAIT_SECS" ]; then
       break
     fi
+    REMAIN=$((WAIT_SECS - ELAPSED))
+    echo "… imagen aún no lista (${ELAPSED}s). Reintento en ${POLL_SECS}s (queda ~${REMAIN}s)"
+    sleep "$POLL_SECS"
   done
 fi
 
 if [ -z "$RESOLVED" ]; then
-  die "no hay imagen GHCR para $SHORT_SHA (ni APP_IMAGE). Espere Publish GHCR o: gh workflow run \"Publish GHCR\""
+  die "no hay imagen GHCR/local para $SHORT_SHA (ni APP_IMAGE). Revise workflow Publish GHCR."
 fi
 
 section "Pull + recreate: $RESOLVED"

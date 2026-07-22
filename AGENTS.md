@@ -28,7 +28,7 @@ npm run ops:ghcr-login
 npm run ops:deploy
 ```
 
-Flujo: commit → push `main` → workflow **Publish GHCR** → `npm run ops:deploy:ghcr`.
+Flujo: commit → push `main` → **de inmediato** `npm run ops:deploy:ghcr` (el script espera solo la imagen del SHA; no poll manual).
 
 Detalle: `docs/DEPLOYMENT.md`. Regla: `.cursor/rules/deploy-ghcr-obligatorio.mdc`.
 

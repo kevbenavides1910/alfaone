@@ -23,7 +23,10 @@ ENV NEXTAUTH_URL=http://localhost:3000
 ENV NEXTAUTH_SECRET=ci-build-placeholder-secret-min-32-characters!!
 # Self-hosted alfaia tiene mucha RAM/CPU; evita OOM y acelera el compile.
 ENV NODE_OPTIONS=--max-old-space-size=8192
-RUN npm run build
+# Omite typecheck en next build (ver next.config.ts); cache webpack/SWC entre publishes.
+ENV DOCKER_BUILD=1
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # Stage aislado: oracledb thick (glibc). Cache estable — no se reinstala en cada rebuild de Next.
 FROM node:20-bookworm-slim AS ora

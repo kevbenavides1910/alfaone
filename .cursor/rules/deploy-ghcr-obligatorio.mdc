@@ -20,16 +20,16 @@ Equivale a pull estricto (`scripts/deploy-ghcr-only.sh`): **nunca** ejecuta `ops
 
 1. Path canónico únicamente (ver `deploy-solo-prod-path.mdc`).
 2. Si hay cambios sin commit/push: **commitear solo si el usuario lo pidió**; luego `git push origin HEAD` a `main`/`master`.
-3. Esperar imagen en GHCR del SHA (`docker manifest inspect` o workflow Publish GHCR).
-4. Si no hay login GHCR: `npm run ops:ghcr-login` (requiere `GHCR_TOKEN` con `read:packages`) — **no** inventar tokens; pedir al usuario.
-5. Correr `npm run ops:deploy:ghcr`.
-6. Si falla (dirty tree, sin imagen, denied): **abortar y explicar**. No hacer fallback a `ops:deploy`.
+3. Si no hay login GHCR: `npm run ops:ghcr-login` (requiere `GHCR_TOKEN` / `/etc/alfa-one/ghcr.env`) — **no** inventar tokens; pedir al usuario.
+4. Correr **de inmediato** `npm run ops:deploy:ghcr` (block largo, p. ej. 15 min). El script **espera solo** la imagen del SHA (local Docker del runner o GHCR); **no** hacer un bucle manual de `sleep` + `docker manifest inspect` / `gh run list` antes.
+5. Si falla (dirty tree, timeout sin imagen, denied): **abortar y explicar**. No hacer fallback a `ops:deploy`.
 
 ## Prohibido
 
 - `npm run ops:deploy` (build local en el VPS)
 - `ops:deploy:auto` si puede caer a build local
-- Desplegar WIP sin push + imagen publicada
+- Desplegar WIP sin push
+- Polling manual lento “hasta que Publish termine” antes de lanzar `ops:deploy:ghcr`
 - Afirmar “deploy OK” sin smoke/health del script
 
 ## Excepción
