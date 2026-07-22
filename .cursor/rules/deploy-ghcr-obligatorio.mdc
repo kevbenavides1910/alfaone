@@ -21,7 +21,7 @@ Equivale a pull estricto (`scripts/deploy-ghcr-only.sh`): **nunca** ejecuta `ops
 1. Path canónico únicamente (ver `deploy-solo-prod-path.mdc`).
 2. Si hay cambios sin commit/push: **commitear solo si el usuario lo pidió**; luego `git push origin HEAD` a `main`/`master`.
 3. Si no hay login GHCR: `npm run ops:ghcr-login` (requiere `GHCR_TOKEN` / `/etc/alfa-one/ghcr.env`) — **no** inventar tokens; pedir al usuario.
-4. Correr **de inmediato** `npm run ops:deploy:ghcr` (block largo, p. ej. 15 min). El script **espera solo** la imagen del SHA (local Docker del runner o GHCR); **no** hacer un bucle manual de `sleep` + `docker manifest inspect` / `gh run list` antes.
+4. Correr **de inmediato** `npm run ops:deploy:ghcr` (block ~hasta 6 min; aborta si Publish GHCR falla). El script **espera solo** la imagen del SHA (local Docker del runner o GHCR); **no** hacer un bucle manual de `sleep` + `docker manifest inspect` / `gh run list` antes.
 5. Si falla (dirty tree, timeout sin imagen, denied): **abortar y explicar**. No hacer fallback a `ops:deploy`.
 
 ## Prohibido

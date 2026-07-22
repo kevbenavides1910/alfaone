@@ -89,7 +89,7 @@ Tiempos típicos tras estas optimizaciones:
 | Esperar imagen + pull | polling manual del agente | `ops:deploy:ghcr` espera solo (imagen local del runner suele listo antes del push) |
 | Recreate app + smoke | ~30–60 s | igual |
 
-Variables útiles: `DEPLOY_GHCR_WAIT_SECONDS` (default 900), `DEPLOY_GHCR_POLL_SECONDS` (default 5).
+Variables útiles: `DEPLOY_GHCR_WAIT_SECONDS` (default **360** = 6 min), `DEPLOY_GHCR_POLL_SECONDS` (default 8). El script aborta antes si `gh` ve que Publish GHCR falló.
 
 ### Producción — WIP local (sin push)
 
