@@ -96,7 +96,7 @@ const FAE_LINKS = [
   { code: "FAE_PENDIENTE", label: "FAE pendiente aceptación" },
 ];
 
-const REFETCH_MS = 30_000;
+const REFETCH_MS = 120_000;
 const PAGE_SIZE = 50;
 const COLSPAN = 15;
 
@@ -345,7 +345,7 @@ export function CxpFacturasPageClient() {
     queryKey,
     placeholderData: keepPreviousData,
     refetchInterval: REFETCH_MS,
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
     queryFn: async () => {
       const params = new URLSearchParams({
         periodMonth: String(periodMonth),
