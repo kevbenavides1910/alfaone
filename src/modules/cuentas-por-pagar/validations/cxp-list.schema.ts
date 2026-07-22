@@ -6,6 +6,14 @@ export const cxpEstadoFilterSchema = z.enum([
   "PARCIAL",
   "PAGADA",
   "ANULADA",
+  "SIN_CXP",
+]);
+
+export const cxpFaeLinkFilterSchema = z.enum([
+  "ALL",
+  "CON_FAE",
+  "SIN_FAE",
+  "FAE_PENDIENTE",
 ]);
 
 export const cxpFacturasListSchema = z.object({
@@ -16,6 +24,7 @@ export const cxpFacturasListSchema = z.object({
   tipoDoc: z.string().trim().optional(),
   search: z.string().trim().optional(),
   estado: cxpEstadoFilterSchema.optional().default("ALL"),
+  faeLink: cxpFaeLinkFilterSchema.optional().default("ALL"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });

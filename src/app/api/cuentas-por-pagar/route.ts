@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     tipoDoc: searchParams.get("tipoDoc") ?? undefined,
     search: searchParams.get("search") ?? undefined,
     estado: searchParams.get("estado") ?? "ALL",
+    faeLink: searchParams.get("faeLink") ?? "ALL",
     page: searchParams.get("page") ?? "1",
     pageSize: searchParams.get("pageSize") ?? "50",
   });

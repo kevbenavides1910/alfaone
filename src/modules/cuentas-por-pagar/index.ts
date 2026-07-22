@@ -1,9 +1,11 @@
 export {
   resolveCxpEstado,
   labelCxpEstado,
+  labelFaeAceptacion,
   labelMonedaCxp,
   type CxpEstadoPago,
   type CxpEstadoFilter,
+  type CxpFaeLinkFilter,
 } from "./business/cxp-status";
 export {
   listCxpFacturas,

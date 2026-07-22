@@ -35,6 +35,7 @@ import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils/format";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import {
   labelCxpEstado,
+  labelFaeAceptacion,
   type CxpEstadoPago,
 } from "@/modules/cuentas-por-pagar/business/cxp-status";
 import type { CxpFacturaRow, CxpFacturasListResult } from "@/modules/cuentas-por-pagar/services/list-cxp-facturas";
@@ -81,14 +82,23 @@ const TIPOS_DOC = [
 
 const ESTADOS = [
   { code: "ALL", label: "Todos los estados" },
-  { code: "PENDIENTE", label: "Pendiente" },
+  { code: "PENDIENTE", label: "Pendiente pago" },
   { code: "PARCIAL", label: "Parcial" },
   { code: "PAGADA", label: "Pagada (amarrada)" },
   { code: "ANULADA", label: "Anulada" },
+  { code: "SIN_CXP", label: "Sin CXP (solo FAE)" },
+];
+
+const FAE_LINKS = [
+  { code: "ALL", label: "FAE: todas" },
+  { code: "CON_FAE", label: "Con FAE" },
+  { code: "SIN_FAE", label: "Sin FAE" },
+  { code: "FAE_PENDIENTE", label: "FAE pendiente aceptación" },
 ];
 
 const REFETCH_MS = 30_000;
 const PAGE_SIZE = 50;
+const COLSPAN = 15;
 
 function currentYear() {
   return new Date().getFullYear();
@@ -121,12 +131,50 @@ function estadoBadge(estado: CxpEstadoPago) {
           {label}
         </Badge>
       );
+    case "SIN_CXP":
+      return (
+        <Badge className="bg-violet-100 text-violet-900 hover:bg-violet-100 border-transparent">
+          {label}
+        </Badge>
+      );
   }
 }
 
-function AmarresPanel({ row }: { row: CxpFacturaRow }) {
+function faeAceptacionBadge(row: CxpFacturaRow) {
+  if (!row.conFae) {
+    return <span className="text-slate-400">—</span>;
+  }
+  const code = (row.faeAceptacion ?? "").trim().toUpperCase();
+  const label = row.faeAceptacionLabel || labelFaeAceptacion(code);
+  if (code === "P") {
+    return (
+      <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 border-transparent">
+        {label}
+      </Badge>
+    );
+  }
+  if (code === "A" || code === "AA") {
+    return (
+      <Badge className="bg-emerald-100 text-emerald-900 hover:bg-emerald-100 border-transparent">
+        {label}
+      </Badge>
+    );
+  }
+  if (code === "R" || code === "X") {
+    return (
+      <Badge className="bg-red-100 text-red-800 hover:bg-red-100 border-transparent">
+        {label}
+      </Badge>
+    );
+  }
+  return <Badge variant="outline">{label}</Badge>;
+}
+
+function TraceabilityPanel({ row }: { row: CxpFacturaRow }) {
+  const canLoadAmarres = row.origen === "CXP" && Boolean(row.tipoDoc && row.noDocu);
   const { data, isLoading, isError, error } = useQuery<{ data: CxpAmarresResult }>({
     queryKey: ["cxp-amarres", row.noCia, row.tipoDoc, row.noDocu, row.noProve],
+    enabled: canLoadAmarres,
     queryFn: async () => {
       const params = new URLSearchParams();
       if (row.noProve) params.set("noProve", row.noProve);
@@ -141,63 +189,104 @@ function AmarresPanel({ row }: { row: CxpFacturaRow }) {
 
   const amarres: CxpAmarreRow[] = data?.data?.rows ?? [];
 
-  if (isLoading) {
-    return <div className="px-6 py-3 text-sm text-slate-500">Cargando amarres…</div>;
-  }
-  if (isError) {
-    return (
-      <div className="px-6 py-3 text-sm text-red-600">
-        {(error as Error)?.message ?? "No se pudieron cargar los amarres."}
-      </div>
-    );
-  }
-  if (amarres.length === 0) {
-    return (
-      <div className="px-6 py-3 text-sm text-slate-500">
-        Sin aplicaciones de pago en NAF5.ARCPRD.
-      </div>
-    );
-  }
-
   return (
-    <div className="px-6 py-3 bg-slate-50/80 border-t border-slate-100">
-      <p className="text-xs font-medium text-slate-600 mb-2">
-        Amarres / aplicaciones ({amarres.length})
-      </p>
-      <div className="overflow-x-auto rounded border border-slate-200 bg-white">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-slate-50 text-left text-slate-500">
-              <th className="px-3 py-2 font-medium">Fecha aplic.</th>
-              <th className="px-3 py-2 font-medium">Pago</th>
-              <th className="px-3 py-2 font-medium">Nº físico</th>
-              <th className="px-3 py-2 font-medium text-right">Monto aplicado</th>
-              <th className="px-3 py-2 font-medium text-right">Monto pago</th>
-              <th className="px-3 py-2 font-medium">Procesado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {amarres.map((a) => (
-              <tr key={a.id} className="border-t border-slate-100">
-                <td className="px-3 py-2 whitespace-nowrap">
-                  {a.fechaAplicacion ? formatDate(a.fechaAplicacion) : "—"}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap">
-                  <span className="font-medium">{a.pagoTipoDoc}</span> {a.pagoNoDocu}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap">{a.pagoNoFisico ?? "—"}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {formatCurrency(a.montoAplicado)}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {a.pagoMonto != null ? formatCurrency(a.pagoMonto) : "—"}
-                </td>
-                <td className="px-3 py-2">{a.procesado ? "Sí" : "No"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 space-y-4">
+      <div>
+        <p className="text-xs font-medium text-slate-600 mb-2">Trazabilidad FAE ↔ CXP</p>
+        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 text-xs">
+          <div className="rounded border border-slate-200 bg-white px-3 py-2">
+            <p className="text-slate-500">Origen</p>
+            <p className="font-medium text-slate-800">{row.origen === "FAE" ? "Solo FAE" : "CXP Codisa"}</p>
+          </div>
+          <div className="rounded border border-slate-200 bg-white px-3 py-2">
+            <p className="text-slate-500">Consecutivo FE</p>
+            <p className="font-medium tabular-nums break-all">{row.faeConsecutivo ?? "—"}</p>
+          </div>
+          <div className="rounded border border-slate-200 bg-white px-3 py-2">
+            <p className="text-slate-500">Clave Hacienda</p>
+            <p className="font-medium tabular-nums break-all">{row.faeClave ?? "—"}</p>
+          </div>
+          <div className="rounded border border-slate-200 bg-white px-3 py-2">
+            <p className="text-slate-500">Fecha FE / Total FAE</p>
+            <p className="font-medium">
+              {row.faeFecha ? formatDate(row.faeFecha) : "—"}
+              {" · "}
+              {row.faeTotal != null ? formatCurrency(row.faeTotal) : "—"}
+            </p>
+          </div>
+          <div className="rounded border border-slate-200 bg-white px-3 py-2">
+            <p className="text-slate-500">Aceptación / Procesado</p>
+            <p className="font-medium">
+              {row.conFae ? row.faeAceptacionLabel : "Sin vínculo FAE"}
+              {" · "}
+              {row.faeProcesado == null ? "—" : row.faeProcesado ? "Procesado" : "No procesado"}
+            </p>
+          </div>
+          <div className="rounded border border-slate-200 bg-white px-3 py-2">
+            <p className="text-slate-500">Nº físico CXP ↔ FAE</p>
+            <p className="font-medium tabular-nums">
+              {row.noFisico ?? "—"}
+              {row.faeConsecutivo ? ` ↔ …${row.faeConsecutivo.slice(-8)}` : ""}
+            </p>
+          </div>
+        </div>
       </div>
+
+      {canLoadAmarres ? (
+        <div>
+          <p className="text-xs font-medium text-slate-600 mb-2">
+            Amarres / aplicaciones CXP ({isLoading ? "…" : amarres.length})
+          </p>
+          {isLoading ? (
+            <div className="text-sm text-slate-500">Cargando amarres…</div>
+          ) : isError ? (
+            <div className="text-sm text-red-600">
+              {(error as Error)?.message ?? "No se pudieron cargar los amarres."}
+            </div>
+          ) : amarres.length === 0 ? (
+            <div className="text-sm text-slate-500">Sin aplicaciones de pago en NAF5.ARCPRD.</div>
+          ) : (
+            <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-left text-slate-500">
+                    <th className="px-3 py-2 font-medium">Fecha aplic.</th>
+                    <th className="px-3 py-2 font-medium">Pago</th>
+                    <th className="px-3 py-2 font-medium">Nº físico</th>
+                    <th className="px-3 py-2 font-medium text-right">Monto aplicado</th>
+                    <th className="px-3 py-2 font-medium text-right">Monto pago</th>
+                    <th className="px-3 py-2 font-medium">Procesado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {amarres.map((a) => (
+                    <tr key={a.id} className="border-t border-slate-100">
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {a.fechaAplicacion ? formatDate(a.fechaAplicacion) : "—"}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className="font-medium">{a.pagoTipoDoc}</span> {a.pagoNoDocu}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">{a.pagoNoFisico ?? "—"}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {formatCurrency(a.montoAplicado)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {a.pagoMonto != null ? formatCurrency(a.pagoMonto) : "—"}
+                      </td>
+                      <td className="px-3 py-2">{a.procesado ? "Sí" : "No"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">
+          Documento solo en FAE: aún no hay digitación/amarrre en CXP Codisa.
+        </p>
+      )}
     </div>
   );
 }
@@ -209,6 +298,7 @@ export function CxpFacturasPageClient() {
   const [company, setCompany] = useState("ALL");
   const [tipoDoc, setTipoDoc] = useState("ALL");
   const [estado, setEstado] = useState("ALL");
+  const [faeLink, setFaeLink] = useState("ALL");
   const [noProve, setNoProve] = useState("ALL");
   const [proveedorSearch, setProveedorSearch] = useState("");
   const [search, setSearch] = useState("");
@@ -243,6 +333,7 @@ export function CxpFacturasPageClient() {
     company,
     tipoDoc,
     estado,
+    faeLink,
     noProve,
     search,
     page,
@@ -262,6 +353,7 @@ export function CxpFacturasPageClient() {
         page: String(page),
         pageSize: String(PAGE_SIZE),
         estado,
+        faeLink,
       });
       if (company !== "ALL") params.set("company", company);
       if (tipoDoc !== "ALL") params.set("tipoDoc", tipoDoc);
@@ -291,9 +383,15 @@ export function CxpFacturasPageClient() {
       },
       {
         key: "fecha",
-        label: "Fecha",
+        label: "Fecha CXP",
         headerClassName: "sticky top-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600",
         getValue: (r) => formatDate(r.fecha),
+      },
+      {
+        key: "faeFecha",
+        label: "Fecha FE",
+        headerClassName: "sticky top-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600",
+        getValue: (r) => (r.faeFecha ? formatDate(r.faeFecha) : ""),
       },
       {
         key: "compania",
@@ -315,9 +413,9 @@ export function CxpFacturasPageClient() {
       },
       {
         key: "noDocu",
-        label: "Nº documento",
+        label: "Nº CXP",
         headerClassName: "sticky top-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600",
-        getValue: (r) => r.noDocu,
+        getValue: (r) => (r.origen === "CXP" ? r.noDocu : ""),
       },
       {
         key: "noFisico",
@@ -326,11 +424,25 @@ export function CxpFacturasPageClient() {
         getValue: (r) => r.noFisico ?? "",
       },
       {
+        key: "faeConsecutivo",
+        label: "Consecutivo FE",
+        headerClassName: "sticky top-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600",
+        getValue: (r) => r.faeConsecutivo ?? "",
+      },
+      {
         key: "monto",
-        label: "Monto",
+        label: "Monto CXP",
         align: "right",
         headerClassName: "sticky top-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600 text-right",
         getValue: (r) => String(r.monto),
+        filterable: false,
+      },
+      {
+        key: "faeTotal",
+        label: "Monto FAE",
+        align: "right",
+        headerClassName: "sticky top-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600 text-right",
+        getValue: (r) => (r.faeTotal != null ? String(r.faeTotal) : ""),
         filterable: false,
       },
       {
@@ -343,9 +455,15 @@ export function CxpFacturasPageClient() {
       },
       {
         key: "estado",
-        label: "Estado",
+        label: "Estado CXP",
         headerClassName: "sticky top-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600",
         getValue: (r) => labelCxpEstado(r.estado),
+      },
+      {
+        key: "faeAceptacion",
+        label: "Aceptación FAE",
+        headerClassName: "sticky top-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600",
+        getValue: (r) => r.faeAceptacionLabel,
       },
       {
         key: "aplic",
@@ -371,27 +489,40 @@ export function CxpFacturasPageClient() {
 
   function handleExport() {
     exportRowsToExcel({
-      filename: `cxp_${periodYear}_${String(periodMonth).padStart(2, "0")}`,
-      sheetName: "CXP",
+      filename: `cxp_fae_${periodYear}_${String(periodMonth).padStart(2, "0")}`,
+      sheetName: "CXP-FAE",
       rows: displayedRows.map((r) => ({
-        Fecha: formatDate(r.fecha),
+        Origen: r.origen,
+        "Fecha CXP": formatDate(r.fecha),
+        "Fecha FE": r.faeFecha ? formatDate(r.faeFecha) : "",
         Compañía: r.companyCode ?? r.noCia,
         Proveedor: r.proveedor,
         Cédula: r.cedula ?? "",
         "Cód. proveedor": r.noProve,
         Tipo: r.tipoDoc,
-        "Nº documento": r.noDocu,
+        "Nº CXP": r.origen === "CXP" ? r.noDocu : "",
         "Nº físico": r.noFisico ?? "",
+        "Consecutivo FE": r.faeConsecutivo ?? "",
+        "Clave Hacienda": r.faeClave ?? "",
         Moneda: r.monedaLabel,
-        Monto: r.monto,
+        "Monto CXP": r.monto,
+        "Monto FAE": r.faeTotal ?? "",
         Saldo: r.saldo,
         "Monto aplicado": r.montoAplicado,
         Aplicaciones: r.nAplicaciones,
-        Estado: labelCxpEstado(r.estado),
+        "Estado CXP": labelCxpEstado(r.estado),
+        "Aceptación FAE": r.faeAceptacionLabel,
+        "Procesado FAE":
+          r.faeProcesado == null ? "" : r.faeProcesado ? "Sí" : "No",
+        "FH procesado FAE": r.faeFhProcesado ? formatDateTime(r.faeFhProcesado) : "",
+        "Estado Hacienda": r.faeEstadoHacienda ?? "",
         Vence: r.fechaVence ? formatDate(r.fechaVence) : "",
         Detalle: r.detalle ?? "",
       })),
-      columnWidths: [12, 12, 28, 14, 12, 8, 14, 12, 8, 14, 14, 14, 10, 12, 12, 30],
+      columnWidths: [
+        8, 12, 12, 12, 28, 14, 12, 8, 14, 12, 22, 28, 8, 14, 14, 14, 14, 10, 14, 18, 12, 16, 12, 12,
+        30,
+      ],
     });
   }
 
@@ -401,10 +532,11 @@ export function CxpFacturasPageClient() {
         <div>
           <h2 className="text-xl font-bold text-slate-800">Cuentas por pagar</h2>
           <p className="text-sm text-slate-500 mt-1 max-w-3xl">
-            Facturas de proveedor desde Codisa CXP en Oracle{" "}
+            Facturas CXP Codisa (
             <code className="text-xs bg-slate-100 px-1 rounded">NAF5.ARCPMD</code>
-            . Estado según saldo y amarres en{" "}
-            <code className="text-xs bg-slate-100 px-1 rounded">ARCPRD</code>.
+            ) cruzadas con compras FE (
+            <code className="text-xs bg-slate-100 px-1 rounded">FAE.FAE_COMPRAS_ENCABEZADOS</code>
+            ) por cédula + nº físico ↔ consecutivo. Incluye FAE sin digitación en CXP.
           </p>
         </div>
         <div className="text-xs text-slate-500 text-right space-y-1">
@@ -502,11 +634,29 @@ export function CxpFacturasPageClient() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[190px]">
                 <SelectValue placeholder="Estado" />
               </SelectTrigger>
               <SelectContent>
                 {ESTADOS.map((e) => (
+                  <SelectItem key={e.code} value={e.code}>
+                    {e.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={faeLink}
+              onValueChange={(v) => {
+                setFaeLink(v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Vínculo FAE" />
+              </SelectTrigger>
+              <SelectContent>
+                {FAE_LINKS.map((e) => (
                   <SelectItem key={e.code} value={e.code}>
                     {e.label}
                   </SelectItem>
@@ -540,7 +690,7 @@ export function CxpFacturasPageClient() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="relative flex-1 min-w-[220px] max-w-sm">
+            <div className="relative flex-1 min-w-[260px] max-w-md">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <Input
                 value={search}
@@ -548,7 +698,7 @@ export function CxpFacturasPageClient() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="Proveedor, cédula, documento, físico…"
+                placeholder="Proveedor, cédula, CXP, físico, consecutivo o clave FE…"
                 className="pl-9 h-9"
               />
               {search && (
@@ -571,9 +721,9 @@ export function CxpFacturasPageClient() {
           </div>
 
           {result && (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 text-sm">
               <div className="rounded-lg bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">Facturas</p>
+                <p className="text-xs text-slate-500">Registros</p>
                 <p className="font-semibold text-slate-800">{result.summary.count}</p>
               </div>
               <div className="rounded-lg bg-slate-50 p-3">
@@ -581,7 +731,7 @@ export function CxpFacturasPageClient() {
                 <p className="font-semibold">{formatCurrency(result.summary.monto)}</p>
               </div>
               <div className="rounded-lg bg-amber-50 p-3">
-                <p className="text-xs text-amber-700">Pendientes</p>
+                <p className="text-xs text-amber-700">Pendientes pago</p>
                 <p className="font-semibold text-amber-900">{result.summary.pendientes}</p>
               </div>
               <div className="rounded-lg bg-sky-50 p-3">
@@ -589,8 +739,20 @@ export function CxpFacturasPageClient() {
                 <p className="font-semibold text-sky-900">{result.summary.parciales}</p>
               </div>
               <div className="rounded-lg bg-emerald-50 p-3">
-                <p className="text-xs text-emerald-700">Saldo abierto</p>
+                <p className="text-xs text-emerald-700">Saldo CXP</p>
                 <p className="font-semibold text-emerald-900">{formatCurrency(result.summary.saldo)}</p>
+              </div>
+              <div className="rounded-lg bg-violet-50 p-3">
+                <p className="text-xs text-violet-700">Solo FAE</p>
+                <p className="font-semibold text-violet-900">{result.summary.sinCxp}</p>
+              </div>
+              <div className="rounded-lg bg-teal-50 p-3">
+                <p className="text-xs text-teal-700">Con FAE</p>
+                <p className="font-semibold text-teal-900">{result.summary.conFae}</p>
+              </div>
+              <div className="rounded-lg bg-orange-50 p-3">
+                <p className="text-xs text-orange-700">FAE pend. acept.</p>
+                <p className="font-semibold text-orange-900">{result.summary.faePendiente}</p>
               </div>
             </div>
           )}
@@ -600,7 +762,7 @@ export function CxpFacturasPageClient() {
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-12 text-center text-slate-400">Consultando CXP en NAF…</div>
+            <div className="p-12 text-center text-slate-400">Consultando CXP + FAE en NAF…</div>
           ) : isError ? (
             <div className="p-12 text-center text-red-600">
               {(error as Error)?.message ?? "Error al cargar cuentas por pagar."}
@@ -627,15 +789,19 @@ export function CxpFacturasPageClient() {
                       defaultColumnWidths={{
                         expand: 40,
                         fecha: 100,
-                        compania: 110,
-                        proveedor: 220,
-                        tipo: 70,
-                        noDocu: 120,
-                        noFisico: 100,
+                        faeFecha: 100,
+                        compania: 100,
+                        proveedor: 200,
+                        tipo: 60,
+                        noDocu: 110,
+                        noFisico: 90,
+                        faeConsecutivo: 170,
                         monto: 110,
+                        faeTotal: 110,
                         saldo: 110,
-                        estado: 110,
-                        aplic: 70,
+                        estado: 120,
+                        faeAceptacion: 130,
+                        aplic: 60,
                       }}
                       columns={columnDefs}
                       rows={rows}
@@ -647,8 +813,8 @@ export function CxpFacturasPageClient() {
                   <tbody>
                     {displayedRows.length === 0 ? (
                       <tr>
-                        <td colSpan={11} className="p-12 text-center text-slate-400">
-                          No hay facturas CXP para {monthLabel} {periodYear}.
+                        <td colSpan={COLSPAN} className="p-12 text-center text-slate-400">
+                          No hay facturas CXP/FAE para {monthLabel} {periodYear}.
                         </td>
                       </tr>
                     ) : (
@@ -656,12 +822,17 @@ export function CxpFacturasPageClient() {
                         const open = expandedId === row.id;
                         return (
                           <Fragment key={row.id}>
-                            <tr className="border-b border-slate-100 hover:bg-slate-50/80">
+                            <tr
+                              className={cn(
+                                "border-b border-slate-100 hover:bg-slate-50/80",
+                                row.origen === "FAE" && "bg-violet-50/40",
+                              )}
+                            >
                               <td className="px-2 py-2">
                                 <button
                                   type="button"
                                   className="p-1 rounded hover:bg-slate-200 text-slate-500"
-                                  title={open ? "Ocultar amarres" : "Ver amarres"}
+                                  title={open ? "Ocultar trazabilidad" : "Ver trazabilidad y amarres"}
                                   onClick={() => setExpandedId(open ? null : row.id)}
                                 >
                                   <ChevronDown
@@ -669,7 +840,12 @@ export function CxpFacturasPageClient() {
                                   />
                                 </button>
                               </td>
-                              <td className="px-3 py-2 whitespace-nowrap">{formatDate(row.fecha)}</td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                {row.origen === "CXP" ? formatDate(row.fecha) : "—"}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                {row.faeFecha ? formatDate(row.faeFecha) : "—"}
+                              </td>
                               <td className="px-3 py-2">
                                 <div className="font-medium text-slate-800">
                                   {row.companyCode ?? row.noCia}
@@ -683,7 +859,7 @@ export function CxpFacturasPageClient() {
                                   {row.proveedor}
                                 </div>
                                 <div className="text-xs text-slate-400">
-                                  {row.noProve}
+                                  {row.noProve || "—"}
                                   {row.cedula ? ` · ${row.cedula}` : ""}
                                 </div>
                               </td>
@@ -692,23 +868,34 @@ export function CxpFacturasPageClient() {
                                   {row.tipoDoc}
                                 </Badge>
                               </td>
-                              <td className="px-3 py-2 tabular-nums whitespace-nowrap">{row.noDocu}</td>
+                              <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                                {row.origen === "CXP" ? row.noDocu : "—"}
+                              </td>
                               <td className="px-3 py-2 tabular-nums whitespace-nowrap">
                                 {row.noFisico ?? "—"}
                               </td>
+                              <td className="px-3 py-2 tabular-nums whitespace-nowrap text-xs" title={row.faeClave ?? undefined}>
+                                {row.faeConsecutivo ?? "—"}
+                              </td>
                               <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap">
-                                {formatCurrency(row.monto)}
+                                {row.origen === "CXP" ? formatCurrency(row.monto) : "—"}
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
-                                {formatCurrency(row.saldo)}
+                                {row.faeTotal != null ? formatCurrency(row.faeTotal) : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                {row.origen === "CXP" ? formatCurrency(row.saldo) : "—"}
                               </td>
                               <td className="px-3 py-2">{estadoBadge(row.estado)}</td>
-                              <td className="px-3 py-2 text-center tabular-nums">{row.nAplicaciones}</td>
+                              <td className="px-3 py-2">{faeAceptacionBadge(row)}</td>
+                              <td className="px-3 py-2 text-center tabular-nums">
+                                {row.origen === "CXP" ? row.nAplicaciones : "—"}
+                              </td>
                             </tr>
                             {open ? (
                               <tr>
-                                <td colSpan={11} className="p-0">
-                                  <AmarresPanel row={row} />
+                                <td colSpan={COLSPAN} className="p-0">
+                                  <TraceabilityPanel row={row} />
                                 </td>
                               </tr>
                             ) : null}
@@ -722,7 +909,7 @@ export function CxpFacturasPageClient() {
 
               <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm">
                 <p className="text-slate-500">
-                  Página {page} de {totalPages} · {total} factura{total === 1 ? "" : "s"}
+                  Página {page} de {totalPages} · {total} registro{total === 1 ? "" : "s"}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
