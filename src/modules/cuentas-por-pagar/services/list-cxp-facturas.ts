@@ -127,15 +127,15 @@ async function loadCompanyMap(): Promise<Map<string, { code: string; name: strin
 function estadoSqlCondition(estado: CxpEstadoPago): string {
   switch (estado) {
     case "ANULADA":
-      return `(u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') = 'S')`;
+      return `(ORIGEN = 'CXP' AND NVL(ANULADO, 'N') = 'S')`;
     case "PAGADA":
-      return `(u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') <> 'S' AND NVL(u.SALDO, 0) = 0)`;
+      return `(ORIGEN = 'CXP' AND NVL(ANULADO, 'N') <> 'S' AND NVL(SALDO, 0) = 0)`;
     case "PARCIAL":
-      return `(u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') <> 'S' AND NVL(u.SALDO, 0) > 0 AND NVL(u.N_APLIC, 0) > 0)`;
+      return `(ORIGEN = 'CXP' AND NVL(ANULADO, 'N') <> 'S' AND NVL(SALDO, 0) > 0 AND NVL(N_APLIC, 0) > 0)`;
     case "PENDIENTE":
-      return `(u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') <> 'S' AND NVL(u.SALDO, 0) > 0 AND NVL(u.N_APLIC, 0) = 0)`;
+      return `(ORIGEN = 'CXP' AND NVL(ANULADO, 'N') <> 'S' AND NVL(SALDO, 0) > 0 AND NVL(N_APLIC, 0) = 0)`;
     case "SIN_CXP":
-      return `(u.ORIGEN = 'FAE')`;
+      return `(ORIGEN = 'FAE')`;
   }
 }
 
@@ -149,11 +149,11 @@ function estadosSqlCondition(estados: CxpEstadoPago[]): string | null {
 function faeLinkSqlCondition(faeLink: CxpFaeLinkFilter): string | null {
   switch (faeLink) {
     case "CON_FAE":
-      return `u.FAE_ID_ENCABEZADO IS NOT NULL`;
+      return `FAE_ID_ENCABEZADO IS NOT NULL`;
     case "SIN_FAE":
-      return `u.ORIGEN = 'CXP' AND u.FAE_ID_ENCABEZADO IS NULL`;
+      return `ORIGEN = 'CXP' AND FAE_ID_ENCABEZADO IS NULL`;
     case "FAE_PENDIENTE":
-      return `TRIM(NVL(u.FAE_IND_ACEPTACION, ' ')) = 'P'`;
+      return `TRIM(NVL(FAE_IND_ACEPTACION, ' ')) = 'P'`;
     default:
       return null;
   }
