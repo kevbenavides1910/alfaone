@@ -4,7 +4,6 @@ import {
   labelFaeAceptacion,
   labelMonedaCxp,
   resolveCxpEstado,
-  type CxpEstadoFilter,
   type CxpEstadoPago,
   type CxpFaeLinkFilter,
 } from "../business/cxp-status";
@@ -117,21 +116,26 @@ async function loadCompanyMap(): Promise<Map<string, { code: string; name: strin
   return map;
 }
 
-function estadoSqlCondition(estado: CxpEstadoFilter): string | null {
+function estadoSqlCondition(estado: CxpEstadoPago): string {
   switch (estado) {
     case "ANULADA":
-      return `u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') = 'S'`;
+      return `(u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') = 'S')`;
     case "PAGADA":
-      return `u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') <> 'S' AND NVL(u.SALDO, 0) = 0`;
+      return `(u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') <> 'S' AND NVL(u.SALDO, 0) = 0)`;
     case "PARCIAL":
-      return `u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') <> 'S' AND NVL(u.SALDO, 0) > 0 AND NVL(u.N_APLIC, 0) > 0`;
+      return `(u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') <> 'S' AND NVL(u.SALDO, 0) > 0 AND NVL(u.N_APLIC, 0) > 0)`;
     case "PENDIENTE":
-      return `u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') <> 'S' AND NVL(u.SALDO, 0) > 0 AND NVL(u.N_APLIC, 0) = 0`;
+      return `(u.ORIGEN = 'CXP' AND NVL(u.ANULADO, 'N') <> 'S' AND NVL(u.SALDO, 0) > 0 AND NVL(u.N_APLIC, 0) = 0)`;
     case "SIN_CXP":
-      return `u.ORIGEN = 'FAE'`;
-    default:
-      return null;
+      return `(u.ORIGEN = 'FAE')`;
   }
+}
+
+function estadosSqlCondition(estados: CxpEstadoPago[]): string | null {
+  if (!estados.length) return null;
+  const unique = [...new Set(estados)];
+  if (unique.length === 1) return estadoSqlCondition(unique[0]!);
+  return `(${unique.map(estadoSqlCondition).join(" OR ")})`;
 }
 
 function faeLinkSqlCondition(faeLink: CxpFaeLinkFilter): string | null {
@@ -230,8 +234,9 @@ function buildQuery(
   noCia: string | null,
 ): BuiltQuery {
   const { from, to, faeFrom, faeTo } = periodBounds(input.periodMonth, input.periodYear);
-  const estado = input.estado ?? "ALL";
-  const includeFaeOnly = estado === "ALL" || estado === "SIN_CXP";
+  const estados = input.estados ?? [];
+  const includeFaeOnly =
+    estados.length === 0 || estados.includes("SIN_CXP");
 
   const binds: Record<string, unknown> = {
     fromDate: from,
@@ -297,7 +302,7 @@ function buildQuery(
   }
 
   const outerFilters: string[] = ["1 = 1"];
-  const estadoCond = estadoSqlCondition(estado);
+  const estadoCond = estadosSqlCondition(estados);
   if (estadoCond) outerFilters.push(estadoCond);
   const faeCond = faeLinkSqlCondition(input.faeLink ?? "ALL");
   if (faeCond) outerFilters.push(faeCond);

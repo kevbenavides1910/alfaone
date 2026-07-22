@@ -3,6 +3,8 @@ export {
   labelCxpEstado,
   labelFaeAceptacion,
   labelMonedaCxp,
+  CXP_ESTADOS_NO_PAGADO,
+  CXP_ESTADO_OPTIONS,
   type CxpEstadoPago,
   type CxpEstadoFilter,
   type CxpFaeLinkFilter,

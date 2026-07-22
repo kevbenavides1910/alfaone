@@ -7,6 +7,21 @@ export type CxpEstadoPago =
 
 export type CxpEstadoFilter = "ALL" | CxpEstadoPago;
 
+/** Estados con saldo abierto o aún no digitados en CXP. */
+export const CXP_ESTADOS_NO_PAGADO: CxpEstadoPago[] = [
+  "PENDIENTE",
+  "PARCIAL",
+  "SIN_CXP",
+];
+
+export const CXP_ESTADO_OPTIONS: { value: CxpEstadoPago; label: string }[] = [
+  { value: "PENDIENTE", label: "Pendiente pago" },
+  { value: "PARCIAL", label: "Parcial" },
+  { value: "PAGADA", label: "Pagada" },
+  { value: "ANULADA", label: "Anulada" },
+  { value: "SIN_CXP", label: "Sin CXP (solo FAE)" },
+];
+
 export type CxpFaeLinkFilter = "ALL" | "CON_FAE" | "SIN_FAE" | "FAE_PENDIENTE";
 
 export type CxpFaeAceptacion = "A" | "AA" | "P" | "R" | "X" | string;

@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -34,6 +36,8 @@ import { cn } from "@/lib/utils/cn";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils/format";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import {
+  CXP_ESTADO_OPTIONS,
+  CXP_ESTADOS_NO_PAGADO,
   labelCxpEstado,
   labelFaeAceptacion,
   type CxpEstadoPago,
@@ -80,21 +84,24 @@ const TIPOS_DOC = [
   { code: "FD", label: "Factura dictamen médico (FD)" },
 ];
 
-const ESTADOS = [
-  { code: "ALL", label: "Todos los estados" },
-  { code: "PENDIENTE", label: "Pendiente pago" },
-  { code: "PARCIAL", label: "Parcial" },
-  { code: "PAGADA", label: "Pagada (amarrada)" },
-  { code: "ANULADA", label: "Anulada" },
-  { code: "SIN_CXP", label: "Sin CXP (solo FAE)" },
-];
-
 const FAE_LINKS = [
   { code: "ALL", label: "FAE: todas" },
   { code: "CON_FAE", label: "Con FAE" },
   { code: "SIN_FAE", label: "Sin FAE" },
   { code: "FAE_PENDIENTE", label: "FAE pendiente aceptación" },
 ];
+
+const ESTADO_MULTI_OPTIONS = CXP_ESTADO_OPTIONS.map((o) => ({
+  value: o.value,
+  label: o.label,
+}));
+
+function sameEstados(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort().join(",");
+  const sb = [...b].sort().join(",");
+  return sa === sb;
+}
 
 const REFETCH_MS = 120_000;
 const PAGE_SIZE = 50;
@@ -297,7 +304,7 @@ export function CxpFacturasPageClient() {
   const [periodYear, setPeriodYear] = useState(now.getFullYear());
   const [company, setCompany] = useState("ALL");
   const [tipoDoc, setTipoDoc] = useState("ALL");
-  const [estado, setEstado] = useState("ALL");
+  const [estados, setEstados] = useState<string[]>([]);
   const [faeLink, setFaeLink] = useState("ALL");
   const [noProve, setNoProve] = useState("ALL");
   const [proveedorSearch, setProveedorSearch] = useState("");
@@ -314,7 +321,7 @@ export function CxpFacturasPageClient() {
   const proveedoresQuery = useQuery<{ data: CxpProveedoresListResult }>({
     queryKey: ["cxp-proveedores", company, proveedorSearch],
     queryFn: async () => {
-      const params = new URLSearchParams({ limit: "80" });
+      const params = new URLSearchParams({ limit: "150" });
       if (company !== "ALL") params.set("company", company);
       if (proveedorSearch.trim()) params.set("search", proveedorSearch.trim());
       const r = await fetch(`/api/cuentas-por-pagar/proveedores?${params}`);
@@ -325,6 +332,16 @@ export function CxpFacturasPageClient() {
   });
 
   const proveedores = proveedoresQuery.data?.data?.rows ?? [];
+  const proveedorOptions = useMemo(
+    () => [
+      { value: "ALL", label: "Todos los proveedores" },
+      ...proveedores.map((p) => ({
+        value: p.noProve,
+        label: `${p.nombre} (${p.noProve}${p.cedula ? ` · ${p.cedula}` : ""})`,
+      })),
+    ],
+    [proveedores],
+  );
 
   const queryKey = [
     "cuentas-por-pagar",
@@ -332,7 +349,7 @@ export function CxpFacturasPageClient() {
     periodYear,
     company,
     tipoDoc,
-    estado,
+    [...estados].sort().join(","),
     faeLink,
     noProve,
     search,
@@ -352,9 +369,9 @@ export function CxpFacturasPageClient() {
         periodYear: String(periodYear),
         page: String(page),
         pageSize: String(PAGE_SIZE),
-        estado,
         faeLink,
       });
+      for (const e of estados) params.append("estados", e);
       if (company !== "ALL") params.set("company", company);
       if (tipoDoc !== "ALL") params.set("tipoDoc", tipoDoc);
       if (noProve !== "ALL") params.set("noProve", noProve);
@@ -365,6 +382,8 @@ export function CxpFacturasPageClient() {
       return json;
     },
   });
+
+  const isNoPagadoPreset = sameEstados(estados, CXP_ESTADOS_NO_PAGADO);
 
   const result = data?.data;
   const rows = result?.rows ?? [];
@@ -627,24 +646,45 @@ export function CxpFacturasPageClient() {
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              value={estado}
-              onValueChange={(v) => {
-                setEstado(v);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-[190px]">
-                <SelectValue placeholder="Estado" />
-              </SelectTrigger>
-              <SelectContent>
-                {ESTADOS.map((e) => (
-                  <SelectItem key={e.code} value={e.code}>
-                    {e.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap items-center gap-2">
+              <MultiSelect
+                className="w-[220px]"
+                options={ESTADO_MULTI_OPTIONS}
+                value={estados}
+                onChange={(values) => {
+                  setEstados(values);
+                  setPage(1);
+                }}
+                placeholder="Estados (todos)"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant={isNoPagadoPreset ? "default" : "outline"}
+                className="h-9"
+                onClick={() => {
+                  setEstados([...CXP_ESTADOS_NO_PAGADO]);
+                  setPage(1);
+                }}
+                title="Pendiente + Parcial + Sin CXP"
+              >
+                No pagado
+              </Button>
+              {estados.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-9"
+                  onClick={() => {
+                    setEstados([]);
+                    setPage(1);
+                  }}
+                >
+                  Todos
+                </Button>
+              )}
+            </div>
             <Select
               value={faeLink}
               onValueChange={(v) => {
@@ -663,32 +703,24 @@ export function CxpFacturasPageClient() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex items-center gap-2">
-              <Input
-                value={proveedorSearch}
-                onChange={(e) => setProveedorSearch(e.target.value)}
-                placeholder="Filtrar lista proveedores…"
-                className="h-9 w-[180px]"
-              />
-              <Select
+            <div className="w-[280px] -mt-1">
+              <SearchableSelect
                 value={noProve}
-                onValueChange={(v) => {
+                onChange={(v) => {
                   setNoProve(v);
                   setPage(1);
                 }}
-              >
-                <SelectTrigger className="w-[240px]">
-                  <SelectValue placeholder="Proveedor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todos los proveedores</SelectItem>
-                  {proveedores.map((p) => (
-                    <SelectItem key={`${p.noCia}-${p.noProve}`} value={p.noProve}>
-                      {p.nombre} ({p.noProve})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={proveedorOptions}
+                placeholder="Proveedor…"
+                searchHint="Buscar por nombre, código o cédula"
+                emptyMessage="Sin proveedores (escriba para filtrar la lista)"
+              />
+              <Input
+                value={proveedorSearch}
+                onChange={(e) => setProveedorSearch(e.target.value)}
+                placeholder="Buscar más proveedores en NAF…"
+                className="mt-1 h-8 text-xs"
+              />
             </div>
             <div className="relative flex-1 min-w-[260px] max-w-md">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />

@@ -12,6 +12,10 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const now = new Date();
+  const estadosRaw = [
+    ...searchParams.getAll("estados"),
+    ...(searchParams.get("estado") ? [searchParams.get("estado")!] : []),
+  ];
   const parsed = cxpFacturasListSchema.safeParse({
     periodMonth: searchParams.get("periodMonth") ?? String(now.getMonth() + 1),
     periodYear: searchParams.get("periodYear") ?? String(now.getFullYear()),
@@ -19,7 +23,7 @@ export async function GET(req: NextRequest) {
     noProve: searchParams.get("noProve") ?? undefined,
     tipoDoc: searchParams.get("tipoDoc") ?? undefined,
     search: searchParams.get("search") ?? undefined,
-    estado: searchParams.get("estado") ?? "ALL",
+    estados: estadosRaw.length ? estadosRaw : undefined,
     faeLink: searchParams.get("faeLink") ?? "ALL",
     page: searchParams.get("page") ?? "1",
     pageSize: searchParams.get("pageSize") ?? "50",
