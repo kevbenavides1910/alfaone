@@ -63,7 +63,7 @@ const nextConfig: NextConfig = {
   // Typecheck en `npm run build` local / CI. En imagen Docker (DOCKER_BUILD=1) se omite
   // (~60s) — el gate de tipos sigue en CI y en `npm run typecheck`.
   typescript: {
-    ignoreDuringBuilds: process.env.DOCKER_BUILD === "1",
+    ignoreBuildErrors: process.env.DOCKER_BUILD === "1",
   },
   // VPS prod tiene ~48 CPUs / 62 GiB; paralelismo acelera compile + traces.
   experimental: {
