@@ -47,6 +47,7 @@ import type { CxpAmarreRow, CxpAmarresResult } from "@/modules/cuentas-por-pagar
 import type { CxpProveedoresListResult } from "@/modules/cuentas-por-pagar/services/list-cxp-proveedores";
 
 const MONTHS = [
+  { value: 0, label: "Todos los meses" },
   { value: 1, label: "Enero" },
   { value: 2, label: "Febrero" },
   { value: 3, label: "Marzo" },
@@ -389,7 +390,10 @@ export function CxpFacturasPageClient() {
   const rows = result?.rows ?? [];
   const total = result?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const monthLabel = MONTHS.find((m) => m.value === periodMonth)?.label ?? "";
+  const monthLabel =
+    periodMonth === 0
+      ? "todo el año"
+      : (MONTHS.find((m) => m.value === periodMonth)?.label ?? "");
 
   const columnDefs: TableColumnFilterDef<CxpFacturaRow>[] = useMemo(
     () => [
@@ -508,7 +512,7 @@ export function CxpFacturasPageClient() {
 
   function handleExport() {
     exportRowsToExcel({
-      filename: `cxp_fae_${periodYear}_${String(periodMonth).padStart(2, "0")}`,
+      filename: `cxp_fae_${periodYear}_${periodMonth === 0 ? "all" : String(periodMonth).padStart(2, "0")}`,
       sheetName: "CXP-FAE",
       rows: displayedRows.map((r) => ({
         Origen: r.origen,

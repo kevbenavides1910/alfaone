@@ -93,6 +93,14 @@ function asIsoDate(value: unknown): string | null {
 }
 
 function periodBounds(month: number, year: number) {
+  // month === 0 → todos los meses del año
+  if (!month || month < 1) {
+    const from = new Date(Date.UTC(year, 0, 1));
+    const to = new Date(Date.UTC(year + 1, 0, 1));
+    const faeFrom = new Date(Date.UTC(year - 1, 10, 1)); // nov año anterior
+    const faeTo = new Date(Date.UTC(year + 1, 2, 1)); // mar año siguiente
+    return { from, to, faeFrom, faeTo };
+  }
   const from = new Date(Date.UTC(year, month - 1, 1));
   const to = new Date(Date.UTC(year, month, 1));
   /** Ventana FAE ±2 meses para amarrar FE con CXP digitado en otro mes. */

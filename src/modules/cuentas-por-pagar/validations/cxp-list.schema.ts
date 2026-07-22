@@ -42,7 +42,7 @@ function parseEstadosInput(value: unknown): string[] {
 }
 
 export const cxpFacturasListSchema = z.object({
-  periodMonth: z.coerce.number().int().min(1).max(12),
+  periodMonth: z.coerce.number().int().min(0).max(12), // 0 = todos los meses del año
   periodYear: z.coerce.number().int().min(2000).max(2100),
   company: z.string().trim().optional(),
   noProve: z.string().trim().optional(),
