@@ -361,7 +361,7 @@ export function CxpFacturasPageClient() {
 
   const columnFilterKeys = columnDefs.map((c) => c.key);
   const displayedRows = useMemo(
-    () => filterRowsByColumnFilters(rows, columnDefs, columnFilters),
+    () => filterRowsByColumnFilters(rows, columnFilters, columnDefs),
     [rows, columnDefs, columnFilters],
   );
 
