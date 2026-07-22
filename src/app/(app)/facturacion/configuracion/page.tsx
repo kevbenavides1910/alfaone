@@ -404,7 +404,7 @@ export default function FacturacionCobroConfigPage() {
             <span className="text-sm">
               <span className="font-medium text-slate-800">Recordatorio por vencer automático</span>
               <span className="block text-slate-500 mt-0.5">
-                Una vez al día, para facturas pendientes que vencen dentro de la ventana configurada abajo.
+                Para facturas pendientes que vencen dentro de la ventana; reenvía cada N días (intervalo abajo).
               </span>
             </span>
           </label>
@@ -427,7 +427,7 @@ export default function FacturacionCobroConfigPage() {
 
           <div className="space-y-1.5 max-w-xs">
             <label className="text-sm font-medium text-slate-700">
-              Intervalo de cobro (días después del vencimiento)
+              Intervalo entre correos automáticos (días)
             </label>
             <input
               type="number"
@@ -436,10 +436,13 @@ export default function FacturacionCobroConfigPage() {
               className="w-full rounded border px-3 py-2 text-sm"
               value={form.collectionEmailIntervalDays}
               onChange={(e) => setForm((s) => ({ ...s, collectionEmailIntervalDays: e.target.value }))}
-              disabled={!canEdit || !form.autoCollectionEnabled}
+              disabled={
+                !canEdit || (!form.autoDueReminderEnabled && !form.autoCollectionEnabled)
+              }
             />
             <p className="text-xs text-slate-500">
-              Ejemplo: con 7 días, se envía el día del vencimiento y luego cada 7 días mientras siga pendiente.
+              Aplica al recordatorio por vencer y al cobro tras vencimiento. Con 7 días: un correo al
+              entrar en la ventana (o al vencer) y luego cada 7 días mientras siga pendiente.
             </p>
           </div>
 
@@ -514,8 +517,9 @@ export default function FacturacionCobroConfigPage() {
               disabled={!canEdit}
             />
             <p className="text-xs text-slate-500">
-              Ventana para el envío automático diario (8:00 AM) y para priorizar en Cuentas por cobrar.
-              También puede enviar el recordatorio manualmente antes del vencimiento.
+              Cuántos días antes del vencimiento puede enviarse el recordatorio automático (el cron
+              corre a las 8:00 AM; el intervalo entre envíos se configura arriba). También prioriza
+              en Cuentas por cobrar y permite envío manual.
             </p>
           </div>
           <div className="space-y-1.5">

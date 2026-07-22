@@ -8,25 +8,25 @@ function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function isSameLocalDay(a: Date, b: Date): boolean {
-  return startOfLocalDay(a).getTime() === startOfLocalDay(b).getTime();
-}
-
 function daysBetweenLocal(a: Date, b: Date): number {
   const ms = startOfLocalDay(b).getTime() - startOfLocalDay(a).getTime();
   return Math.round(ms / (24 * 60 * 60 * 1000));
 }
 
-/** Máximo un recordatorio por vencer por factura y por día calendario. */
+/**
+ * Recordatorio por vencer: solo dentro de la ventana (1..windowDays días antes);
+ * reenvío cada N días desde el último recordatorio por vencer.
+ */
 export function shouldSendAutoDueReminder(
   lastSent: Date | null | undefined,
   daysLeft: number,
   windowDays: number,
+  intervalDays: number,
   asOf: Date
 ): boolean {
   if (daysLeft <= 0 || daysLeft > windowDays) return false;
   if (!lastSent) return true;
-  return !isSameLocalDay(lastSent, asOf);
+  return daysBetweenLocal(lastSent, asOf) >= intervalDays;
 }
 
 /**
@@ -115,6 +115,7 @@ export async function runAutomaticCobroEmails(asOf: Date = new Date()): Promise<
           factura.lastDueReminderEmailAt,
           daysLeft,
           settings.dueReminderDaysBefore,
+          settings.collectionEmailIntervalDays,
           asOf
         )
       ) {
