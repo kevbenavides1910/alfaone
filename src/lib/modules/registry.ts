@@ -85,6 +85,21 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     prismaModels: ["FacturaMensual", "FacturaRequisito"],
   },
 
+  cuentasPorPagar: {
+    id: "cuentasPorPagar",
+    label: "Cuentas por pagar",
+    description: "Consulta de facturas CXP Codisa (NAF5.ARCP*) por proveedor y estado de amarre.",
+    uiRoutePrefixes: ["/cuentas-por-pagar"],
+    apiRoutePrefixes: ["/api/cuentas-por-pagar"],
+    codePaths: [
+      "src/modules/cuentas-por-pagar",
+      "src/app/(app)/cuentas-por-pagar",
+      "src/app/api/cuentas-por-pagar",
+      "src/components/cuentas-por-pagar",
+    ],
+    prismaModels: [],
+  },
+
   reportes: {
     id: "reportes",
     label: "Reportes",
@@ -372,6 +387,7 @@ export function resolveModuleFromPath(pathname: string): AppModuleId {
     "formularios",
     "monitoreo",
     "facturacionElectronica",
+    "cuentasPorPagar",
     "ventas",
     "facturacion",
     "plataforma",

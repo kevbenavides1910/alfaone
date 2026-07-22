@@ -5,6 +5,7 @@ export type AppModuleId =
   | "ventas"
   | "facturacion"
   | "facturacionElectronica"
+  | "cuentasPorPagar"
   | "reportes"
   | "inventario"
   | "disciplinario"

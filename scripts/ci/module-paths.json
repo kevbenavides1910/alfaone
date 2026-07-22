@@ -85,6 +85,12 @@
       "src/app/api/solicitudes-rrhh/**",
       "src/components/solicitudes-rrhh/**",
       "prisma/migrations/*hr_document*"
+    ],
+    "cuentasPorPagar": [
+      "src/modules/cuentas-por-pagar/**",
+      "src/app/(app)/cuentas-por-pagar/**",
+      "src/app/api/cuentas-por-pagar/**",
+      "src/components/cuentas-por-pagar/**"
     ]
   }
 }

@@ -250,6 +250,20 @@ export const PERMISSION_REGISTRY = {
       },
     },
   },
+  cuentasPorPagar: {
+    label: "Cuentas por pagar",
+    moduleId: "cuentasPorPagar" as const,
+    screens: {
+      facturas: {
+        label: "Facturas CXP (NAF)",
+        uiRoutes: ["/cuentas-por-pagar"],
+        apiPrefixes: ["/api/cuentas-por-pagar"],
+        actions: {
+          view: "Consultar facturas CXP por proveedor y amarres de pago",
+        },
+      },
+    },
+  },
   gastos: {
     label: "Gastos y reportes",
     moduleId: "presupuestos" as const,
@@ -897,6 +911,7 @@ export const HOME_MODULE_PERMISSION_GROUPS: {
 }[] = [
   { tileId: "contratos", label: "Contratos", moduleKeys: ["presupuestos"] },
   { tileId: "facturacion_cobro", label: "Facturación y cobro", moduleKeys: ["facturacion"] },
+  { tileId: "cuentas_por_pagar", label: "Cuentas por pagar", moduleKeys: ["cuentasPorPagar"] },
   { tileId: "gastos", label: "Gastos", moduleKeys: ["gastos"] },
   { tileId: "disciplinario", label: "Disciplinario", moduleKeys: ["disciplinario"] },
   { tileId: "empleados", label: "Empleados", moduleKeys: ["empleados"] },

@@ -17,6 +17,7 @@ import {
   UsersRound,
   ClipboardCheck,
   FolderOpen,
+  Wallet,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
 import type { PermissionKey } from "@/lib/permissions/registry";
@@ -56,6 +57,18 @@ export const HOME_MODULE_TILES: HomeModuleTile[] = [
     href: "/facturacion",
     icon: Receipt,
     permissionTileId: "facturacion_cobro",
+    accent: "bg-white",
+    tile: "",
+  },
+  {
+    id: "cuentas_por_pagar",
+    label: "Cuentas por pagar",
+    description: "Facturas CXP Codisa por proveedor y amarre",
+    href: "/cuentas-por-pagar",
+    icon: Wallet,
+    permissionTileId: "cuentas_por_pagar",
+    requiredPermission: "cuentasPorPagar.facturas",
+    moduleId: "cuentasPorPagar",
     accent: "bg-white",
     tile: "",
   },

@@ -23,6 +23,7 @@ import {
   UsersRound,
   FolderOpen,
   ScrollText,
+  Wallet,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
 
@@ -49,6 +50,13 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     isActive: (p) =>
       (p.startsWith("/facturacion") && !p.startsWith("/facturacion-electronica")) ||
       p.startsWith("/cuentas-por-cobrar"),
+  },
+  {
+    href: "/cuentas-por-pagar",
+    label: "Cuentas por pagar",
+    icon: Wallet,
+    moduleId: "cuentasPorPagar",
+    isActive: (p) => p.startsWith("/cuentas-por-pagar"),
   },
   { href: "/expenses", label: "Gastos", icon: DollarSign, moduleId: "presupuestos" },
   {
