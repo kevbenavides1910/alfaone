@@ -5,6 +5,7 @@ import { ok, created, badRequest, unauthorized, forbidden, serverError } from "@
 import {
   buildReportePilasDia,
   listPilasLlenado,
+  parseFechaDia,
   upsertPilasLlenadoBatch,
   upsertPilaLlenado,
 } from "@/modules/monitoreo/services/pilas-llenado";
@@ -22,11 +23,11 @@ const rowSchema = z.object({
   paneo: z.string().max(50).nullable().optional(),
   observaciones: z.string().max(500).nullable().optional(),
   imagenes: z.array(imagenSchema).optional(),
-  fecha: z.coerce.date().optional(),
+  fecha: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}/), z.coerce.date()]).optional(),
 });
 
 const batchSchema = z.object({
-  fecha: z.coerce.date().optional(),
+  fecha: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}/), z.coerce.date()]).optional(),
   rows: z.array(rowSchema).min(1),
 });
 
@@ -37,8 +38,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const fechaParam = req.nextUrl.searchParams.get("fecha");
-    const fecha = fechaParam ? new Date(fechaParam) : new Date();
-    if (Number.isNaN(fecha.getTime())) return badRequest("Fecha inválida");
+    let fecha: Date;
+    try {
+      fecha = parseFechaDia(fechaParam);
+    } catch {
+      return badRequest("Fecha inválida");
+    }
 
     const withReport = req.nextUrl.searchParams.get("reporte") === "1";
     if (withReport) {
@@ -68,9 +73,12 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(body?.rows)) {
       const parsed = batchSchema.safeParse(body);
       if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
-      const fecha = parsed.data.fecha ?? new Date();
+      const fecha = parseFechaDia(parsed.data.fecha ?? new Date());
       const rows = await upsertPilasLlenadoBatch(
-        parsed.data.rows.map((r) => ({ ...r, fecha: r.fecha ?? fecha })),
+        parsed.data.rows.map((r) => ({
+          ...r,
+          fecha: r.fecha ? parseFechaDia(r.fecha) : fecha,
+        })),
         operador,
       );
       const report = await buildReportePilasDia(fecha);
@@ -81,6 +89,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
     const row = await upsertPilaLlenado({
       ...parsed.data,
+      fecha: parsed.data.fecha ? parseFechaDia(parsed.data.fecha) : undefined,
       operadorName: operador.name,
       operadorId: operador.id,
     });

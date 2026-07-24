@@ -13,7 +13,11 @@ import { passwordSchema } from "@/lib/security/password-policy";
 
 const createSchema = z.object({
   name: z.string().min(2, "Nombre requerido"),
-  email: z.string().email("Email inválido"),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Email inválido"),
   password: passwordSchema,
   roleId: z.string().min(1, "Rol requerido"),
   company: z.string().optional().nullable(),

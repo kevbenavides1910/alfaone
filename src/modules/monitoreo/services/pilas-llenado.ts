@@ -41,6 +41,19 @@ function dayOnly(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+/** Interpreta `YYYY-MM-DD` o Date como día calendario local (evita off-by-one UTC). */
+export function parseFechaDia(value: string | Date | null | undefined): Date {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) throw new Error("Fecha inválida");
+    return dayOnly(value);
+  }
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    const [y, m, d] = value.slice(0, 10).split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return dayOnly(new Date());
+}
+
 export type PilaLlenadoInput = {
   fecha?: Date;
   finca: string;
@@ -54,7 +67,7 @@ export type PilaLlenadoInput = {
 };
 
 export async function upsertPilaLlenado(input: PilaLlenadoInput) {
-  const fecha = dayOnly(input.fecha ?? new Date());
+  const fecha = parseFechaDia(input.fecha ?? new Date());
   const recomendaciones = generarRecomendaciones(input.desmane, input.paneo);
 
   const catalog = input.pilaFincaId
@@ -107,41 +120,43 @@ export async function upsertPilasLlenadoBatch(
   return results;
 }
 
-export async function listPilasLlenado(fecha: Date) {
-  const day = dayOnly(fecha);
+export async function listPilasLlenado(fecha: Date | string) {
+  const day = parseFechaDia(fecha);
   return prisma.bandecoPilaLlenado.findMany({
     where: { fecha: day },
     orderBy: { finca: "asc" },
   });
 }
 
-export async function buildReportePilasDia(fecha: Date) {
+export async function buildReportePilasDia(fecha: Date | string) {
+  const day = parseFechaDia(fecha);
   const fincas = await prisma.bandecoPilaFinca.findMany({ orderBy: { finca: "asc" } });
-  const llenados = await listPilasLlenado(fecha);
+  const llenados = await listPilasLlenado(day);
   const byFinca = new Map(llenados.map((l) => [l.finca, l]));
 
-  const fechaLabel = fecha.toLocaleDateString("es-CR");
+  const fechaLabel = day.toLocaleDateString("es-CR");
   const lines: string[] = [`REPORTE LLENADO DE PILAS — ${fechaLabel}`, ""];
   const recomendaciones: string[] = ["RECOMENDACIONES:", ""];
 
   for (const f of fincas) {
     const row = byFinca.get(f.finca);
-    const desmane = row?.desmane ?? f.desmane;
-    const paneo = row?.paneo ?? f.paneo;
+    // Solo datos del día: no reutilizar defaults del catálogo (cada día es distinto).
+    const desmane = row?.desmane ?? null;
+    const paneo = row?.paneo ?? null;
     lines.push(
       [
         `FINCA: ${f.finca}`,
         desmane ? `DESMANE: ${desmane}` : null,
         paneo ? `PANEO: ${paneo}` : null,
         f.zonaMotorizado ? `ZONA: ${f.zonaMotorizado}` : null,
-        row?.observaciones || f.observaciones ? `OBS: ${row?.observaciones ?? f.observaciones}` : null,
+        row?.observaciones ? `OBS: ${row.observaciones}` : null,
         row ? "✓ registrado hoy" : "⚠ sin registro diario",
       ]
         .filter(Boolean)
         .join(" | "),
     );
 
-    const rec = row?.recomendaciones ?? generarRecomendaciones(desmane, paneo);
+    const rec = row?.recomendaciones ?? (row ? generarRecomendaciones(desmane, paneo) : null);
     if (rec) {
       recomendaciones.push(`• ${f.finca}`);
       recomendaciones.push(...rec.split("\n").map((t) => `  - ${t}`));

@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
 import { getSession, requirePermission } from "@/lib/api/middleware";
-import { apiHandler } from "@/lib/api/handler";
 import { ok, created, badRequest, unauthorized, forbidden, serverError } from "@/lib/api/response";
 import { pilaFincaSchema } from "@/modules/monitoreo/validations/schemas";
 import { listPilasFincas, createPilaFinca } from "@/modules/monitoreo/services/catalogs-service";
@@ -22,11 +21,25 @@ export async function GET(_req: NextRequest) {
   }
 }
 
-export const POST = apiHandler(
-  { permission: ["monitoreo.mantenimientos", "edit"], errorLabel: "Error al crear finca de pilas" },
-  async ({ req }) => {
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return unauthorized();
+  // Operadores pueden agregar ubicaciones desde el llenado diario;
+  // mantenimientos sigue pudiendo gestionar el catálogo.
+  if (
+    !requirePermission(session, "monitoreo.mantenimientos", "edit") &&
+    !requirePermission(session, "monitoreo.operacion", "edit")
+  ) {
+    return forbidden();
+  }
+
+  try {
     const parsed = pilaFincaSchema.safeParse(await req.json());
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
     return created(await createPilaFinca(parsed.data));
+  } catch (e) {
+    const code = typeof e === "object" && e && "code" in e ? String((e as { code: unknown }).code) : "";
+    if (code === "P2002") return badRequest("Ya existe una ubicación con ese nombre");
+    return serverError("Error al crear finca de pilas", e);
   }
-);
+}
