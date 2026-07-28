@@ -15,7 +15,13 @@ type Props = ThHTMLAttributes<HTMLTableCellElement> & {
 
 /**
  * <th> con asa de redimensionado. Arrastrar el borde derecho cambia el ancho.
+ * Respeta columnas `sticky`: no fuerza `position:relative` (rompe left/right sticky).
  */
+function classImpliesSticky(className?: string): boolean {
+  if (!className) return false;
+  return /(?:^|\s)sticky(?:\s|$)/.test(className);
+}
+
 export function ResizableTh({
   columnKey,
   width,
@@ -26,9 +32,10 @@ export function ResizableTh({
   children,
   ...rest
 }: Props) {
+  const sticky = classImpliesSticky(typeof className === "string" ? className : undefined);
   const mergedStyle: CSSProperties = {
     ...style,
-    position: style?.position ?? "relative",
+    position: style?.position ?? (sticky ? "sticky" : "relative"),
     ...(width != null
       ? {
           width,

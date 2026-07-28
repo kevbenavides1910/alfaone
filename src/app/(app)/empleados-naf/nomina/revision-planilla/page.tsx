@@ -811,6 +811,8 @@ export default function RevisionPlanillaPage() {
       label: "Empresa",
       headerClassName: cn(stickyHeadClass("companyLabel"), "p-3 font-medium whitespace-nowrap"),
       filterClassName: cn(stickyHeadClass("companyLabel"), "p-3"),
+      headerStyle: stickyStyle("companyLabel"),
+      filterStyle: stickyStyle("companyLabel"),
       getValue: (r) => r.companyLabel,
     },
     {
@@ -818,6 +820,8 @@ export default function RevisionPlanillaPage() {
       label: "Cód. planilla",
       headerClassName: cn(stickyHeadClass("codPla"), "p-3 font-medium whitespace-nowrap"),
       filterClassName: cn(stickyHeadClass("codPla"), "p-3"),
+      headerStyle: stickyStyle("codPla"),
+      filterStyle: stickyStyle("codPla"),
       getValue: (r) => r.codPla,
     },
     {
@@ -825,6 +829,8 @@ export default function RevisionPlanillaPage() {
       label: "Planilla",
       headerClassName: cn(stickyHeadClass("nominaNombre"), "p-3 font-medium whitespace-nowrap"),
       filterClassName: cn(stickyHeadClass("nominaNombre"), "p-3"),
+      headerStyle: stickyStyle("nominaNombre"),
+      filterStyle: stickyStyle("nominaNombre"),
       getValue: (r) => r.nominaNombre ?? "",
     },
     {
@@ -1279,7 +1285,10 @@ export default function RevisionPlanillaPage() {
             </div>
           </div>
           <div className="overflow-auto max-h-[calc(100vh-360px)]">
-            <table data-table-id="naf-revision-planilla" className="w-full text-sm">
+            <table
+              data-table-id="naf-revision-planilla"
+              className="w-full text-sm min-w-[1680px] border-separate border-spacing-0"
+            >
               <thead className="sticky top-0 z-10 bg-slate-50">
               <TableColumnFilterHead
                 tableId="naf-revision-planilla"
@@ -1293,9 +1302,20 @@ export default function RevisionPlanillaPage() {
                   companyLabel: STICKY_COLS.companyLabel.width,
                   codPla: STICKY_COLS.codPla.width,
                   nominaNombre: STICKY_COLS.nominaNombre.width,
+                  estado: 100,
+                  empleados: 88,
+                  ingresos: 120,
+                  deducciones: 120,
+                  liquido: 120,
+                  cheque: 130,
+                  davivienda: 130,
+                  bn: 130,
+                  otro: 100,
+                  sumaFormasPago: 120,
+                  diferencia: 110,
+                  accionesNaf: 220,
                   revisada: 88,
                   generada: 88,
-
                 }}
               />
               </thead>

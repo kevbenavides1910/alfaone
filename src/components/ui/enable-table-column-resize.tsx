@@ -81,7 +81,10 @@ function attachHandles(table: HTMLTableElement, tableId: string, keys: string[])
   ths.forEach((th, i) => {
     const key = keys[i] ?? `col-${i}`;
     th.setAttribute("data-col-key", key);
-    th.style.position = th.style.position || "relative";
+    // No pisar sticky: relative + left-* solapa encabezados (p. ej. revisión planilla NAF).
+    if (!th.classList.contains("sticky") && !th.style.position) {
+      th.style.position = "relative";
+    }
 
     if (th.querySelector(`.${HANDLE_CLASS}`)) return;
     // Ya tiene ResizableTh nativo

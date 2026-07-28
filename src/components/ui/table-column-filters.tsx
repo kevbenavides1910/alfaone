@@ -253,6 +253,10 @@ export type TableColumnFilterDef<T> = {
   align?: "left" | "right" | "center";
   headerClassName?: string;
   filterClassName?: string;
+  /** Estilos del <th> de título (p. ej. sticky left/width). */
+  headerStyle?: React.CSSProperties;
+  /** Estilos del <th> de filtro. */
+  filterStyle?: React.CSSProperties;
   filterable?: boolean;
   placeholder?: string;
   allLabel?: string;
@@ -330,7 +334,7 @@ export function TableColumnFilterHead<T>({
               key={col.key}
               columnKey={col.key}
               className={col.headerClassName}
-              style={{ textAlign: col.align ?? "left" }}
+              style={{ textAlign: col.align ?? "left", ...col.headerStyle }}
               width={width}
               resizable={persist}
               onResizeWidth={persist ? resize.setColumnWidth : undefined}
@@ -353,6 +357,7 @@ export function TableColumnFilterHead<T>({
                 className={cn("px-2 py-1.5 font-normal", col.filterClassName ?? col.headerClassName)}
                 style={{
                   textAlign: col.align ?? "left",
+                  ...col.filterStyle,
                   ...(width != null
                     ? { width, minWidth: width, maxWidth: width }
                     : null),
