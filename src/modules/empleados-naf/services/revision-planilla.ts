@@ -241,6 +241,9 @@ function addCanal(
   canal: FormaPagoCanal,
   neto: number,
 ) {
+  // Solo líquido > 0, como el archivo bancario de Codisa / preparar ARPLCK.
+  // Un neto ≤ 0 no se paga; si se suma al canal BN/DAV/CK el total no cuadra con Codisa.
+  if (neto <= 0) return;
   if (canal === "CK") target.cheque += neto;
   else if (canal === "DAV") target.davivienda += neto;
   else if (canal === "BN") target.bn += neto;

@@ -247,6 +247,10 @@ export async function getRevisionPlanillaEmpleadosPorCanal(input: {
     );
     if (classified !== canal) continue;
 
+    const liquidoEmp = roundMoney(decimalToNumber(summary.neto));
+    // Igual que Codisa / archivo bancario: no listar ni sumar líquido ≤ 0.
+    if (liquidoEmp <= 0) continue;
+
     empleados.push({
       noEmple,
       nombre: pago?.nombre ?? local?.nombre ?? null,
@@ -255,7 +259,7 @@ export async function getRevisionPlanillaEmpleadosPorCanal(input: {
       banco: pago?.banco ?? local?.banco ?? null,
       numCuenta: pago?.numCuenta ?? local?.numCuenta ?? null,
       idCta: pago?.idCta ?? local?.tipoCuenta ?? null,
-      liquido: roundMoney(decimalToNumber(summary.neto)),
+      liquido: liquidoEmp,
     });
   }
 
