@@ -1100,7 +1100,7 @@ export default function RevisionPlanillaPage() {
   }));
 
   return (
-    <ModulePage>
+    <ModulePage wide className="max-w-none">
       <ModulePageHeader
         title="Revisión de planilla"
         description="Valide planillas conforme se calculan en NAF (estado Calculada / En proceso). Totales de ingresos, deducciones y formas de pago; al final la suma de todas debe cuadrar con el líquido."
