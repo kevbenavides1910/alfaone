@@ -67,9 +67,13 @@ WHERE ANO_PROCE = :ano
 `;
 
 /**
- * Solo empleados con ingresos (ARPLPPI), como RPL3071.
+ * Solo empleados con ingresos (ARPLPPI), como RPL3071 / Codisa.
  * Evita arrastrar deducciones huérfanas (p.ej. embargos manuales de
  * empleados inactivos sin salario en la planilla).
+ *
+ * COD_PLA se empareja en forma exacta con ARPLCP.CODPLA (TRIM), igual que Codisa.
+ * No usar LPAD sobre PPI/PPD: filas basura con COD_PLA='4' se mezclaban con '04'
+ * e inflaban embargos / deducciones vs el reporte para firmar.
  */
 const NAF_NOMINA_OPEN_SUMMARY_QUERY = `
 SELECT
@@ -80,21 +84,35 @@ SELECT
   NVL(d.DEDUC, 0) AS DEDUC
 FROM (
   SELECT
-    NO_CIA,
-    LPAD(TRIM(COD_PLA), 2, '0') AS COD_PLA,
-    NO_EMPLE,
-    SUM(NVL(MONTO, 0)) AS DEVENG
-  FROM NAF5.ARPLPPI
-  GROUP BY NO_CIA, LPAD(TRIM(COD_PLA), 2, '0'), NO_EMPLE
+    i.NO_CIA,
+    LPAD(TRIM(c.CODPLA), 2, '0') AS COD_PLA,
+    i.NO_EMPLE,
+    SUM(NVL(i.MONTO, 0)) AS DEVENG
+  FROM NAF5.ARPLPPI i
+  INNER JOIN NAF5.ARPLCP c
+    ON c.NO_CIA = i.NO_CIA
+   AND TRIM(c.CODPLA) = TRIM(i.COD_PLA)
+   AND c.ESTADO IN ('C', 'M', 'A')
+   AND c.F_DESDE IS NOT NULL
+   AND c.F_HASTA IS NOT NULL
+   AND c.F_HASTA - c.F_DESDE <= 45
+  GROUP BY i.NO_CIA, LPAD(TRIM(c.CODPLA), 2, '0'), i.NO_EMPLE
 ) p
 LEFT JOIN (
   SELECT
-    NO_CIA,
-    LPAD(TRIM(COD_PLA), 2, '0') AS COD_PLA,
-    NO_EMPLE,
-    SUM(CASE WHEN NVL(SOLO_CIA, 'N') = 'N' THEN NVL(MONTO, 0) ELSE 0 END) AS DEDUC
-  FROM NAF5.ARPLPPD
-  GROUP BY NO_CIA, LPAD(TRIM(COD_PLA), 2, '0'), NO_EMPLE
+    d.NO_CIA,
+    LPAD(TRIM(c.CODPLA), 2, '0') AS COD_PLA,
+    d.NO_EMPLE,
+    SUM(CASE WHEN NVL(d.SOLO_CIA, 'N') = 'N' THEN NVL(d.MONTO, 0) ELSE 0 END) AS DEDUC
+  FROM NAF5.ARPLPPD d
+  INNER JOIN NAF5.ARPLCP c
+    ON c.NO_CIA = d.NO_CIA
+   AND TRIM(c.CODPLA) = TRIM(d.COD_PLA)
+   AND c.ESTADO IN ('C', 'M', 'A')
+   AND c.F_DESDE IS NOT NULL
+   AND c.F_HASTA IS NOT NULL
+   AND c.F_HASTA - c.F_DESDE <= 45
+  GROUP BY d.NO_CIA, LPAD(TRIM(c.CODPLA), 2, '0'), d.NO_EMPLE
 ) d
   ON d.NO_CIA = p.NO_CIA
  AND d.COD_PLA = p.COD_PLA

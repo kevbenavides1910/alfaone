@@ -96,6 +96,10 @@ async function resolveCompanyLabel(noCia: string): Promise<string> {
   return companySapLabel(sapCode, companyCode, company?.name ?? null);
 }
 
+/**
+ * COD_PLA exacto (= :codPla del control ARPLCP), como Codisa/RPL3071.
+ * No LPAD: evita mezclar filas basura COD_PLA='4' con planilla '04'.
+ */
 const OPEN_INGRESOS_QUERY = `
 SELECT
   p.NO_INGRE AS CODIGO,
@@ -106,7 +110,7 @@ FROM NAF5.ARPLPPI p
 LEFT JOIN NAF5.ARPLMI i
   ON i.NO_CIA = p.NO_CIA AND i.NO_INGRE = p.NO_INGRE
 WHERE p.NO_CIA = :noCia
-  AND LPAD(TRIM(p.COD_PLA), 2, '0') = :codPla
+  AND TRIM(p.COD_PLA) = :codPla
 GROUP BY p.NO_INGRE, i.DESCRI
 HAVING SUM(NVL(p.MONTO, 0)) <> 0
 ORDER BY MONTO DESC
@@ -121,12 +125,12 @@ FROM NAF5.ARPLPPD p
 LEFT JOIN NAF5.ARPLMD d
   ON d.NO_CIA = p.NO_CIA AND d.NO_DEDU = p.NO_DEDU
 WHERE p.NO_CIA = :noCia
-  AND LPAD(TRIM(p.COD_PLA), 2, '0') = :codPla
+  AND TRIM(p.COD_PLA) = :codPla
   AND EXISTS (
     SELECT 1
     FROM NAF5.ARPLPPI i
     WHERE i.NO_CIA = p.NO_CIA
-      AND LPAD(TRIM(i.COD_PLA), 2, '0') = LPAD(TRIM(p.COD_PLA), 2, '0')
+      AND TRIM(i.COD_PLA) = TRIM(p.COD_PLA)
       AND i.NO_EMPLE = p.NO_EMPLE
   )
 GROUP BY p.NO_DEDU, d.DESCRI, p.DESCRIPCION
