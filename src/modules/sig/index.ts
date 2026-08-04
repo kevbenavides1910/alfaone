@@ -102,6 +102,16 @@ export {
   type SigLegalTrafficLight,
   type SigLegalListItem,
 } from "./services/legal";
+export {
+  listSigIndicators,
+  getSigIndicatorDetail,
+  createSigIndicator,
+  updateSigIndicator,
+  createSigIndicatorMeasurement,
+  deleteSigIndicatorMeasurement,
+  evaluateIndicatorLight,
+  type SigIndicatorTrafficLight,
+} from "./services/indicators";
 export { getSigProcessDossier } from "./services/process-dossier";
 export {
   approveAuditProgram,

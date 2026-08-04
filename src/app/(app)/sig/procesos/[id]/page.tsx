@@ -26,6 +26,7 @@ type Dossier = {
     controls: number;
     risks: number;
     legalRequirements: number;
+    indicators: number;
     audits: number;
     openFindings: number;
     overdueActions: number;
@@ -70,6 +71,14 @@ type Dossier = {
     legalSource: string;
     complianceStatus: string;
     _count: { evidenceLinks: number };
+  }>;
+  indicators: Array<{
+    id: string;
+    code: string;
+    title: string;
+    unit: string | null;
+    targetValue: string | number | null;
+    measurements: Array<{ value: string | number; periodStart: string }>;
   }>;
   audits: Array<{
     id: string;
@@ -166,6 +175,7 @@ export default function SigProcessDossierPage() {
           <Stat label="Controles" value={summary.controls} href="/sig/controles" />
           <Stat label="Riesgos" value={summary.risks} href="/sig/riesgos" />
           <Stat label="Legales" value={summary.legalRequirements} href="/sig/legales" />
+          <Stat label="Indicadores" value={summary.indicators} href="/sig/indicadores" />
           <Stat label="Evidencias" value={summary.evidences} href="/sig/evidencias" />
           <Stat label="Auditorías" value={summary.audits} href="/sig/auditorias" />
           <Stat label="Hallazgos abiertos" value={summary.openFindings} />
@@ -266,6 +276,32 @@ export default function SigProcessDossierPage() {
               {data.legalRequirements.length === 0 && (
                 <p className="text-slate-500">Sin requisitos legales</p>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Indicadores</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {data.indicators.map((i) => {
+                const latest = i.measurements[0];
+                return (
+                  <div key={i.id}>
+                    <Link href={`/sig/indicadores/${i.id}`} className="text-red-700 hover:underline">
+                      {i.code}
+                    </Link>{" "}
+                    — {i.title}{" "}
+                    <span className="text-xs text-slate-500">
+                      {latest
+                        ? `último ${Number(latest.value)}${i.unit ? ` ${i.unit}` : ""}`
+                        : "sin medición"}
+                      {i.targetValue != null ? ` · meta ${i.targetValue}` : ""}
+                    </span>
+                  </div>
+                );
+              })}
+              {data.indicators.length === 0 && <p className="text-slate-500">Sin indicadores</p>}
             </CardContent>
           </Card>
 

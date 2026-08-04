@@ -658,6 +658,16 @@ export const PERMISSION_REGISTRY = {
           admin: "Administrar requisitos legales",
         },
       },
+      indicadores: {
+        label: "Indicadores del SIG",
+        uiRoutes: ["/sig/indicadores"],
+        apiPrefixes: ["/api/sig/indicators"],
+        actions: {
+          view: "Consultar indicadores y mediciones",
+          edit: "Registrar indicadores y mediciones",
+          admin: "Administrar indicadores",
+        },
+      },
       procesos: {
         label: "Procesos y tipos",
         uiRoutes: ["/sig/procesos"],

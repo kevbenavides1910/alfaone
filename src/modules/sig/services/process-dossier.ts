@@ -28,6 +28,8 @@ export async function getSigProcessDossier(processId: string) {
     riskLinks,
     legalPrimary,
     legalLinks,
+    indicatorsPrimary,
+    indicatorLinks,
     openFindingsViaDocs,
     overduePlans,
   ] = await Promise.all([
@@ -162,6 +164,47 @@ export async function getSigProcessDossier(processId: string) {
         },
       },
     }),
+    prisma.sigIndicator.findMany({
+      where: { processId, status: { not: "INACTIVE" } },
+      orderBy: [{ code: "asc" }],
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        unit: true,
+        direction: true,
+        frequency: true,
+        targetValue: true,
+        status: true,
+        measurements: {
+          orderBy: { periodStart: "desc" },
+          take: 1,
+          select: { value: true, periodStart: true },
+        },
+      },
+    }),
+    prisma.sigIndicatorProcess.findMany({
+      where: { processId },
+      include: {
+        indicator: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            unit: true,
+            direction: true,
+            frequency: true,
+            targetValue: true,
+            status: true,
+            measurements: {
+              orderBy: { periodStart: "desc" },
+              take: 1,
+              select: { value: true, periodStart: true },
+            },
+          },
+        },
+      },
+    }),
     prisma.finding.findMany({
       where: {
         status: { not: "CLOSED" },
@@ -243,6 +286,16 @@ export async function getSigProcessDossier(processId: string) {
     a.code.localeCompare(b.code)
   );
 
+  const indicatorsMap = new Map<string, (typeof indicatorsPrimary)[number]>();
+  for (const i of indicatorsPrimary) indicatorsMap.set(i.id, i);
+  for (const link of indicatorLinks) {
+    if (link.indicator.status === "INACTIVE") continue;
+    if (!indicatorsMap.has(link.indicator.id)) indicatorsMap.set(link.indicator.id, link.indicator);
+  }
+  const indicators = Array.from(indicatorsMap.values()).sort((a, b) =>
+    a.code.localeCompare(b.code)
+  );
+
   const requirements = requirementLinks.map((l) => l.requirement);
   const procedures = documents.filter(
     (d) =>
@@ -264,6 +317,7 @@ export async function getSigProcessDossier(processId: string) {
       controls: controls.length,
       risks: risks.length,
       legalRequirements: legalRequirements.length,
+      indicators: indicators.length,
       audits: audits.length,
       openFindings: openFindingsViaDocs.length,
       overdueActions: overduePlans.length,
@@ -275,6 +329,7 @@ export async function getSigProcessDossier(processId: string) {
     controls,
     risks,
     legalRequirements,
+    indicators,
     audits,
     openFindings: openFindingsViaDocs,
     overdueActions: overduePlans,

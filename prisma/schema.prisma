@@ -297,6 +297,9 @@ model User {
   sigRisksOwned                          SigRisk[]                     @relation("SigRiskOwner")
   sigLegalRequirementsCreated            SigLegalRequirement[]         @relation("SigLegalRequirementCreator")
   sigLegalRequirementsOwned              SigLegalRequirement[]         @relation("SigLegalRequirementOwner")
+  sigIndicatorsCreated                   SigIndicator[]                @relation("SigIndicatorCreator")
+  sigIndicatorsOwned                     SigIndicator[]                @relation("SigIndicatorOwner")
+  sigIndicatorMeasurementsRecorded       SigIndicatorMeasurement[]     @relation("SigIndicatorMeasurementRecorder")
   auditProgramsCreated                   AuditProgram[]                @relation("AuditProgramCreator")
   auditProgramsApproved                  AuditProgram[]                @relation("AuditProgramApprover")
   auditProgramItemsAssigned              AuditProgramItem[]            @relation("AuditProgramItemAuditor")
@@ -1939,6 +1942,8 @@ model SigProcess {
   risksPrimary         SigRisk[]               @relation("SigRiskPrimaryProcess")
   legalLinks           SigLegalProcess[]
   legalPrimary         SigLegalRequirement[]   @relation("SigLegalPrimaryProcess")
+  indicatorLinks       SigIndicatorProcess[]
+  indicatorsPrimary    SigIndicator[]          @relation("SigIndicatorPrimaryProcess")
   auditProgramItems    AuditProgramItem[]
 
   @@index([parentId])
@@ -2253,6 +2258,7 @@ model SigEvidence {
   controlLinks      SigControlEvidence[]
   riskLinks         SigRiskEvidence[]
   legalLinks        SigLegalEvidence[]
+  indicatorMeasurements SigIndicatorMeasurement[]
 
   @@index([processId])
   @@index([status])
@@ -2466,6 +2472,95 @@ model SigLegalEvidence {
   @@unique([legalId, evidenceId])
   @@index([evidenceId])
   @@map("sig_legal_evidences")
+}
+
+enum SigIndicatorDirection {
+  HIGHER_BETTER
+  LOWER_BETTER
+}
+
+enum SigIndicatorFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  ADHOC
+}
+
+enum SigIndicatorStatus {
+  ACTIVE
+  INACTIVE
+  UNDER_REVIEW
+}
+
+/// Indicador / KPI del SIG (ISO 9001 9.1).
+model SigIndicator {
+  id                 String                 @id @default(cuid())
+  code               String                 @unique
+  title              String
+  description        String?                @db.Text
+  processId          String?
+  process            SigProcess?            @relation("SigIndicatorPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
+  ownerUserId        String?
+  ownerUser          User?                  @relation("SigIndicatorOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  unit               String?
+  direction          SigIndicatorDirection  @default(HIGHER_BETTER)
+  frequency          SigIndicatorFrequency  @default(MONTHLY)
+  /// Meta del indicador.
+  targetValue        Decimal?               @db.Decimal(15, 4)
+  /// Umbral de alerta (amarillo).
+  warningThreshold   Decimal?               @db.Decimal(15, 4)
+  /// Umbral crítico (rojo).
+  criticalThreshold  Decimal?               @db.Decimal(15, 4)
+  status             SigIndicatorStatus     @default(ACTIVE)
+  formulaNotes       String?                @db.Text
+  createdById        String
+  createdBy          User                   @relation("SigIndicatorCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  processLinks  SigIndicatorProcess[]
+  measurements  SigIndicatorMeasurement[]
+
+  @@index([processId])
+  @@index([status])
+  @@index([frequency])
+  @@index([ownerUserId])
+  @@map("sig_indicators")
+}
+
+model SigIndicatorProcess {
+  id          String       @id @default(cuid())
+  indicatorId String
+  indicator   SigIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  processId   String
+  process     SigProcess   @relation(fields: [processId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+
+  @@unique([indicatorId, processId])
+  @@index([processId])
+  @@map("sig_indicator_processes")
+}
+
+model SigIndicatorMeasurement {
+  id           String       @id @default(cuid())
+  indicatorId  String
+  indicator    SigIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  periodStart  DateTime
+  periodEnd    DateTime?
+  value        Decimal      @db.Decimal(15, 4)
+  notes        String?      @db.Text
+  evidenceId   String?
+  evidence     SigEvidence? @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+  recordedById String
+  recordedBy   User         @relation("SigIndicatorMeasurementRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([indicatorId, periodStart])
+  @@index([evidenceId])
+  @@index([recordedById])
+  @@map("sig_indicator_measurements")
 }
 
 model SigEvidenceRequirement {
