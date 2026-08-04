@@ -82,3 +82,18 @@ export {
   unlinkSigControl,
 } from "./services/controls";
 export { getSigProcessDossier } from "./services/process-dossier";
+export {
+  approveAuditProgram,
+  computeProcedurePriorities,
+  createAuditFromProgramItem,
+  createAuditProgram,
+  createAuditProgramItem,
+  deleteAuditProgramItem,
+  getAuditProgramByYear,
+  getAuditProgramDetail,
+  listAuditPrograms,
+  refreshAuditProgramPriorities,
+  updateAuditProgram,
+  updateAuditProgramItem,
+  type ProcedurePrioritySuggestion,
+} from "./services/audit-program";

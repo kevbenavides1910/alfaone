@@ -293,6 +293,9 @@ model User {
   sigRequirementsCreated                 SigRequirement[]              @relation("SigRequirementCreator")
   sigControlsCreated                     SigControl[]                  @relation("SigControlCreator")
   sigControlsOwned                       SigControl[]                  @relation("SigControlOwner")
+  auditProgramsCreated                   AuditProgram[]                @relation("AuditProgramCreator")
+  auditProgramsApproved                  AuditProgram[]                @relation("AuditProgramApprover")
+  auditProgramItemsAssigned              AuditProgramItem[]            @relation("AuditProgramItemAuditor")
   ventasOportunidadesDecididas           VentasOportunidad[]           @relation("VentasOportunidadDecidedBy")
   ventasPresupuestosCreados              VentasPresupuesto[]           @relation("VentasPresupuestoCreatedBy")
   facturasMensualesReturnedForCorrection FacturaMensual[]              @relation("FacturaReturnedForCorrection")
@@ -1926,6 +1929,7 @@ model SigProcess {
   evidences            SigEvidence[]
   controlLinks         SigControlProcess[]
   controlsPrimary      SigControl[]            @relation("SigControlPrimaryProcess")
+  auditProgramItems    AuditProgramItem[]
 
   @@index([parentId])
   @@map("sig_processes")
@@ -1957,6 +1961,7 @@ model SigDocument {
   audits           Audit[]
   requirementLinks SigRequirementDocument[]
   controlLinks     SigControlDocument[]
+  programItems     AuditProgramItem[]
 
   @@index([documentTypeId])
   @@index([processId])
@@ -2342,12 +2347,91 @@ model Audit {
   checklistItems AuditChecklistItem[]
   samples        AuditSample[]
   evidenceLinks  SigEvidenceAudit[]
+  programItems   AuditProgramItem[]
 
   @@unique([procedureId, year, quarter])
   @@index([year, quarter])
   @@index([status])
   @@index([auditorId])
   @@map("sig_audits")
+}
+
+enum AuditProgramStatus {
+  DRAFT
+  APPROVED
+  IN_PROGRESS
+  CLOSED
+}
+
+enum AuditProgramPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AuditProgramItemStatus {
+  PLANNED
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  DEFERRED
+}
+
+/// Programa anual de auditorías internas (F-SIG-21).
+model AuditProgram {
+  id           String             @id @default(cuid())
+  year         Int                @unique
+  title        String
+  status       AuditProgramStatus @default(DRAFT)
+  notes        String?            @db.Text
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?              @relation("AuditProgramApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  createdById  String
+  createdBy    User               @relation("AuditProgramCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  items AuditProgramItem[]
+
+  @@index([status])
+  @@map("sig_audit_programs")
+}
+
+/// Ítem del programa: proceso/procedimiento planificado en un mes.
+model AuditProgramItem {
+  id              String                @id @default(cuid())
+  programId       String
+  program         AuditProgram          @relation(fields: [programId], references: [id], onDelete: Cascade)
+  processId       String?
+  process         SigProcess?           @relation(fields: [processId], references: [id], onDelete: SetNull)
+  procedureId     String?
+  procedure       SigDocument?          @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+  plannedMonth    Int
+  plannedQuarter  Int
+  priority        AuditProgramPriority  @default(MEDIUM)
+  priorityScore   Int                   @default(0)
+  priorityReason  String?               @db.Text
+  scope           String?               @db.Text
+  objective       String?               @db.Text
+  notes           String?               @db.Text
+  status          AuditProgramItemStatus @default(PLANNED)
+  auditorId       String?
+  auditor         User?                 @relation("AuditProgramItemAuditor", fields: [auditorId], references: [id], onDelete: SetNull)
+  linkedAuditId   String?
+  linkedAudit     Audit?                @relation(fields: [linkedAuditId], references: [id], onDelete: SetNull)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([programId])
+  @@index([processId])
+  @@index([procedureId])
+  @@index([plannedMonth])
+  @@index([priority])
+  @@index([status])
+  @@index([linkedAuditId])
+  @@map("sig_audit_program_items")
 }
 
 model AuditChecklistItem {

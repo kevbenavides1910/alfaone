@@ -603,10 +603,10 @@ export const PERMISSION_REGISTRY = {
       auditorias: {
         label: "Auditorías de procedimientos",
         uiRoutes: ["/sig/auditorias", "/audits"],
-        apiPrefixes: ["/api/sig/audits"],
+        apiPrefixes: ["/api/sig/audits", "/api/sig/audit-programs"],
         actions: {
-          view: "Ver auditorías trimestrales del SIG",
-          edit: "Crear y actualizar auditorías, hallazgos, planes y seguimientos",
+          view: "Ver auditorías trimestrales y programa anual del SIG",
+          edit: "Crear y actualizar auditorías, programa anual, hallazgos, planes y seguimientos",
         },
       },
       requisitos: {

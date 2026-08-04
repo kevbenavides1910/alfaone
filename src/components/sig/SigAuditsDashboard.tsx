@@ -119,6 +119,9 @@ export function SigAuditsDashboard() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/sig/auditorias/programa">Programa anual (F-SIG-21)</Link>
+          </Button>
           <Input
             className="w-28"
             type="number"
