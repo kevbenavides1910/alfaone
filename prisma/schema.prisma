@@ -295,6 +295,8 @@ model User {
   sigControlsOwned                       SigControl[]                  @relation("SigControlOwner")
   sigRisksCreated                        SigRisk[]                     @relation("SigRiskCreator")
   sigRisksOwned                          SigRisk[]                     @relation("SigRiskOwner")
+  sigLegalRequirementsCreated            SigLegalRequirement[]         @relation("SigLegalRequirementCreator")
+  sigLegalRequirementsOwned              SigLegalRequirement[]         @relation("SigLegalRequirementOwner")
   auditProgramsCreated                   AuditProgram[]                @relation("AuditProgramCreator")
   auditProgramsApproved                  AuditProgram[]                @relation("AuditProgramApprover")
   auditProgramItemsAssigned              AuditProgramItem[]            @relation("AuditProgramItemAuditor")
@@ -854,6 +856,8 @@ model ContractBillingLine {
   lineCode      String
   description   String
   monthlyAmount Decimal? @db.Decimal(15, 2)
+  /// Si es true, el monto mensual de la línea lleva IVA según el % del contrato.
+  appliesIva    Boolean  @default(true)
   sortOrder     Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -1933,6 +1937,8 @@ model SigProcess {
   controlsPrimary      SigControl[]            @relation("SigControlPrimaryProcess")
   riskLinks            SigRiskProcess[]
   risksPrimary         SigRisk[]               @relation("SigRiskPrimaryProcess")
+  legalLinks           SigLegalProcess[]
+  legalPrimary         SigLegalRequirement[]   @relation("SigLegalPrimaryProcess")
   auditProgramItems    AuditProgramItem[]
 
   @@index([parentId])
@@ -1966,6 +1972,7 @@ model SigDocument {
   requirementLinks SigRequirementDocument[]
   controlLinks     SigControlDocument[]
   programItems     AuditProgramItem[]
+  legalLinks       SigLegalDocument[]
 
   @@index([documentTypeId])
   @@index([processId])
@@ -2158,6 +2165,7 @@ model SigControl {
   documentLinks    SigControlDocument[]
   evidenceLinks    SigControlEvidence[]
   riskLinks        SigRiskControl[]
+  legalLinks       SigLegalControl[]
 
   @@index([processId])
   @@index([status])
@@ -2244,6 +2252,7 @@ model SigEvidence {
   actionPlanLinks   SigEvidenceActionPlan[]
   controlLinks      SigControlEvidence[]
   riskLinks         SigRiskEvidence[]
+  legalLinks        SigLegalEvidence[]
 
   @@index([processId])
   @@index([status])
@@ -2358,6 +2367,105 @@ model SigRiskEvidence {
   @@unique([riskId, evidenceId])
   @@index([evidenceId])
   @@map("sig_risk_evidences")
+}
+
+enum SigLegalComplianceStatus {
+  COMPLIANT
+  PARTIAL
+  NON_COMPLIANT
+  NOT_EVALUATED
+  NOT_APPLICABLE
+}
+
+/// Requisito legal / reglamentario del SIG (matriz de cumplimiento).
+model SigLegalRequirement {
+  id               String                    @id @default(cuid())
+  code             String                    @unique
+  title            String
+  description      String?                   @db.Text
+  legalSource      String
+  authority        String?
+  articleRef       String?
+  jurisdiction     String?                   @default("CR")
+  processId        String?
+  process          SigProcess?               @relation("SigLegalPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
+  ownerUserId      String?
+  ownerUser        User?                     @relation("SigLegalRequirementOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  complianceStatus SigLegalComplianceStatus  @default(NOT_EVALUATED)
+  evaluationNotes  String?                   @db.Text
+  effectiveFrom    DateTime?
+  effectiveUntil   DateTime?
+  lastEvaluatedAt  DateTime?
+  nextReviewDate   DateTime?
+  createdById      String
+  createdBy        User                      @relation("SigLegalRequirementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  processLinks   SigLegalProcess[]
+  documentLinks  SigLegalDocument[]
+  controlLinks   SigLegalControl[]
+  evidenceLinks  SigLegalEvidence[]
+
+  @@index([processId])
+  @@index([complianceStatus])
+  @@index([jurisdiction])
+  @@index([ownerUserId])
+  @@index([nextReviewDate])
+  @@index([effectiveUntil])
+  @@map("sig_legal_requirements")
+}
+
+model SigLegalProcess {
+  id        String              @id @default(cuid())
+  legalId   String
+  legal     SigLegalRequirement @relation(fields: [legalId], references: [id], onDelete: Cascade)
+  processId String
+  process   SigProcess          @relation(fields: [processId], references: [id], onDelete: Cascade)
+  createdAt DateTime            @default(now())
+
+  @@unique([legalId, processId])
+  @@index([processId])
+  @@map("sig_legal_processes")
+}
+
+model SigLegalDocument {
+  id         String              @id @default(cuid())
+  legalId    String
+  legal      SigLegalRequirement @relation(fields: [legalId], references: [id], onDelete: Cascade)
+  documentId String
+  document   SigDocument         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt  DateTime            @default(now())
+
+  @@unique([legalId, documentId])
+  @@index([documentId])
+  @@map("sig_legal_documents")
+}
+
+model SigLegalControl {
+  id        String              @id @default(cuid())
+  legalId   String
+  legal     SigLegalRequirement @relation(fields: [legalId], references: [id], onDelete: Cascade)
+  controlId String
+  control   SigControl          @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  createdAt DateTime            @default(now())
+
+  @@unique([legalId, controlId])
+  @@index([controlId])
+  @@map("sig_legal_controls")
+}
+
+model SigLegalEvidence {
+  id         String              @id @default(cuid())
+  legalId    String
+  legal      SigLegalRequirement @relation(fields: [legalId], references: [id], onDelete: Cascade)
+  evidenceId String
+  evidence   SigEvidence         @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  createdAt  DateTime            @default(now())
+
+  @@unique([legalId, evidenceId])
+  @@index([evidenceId])
+  @@map("sig_legal_evidences")
 }
 
 model SigEvidenceRequirement {

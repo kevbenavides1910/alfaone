@@ -25,6 +25,7 @@ type Dossier = {
     evidences: number;
     controls: number;
     risks: number;
+    legalRequirements: number;
     audits: number;
     openFindings: number;
     overdueActions: number;
@@ -61,6 +62,14 @@ type Dossier = {
     status: string;
     inherentScore: number;
     residualScore: number | null;
+  }>;
+  legalRequirements: Array<{
+    id: string;
+    code: string;
+    title: string;
+    legalSource: string;
+    complianceStatus: string;
+    _count: { evidenceLinks: number };
   }>;
   audits: Array<{
     id: string;
@@ -156,6 +165,7 @@ export default function SigProcessDossierPage() {
           <Stat label="Requisitos" value={summary.requirements} href="/sig/requisitos" />
           <Stat label="Controles" value={summary.controls} href="/sig/controles" />
           <Stat label="Riesgos" value={summary.risks} href="/sig/riesgos" />
+          <Stat label="Legales" value={summary.legalRequirements} href="/sig/legales" />
           <Stat label="Evidencias" value={summary.evidences} href="/sig/evidencias" />
           <Stat label="Auditorías" value={summary.audits} href="/sig/auditorias" />
           <Stat label="Hallazgos abiertos" value={summary.openFindings} />
@@ -235,6 +245,27 @@ export default function SigProcessDossierPage() {
                 </div>
               ))}
               {data.risks.length === 0 && <p className="text-slate-500">Sin riesgos abiertos</p>}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Requisitos legales</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {data.legalRequirements.map((l) => (
+                <div key={l.id}>
+                  <Link href={`/sig/legales/${l.id}`} className="text-red-700 hover:underline">
+                    {l.code}
+                  </Link>{" "}
+                  — {l.title}{" "}
+                  <Badge variant="outline">{l.complianceStatus}</Badge>{" "}
+                  <span className="text-xs text-slate-500">{l._count.evidenceLinks} evid.</span>
+                </div>
+              ))}
+              {data.legalRequirements.length === 0 && (
+                <p className="text-slate-500">Sin requisitos legales</p>
+              )}
             </CardContent>
           </Card>
 

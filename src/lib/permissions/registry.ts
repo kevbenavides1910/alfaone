@@ -648,6 +648,16 @@ export const PERMISSION_REGISTRY = {
           admin: "Cerrar o administrar riesgos",
         },
       },
+      legales: {
+        label: "Requisitos legales",
+        uiRoutes: ["/sig/legales"],
+        apiPrefixes: ["/api/sig/legal"],
+        actions: {
+          view: "Consultar matriz de requisitos legales",
+          edit: "Registrar y evaluar cumplimiento legal",
+          admin: "Administrar requisitos legales",
+        },
+      },
       procesos: {
         label: "Procesos y tipos",
         uiRoutes: ["/sig/procesos"],

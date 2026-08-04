@@ -26,6 +26,8 @@ export async function getSigProcessDossier(processId: string) {
     controlLinks,
     risksPrimary,
     riskLinks,
+    legalPrimary,
+    legalLinks,
     openFindingsViaDocs,
     overduePlans,
   ] = await Promise.all([
@@ -128,6 +130,38 @@ export async function getSigProcessDossier(processId: string) {
         },
       },
     }),
+    prisma.sigLegalRequirement.findMany({
+      where: {
+        processId,
+        complianceStatus: { not: "NOT_APPLICABLE" },
+      },
+      orderBy: [{ complianceStatus: "asc" }, { code: "asc" }],
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        legalSource: true,
+        complianceStatus: true,
+        nextReviewDate: true,
+        _count: { select: { evidenceLinks: true } },
+      },
+    }),
+    prisma.sigLegalProcess.findMany({
+      where: { processId },
+      include: {
+        legal: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            legalSource: true,
+            complianceStatus: true,
+            nextReviewDate: true,
+            _count: { select: { evidenceLinks: true } },
+          },
+        },
+      },
+    }),
     prisma.finding.findMany({
       where: {
         status: { not: "CLOSED" },
@@ -199,6 +233,16 @@ export async function getSigProcessDossier(processId: string) {
     (a, b) => b.inherentScore - a.inherentScore || a.code.localeCompare(b.code)
   );
 
+  const legalMap = new Map<string, (typeof legalPrimary)[number]>();
+  for (const l of legalPrimary) legalMap.set(l.id, l);
+  for (const link of legalLinks) {
+    if (link.legal.complianceStatus === "NOT_APPLICABLE") continue;
+    if (!legalMap.has(link.legal.id)) legalMap.set(link.legal.id, link.legal);
+  }
+  const legalRequirements = Array.from(legalMap.values()).sort((a, b) =>
+    a.code.localeCompare(b.code)
+  );
+
   const requirements = requirementLinks.map((l) => l.requirement);
   const procedures = documents.filter(
     (d) =>
@@ -219,6 +263,7 @@ export async function getSigProcessDossier(processId: string) {
       evidences: evidences.length,
       controls: controls.length,
       risks: risks.length,
+      legalRequirements: legalRequirements.length,
       audits: audits.length,
       openFindings: openFindingsViaDocs.length,
       overdueActions: overduePlans.length,
@@ -229,6 +274,7 @@ export async function getSigProcessDossier(processId: string) {
     evidences,
     controls,
     risks,
+    legalRequirements,
     audits,
     openFindings: openFindingsViaDocs,
     overdueActions: overduePlans,

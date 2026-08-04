@@ -92,6 +92,16 @@ export {
   type SigRiskLevel,
   type SigRiskListItem,
 } from "./services/risks";
+export {
+  listSigLegalRequirements,
+  getSigLegalRequirementDetail,
+  createSigLegalRequirement,
+  updateSigLegalRequirement,
+  linkSigLegalRequirement,
+  unlinkSigLegalRequirement,
+  type SigLegalTrafficLight,
+  type SigLegalListItem,
+} from "./services/legal";
 export { getSigProcessDossier } from "./services/process-dossier";
 export {
   approveAuditProgram,

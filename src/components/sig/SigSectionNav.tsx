@@ -68,6 +68,12 @@ const TABS: Tab[] = [
     isActive: (p) => p.startsWith("/sig/riesgos"),
   },
   {
+    href: "/sig/legales",
+    label: "Legales",
+    permission: "sig.legales",
+    isActive: (p) => p.startsWith("/sig/legales"),
+  },
+  {
     href: "/sig/auditorias",
     label: "Auditorías",
     permission: "sig.auditorias",
