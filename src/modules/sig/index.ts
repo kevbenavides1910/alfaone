@@ -112,6 +112,15 @@ export {
   evaluateIndicatorLight,
   type SigIndicatorTrafficLight,
 } from "./services/indicators";
+export {
+  listSigIncidents,
+  getSigIncidentDetail,
+  createSigIncident,
+  updateSigIncident,
+  linkSigIncident,
+  unlinkSigIncident,
+  type SigIncidentTrafficLight,
+} from "./services/incidents";
 export { getSigProcessDossier } from "./services/process-dossier";
 export {
   approveAuditProgram,

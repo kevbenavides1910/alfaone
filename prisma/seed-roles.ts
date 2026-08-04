@@ -49,6 +49,7 @@ const ALL_KEYS = [
   "sig.riesgos",
   "sig.legales",
   "sig.indicadores",
+  "sig.incidentes",
   "sig.procesos",
   "recorridos.dashboard",
   "recorridos.configuracion",

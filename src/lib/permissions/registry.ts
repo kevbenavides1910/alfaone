@@ -668,6 +668,16 @@ export const PERMISSION_REGISTRY = {
           admin: "Administrar indicadores",
         },
       },
+      incidentes: {
+        label: "Incidentes y DDHH",
+        uiRoutes: ["/sig/incidentes"],
+        apiPrefixes: ["/api/sig/incidents"],
+        actions: {
+          view: "Consultar incidentes de seguridad y DDHH",
+          edit: "Registrar e investigar incidentes",
+          admin: "Cerrar o administrar incidentes",
+        },
+      },
       procesos: {
         label: "Procesos y tipos",
         uiRoutes: ["/sig/procesos"],

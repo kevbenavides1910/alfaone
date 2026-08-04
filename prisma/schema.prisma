@@ -300,6 +300,8 @@ model User {
   sigIndicatorsCreated                   SigIndicator[]                @relation("SigIndicatorCreator")
   sigIndicatorsOwned                     SigIndicator[]                @relation("SigIndicatorOwner")
   sigIndicatorMeasurementsRecorded       SigIndicatorMeasurement[]     @relation("SigIndicatorMeasurementRecorder")
+  sigIncidentsCreated                    SigIncident[]                 @relation("SigIncidentCreator")
+  sigIncidentsOwned                      SigIncident[]                 @relation("SigIncidentOwner")
   auditProgramsCreated                   AuditProgram[]                @relation("AuditProgramCreator")
   auditProgramsApproved                  AuditProgram[]                @relation("AuditProgramApprover")
   auditProgramItemsAssigned              AuditProgramItem[]            @relation("AuditProgramItemAuditor")
@@ -1944,6 +1946,8 @@ model SigProcess {
   legalPrimary         SigLegalRequirement[]   @relation("SigLegalPrimaryProcess")
   indicatorLinks       SigIndicatorProcess[]
   indicatorsPrimary    SigIndicator[]          @relation("SigIndicatorPrimaryProcess")
+  incidentLinks        SigIncidentProcess[]
+  incidentsPrimary     SigIncident[]           @relation("SigIncidentPrimaryProcess")
   auditProgramItems    AuditProgramItem[]
 
   @@index([parentId])
@@ -2171,6 +2175,7 @@ model SigControl {
   evidenceLinks    SigControlEvidence[]
   riskLinks        SigRiskControl[]
   legalLinks       SigLegalControl[]
+  incidentLinks    SigIncidentControl[]
 
   @@index([processId])
   @@index([status])
@@ -2259,6 +2264,7 @@ model SigEvidence {
   riskLinks         SigRiskEvidence[]
   legalLinks        SigLegalEvidence[]
   indicatorMeasurements SigIndicatorMeasurement[]
+  incidentLinks     SigIncidentEvidence[]
 
   @@index([processId])
   @@index([status])
@@ -2561,6 +2567,113 @@ model SigIndicatorMeasurement {
   @@index([evidenceId])
   @@index([recordedById])
   @@map("sig_indicator_measurements")
+}
+
+enum SigIncidentType {
+  SECURITY_EVENT
+  USE_OF_FORCE
+  HUMAN_RIGHTS
+  COMPLAINT
+  NEAR_MISS
+  OTHER
+}
+
+enum SigIncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum SigIncidentStatus {
+  REPORTED
+  UNDER_INVESTIGATION
+  ACTIONS_PENDING
+  CLOSED
+  DISMISSED
+}
+
+/// Incidente / evento de seguridad u DDHH (ISO 18788).
+model SigIncident {
+  id                   String              @id @default(cuid())
+  code                 String              @unique
+  title                String
+  description          String              @db.Text
+  type                 SigIncidentType     @default(SECURITY_EVENT)
+  severity             SigIncidentSeverity @default(MEDIUM)
+  status               SigIncidentStatus   @default(REPORTED)
+  occurredAt           DateTime
+  reportedAt           DateTime            @default(now())
+  location             String?
+  processId            String?
+  process              SigProcess?         @relation("SigIncidentPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
+  ownerUserId          String?
+  ownerUser            User?               @relation("SigIncidentOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  involvedParties      String?             @db.Text
+  immediateActions     String?             @db.Text
+  rootCause            String?             @db.Text
+  correctiveActions    String?             @db.Text
+  humanRightsImpact    Boolean             @default(false)
+  notificationRequired Boolean             @default(false)
+  notifiedAt           DateTime?
+  closedAt             DateTime?
+  closureNotes         String?             @db.Text
+  createdById          String
+  createdBy            User                @relation("SigIncidentCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  processLinks  SigIncidentProcess[]
+  controlLinks  SigIncidentControl[]
+  evidenceLinks SigIncidentEvidence[]
+
+  @@index([processId])
+  @@index([status])
+  @@index([type])
+  @@index([severity])
+  @@index([occurredAt])
+  @@index([ownerUserId])
+  @@index([humanRightsImpact])
+  @@map("sig_incidents")
+}
+
+model SigIncidentProcess {
+  id         String      @id @default(cuid())
+  incidentId String
+  incident   SigIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  processId  String
+  process    SigProcess  @relation(fields: [processId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+
+  @@unique([incidentId, processId])
+  @@index([processId])
+  @@map("sig_incident_processes")
+}
+
+model SigIncidentControl {
+  id         String      @id @default(cuid())
+  incidentId String
+  incident   SigIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  controlId  String
+  control    SigControl  @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+
+  @@unique([incidentId, controlId])
+  @@index([controlId])
+  @@map("sig_incident_controls")
+}
+
+model SigIncidentEvidence {
+  id         String      @id @default(cuid())
+  incidentId String
+  incident   SigIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  evidenceId String
+  evidence   SigEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+
+  @@unique([incidentId, evidenceId])
+  @@index([evidenceId])
+  @@map("sig_incident_evidences")
 }
 
 model SigEvidenceRequirement {

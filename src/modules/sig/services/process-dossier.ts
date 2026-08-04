@@ -2,7 +2,8 @@ import { prisma } from "@/modules/core/db/prisma";
 
 /**
  * Expediente digital de un proceso SIG: agrega documentos, requisitos,
- * evidencias, controles, auditorías y hallazgos abiertos.
+ * evidencias, controles, riesgos, legales, indicadores, incidentes,
+ * auditorías y hallazgos abiertos.
  */
 export async function getSigProcessDossier(processId: string) {
   const process = await prisma.sigProcess.findUnique({
@@ -30,6 +31,8 @@ export async function getSigProcessDossier(processId: string) {
     legalLinks,
     indicatorsPrimary,
     indicatorLinks,
+    incidentsPrimary,
+    incidentLinks,
     openFindingsViaDocs,
     overduePlans,
   ] = await Promise.all([
@@ -205,6 +208,41 @@ export async function getSigProcessDossier(processId: string) {
         },
       },
     }),
+    prisma.sigIncident.findMany({
+      where: {
+        processId,
+        status: { notIn: ["CLOSED", "DISMISSED"] },
+      },
+      orderBy: [{ occurredAt: "desc" }],
+      take: 40,
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        type: true,
+        severity: true,
+        status: true,
+        humanRightsImpact: true,
+        occurredAt: true,
+      },
+    }),
+    prisma.sigIncidentProcess.findMany({
+      where: { processId },
+      include: {
+        incident: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            type: true,
+            severity: true,
+            status: true,
+            humanRightsImpact: true,
+            occurredAt: true,
+          },
+        },
+      },
+    }),
     prisma.finding.findMany({
       where: {
         status: { not: "CLOSED" },
@@ -296,6 +334,16 @@ export async function getSigProcessDossier(processId: string) {
     a.code.localeCompare(b.code)
   );
 
+  const incidentsMap = new Map<string, (typeof incidentsPrimary)[number]>();
+  for (const i of incidentsPrimary) incidentsMap.set(i.id, i);
+  for (const link of incidentLinks) {
+    if (link.incident.status === "CLOSED" || link.incident.status === "DISMISSED") continue;
+    if (!incidentsMap.has(link.incident.id)) incidentsMap.set(link.incident.id, link.incident);
+  }
+  const incidents = Array.from(incidentsMap.values()).sort(
+    (a, b) => b.occurredAt.getTime() - a.occurredAt.getTime()
+  );
+
   const requirements = requirementLinks.map((l) => l.requirement);
   const procedures = documents.filter(
     (d) =>
@@ -318,6 +366,7 @@ export async function getSigProcessDossier(processId: string) {
       risks: risks.length,
       legalRequirements: legalRequirements.length,
       indicators: indicators.length,
+      incidents: incidents.length,
       audits: audits.length,
       openFindings: openFindingsViaDocs.length,
       overdueActions: overduePlans.length,
@@ -330,6 +379,7 @@ export async function getSigProcessDossier(processId: string) {
     risks,
     legalRequirements,
     indicators,
+    incidents,
     audits,
     openFindings: openFindingsViaDocs,
     overdueActions: overduePlans,

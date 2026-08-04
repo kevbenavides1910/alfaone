@@ -27,6 +27,7 @@ type Dossier = {
     risks: number;
     legalRequirements: number;
     indicators: number;
+    incidents: number;
     audits: number;
     openFindings: number;
     overdueActions: number;
@@ -79,6 +80,16 @@ type Dossier = {
     unit: string | null;
     targetValue: string | number | null;
     measurements: Array<{ value: string | number; periodStart: string }>;
+  }>;
+  incidents: Array<{
+    id: string;
+    code: string;
+    title: string;
+    type: string;
+    severity: string;
+    status: string;
+    humanRightsImpact: boolean;
+    occurredAt: string;
   }>;
   audits: Array<{
     id: string;
@@ -176,6 +187,7 @@ export default function SigProcessDossierPage() {
           <Stat label="Riesgos" value={summary.risks} href="/sig/riesgos" />
           <Stat label="Legales" value={summary.legalRequirements} href="/sig/legales" />
           <Stat label="Indicadores" value={summary.indicators} href="/sig/indicadores" />
+          <Stat label="Incidentes" value={summary.incidents} href="/sig/incidentes" />
           <Stat label="Evidencias" value={summary.evidences} href="/sig/evidencias" />
           <Stat label="Auditorías" value={summary.audits} href="/sig/auditorias" />
           <Stat label="Hallazgos abiertos" value={summary.openFindings} />
@@ -302,6 +314,25 @@ export default function SigProcessDossierPage() {
                 );
               })}
               {data.indicators.length === 0 && <p className="text-slate-500">Sin indicadores</p>}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Incidentes abiertos</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {data.incidents.map((i) => (
+                <div key={i.id}>
+                  <Link href={`/sig/incidentes/${i.id}`} className="text-red-700 hover:underline">
+                    {i.code}
+                  </Link>{" "}
+                  — {i.title}{" "}
+                  <Badge variant="outline">{i.severity}</Badge>{" "}
+                  {i.humanRightsImpact && <Badge variant="danger">DDHH</Badge>}
+                </div>
+              ))}
+              {data.incidents.length === 0 && <p className="text-slate-500">Sin incidentes abiertos</p>}
             </CardContent>
           </Card>
 
