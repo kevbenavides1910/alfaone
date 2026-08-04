@@ -21,6 +21,7 @@ export const STORAGE_DIRS = {
   expenses: "expense-uploads",
   branding: "branding",
   sigDocuments: "sig-documents",
+  sigEvidence: "sig-evidence",
   facturacion: "facturacion-uploads",
   feElectronica: "fe-electronica",
   disciplinaryEvidence: "disciplinary-evidence",
@@ -46,6 +47,12 @@ export function sigDocumentsRoot(): string {
   const explicit = process.env.SIG_DOCUMENTS_DIR?.trim();
   if (explicit) return path.resolve(explicit);
   return path.join(appDataRoot(), STORAGE_DIRS.sigDocuments);
+}
+
+export function sigEvidenceRoot(): string {
+  const explicit = process.env.SIG_EVIDENCE_DIR?.trim();
+  if (explicit) return path.resolve(explicit);
+  return path.join(appDataRoot(), STORAGE_DIRS.sigEvidence);
 }
 
 export function disciplinaryEvidenceUploadRoot(): string {

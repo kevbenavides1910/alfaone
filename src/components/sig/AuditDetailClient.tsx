@@ -3,7 +3,14 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Loader2, PlusCircle, XCircle } from "lucide-react";
-import type { ActionPlanStatus, AuditChecklistResult, AuditStatus, FindingSeverity } from "@prisma/client";
+import type {
+  ActionPlanStatus,
+  AuditChecklistResult,
+  AuditSampleMethod,
+  AuditStatus,
+  FindingSeverity,
+  FindingType,
+} from "@prisma/client";
 import type { AuditDetail } from "@/modules/sig";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,8 +23,10 @@ type ApiResponse<T> = { data: T; error?: { message: string } };
 
 const auditStatuses: AuditStatus[] = ["PLANNED", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 const severities: FindingSeverity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const findingTypes: FindingType[] = ["NONCONFORMITY", "OBSERVATION", "OPPORTUNITY"];
 const actionStatuses: ActionPlanStatus[] = ["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 const checklistResults: AuditChecklistResult[] = ["PENDING", "COMPLIES", "NON_COMPLIES", "NOT_APPLICABLE"];
+const sampleMethods: AuditSampleMethod[] = ["RANDOM", "RISK_BASED", "AUDITOR_JUDGMENT", "MIXED"];
 
 function formatDate(value?: string | Date | null) {
   if (!value) return "Sin fecha";
@@ -25,7 +34,14 @@ function formatDate(value?: string | Date | null) {
 }
 
 function emptyPlan() {
-  return { title: "", description: "", responsibleName: "", dueDate: "", status: "PENDING" as ActionPlanStatus };
+  return {
+    title: "",
+    description: "",
+    correctionImmediate: "",
+    responsibleName: "",
+    dueDate: "",
+    status: "PENDING" as ActionPlanStatus,
+  };
 }
 
 function emptyFollowUp() {
@@ -34,6 +50,19 @@ function emptyFollowUp() {
 
 function emptyChecklistItem() {
   return { stage: "", requirement: "", result: "PENDING" as AuditChecklistResult, notes: "", evidence: "" };
+}
+
+function emptyFinding() {
+  return {
+    title: "",
+    description: "",
+    findingType: "NONCONFORMITY" as FindingType,
+    severity: "MEDIUM" as FindingSeverity,
+    criterionText: "",
+    evidenceStatement: "",
+    nonconformityStatement: "",
+    rootCause: "",
+  };
 }
 
 function checklistLabel(result: AuditChecklistResult) {
@@ -46,16 +75,32 @@ function checklistLabel(result: AuditChecklistResult) {
   return labels[result];
 }
 
+function findingTypeLabel(type: FindingType) {
+  return { NONCONFORMITY: "No conformidad", OBSERVATION: "Observación", OPPORTUNITY: "Oportunidad" }[type];
+}
+
 export function AuditDetailClient({ auditId }: { auditId: string }) {
   const [audit, setAudit] = useState<AuditDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [finding, setFinding] = useState({ title: "", description: "", severity: "MEDIUM" as FindingSeverity });
+  const [finding, setFinding] = useState(emptyFinding());
   const [plans, setPlans] = useState<Record<string, ReturnType<typeof emptyPlan>>>({});
   const [followUps, setFollowUps] = useState<Record<string, ReturnType<typeof emptyFollowUp>>>({});
-  const [checklistDrafts, setChecklistDrafts] = useState<Record<string, { result: AuditChecklistResult; notes: string; evidence: string }>>({});
+  const [rootCauses, setRootCauses] = useState<Record<string, string>>({});
+  const [checklistDrafts, setChecklistDrafts] = useState<
+    Record<string, { result: AuditChecklistResult; notes: string; evidence: string }>
+  >({});
   const [newChecklistItem, setNewChecklistItem] = useState(emptyChecklistItem());
+  const [sampleDraft, setSampleDraft] = useState({
+    populationDescription: "",
+    populationSize: "",
+    sampleSize: "",
+    method: "AUDITOR_JUDGMENT" as AuditSampleMethod,
+    itemsText: "",
+    notes: "",
+  });
+  const [evidenceUploads, setEvidenceUploads] = useState<Record<string, File | null>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,14 +121,12 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
     void load();
   }, [load]);
 
-  async function submit(path: string, body: unknown, key: string) {
+  async function postJson(path: string, body: unknown, key: string, method: "POST" | "PATCH" = "POST") {
     setSaving(key);
     setError(null);
     try {
       const res = await fetch(path, {
-        method: path.includes("/follow-ups/") || path.includes("/findings/") || path.includes("/action-plans/")
-          ? "POST"
-          : "PATCH",
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -98,81 +141,140 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
   }
 
   async function updateAuditStatus(status: AuditStatus) {
-    setSaving("audit-status");
-    setError(null);
-    try {
-      const res = await fetch(`/api/sig/audits/${auditId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      const json = (await res.json()) as ApiResponse<AuditDetail>;
-      if (!res.ok) throw new Error(json.error?.message ?? "No se pudo actualizar el estado");
-      setAudit(json.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error actualizando estado");
-    } finally {
-      setSaving(null);
-    }
+    await postJson(`/api/sig/audits/${auditId}`, { status }, "audit-status", "PATCH");
   }
 
   async function createFinding(event: FormEvent) {
     event.preventDefault();
-    await submit(`/api/sig/audits/${auditId}/findings`, finding, "finding");
-    setFinding({ title: "", description: "", severity: "MEDIUM" });
+    await postJson(`/api/sig/audits/${auditId}/findings`, finding, "finding");
+    setFinding(emptyFinding());
   }
 
   async function createPlan(event: FormEvent, findingId: string) {
     event.preventDefault();
     const plan = plans[findingId] ?? emptyPlan();
-    await submit(`/api/sig/audits/findings/${findingId}/action-plans`, plan, `plan-${findingId}`);
+    await postJson(`/api/sig/audits/findings/${findingId}/action-plans`, plan, `plan-${findingId}`);
     setPlans((prev) => ({ ...prev, [findingId]: emptyPlan() }));
   }
 
   async function createFollowUp(event: FormEvent, actionPlanId: string) {
     event.preventDefault();
     const followUp = followUps[actionPlanId] ?? emptyFollowUp();
-    await submit(`/api/sig/audits/action-plans/${actionPlanId}/follow-ups`, followUp, `follow-${actionPlanId}`);
+    await postJson(
+      `/api/sig/audits/action-plans/${actionPlanId}/follow-ups`,
+      followUp,
+      `follow-${actionPlanId}`
+    );
     setFollowUps((prev) => ({ ...prev, [actionPlanId]: emptyFollowUp() }));
   }
 
   async function updateChecklistItem(itemId: string) {
     const draft = checklistDrafts[itemId];
     if (!draft) return;
-    setSaving(`checklist-${itemId}`);
-    setError(null);
-    try {
-      const res = await fetch(`/api/sig/audits/checklist/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
-      });
-      const json = (await res.json()) as ApiResponse<unknown>;
-      if (!res.ok) throw new Error(json.error?.message ?? "No se pudo actualizar el checklist");
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error actualizando checklist");
-    } finally {
-      setSaving(null);
-    }
+    await postJson(`/api/sig/audits/checklist/${itemId}`, draft, `checklist-${itemId}`, "PATCH");
   }
 
   async function createChecklistItem(event: FormEvent) {
     event.preventDefault();
-    setSaving("checklist-new");
+    await postJson(`/api/sig/audits/${auditId}/checklist`, newChecklistItem, "checklist-new");
+    setNewChecklistItem(emptyChecklistItem());
+  }
+
+  async function generateFindingFromChecklist(itemId: string) {
+    await postJson(`/api/sig/audits/checklist/${itemId}/finding`, {}, `gen-finding-${itemId}`);
+  }
+
+  async function saveRootCause(findingId: string) {
+    await postJson(
+      `/api/sig/audits/findings/${findingId}`,
+      { rootCause: rootCauses[findingId] ?? "" },
+      `root-${findingId}`,
+      "PATCH"
+    );
+  }
+
+  async function closeFinding(findingId: string) {
+    await postJson(`/api/sig/audits/findings/${findingId}`, { status: "CLOSED" }, `close-${findingId}`, "PATCH");
+  }
+
+  async function completePlan(planId: string) {
+    await postJson(`/api/sig/audits/action-plans/${planId}`, { status: "COMPLETED" }, `complete-${planId}`, "PATCH");
+  }
+
+  async function verifyEfficacy(planId: string, efficacyStatus: "VERIFIED" | "NOT_EFFECTIVE") {
+    await postJson(
+      `/api/sig/audits/action-plans/${planId}/efficacy`,
+      { efficacyStatus, efficacyNotes: "Verificación desde detalle de auditoría" },
+      `efficacy-${planId}`
+    );
+  }
+
+  async function createSample(event: FormEvent) {
+    event.preventDefault();
+    const items = sampleDraft.itemsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [code, ...rest] = line.split("|");
+        if (rest.length) return { code: code.trim(), label: rest.join("|").trim() };
+        return { label: code.trim() };
+      });
+    await postJson(
+      `/api/sig/audits/${auditId}/samples`,
+      {
+        populationDescription: sampleDraft.populationDescription,
+        populationSize: sampleDraft.populationSize ? Number(sampleDraft.populationSize) : null,
+        sampleSize: sampleDraft.sampleSize ? Number(sampleDraft.sampleSize) : items.length || null,
+        method: sampleDraft.method,
+        notes: sampleDraft.notes || null,
+        items,
+      },
+      "sample"
+    );
+    setSampleDraft({
+      populationDescription: "",
+      populationSize: "",
+      sampleSize: "",
+      method: "AUDITOR_JUDGMENT",
+      itemsText: "",
+      notes: "",
+    });
+  }
+
+  async function uploadEvidence(params: {
+    key: string;
+    description: string;
+    checklistItemId?: string;
+    findingId?: string;
+    actionPlanId?: string;
+    actionPlanRole?: "OBSERVED" | "IMPLEMENTATION" | "EFFICACY";
+  }) {
+    const file = evidenceUploads[params.key];
+    if (!file) {
+      setError("Seleccione un archivo de evidencia");
+      return;
+    }
+    setSaving(params.key);
     setError(null);
     try {
-      const res = await fetch(`/api/sig/audits/${auditId}/checklist`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newChecklistItem),
-      });
+      const form = new FormData();
+      form.set("description", params.description);
+      form.set("evidenceDate", new Date().toISOString().slice(0, 10));
+      form.set("type", "OTHER");
+      form.set("auditId", auditId);
+      if (params.checklistItemId) form.set("checklistItemId", params.checklistItemId);
+      if (params.findingId) form.set("findingId", params.findingId);
+      if (params.actionPlanId) form.set("actionPlanId", params.actionPlanId);
+      if (params.actionPlanRole) form.set("actionPlanRole", params.actionPlanRole);
+      form.set("file", file);
+      const res = await fetch("/api/sig/evidences", { method: "POST", body: form });
       const json = (await res.json()) as ApiResponse<unknown>;
-      if (!res.ok) throw new Error(json.error?.message ?? "No se pudo agregar la etapa");
-      setNewChecklistItem(emptyChecklistItem());
+      if (!res.ok) throw new Error(json.error?.message ?? "No se pudo subir la evidencia");
+      setEvidenceUploads((prev) => ({ ...prev, [params.key]: null }));
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error agregando etapa");
+      setError(err instanceof Error ? err.message : "Error subiendo evidencia");
     } finally {
       setSaving(null);
     }
@@ -222,7 +324,6 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
               </option>
             ))}
           </select>
-          {saving === "audit-status" && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
         </div>
       </div>
 
@@ -255,21 +356,82 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Lista de chequeo del procedimiento</CardTitle>
-          <p className="text-sm text-slate-500">
-            Marque cada etapa revisada como cumple, no cumple, no aplica o pendiente.
-          </p>
+          <CardTitle>Muestreo</CardTitle>
+          <p className="text-sm text-slate-500">Documente población, método y unidades verificadas (ISO 19011).</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {audit.samples.map((sample) => (
+            <div key={sample.id} className="rounded-lg border border-slate-200 p-3 text-sm">
+              <div className="font-medium">{sample.populationDescription}</div>
+              <div className="mt-1 text-slate-500">
+                Método: {sample.method} · Población: {sample.populationSize ?? "—"} · Muestra:{" "}
+                {sample.sampleSize ?? sample.items.length}
+              </div>
+              {sample.items.length > 0 && (
+                <ul className="mt-2 list-disc pl-5 text-slate-600">
+                  {sample.items.map((item) => (
+                    <li key={item.id}>
+                      {item.code ? `${item.code} — ` : ""}
+                      {item.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+          <form onSubmit={createSample} className="grid gap-3 rounded-lg bg-slate-50 p-3 md:grid-cols-2">
+            <div className="space-y-1 md:col-span-2">
+              <Label>Descripción de la población</Label>
+              <Textarea
+                value={sampleDraft.populationDescription}
+                onChange={(e) => setSampleDraft((p) => ({ ...p, populationDescription: e.target.value }))}
+                required
+              />
+            </div>
+            <Input
+              type="number"
+              placeholder="Tamaño población"
+              value={sampleDraft.populationSize}
+              onChange={(e) => setSampleDraft((p) => ({ ...p, populationSize: e.target.value }))}
+            />
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              value={sampleDraft.method}
+              onChange={(e) => setSampleDraft((p) => ({ ...p, method: e.target.value as AuditSampleMethod }))}
+            >
+              {sampleMethods.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <Textarea
+              className="md:col-span-2"
+              placeholder={"Ítems verificados (uno por línea). Formato: código|etiqueta o solo etiqueta"}
+              value={sampleDraft.itemsText}
+              onChange={(e) => setSampleDraft((p) => ({ ...p, itemsText: e.target.value }))}
+            />
+            <Button disabled={saving === "sample"}>
+              {saving === "sample" ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
+              Registrar muestra
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Lista de chequeo</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="overflow-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1000px] text-sm">
               <thead className="bg-slate-100 text-left text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Etapa</th>
+                  <th className="px-3 py-2">Etapa / Criterio</th>
                   <th className="px-3 py-2">Resultado</th>
-                  <th className="px-3 py-2">Notas</th>
-                  <th className="px-3 py-2">Evidencia</th>
-                  <th className="px-3 py-2 text-right">Acción</th>
+                  <th className="px-3 py-2">Notas / Evidencia texto</th>
+                  <th className="px-3 py-2 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -280,10 +442,24 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                     evidence: item.evidence ?? "",
                   };
                   return (
-                    <tr key={item.id} className="border-t">
+                    <tr key={item.id} className="border-t align-top">
                       <td className="px-3 py-3">
                         <div className="font-medium text-slate-900">{item.stage}</div>
+                        {item.sigRequirement && (
+                          <div className="mt-1 text-xs text-red-700">
+                            {item.sigRequirement.standard.code} {item.sigRequirement.code} — {item.sigRequirement.title}
+                          </div>
+                        )}
                         {item.requirement && <div className="mt-1 text-xs text-slate-500">{item.requirement}</div>}
+                        {item.evidenceLinks.length > 0 && (
+                          <div className="mt-2 space-y-1 text-xs text-slate-600">
+                            {item.evidenceLinks.map((link) => (
+                              <div key={link.id}>
+                                {link.evidence.code}: {link.evidence.description.slice(0, 80)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         <select
@@ -303,7 +479,7 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                           ))}
                         </select>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 space-y-2">
                         <Input
                           value={draft.notes}
                           placeholder="Observación"
@@ -314,11 +490,9 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                             }))
                           }
                         />
-                      </td>
-                      <td className="px-3 py-3">
                         <Input
                           value={draft.evidence}
-                          placeholder="Evidencia o referencia"
+                          placeholder="Evidencia observada (texto)"
                           onChange={(e) =>
                             setChecklistDrafts((prev) => ({
                               ...prev,
@@ -326,8 +500,17 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                             }))
                           }
                         />
+                        <Input
+                          type="file"
+                          onChange={(e) =>
+                            setEvidenceUploads((prev) => ({
+                              ...prev,
+                              [`check-${item.id}`]: e.target.files?.[0] ?? null,
+                            }))
+                          }
+                        />
                       </td>
-                      <td className="px-3 py-3 text-right">
+                      <td className="px-3 py-3 text-right space-y-2">
                         <Button
                           type="button"
                           size="sm"
@@ -335,15 +518,38 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                           disabled={saving === `checklist-${item.id}`}
                           onClick={() => void updateChecklistItem(item.id)}
                         >
-                          {saving === `checklist-${item.id}` ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : draft.result === "COMPLIES" ? (
+                          {draft.result === "COMPLIES" ? (
                             <CheckCircle2 className="h-4 w-4" />
                           ) : draft.result === "NON_COMPLIES" ? (
                             <XCircle className="h-4 w-4" />
                           ) : null}
                           Guardar
                         </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={saving === `check-${item.id}`}
+                          onClick={() =>
+                            void uploadEvidence({
+                              key: `check-${item.id}`,
+                              description: `Evidencia checklist: ${item.stage}`,
+                              checklistItemId: item.id,
+                            })
+                          }
+                        >
+                          Adjuntar
+                        </Button>
+                        {item.result === "NON_COMPLIES" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={saving === `gen-finding-${item.id}`}
+                            onClick={() => void generateFindingFromChecklist(item.id)}
+                          >
+                            Generar NC
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -377,12 +583,6 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                 {saving === "checklist-new" ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
                 Agregar etapa
               </Button>
-              <Textarea
-                className="md:col-span-3"
-                placeholder="Criterio o requisito esperado para esta etapa"
-                value={newChecklistItem.requirement}
-                onChange={(e) => setNewChecklistItem((prev) => ({ ...prev, requirement: e.target.value }))}
-              />
             </div>
           </form>
         </CardContent>
@@ -390,10 +590,10 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Agregar hallazgo</CardTitle>
+          <CardTitle>Agregar hallazgo (ISO 19011)</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={createFinding} className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
+          <form onSubmit={createFinding} className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
               <Label>Título</Label>
               <Input
@@ -402,27 +602,59 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                 required
               />
             </div>
-            <div className="space-y-1">
-              <Label>Severidad</Label>
-              <select
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={finding.severity}
-                onChange={(e) => setFinding((prev) => ({ ...prev, severity: e.target.value as FindingSeverity }))}
-              >
-                {severities.map((severity) => (
-                  <option key={severity} value={severity}>
-                    {severity}
-                  </option>
-                ))}
-              </select>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label>Tipo</Label>
+                <select
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={finding.findingType}
+                  onChange={(e) => setFinding((prev) => ({ ...prev, findingType: e.target.value as FindingType }))}
+                >
+                  {findingTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {findingTypeLabel(type)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label>Severidad</Label>
+                <select
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={finding.severity}
+                  onChange={(e) => setFinding((prev) => ({ ...prev, severity: e.target.value as FindingSeverity }))}
+                >
+                  {severities.map((severity) => (
+                    <option key={severity} value={severity}>
+                      {severity}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="flex items-end">
-              <Button disabled={saving === "finding"}>
-                {saving === "finding" ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
-                Agregar
-              </Button>
+            <div className="space-y-1 md:col-span-2">
+              <Label>Criterio</Label>
+              <Textarea
+                value={finding.criterionText}
+                onChange={(e) => setFinding((prev) => ({ ...prev, criterionText: e.target.value }))}
+                placeholder="Norma / procedimiento / requisito"
+              />
             </div>
-            <div className="space-y-1 md:col-span-3">
+            <div className="space-y-1 md:col-span-2">
+              <Label>Evidencia observada</Label>
+              <Textarea
+                value={finding.evidenceStatement}
+                onChange={(e) => setFinding((prev) => ({ ...prev, evidenceStatement: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label>Declaración de no conformidad / hallazgo</Label>
+              <Textarea
+                value={finding.nonconformityStatement}
+                onChange={(e) => setFinding((prev) => ({ ...prev, nonconformityStatement: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1 md:col-span-2">
               <Label>Descripción</Label>
               <Textarea
                 value={finding.description}
@@ -430,6 +662,10 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                 required
               />
             </div>
+            <Button disabled={saving === "finding"}>
+              {saving === "finding" ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
+              Agregar hallazgo
+            </Button>
           </form>
         </CardContent>
       </Card>
@@ -442,8 +678,24 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                 <div>
                   <CardTitle className="text-lg">{item.title}</CardTitle>
                   <p className="mt-1 text-sm text-slate-500">{item.description}</p>
+                  {item.criterionText && (
+                    <p className="mt-2 text-xs text-slate-600">
+                      <span className="font-semibold">Criterio:</span> {item.criterionText}
+                    </p>
+                  )}
+                  {item.evidenceStatement && (
+                    <p className="mt-1 text-xs text-slate-600">
+                      <span className="font-semibold">Evidencia:</span> {item.evidenceStatement}
+                    </p>
+                  )}
+                  {item.nonconformityStatement && (
+                    <p className="mt-1 text-xs text-slate-600">
+                      <span className="font-semibold">Declaración:</span> {item.nonconformityStatement}
+                    </p>
+                  )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Badge>{findingTypeLabel(item.findingType)}</Badge>
                   <Badge variant={item.severity === "CRITICAL" || item.severity === "HIGH" ? "danger" : "warning"}>
                     {item.severity}
                   </Badge>
@@ -452,13 +704,46 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-lg bg-amber-50 p-3 space-y-2">
+                <Label>Análisis de causa</Label>
+                <Textarea
+                  value={rootCauses[item.id] ?? item.rootCause ?? ""}
+                  onChange={(e) => setRootCauses((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                  placeholder="Causa raíz del hallazgo"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={saving === `root-${item.id}`}
+                    onClick={() => void saveRootCause(item.id)}
+                  >
+                    Guardar causa
+                  </Button>
+                  {item.status !== "CLOSED" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={saving === `close-${item.id}`}
+                      onClick={() => void closeFinding(item.id)}
+                    >
+                      Cerrar hallazgo
+                    </Button>
+                  )}
+                </div>
+              </div>
+
               <form onSubmit={(event) => void createPlan(event, item.id)} className="rounded-lg bg-slate-50 p-3">
                 <div className="grid gap-3 md:grid-cols-2">
                   <Input
                     placeholder="Título del plan"
                     value={(plans[item.id] ?? emptyPlan()).title}
                     onChange={(e) =>
-                      setPlans((prev) => ({ ...prev, [item.id]: { ...(prev[item.id] ?? emptyPlan()), title: e.target.value } }))
+                      setPlans((prev) => ({
+                        ...prev,
+                        [item.id]: { ...(prev[item.id] ?? emptyPlan()), title: e.target.value },
+                      }))
                     }
                     required
                   />
@@ -476,16 +761,34 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                     type="date"
                     value={(plans[item.id] ?? emptyPlan()).dueDate}
                     onChange={(e) =>
-                      setPlans((prev) => ({ ...prev, [item.id]: { ...(prev[item.id] ?? emptyPlan()), dueDate: e.target.value } }))
+                      setPlans((prev) => ({
+                        ...prev,
+                        [item.id]: { ...(prev[item.id] ?? emptyPlan()), dueDate: e.target.value },
+                      }))
                     }
                   />
                   <Button disabled={saving === `plan-${item.id}`}>
-                    {saving === `plan-${item.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
+                    {saving === `plan-${item.id}` ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <PlusCircle className="h-4 w-4" />
+                    )}
                     Agregar plan
                   </Button>
                   <Textarea
                     className="md:col-span-2"
-                    placeholder="Descripción del plan de acción"
+                    placeholder="Corrección inmediata"
+                    value={(plans[item.id] ?? emptyPlan()).correctionImmediate}
+                    onChange={(e) =>
+                      setPlans((prev) => ({
+                        ...prev,
+                        [item.id]: { ...(prev[item.id] ?? emptyPlan()), correctionImmediate: e.target.value },
+                      }))
+                    }
+                  />
+                  <Textarea
+                    className="md:col-span-2"
+                    placeholder="Descripción de la acción correctiva"
                     value={(plans[item.id] ?? emptyPlan()).description}
                     onChange={(e) =>
                       setPlans((prev) => ({
@@ -499,24 +802,95 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
               </form>
 
               {item.actionPlans.map((plan) => (
-                <div key={plan.id} className="rounded-lg border border-slate-200 p-3">
+                <div key={plan.id} className="rounded-lg border border-slate-200 p-3 space-y-3">
                   <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                     <div>
                       <div className="font-medium text-slate-900">{plan.title}</div>
                       <div className="text-sm text-slate-500">{plan.description}</div>
+                      {plan.correctionImmediate && (
+                        <div className="mt-1 text-xs text-slate-500">
+                          Corrección inmediata: {plan.correctionImmediate}
+                        </div>
+                      )}
                       <div className="mt-1 text-xs text-slate-400">
-                        Responsable: {plan.responsibleName ?? "No asignado"} · Vence: {formatDate(plan.dueDate)}
+                        Responsable: {plan.responsibleName ?? "No asignado"} · Vence: {formatDate(plan.dueDate)} ·
+                        Eficacia: {plan.efficacyStatus}
                       </div>
+                      {plan.evidenceLinks.length > 0 && (
+                        <div className="mt-2 text-xs text-slate-600">
+                          Evidencias:{" "}
+                          {plan.evidenceLinks
+                            .map((l) => `${l.evidence.code} (${l.role})`)
+                            .join(", ")}
+                        </div>
+                      )}
                     </div>
                     <Badge variant={plan.status === "COMPLETED" ? "success" : "outline"}>{plan.status}</Badge>
                   </div>
 
-                  <form onSubmit={(event) => void createFollowUp(event, plan.id)} className="mt-3 grid gap-2 md:grid-cols-[1fr_180px_160px_auto]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      type="file"
+                      className="max-w-xs"
+                      onChange={(e) =>
+                        setEvidenceUploads((prev) => ({
+                          ...prev,
+                          [`plan-${plan.id}`]: e.target.files?.[0] ?? null,
+                        }))
+                      }
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={saving === `plan-${plan.id}`}
+                      onClick={() =>
+                        void uploadEvidence({
+                          key: `plan-${plan.id}`,
+                          description: `Evidencia implementación: ${plan.title}`,
+                          actionPlanId: plan.id,
+                          actionPlanRole: "IMPLEMENTATION",
+                          findingId: item.id,
+                        })
+                      }
+                    >
+                      Evidencia implementación
+                    </Button>
+                    {plan.status !== "COMPLETED" && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={saving === `complete-${plan.id}`}
+                        onClick={() => void completePlan(plan.id)}
+                      >
+                        Completar plan
+                      </Button>
+                    )}
+                    {plan.efficacyStatus !== "VERIFIED" && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={saving === `efficacy-${plan.id}`}
+                        onClick={() => void verifyEfficacy(plan.id, "VERIFIED")}
+                      >
+                        Verificar eficacia
+                      </Button>
+                    )}
+                  </div>
+
+                  <form
+                    onSubmit={(event) => void createFollowUp(event, plan.id)}
+                    className="grid gap-2 md:grid-cols-[1fr_180px_160px_auto]"
+                  >
                     <Input
                       placeholder="Nota de seguimiento"
                       value={(followUps[plan.id] ?? emptyFollowUp()).note}
                       onChange={(e) =>
-                        setFollowUps((prev) => ({ ...prev, [plan.id]: { ...(prev[plan.id] ?? emptyFollowUp()), note: e.target.value } }))
+                        setFollowUps((prev) => ({
+                          ...prev,
+                          [plan.id]: { ...(prev[plan.id] ?? emptyFollowUp()), note: e.target.value },
+                        }))
                       }
                       required
                     />
@@ -526,7 +900,10 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                       onChange={(e) =>
                         setFollowUps((prev) => ({
                           ...prev,
-                          [plan.id]: { ...(prev[plan.id] ?? emptyFollowUp()), status: e.target.value as ActionPlanStatus },
+                          [plan.id]: {
+                            ...(prev[plan.id] ?? emptyFollowUp()),
+                            status: e.target.value as ActionPlanStatus,
+                          },
                         }))
                       }
                     >
@@ -552,7 +929,7 @@ export function AuditDetailClient({ auditId }: { auditId: string }) {
                   </form>
 
                   {plan.followUps.length > 0 && (
-                    <div className="mt-3 space-y-2 border-t pt-3">
+                    <div className="space-y-2 border-t pt-3">
                       {plan.followUps.map((followUp) => (
                         <div key={followUp.id} className="text-sm">
                           <span className="font-medium">{formatDate(followUp.followUpDate)}:</span>{" "}

@@ -609,6 +609,25 @@ export const PERMISSION_REGISTRY = {
           edit: "Crear y actualizar auditorías, hallazgos, planes y seguimientos",
         },
       },
+      requisitos: {
+        label: "Matriz de requisitos",
+        uiRoutes: ["/sig/requisitos"],
+        apiPrefixes: ["/api/sig/requirements"],
+        actions: {
+          view: "Consultar matriz de requisitos ISO",
+          edit: "Crear y vincular requisitos",
+          admin: "Administrar normas y aplicabilidad",
+        },
+      },
+      evidencias: {
+        label: "Evidencias del SIG",
+        uiRoutes: ["/sig/evidencias"],
+        apiPrefixes: ["/api/sig/evidences"],
+        actions: {
+          view: "Consultar evidencias trazables",
+          edit: "Registrar y vincular evidencias",
+        },
+      },
       procesos: {
         label: "Procesos y tipos",
         uiRoutes: ["/sig/procesos"],

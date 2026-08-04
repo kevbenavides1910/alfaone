@@ -13,6 +13,11 @@ export const PATCH = apiHandler(
   async ({ req, params }) => {
     const parsed = updateFindingSchema.safeParse(await req.json());
     if (!parsed.success) return badRequest("Datos de hallazgo inválidos", parsed.error.flatten());
-    return ok(await updateFinding(paramId(await params), parsed.data));
+    try {
+      return ok(await updateFinding(paramId(await params), parsed.data));
+    } catch (error) {
+      if (error instanceof Error) return badRequest(error.message);
+      throw error;
+    }
   }
 );

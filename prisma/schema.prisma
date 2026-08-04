@@ -285,8 +285,12 @@ model User {
   auditsAssigned                         Audit[]                       @relation("AuditAuditor")
   findingsCreated                        Finding[]                     @relation("FindingCreator")
   actionPlansCreated                     ActionPlan[]                  @relation("ActionPlanCreator")
+  actionPlansResponsible                 ActionPlan[]                  @relation("ActionPlanResponsible")
+  actionPlansEfficacyVerified            ActionPlan[]                  @relation("ActionPlanEfficacyVerifier")
   followUpsCreated                       FollowUp[]                    @relation("FollowUpCreator")
   checklistItemsReviewed                 AuditChecklistItem[]          @relation("AuditChecklistReviewer")
+  sigEvidencesCreated                    SigEvidence[]                 @relation("SigEvidenceCreator")
+  sigRequirementsCreated                 SigRequirement[]              @relation("SigRequirementCreator")
   ventasOportunidadesDecididas           VentasOportunidad[]           @relation("VentasOportunidadDecidedBy")
   ventasPresupuestosCreados              VentasPresupuesto[]           @relation("VentasPresupuestoCreatedBy")
   facturasMensualesReturnedForCorrection FacturaMensual[]              @relation("FacturaReturnedForCorrection")
@@ -1915,7 +1919,9 @@ model SigProcess {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  documents SigDocument[]
+  documents            SigDocument[]
+  requirementLinks     SigRequirementProcess[]
+  evidences            SigEvidence[]
 
   @@index([parentId])
   @@map("sig_processes")
@@ -1942,9 +1948,10 @@ model SigDocument {
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
-  versions  SigDocumentVersion[]  @relation("SigDocumentVersions")
-  auditLogs SigDocumentAuditLog[]
-  audits    Audit[]
+  versions         SigDocumentVersion[]     @relation("SigDocumentVersions")
+  auditLogs        SigDocumentAuditLog[]
+  audits           Audit[]
+  requirementLinks SigRequirementDocument[]
 
   @@index([documentTypeId])
   @@index([processId])
@@ -1973,6 +1980,12 @@ enum FindingStatus {
   CLOSED
 }
 
+enum FindingType {
+  NONCONFORMITY
+  OBSERVATION
+  OPPORTUNITY
+}
+
 enum ActionPlanStatus {
   PENDING
   IN_PROGRESS
@@ -1980,11 +1993,236 @@ enum ActionPlanStatus {
   CANCELLED
 }
 
+enum ActionPlanEfficacyStatus {
+  PENDING
+  VERIFIED
+  NOT_EFFECTIVE
+}
+
 enum AuditChecklistResult {
   PENDING
   COMPLIES
   NON_COMPLIES
   NOT_APPLICABLE
+}
+
+enum AuditSampleMethod {
+  RANDOM
+  RISK_BASED
+  AUDITOR_JUDGMENT
+  MIXED
+}
+
+enum SigEvidenceType {
+  PHOTO
+  PDF
+  EXCEL
+  RECORD
+  EMAIL
+  ACTA
+  CERTIFICATE
+  INTERVIEW
+  SCREENSHOT
+  VIDEO
+  FORM
+  INSPECTION
+  OTHER
+}
+
+enum SigEvidenceStatus {
+  ACTIVE
+  EXPIRED
+  SUPERSEDED
+}
+
+enum SigEvidenceLinkRole {
+  OBSERVED
+  IMPLEMENTATION
+  EFFICACY
+}
+
+/// Norma / estándar del SIG (ISO 9001, ISO 18788, interno).
+model SigStandard {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  year      Int?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirements SigRequirement[]
+
+  @@map("sig_standards")
+}
+
+/// Requisito / cláusula de una norma (matriz maestra del SIG).
+model SigRequirement {
+  id            String         @id @default(cuid())
+  standardId    String
+  standard      SigStandard    @relation(fields: [standardId], references: [id], onDelete: Restrict)
+  code          String
+  title         String
+  description   String?        @db.Text
+  parentId      String?
+  parent        SigRequirement?  @relation("SigRequirementTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children      SigRequirement[] @relation("SigRequirementTree")
+  isApplicable  Boolean        @default(true)
+  sortOrder     Int            @default(0)
+  createdById   String?
+  createdBy     User?          @relation("SigRequirementCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  processLinks   SigRequirementProcess[]
+  documentLinks  SigRequirementDocument[]
+  evidenceLinks  SigEvidenceRequirement[]
+  checklistItems AuditChecklistItem[]
+  findingLinks   SigFindingRequirement[]
+
+  @@unique([standardId, code])
+  @@index([parentId])
+  @@index([isApplicable])
+  @@map("sig_requirements")
+}
+
+model SigRequirementProcess {
+  id            String         @id @default(cuid())
+  requirementId String
+  requirement   SigRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  processId     String
+  process       SigProcess     @relation(fields: [processId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now())
+
+  @@unique([requirementId, processId])
+  @@index([processId])
+  @@map("sig_requirement_processes")
+}
+
+model SigRequirementDocument {
+  id            String         @id @default(cuid())
+  requirementId String
+  requirement   SigRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  documentId    String
+  document      SigDocument    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now())
+
+  @@unique([requirementId, documentId])
+  @@index([documentId])
+  @@map("sig_requirement_documents")
+}
+
+/// Evidencia trazable del SIG (archivo o registro).
+model SigEvidence {
+  id            String            @id @default(cuid())
+  code          String            @unique
+  type          SigEvidenceType   @default(OTHER)
+  description   String            @db.Text
+  evidenceDate  DateTime
+  validUntil    DateTime?
+  status        SigEvidenceStatus @default(ACTIVE)
+  processId     String?
+  process       SigProcess?       @relation(fields: [processId], references: [id], onDelete: SetNull)
+  fileName      String?
+  mimeType      String?
+  storagePath   String?
+  fileSizeBytes Int?
+  createdById   String
+  createdBy     User              @relation("SigEvidenceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  requirementLinks  SigEvidenceRequirement[]
+  auditLinks        SigEvidenceAudit[]
+  checklistLinks    SigEvidenceChecklistItem[]
+  findingLinks      SigEvidenceFinding[]
+  actionPlanLinks   SigEvidenceActionPlan[]
+
+  @@index([processId])
+  @@index([status])
+  @@index([evidenceDate])
+  @@index([validUntil])
+  @@map("sig_evidences")
+}
+
+model SigEvidenceRequirement {
+  id            String         @id @default(cuid())
+  evidenceId    String
+  evidence      SigEvidence    @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  requirementId String
+  requirement   SigRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now())
+
+  @@unique([evidenceId, requirementId])
+  @@index([requirementId])
+  @@map("sig_evidence_requirements")
+}
+
+model SigEvidenceAudit {
+  id         String      @id @default(cuid())
+  evidenceId String
+  evidence   SigEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  auditId    String
+  audit      Audit       @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+
+  @@unique([evidenceId, auditId])
+  @@index([auditId])
+  @@map("sig_evidence_audits")
+}
+
+model SigEvidenceChecklistItem {
+  id              String             @id @default(cuid())
+  evidenceId      String
+  evidence        SigEvidence        @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  checklistItemId String
+  checklistItem   AuditChecklistItem @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+  createdAt       DateTime           @default(now())
+
+  @@unique([evidenceId, checklistItemId])
+  @@index([checklistItemId])
+  @@map("sig_evidence_checklist_items")
+}
+
+model SigEvidenceFinding {
+  id         String      @id @default(cuid())
+  evidenceId String
+  evidence   SigEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  findingId  String
+  finding    Finding     @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+
+  @@unique([evidenceId, findingId])
+  @@index([findingId])
+  @@map("sig_evidence_findings")
+}
+
+model SigEvidenceActionPlan {
+  id           String              @id @default(cuid())
+  evidenceId   String
+  evidence     SigEvidence         @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  actionPlanId String
+  actionPlan   ActionPlan          @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
+  role         SigEvidenceLinkRole @default(IMPLEMENTATION)
+  createdAt    DateTime            @default(now())
+
+  @@unique([evidenceId, actionPlanId, role])
+  @@index([actionPlanId])
+  @@map("sig_evidence_action_plans")
+}
+
+model SigFindingRequirement {
+  id            String         @id @default(cuid())
+  findingId     String
+  finding       Finding        @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  requirementId String
+  requirement   SigRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now())
+
+  @@unique([findingId, requirementId])
+  @@index([requirementId])
+  @@map("sig_finding_requirements")
 }
 
 /// Auditoría trimestral asociada a un procedimiento vigente del SIG.
@@ -2008,6 +2246,8 @@ model Audit {
 
   findings       Finding[]
   checklistItems AuditChecklistItem[]
+  samples        AuditSample[]
+  evidenceLinks  SigEvidenceAudit[]
 
   @@unique([procedureId, year, quarter])
   @@index([year, quarter])
@@ -2017,65 +2257,125 @@ model Audit {
 }
 
 model AuditChecklistItem {
-  id           String               @id @default(cuid())
-  auditId      String
-  audit        Audit                @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  stage        String
-  requirement  String?              @db.Text
-  result       AuditChecklistResult @default(PENDING)
-  notes        String?              @db.Text
-  evidence     String?              @db.Text
-  sortOrder    Int                  @default(0)
-  reviewedAt   DateTime?
-  reviewedById String?
-  reviewedBy   User?                @relation("AuditChecklistReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  id            String               @id @default(cuid())
+  auditId       String
+  audit         Audit                @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  stage         String
+  requirement   String?              @db.Text
+  requirementId String?
+  sigRequirement SigRequirement?     @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+  result        AuditChecklistResult @default(PENDING)
+  notes         String?              @db.Text
+  evidence      String?              @db.Text
+  sortOrder     Int                  @default(0)
+  reviewedAt    DateTime?
+  reviewedById  String?
+  reviewedBy    User?                @relation("AuditChecklistReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  findings       Finding[]
+  evidenceLinks  SigEvidenceChecklistItem[]
 
   @@index([auditId])
   @@index([result])
+  @@index([requirementId])
   @@map("sig_audit_checklist_items")
 }
 
-model Finding {
-  id          String          @id @default(cuid())
-  auditId     String
-  audit       Audit           @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  title       String
-  description String          @db.Text
-  severity    FindingSeverity @default(MEDIUM)
-  status      FindingStatus   @default(OPEN)
-  createdById String
-  createdBy   User            @relation("FindingCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+model AuditSample {
+  id                     String            @id @default(cuid())
+  auditId                String
+  audit                  Audit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  populationDescription  String            @db.Text
+  populationSize         Int?
+  sampleSize             Int?
+  method                 AuditSampleMethod @default(AUDITOR_JUDGMENT)
+  notes                  String?           @db.Text
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
 
-  actionPlans ActionPlan[]
+  items AuditSampleItem[]
+
+  @@index([auditId])
+  @@map("sig_audit_samples")
+}
+
+model AuditSampleItem {
+  id        String      @id @default(cuid())
+  sampleId  String
+  sample    AuditSample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  code      String?
+  label     String
+  notes     String?     @db.Text
+  sortOrder Int         @default(0)
+  createdAt DateTime    @default(now())
+
+  @@index([sampleId])
+  @@map("sig_audit_sample_items")
+}
+
+model Finding {
+  id                      String          @id @default(cuid())
+  auditId                 String
+  audit                   Audit           @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  title                   String
+  description             String          @db.Text
+  findingType             FindingType     @default(NONCONFORMITY)
+  severity                FindingSeverity @default(MEDIUM)
+  status                  FindingStatus   @default(OPEN)
+  criterionText           String?         @db.Text
+  evidenceStatement       String?         @db.Text
+  nonconformityStatement  String?         @db.Text
+  rootCause               String?         @db.Text
+  checklistItemId         String?
+  checklistItem           AuditChecklistItem? @relation(fields: [checklistItemId], references: [id], onDelete: SetNull)
+  createdById             String
+  createdBy               User            @relation("FindingCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  actionPlans      ActionPlan[]
+  evidenceLinks    SigEvidenceFinding[]
+  requirementLinks SigFindingRequirement[]
 
   @@index([auditId])
   @@index([status])
+  @@index([findingType])
+  @@index([checklistItemId])
   @@map("sig_audit_findings")
 }
 
 model ActionPlan {
-  id              String           @id @default(cuid())
-  findingId       String
-  finding         Finding          @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  title           String
-  description     String           @db.Text
-  responsibleName String?
-  dueDate         DateTime?
-  status          ActionPlanStatus @default(PENDING)
-  createdById     String
-  createdBy       User             @relation("ActionPlanCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id                   String                   @id @default(cuid())
+  findingId            String
+  finding              Finding                  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  title                String
+  description          String                   @db.Text
+  correctionImmediate  String?                  @db.Text
+  responsibleName      String?
+  responsibleUserId    String?
+  responsibleUser      User?                    @relation("ActionPlanResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+  dueDate              DateTime?
+  status               ActionPlanStatus         @default(PENDING)
+  efficacyStatus       ActionPlanEfficacyStatus @default(PENDING)
+  efficacyVerifiedAt   DateTime?
+  efficacyVerifiedById String?
+  efficacyVerifiedBy   User?                    @relation("ActionPlanEfficacyVerifier", fields: [efficacyVerifiedById], references: [id], onDelete: SetNull)
+  efficacyNotes        String?                  @db.Text
+  createdById          String
+  createdBy            User                     @relation("ActionPlanCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
 
-  followUps FollowUp[]
+  followUps     FollowUp[]
+  evidenceLinks SigEvidenceActionPlan[]
 
   @@index([findingId])
   @@index([status])
   @@index([dueDate])
+  @@index([responsibleUserId])
+  @@index([efficacyStatus])
   @@map("sig_action_plans")
 }
 

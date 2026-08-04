@@ -44,6 +44,18 @@ const TABS: Tab[] = [
     permission: "sig.bitacora",
   },
   {
+    href: "/sig/requisitos",
+    label: "Requisitos",
+    permission: "sig.requisitos",
+    isActive: (p) => p.startsWith("/sig/requisitos"),
+  },
+  {
+    href: "/sig/evidencias",
+    label: "Evidencias",
+    permission: "sig.evidencias",
+    isActive: (p) => p.startsWith("/sig/evidencias"),
+  },
+  {
     href: "/sig/auditorias",
     label: "Auditorías",
     permission: "sig.auditorias",
