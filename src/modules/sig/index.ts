@@ -81,6 +81,17 @@ export {
   linkSigControl,
   unlinkSigControl,
 } from "./services/controls";
+export {
+  listSigRisks,
+  getSigRiskDetail,
+  createSigRisk,
+  updateSigRisk,
+  linkSigRisk,
+  unlinkSigRisk,
+  scoreToLevel,
+  type SigRiskLevel,
+  type SigRiskListItem,
+} from "./services/risks";
 export { getSigProcessDossier } from "./services/process-dossier";
 export {
   approveAuditProgram,

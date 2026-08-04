@@ -293,6 +293,8 @@ model User {
   sigRequirementsCreated                 SigRequirement[]              @relation("SigRequirementCreator")
   sigControlsCreated                     SigControl[]                  @relation("SigControlCreator")
   sigControlsOwned                       SigControl[]                  @relation("SigControlOwner")
+  sigRisksCreated                        SigRisk[]                     @relation("SigRiskCreator")
+  sigRisksOwned                          SigRisk[]                     @relation("SigRiskOwner")
   auditProgramsCreated                   AuditProgram[]                @relation("AuditProgramCreator")
   auditProgramsApproved                  AuditProgram[]                @relation("AuditProgramApprover")
   auditProgramItemsAssigned              AuditProgramItem[]            @relation("AuditProgramItemAuditor")
@@ -1929,6 +1931,8 @@ model SigProcess {
   evidences            SigEvidence[]
   controlLinks         SigControlProcess[]
   controlsPrimary      SigControl[]            @relation("SigControlPrimaryProcess")
+  riskLinks            SigRiskProcess[]
+  risksPrimary         SigRisk[]               @relation("SigRiskPrimaryProcess")
   auditProgramItems    AuditProgramItem[]
 
   @@index([parentId])
@@ -2097,6 +2101,7 @@ model SigRequirement {
   checklistItems AuditChecklistItem[]
   findingLinks   SigFindingRequirement[]
   controlLinks   SigControlRequirement[]
+  riskLinks      SigRiskRequirement[]
 
   @@unique([standardId, code])
   @@index([parentId])
@@ -2152,6 +2157,7 @@ model SigControl {
   processLinks     SigControlProcess[]
   documentLinks    SigControlDocument[]
   evidenceLinks    SigControlEvidence[]
+  riskLinks        SigRiskControl[]
 
   @@index([processId])
   @@index([status])
@@ -2237,12 +2243,121 @@ model SigEvidence {
   findingLinks      SigEvidenceFinding[]
   actionPlanLinks   SigEvidenceActionPlan[]
   controlLinks      SigControlEvidence[]
+  riskLinks         SigRiskEvidence[]
 
   @@index([processId])
   @@index([status])
   @@index([evidenceDate])
   @@index([validUntil])
   @@map("sig_evidences")
+}
+
+enum SigRiskKind {
+  RISK
+  OPPORTUNITY
+}
+
+enum SigRiskStatus {
+  IDENTIFIED
+  ANALYZED
+  TREATING
+  MONITORING
+  CLOSED
+}
+
+/// Riesgo u oportunidad del SIG (ISO 9001 6.1 / Manual).
+model SigRisk {
+  id                   String        @id @default(cuid())
+  code                 String        @unique
+  title                String
+  description          String?       @db.Text
+  kind                 SigRiskKind   @default(RISK)
+  status               SigRiskStatus @default(IDENTIFIED)
+  processId            String?
+  process              SigProcess?   @relation("SigRiskPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
+  ownerUserId          String?
+  ownerUser            User?         @relation("SigRiskOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  /// Probabilidad inherente 1–5.
+  likelihood           Int           @default(3)
+  /// Impacto inherente 1–5.
+  impact               Int           @default(3)
+  inherentScore        Int           @default(9)
+  residualLikelihood   Int?
+  residualImpact       Int?
+  residualScore        Int?
+  treatment            String?       @db.Text
+  reviewDate           DateTime?
+  nextReviewDate       DateTime?
+  createdById          String
+  createdBy            User          @relation("SigRiskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  processLinks      SigRiskProcess[]
+  controlLinks      SigRiskControl[]
+  requirementLinks  SigRiskRequirement[]
+  evidenceLinks     SigRiskEvidence[]
+
+  @@index([processId])
+  @@index([status])
+  @@index([kind])
+  @@index([inherentScore])
+  @@index([residualScore])
+  @@index([ownerUserId])
+  @@index([nextReviewDate])
+  @@map("sig_risks")
+}
+
+model SigRiskProcess {
+  id        String     @id @default(cuid())
+  riskId    String
+  risk      SigRisk    @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  processId String
+  process   SigProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([riskId, processId])
+  @@index([processId])
+  @@map("sig_risk_processes")
+}
+
+model SigRiskControl {
+  id        String     @id @default(cuid())
+  riskId    String
+  risk      SigRisk    @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  controlId String
+  control   SigControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([riskId, controlId])
+  @@index([controlId])
+  @@map("sig_risk_controls")
+}
+
+model SigRiskRequirement {
+  id            String         @id @default(cuid())
+  riskId        String
+  risk          SigRisk        @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  requirementId String
+  requirement   SigRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now())
+
+  @@unique([riskId, requirementId])
+  @@index([requirementId])
+  @@map("sig_risk_requirements")
+}
+
+model SigRiskEvidence {
+  id         String      @id @default(cuid())
+  riskId     String
+  risk       SigRisk     @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  evidenceId String
+  evidence   SigEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+
+  @@unique([riskId, evidenceId])
+  @@index([evidenceId])
+  @@map("sig_risk_evidences")
 }
 
 model SigEvidenceRequirement {

@@ -24,6 +24,7 @@ type Dossier = {
     requirements: number;
     evidences: number;
     controls: number;
+    risks: number;
     audits: number;
     openFindings: number;
     overdueActions: number;
@@ -51,6 +52,15 @@ type Dossier = {
     title: string;
     status: string;
     _count: { evidenceLinks: number; requirementLinks: number };
+  }>;
+  risks: Array<{
+    id: string;
+    code: string;
+    title: string;
+    kind: string;
+    status: string;
+    inherentScore: number;
+    residualScore: number | null;
   }>;
   audits: Array<{
     id: string;
@@ -145,6 +155,7 @@ export default function SigProcessDossierPage() {
           <Stat label="Documentos" value={summary.documents} />
           <Stat label="Requisitos" value={summary.requirements} href="/sig/requisitos" />
           <Stat label="Controles" value={summary.controls} href="/sig/controles" />
+          <Stat label="Riesgos" value={summary.risks} href="/sig/riesgos" />
           <Stat label="Evidencias" value={summary.evidences} href="/sig/evidencias" />
           <Stat label="Auditorías" value={summary.audits} href="/sig/auditorias" />
           <Stat label="Hallazgos abiertos" value={summary.openFindings} />
@@ -203,6 +214,27 @@ export default function SigProcessDossierPage() {
                 </div>
               ))}
               {data.controls.length === 0 && <p className="text-slate-500">Sin controles</p>}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Riesgos y oportunidades</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {data.risks.map((r) => (
+                <div key={r.id}>
+                  <Link href={`/sig/riesgos/${r.id}`} className="text-red-700 hover:underline">
+                    {r.code}
+                  </Link>{" "}
+                  — {r.title}{" "}
+                  <Badge variant="outline">{r.kind === "OPPORTUNITY" ? "Oportunidad" : "Riesgo"}</Badge>{" "}
+                  <span className="text-xs text-slate-500">
+                    score {r.residualScore ?? r.inherentScore}
+                  </span>
+                </div>
+              ))}
+              {data.risks.length === 0 && <p className="text-slate-500">Sin riesgos abiertos</p>}
             </CardContent>
           </Card>
 

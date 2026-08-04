@@ -638,6 +638,16 @@ export const PERMISSION_REGISTRY = {
           admin: "Administrar estado de controles",
         },
       },
+      riesgos: {
+        label: "Riesgos y oportunidades",
+        uiRoutes: ["/sig/riesgos"],
+        apiPrefixes: ["/api/sig/risks"],
+        actions: {
+          view: "Consultar matriz de riesgos y oportunidades",
+          edit: "Registrar, evaluar y vincular riesgos",
+          admin: "Cerrar o administrar riesgos",
+        },
+      },
       procesos: {
         label: "Procesos y tipos",
         uiRoutes: ["/sig/procesos"],

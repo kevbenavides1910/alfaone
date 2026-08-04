@@ -24,6 +24,8 @@ export async function getSigProcessDossier(processId: string) {
     evidences,
     controlsPrimary,
     controlLinks,
+    risksPrimary,
+    riskLinks,
     openFindingsViaDocs,
     overduePlans,
   ] = await Promise.all([
@@ -95,6 +97,37 @@ export async function getSigProcessDossier(processId: string) {
         },
       },
     }),
+    prisma.sigRisk.findMany({
+      where: { processId, status: { not: "CLOSED" } },
+      orderBy: [{ inherentScore: "desc" }, { code: "asc" }],
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        kind: true,
+        status: true,
+        inherentScore: true,
+        residualScore: true,
+        nextReviewDate: true,
+      },
+    }),
+    prisma.sigRiskProcess.findMany({
+      where: { processId },
+      include: {
+        risk: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            kind: true,
+            status: true,
+            inherentScore: true,
+            residualScore: true,
+            nextReviewDate: true,
+          },
+        },
+      },
+    }),
     prisma.finding.findMany({
       where: {
         status: { not: "CLOSED" },
@@ -156,6 +189,16 @@ export async function getSigProcessDossier(processId: string) {
   }
   const controls = Array.from(controlsMap.values()).sort((a, b) => a.code.localeCompare(b.code));
 
+  const risksMap = new Map<string, (typeof risksPrimary)[number]>();
+  for (const r of risksPrimary) risksMap.set(r.id, r);
+  for (const link of riskLinks) {
+    if (link.risk.status === "CLOSED") continue;
+    if (!risksMap.has(link.risk.id)) risksMap.set(link.risk.id, link.risk);
+  }
+  const risks = Array.from(risksMap.values()).sort(
+    (a, b) => b.inherentScore - a.inherentScore || a.code.localeCompare(b.code)
+  );
+
   const requirements = requirementLinks.map((l) => l.requirement);
   const procedures = documents.filter(
     (d) =>
@@ -175,6 +218,7 @@ export async function getSigProcessDossier(processId: string) {
       requirements: requirements.length,
       evidences: evidences.length,
       controls: controls.length,
+      risks: risks.length,
       audits: audits.length,
       openFindings: openFindingsViaDocs.length,
       overdueActions: overduePlans.length,
@@ -184,6 +228,7 @@ export async function getSigProcessDossier(processId: string) {
     requirements,
     evidences,
     controls,
+    risks,
     audits,
     openFindings: openFindingsViaDocs,
     overdueActions: overduePlans,
