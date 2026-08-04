@@ -628,12 +628,22 @@ export const PERMISSION_REGISTRY = {
           edit: "Registrar y vincular evidencias",
         },
       },
+      controles: {
+        label: "Controles del SIG",
+        uiRoutes: ["/sig/controles"],
+        apiPrefixes: ["/api/sig/controls"],
+        actions: {
+          view: "Consultar controles SIG",
+          edit: "Crear y vincular controles",
+          admin: "Administrar estado de controles",
+        },
+      },
       procesos: {
         label: "Procesos y tipos",
         uiRoutes: ["/sig/procesos"],
         apiPrefixes: ["/api/sig/procesos", "/api/sig/tipos-documento"],
         actions: {
-          view: "Ver catálogos",
+          view: "Ver catálogos y expediente de proceso",
           edit: "Crear y editar procesos",
           admin: "Administrar tipos documentales",
         },

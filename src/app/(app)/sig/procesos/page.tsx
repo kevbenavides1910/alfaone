@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Pencil, Check, X, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Pencil, Check, X, Trash2, FolderOpen } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -175,6 +176,14 @@ function CatalogListItem({
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <span className="text-muted-foreground text-xs mr-1">{row._count.documents} docs</span>
+        {kind === "process" && (
+          <Link href={`/sig/procesos/${row.id}`}>
+            <Button variant="ghost" size="sm" className="h-8 px-2" title="Expediente de proceso">
+              <FolderOpen className="h-4 w-4 mr-1" />
+              Expediente
+            </Button>
+          </Link>
+        )}
         {canEdit && (
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onStartEdit} title="Editar">
             <Pencil className="h-4 w-4" />

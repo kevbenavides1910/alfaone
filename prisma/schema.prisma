@@ -291,6 +291,8 @@ model User {
   checklistItemsReviewed                 AuditChecklistItem[]          @relation("AuditChecklistReviewer")
   sigEvidencesCreated                    SigEvidence[]                 @relation("SigEvidenceCreator")
   sigRequirementsCreated                 SigRequirement[]              @relation("SigRequirementCreator")
+  sigControlsCreated                     SigControl[]                  @relation("SigControlCreator")
+  sigControlsOwned                       SigControl[]                  @relation("SigControlOwner")
   ventasOportunidadesDecididas           VentasOportunidad[]           @relation("VentasOportunidadDecidedBy")
   ventasPresupuestosCreados              VentasPresupuesto[]           @relation("VentasPresupuestoCreatedBy")
   facturasMensualesReturnedForCorrection FacturaMensual[]              @relation("FacturaReturnedForCorrection")
@@ -1922,6 +1924,8 @@ model SigProcess {
   documents            SigDocument[]
   requirementLinks     SigRequirementProcess[]
   evidences            SigEvidence[]
+  controlLinks         SigControlProcess[]
+  controlsPrimary      SigControl[]            @relation("SigControlPrimaryProcess")
 
   @@index([parentId])
   @@map("sig_processes")
@@ -1952,6 +1956,7 @@ model SigDocument {
   auditLogs        SigDocumentAuditLog[]
   audits           Audit[]
   requirementLinks SigRequirementDocument[]
+  controlLinks     SigControlDocument[]
 
   @@index([documentTypeId])
   @@index([processId])
@@ -2041,6 +2046,12 @@ enum SigEvidenceLinkRole {
   EFFICACY
 }
 
+enum SigControlStatus {
+  ACTIVE
+  INACTIVE
+  UNDER_REVIEW
+}
+
 /// Norma / estándar del SIG (ISO 9001, ISO 18788, interno).
 model SigStandard {
   id        String   @id @default(cuid())
@@ -2080,6 +2091,7 @@ model SigRequirement {
   evidenceLinks  SigEvidenceRequirement[]
   checklistItems AuditChecklistItem[]
   findingLinks   SigFindingRequirement[]
+  controlLinks   SigControlRequirement[]
 
   @@unique([standardId, code])
   @@index([parentId])
@@ -2113,6 +2125,87 @@ model SigRequirementDocument {
   @@map("sig_requirement_documents")
 }
 
+/// Control del SIG: puente entre requisito, proceso, documento y evidencia.
+model SigControl {
+  id                 String           @id @default(cuid())
+  code               String           @unique
+  title              String
+  description        String?          @db.Text
+  status             SigControlStatus @default(ACTIVE)
+  processId          String?
+  process            SigProcess?      @relation("SigControlPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
+  ownerUserId        String?
+  ownerUser          User?            @relation("SigControlOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  /// Días esperados entre evidencias del control (alerta de frescura).
+  evidenceIntervalDays Int?
+  createdById        String
+  createdBy          User             @relation("SigControlCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  requirementLinks SigControlRequirement[]
+  processLinks     SigControlProcess[]
+  documentLinks    SigControlDocument[]
+  evidenceLinks    SigControlEvidence[]
+
+  @@index([processId])
+  @@index([status])
+  @@index([ownerUserId])
+  @@map("sig_controls")
+}
+
+model SigControlRequirement {
+  id            String         @id @default(cuid())
+  controlId     String
+  control       SigControl     @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  requirementId String
+  requirement   SigRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now())
+
+  @@unique([controlId, requirementId])
+  @@index([requirementId])
+  @@map("sig_control_requirements")
+}
+
+model SigControlProcess {
+  id        String     @id @default(cuid())
+  controlId String
+  control   SigControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  processId String
+  process   SigProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([controlId, processId])
+  @@index([processId])
+  @@map("sig_control_processes")
+}
+
+model SigControlDocument {
+  id         String      @id @default(cuid())
+  controlId  String
+  control    SigControl  @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  documentId String
+  document   SigDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+
+  @@unique([controlId, documentId])
+  @@index([documentId])
+  @@map("sig_control_documents")
+}
+
+model SigControlEvidence {
+  id         String      @id @default(cuid())
+  controlId  String
+  control    SigControl  @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  evidenceId String
+  evidence   SigEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+
+  @@unique([controlId, evidenceId])
+  @@index([evidenceId])
+  @@map("sig_control_evidences")
+}
+
 /// Evidencia trazable del SIG (archivo o registro).
 model SigEvidence {
   id            String            @id @default(cuid())
@@ -2138,6 +2231,7 @@ model SigEvidence {
   checklistLinks    SigEvidenceChecklistItem[]
   findingLinks      SigEvidenceFinding[]
   actionPlanLinks   SigEvidenceActionPlan[]
+  controlLinks      SigControlEvidence[]
 
   @@index([processId])
   @@index([status])

@@ -73,3 +73,12 @@ export {
   updateSigEvidence,
   linkSigEvidence,
 } from "./services/evidences";
+export {
+  listSigControls,
+  getSigControlDetail,
+  createSigControl,
+  updateSigControl,
+  linkSigControl,
+  unlinkSigControl,
+} from "./services/controls";
+export { getSigProcessDossier } from "./services/process-dossier";

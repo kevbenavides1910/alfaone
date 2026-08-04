@@ -45,6 +45,7 @@ const ALL_KEYS = [
   "sig.auditorias",
   "sig.requisitos",
   "sig.evidencias",
+  "sig.controles",
   "sig.procesos",
   "recorridos.dashboard",
   "recorridos.configuracion",
