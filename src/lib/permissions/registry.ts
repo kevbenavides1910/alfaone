@@ -678,6 +678,16 @@ export const PERMISSION_REGISTRY = {
           admin: "Cerrar o administrar incidentes",
         },
       },
+      revisionDireccion: {
+        label: "Revisión por la dirección",
+        uiRoutes: ["/sig/revision-direccion"],
+        apiPrefixes: ["/api/sig/management-reviews"],
+        actions: {
+          view: "Consultar actas de revisión por la dirección",
+          edit: "Registrar actas, entradas y acciones de seguimiento",
+          admin: "Cerrar revisiones por la dirección",
+        },
+      },
       procesos: {
         label: "Procesos y tipos",
         uiRoutes: ["/sig/procesos"],

@@ -121,6 +121,20 @@ export {
   unlinkSigIncident,
   type SigIncidentTrafficLight,
 } from "./services/incidents";
+export {
+  listSigManagementReviews,
+  getSigManagementReviewDetail,
+  createSigManagementReview,
+  updateSigManagementReview,
+  updateSigManagementReviewInput,
+  createSigManagementReviewAction,
+  updateSigManagementReviewAction,
+  deleteSigManagementReviewAction,
+  linkSigManagementReview,
+  unlinkSigManagementReview,
+  MANAGEMENT_REVIEW_INPUT_KEYS,
+  type SigManagementReviewTrafficLight,
+} from "./services/management-reviews";
 export { getSigProcessDossier } from "./services/process-dossier";
 export {
   approveAuditProgram,

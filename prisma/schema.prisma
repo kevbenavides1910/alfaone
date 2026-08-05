@@ -302,6 +302,9 @@ model User {
   sigIndicatorMeasurementsRecorded       SigIndicatorMeasurement[]     @relation("SigIndicatorMeasurementRecorder")
   sigIncidentsCreated                    SigIncident[]                 @relation("SigIncidentCreator")
   sigIncidentsOwned                      SigIncident[]                 @relation("SigIncidentOwner")
+  sigManagementReviewsCreated            SigManagementReview[]         @relation("SigManagementReviewCreator")
+  sigManagementReviewsChaired            SigManagementReview[]         @relation("SigManagementReviewChair")
+  sigManagementReviewActionsOwned        SigManagementReviewAction[]   @relation("SigManagementReviewActionOwner")
   auditProgramsCreated                   AuditProgram[]                @relation("AuditProgramCreator")
   auditProgramsApproved                  AuditProgram[]                @relation("AuditProgramApprover")
   auditProgramItemsAssigned              AuditProgramItem[]            @relation("AuditProgramItemAuditor")
@@ -1948,6 +1951,7 @@ model SigProcess {
   indicatorsPrimary    SigIndicator[]          @relation("SigIndicatorPrimaryProcess")
   incidentLinks        SigIncidentProcess[]
   incidentsPrimary     SigIncident[]           @relation("SigIncidentPrimaryProcess")
+  managementReviewLinks SigManagementReviewProcess[]
   auditProgramItems    AuditProgramItem[]
 
   @@index([parentId])
@@ -2265,6 +2269,7 @@ model SigEvidence {
   legalLinks        SigLegalEvidence[]
   indicatorMeasurements SigIndicatorMeasurement[]
   incidentLinks     SigIncidentEvidence[]
+  managementReviewLinks SigManagementReviewEvidence[]
 
   @@index([processId])
   @@index([status])
@@ -2674,6 +2679,143 @@ model SigIncidentEvidence {
   @@unique([incidentId, evidenceId])
   @@index([evidenceId])
   @@map("sig_incident_evidences")
+}
+
+enum SigManagementReviewStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  FOLLOW_UP
+  CLOSED
+}
+
+/// Entradas ISO 9001 9.3.2 / M-SIG-01 (a–l).
+enum SigManagementReviewInputKey {
+  PRIOR_ACTIONS
+  CONTEXT_CHANGES
+  CUSTOMER_FEEDBACK
+  QUALITY_OBJECTIVES
+  PROCESS_PERFORMANCE
+  NONCONFORMITIES_CAPA
+  MONITORING_MEASUREMENT
+  AUDIT_RESULTS
+  EXTERNAL_PROVIDERS
+  RESOURCES
+  RISKS_OPPORTUNITIES_EFFICACY
+  IMPROVEMENT_OPPORTUNITIES
+}
+
+enum SigManagementReviewActionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+/// Acta de revisión por la dirección (ISO 9001 9.3 / F-SIG-18).
+model SigManagementReview {
+  id                      String                     @id @default(cuid())
+  code                    String                     @unique
+  title                   String
+  status                  SigManagementReviewStatus  @default(DRAFT)
+  meetingDate             DateTime
+  periodStart             DateTime?
+  periodEnd               DateTime?
+  location                String?
+  attendees               String?                    @db.Text
+  agenda                  String?                    @db.Text
+  minutesSummary          String?                    @db.Text
+  outputImprovements      String?                    @db.Text
+  outputQmsChanges        String?                    @db.Text
+  outputResourceNeeds     String?                    @db.Text
+  formCode                String                     @default("F-SIG-18")
+  followUpFormCode        String                     @default("F-SIG-19")
+  chairUserId             String?
+  chairUser               User?                      @relation("SigManagementReviewChair", fields: [chairUserId], references: [id], onDelete: SetNull)
+  previousReviewId        String?
+  previousReview          SigManagementReview?       @relation("SigManagementReviewChain", fields: [previousReviewId], references: [id], onDelete: SetNull)
+  nextReviews             SigManagementReview[]      @relation("SigManagementReviewChain")
+  closedAt                DateTime?
+  createdById             String
+  createdBy               User                       @relation("SigManagementReviewCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+
+  inputs        SigManagementReviewInput[]
+  actions       SigManagementReviewAction[]
+  processLinks  SigManagementReviewProcess[]
+  evidenceLinks SigManagementReviewEvidence[]
+
+  @@index([status])
+  @@index([meetingDate])
+  @@index([chairUserId])
+  @@index([previousReviewId])
+  @@map("sig_management_reviews")
+}
+
+model SigManagementReviewInput {
+  id         String                      @id @default(cuid())
+  reviewId   String
+  review     SigManagementReview         @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  inputKey   SigManagementReviewInputKey
+  covered    Boolean                     @default(false)
+  notes      String?                     @db.Text
+  sortOrder  Int                         @default(0)
+  createdAt  DateTime                    @default(now())
+  updatedAt  DateTime                    @updatedAt
+
+  @@unique([reviewId, inputKey])
+  @@index([inputKey])
+  @@map("sig_management_review_inputs")
+}
+
+/// Pendientes de seguimiento (F-SIG-19).
+model SigManagementReviewAction {
+  id               String                           @id @default(cuid())
+  reviewId         String
+  review           SigManagementReview              @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?                          @db.Text
+  status           SigManagementReviewActionStatus  @default(PENDING)
+  dueDate          DateTime?
+  completedAt      DateTime?
+  efficacyNotes    String?                          @db.Text
+  ownerUserId      String?
+  ownerUser        User?                            @relation("SigManagementReviewActionOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime                         @default(now())
+  updatedAt        DateTime                         @updatedAt
+
+  @@index([reviewId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([ownerUserId])
+  @@map("sig_management_review_actions")
+}
+
+model SigManagementReviewProcess {
+  id        String               @id @default(cuid())
+  reviewId  String
+  review    SigManagementReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  processId String
+  process   SigProcess           @relation(fields: [processId], references: [id], onDelete: Cascade)
+  createdAt DateTime             @default(now())
+
+  @@unique([reviewId, processId])
+  @@index([processId])
+  @@map("sig_management_review_processes")
+}
+
+model SigManagementReviewEvidence {
+  id         String               @id @default(cuid())
+  reviewId   String
+  review     SigManagementReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  evidenceId String
+  evidence   SigEvidence          @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  createdAt  DateTime             @default(now())
+
+  @@unique([reviewId, evidenceId])
+  @@index([evidenceId])
+  @@map("sig_management_review_evidences")
 }
 
 model SigEvidenceRequirement {
