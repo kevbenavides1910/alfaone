@@ -63,7 +63,7 @@ export const HOME_MODULE_TILES: HomeModuleTile[] = [
   {
     id: "cuentas_por_pagar",
     label: "Cuentas por pagar",
-    description: "Facturas CXP Codisa por proveedor y amarre",
+    description: "Facturas, NC/ND y movimientos CXP desde NAF",
     href: "/cuentas-por-pagar",
     icon: Wallet,
     permissionTileId: "cuentas_por_pagar",

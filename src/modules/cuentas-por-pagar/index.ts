@@ -29,3 +29,20 @@ export {
   cxpProveedoresListSchema,
   cxpAmarresParamsSchema,
 } from "./validations/cxp-list.schema";
+export {
+  labelCxpTipoDoc,
+  labelCxpDocumentoClase,
+  CXP_TIPO_DOC_LABELS,
+  CXP_DOCUMENTO_CLASE_LABELS,
+} from "./business/cxp-movimientos";
+export {
+  listCxpMovimientos,
+  type CxpMovimientoRow,
+  type CxpMovimientosListResult,
+} from "./services/list-cxp-movimientos";
+export {
+  listCxpTiposDoc,
+  type CxpTipoDocRow,
+  type CxpTiposDocResult,
+} from "./services/list-cxp-tipos-doc";
+export { cxpMovimientosListSchema } from "./validations/cxp-movimientos.schema";

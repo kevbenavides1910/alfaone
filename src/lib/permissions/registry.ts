@@ -255,11 +255,11 @@ export const PERMISSION_REGISTRY = {
     moduleId: "cuentasPorPagar" as const,
     screens: {
       facturas: {
-        label: "Facturas CXP (NAF)",
+        label: "Facturas y movimientos CXP (NAF)",
         uiRoutes: ["/cuentas-por-pagar"],
         apiPrefixes: ["/api/cuentas-por-pagar"],
         actions: {
-          view: "Consultar facturas CXP por proveedor y amarres de pago",
+          view: "Consultar facturas CXP, amarres de pago y movimientos contables NAF",
         },
       },
     },

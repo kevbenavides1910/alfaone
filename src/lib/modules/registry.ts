@@ -88,7 +88,8 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
   cuentasPorPagar: {
     id: "cuentasPorPagar",
     label: "Cuentas por pagar",
-    description: "Consulta de facturas CXP Codisa (NAF5.ARCP*) por proveedor y estado de amarre.",
+    description:
+      "Consulta de facturas CXP Codisa (NAF5.ARCP*) por proveedor/amarre y movimientos contables (NC, ND, pagos, etc.).",
     uiRoutePrefixes: ["/cuentas-por-pagar"],
     apiRoutePrefixes: ["/api/cuentas-por-pagar"],
     codePaths: [
