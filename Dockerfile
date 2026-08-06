@@ -25,8 +25,8 @@ ENV NEXTAUTH_SECRET=ci-build-placeholder-secret-min-32-characters!!
 ENV NODE_OPTIONS=--max-old-space-size=8192
 # Omite typecheck en next build (ver next.config.ts); cache webpack/SWC entre publishes.
 ENV DOCKER_BUILD=1
-RUN --mount=type=cache,target=/app/.next/cache \
-    npm run build
+# Sin cache mount de .next: evita chunks cliente vacíos/corruptos en rebuilds.
+RUN npm run build
 
 # Stage aislado: oracledb thick (glibc). Cache estable — no se reinstala en cada rebuild de Next.
 FROM node:20-bookworm-slim AS ora
@@ -37,7 +37,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng poppler-utils libaio1 ca-certificates smbclient \
+    tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng poppler-utils qpdf libaio1 ca-certificates smbclient \
   && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system --gid 1001 nodejs && useradd --system --uid 1001 --gid nodejs nextjs
 
