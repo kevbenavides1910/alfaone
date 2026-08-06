@@ -20,7 +20,7 @@ type ContractOption = {
 type ProcessResult = {
   filename: string;
   pdfBase64: string;
-  reportType: "ccss" | "ins";
+  reportType: "ccss" | "ins" | "mnk";
   contract: { id: string; licitacionNo: string; client: string };
   stats: {
     pdfCedulasFound: number;
@@ -39,6 +39,7 @@ const REPORT_TYPES = [
   { value: "auto", label: "Detectar automáticamente" },
   { value: "ccss", label: "CCSS — Caja (planilla)" },
   { value: "ins", label: "INS" },
+  { value: "mnk", label: "MNK — Póliza / riesgos del trabajo" },
 ] as const;
 
 export default function InformeCcssInsPage() {
@@ -125,11 +126,11 @@ export default function InformeCcssInsPage() {
   return (
     <div className="p-6 space-y-6 max-w-4xl">
       <div>
-        <h2 className="text-xl font-bold text-slate-800">Informe CCSS e INS</h2>
+        <h2 className="text-xl font-bold text-slate-800">Informe CCSS, INS y MNK</h2>
         <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-          Suba el PDF de la planilla CCSS (Caja) o del INS, seleccione el contrato y el sistema
-          resaltará en amarillo las filas de empleados que pertenecen a ese contrato según Empleados
-          NAF y asignaciones RRHH.
+          Suba el PDF de la planilla CCSS (Caja), del INS o de la póliza MNK (riesgos del trabajo),
+          seleccione el contrato y el sistema resaltará en amarillo las filas de empleados que
+          pertenecen a ese contrato según Empleados NAF y asignaciones RRHH.
         </p>
       </div>
 
@@ -142,7 +143,7 @@ export default function InformeCcssInsPage() {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="pdf-file">PDF del informe (CCSS o INS)</Label>
+            <Label htmlFor="pdf-file">PDF del informe (CCSS, INS o MNK)</Label>
             <Input
               id="pdf-file"
               type="file"

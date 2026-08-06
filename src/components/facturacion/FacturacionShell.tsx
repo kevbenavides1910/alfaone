@@ -44,7 +44,7 @@ const TABS: Tab[] = [
   },
   {
     href: "/facturacion/informe-ccss-ins",
-    label: "Informe CCSS/INS",
+    label: "Informe CCSS/INS/MNK",
     permission: "facturacion.informe_ccss_ins",
     match: (path) => path.startsWith("/facturacion/informe-ccss-ins"),
   },

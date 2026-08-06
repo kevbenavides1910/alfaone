@@ -171,10 +171,10 @@ export const PERMISSION_REGISTRY = {
         actions: { view: "Consultar y descargar documentos NAF" },
       },
       informe_ccss_ins: {
-        label: "Informe CCSS/INS",
+        label: "Informe CCSS/INS/MNK",
         uiRoutes: ["/facturacion/informe-ccss-ins"],
         apiPrefixes: ["/api/facturacion/informe-ccss-ins"],
-        actions: { view: "Generar informe CCSS/INS" },
+        actions: { view: "Generar informe CCSS/INS/MNK" },
       },
       config: {
         label: "Configuración de cobro",

@@ -7,7 +7,8 @@ import {
 import { loadPdfJsForNode } from "@/modules/presupuestos/services/pdfjs-node-setup";
 import { preparePdfBufferForEdit } from "@/modules/presupuestos/services/pdf-decrypt-for-edit";
 
-export type InformeReportType = "auto" | "ccss" | "ins";
+export type InformeReportType = "auto" | "ccss" | "ins" | "mnk";
+export type InformeDetectedType = "ccss" | "ins" | "mnk";
 
 export type HighlightRect = {
   pageIndex: number;
@@ -20,7 +21,7 @@ export type HighlightRect = {
 };
 
 export type InformeHighlightResult = {
-  reportType: "ccss" | "ins";
+  reportType: InformeDetectedType;
   pdfBytes: Uint8Array;
   stats: {
     pdfCedulasFound: number;
@@ -63,9 +64,19 @@ function asTextItems(items: unknown[]): PdfTextItem[] {
   );
 }
 
-function detectReportType(text: string, requested: InformeReportType): "ccss" | "ins" {
-  if (requested === "ccss" || requested === "ins") return requested;
+function detectReportType(text: string, requested: InformeReportType): InformeDetectedType {
+  if (requested === "ccss" || requested === "ins" || requested === "mnk") return requested;
   const upper = text.toUpperCase();
+  // MNK (póliza SORT / riesgos del trabajo) antes que INS: también usa cédulas de 9 dígitos.
+  if (
+    upper.includes("MNK SEGUROS") ||
+    upper.includes("REPORTE DE PLANILLAS") ||
+    /SORT-\d+/.test(upper) ||
+    (upper.includes("SEGURO OBLIGATORIO DE RIESGOS DEL TRABAJO") &&
+      (upper.includes("PÓLIZA") || upper.includes("POLIZA")))
+  ) {
+    return "mnk";
+  }
   if (upper.includes("CAJA COSTARRICENSE") || upper.includes("PLANILLA MENSUAL")) return "ccss";
   if (upper.includes("NO_IDENTIFICACION") || upper.includes("TIPO_JORNADA")) return "ins";
   if (extractCcssCedulas(text).length > extractInsCedulas(text).length) return "ccss";
@@ -76,7 +87,8 @@ function isCcssCedulaItem(str: string): boolean {
   return /^[0-9]-\d{7,11}$/.test(str.trim());
 }
 
-function isInsCedulaItem(str: string): boolean {
+/** INS y MNK reportan identificación como 9 dígitos sueltos. */
+function isNineDigitCedulaItem(str: string): boolean {
   return /^\d{9}$/.test(str.trim());
 }
 
@@ -203,7 +215,7 @@ function findCcssHighlights(
   return rects;
 }
 
-function findInsHighlights(
+function findNineDigitHighlights(
   items: PdfTextItem[],
   viewport: PdfJsPageViewport,
   pageIndex: number,
@@ -217,13 +229,13 @@ function findInsHighlights(
 
   // Todas las Y de cédulas en la página (para limitar altura del rectángulo).
   const allCedulaYs = positioned
-    .filter(({ item }) => isInsCedulaItem(item.str.trim()))
+    .filter(({ item }) => isNineDigitCedulaItem(item.str.trim()))
     .map(({ pos }) => lineKey(pos.y))
     .sort((a, b) => b - a);
 
   for (const { item, pos: cedPos } of positioned) {
     const text = item.str.trim();
-    if (!isInsCedulaItem(text)) continue;
+    if (!isNineDigitCedulaItem(text)) continue;
     const digits = normalizeCedulaDigits(text);
     if (!highlightSet.has(digits)) continue;
 
@@ -233,7 +245,7 @@ function findInsHighlights(
         if (pos.x < 20 || pos.x > pageWidth - 20) return false;
         const dy = Math.abs(pos.y - cedPos.y);
         if (dy <= 2) return true;
-        if (dy <= 5 && !isInsCedulaItem(rowItem.str.trim())) return true;
+        if (dy <= 5 && !isNineDigitCedulaItem(rowItem.str.trim())) return true;
         return false;
       })
       .map(({ pos }) => pos);
@@ -316,7 +328,7 @@ export async function buildHighlightedInformePdf(input: {
             input.employeeNames,
             pdfjs.Util,
           )
-        : findInsHighlights(
+        : findNineDigitHighlights(
             items,
             viewport,
             pageNum - 1,
