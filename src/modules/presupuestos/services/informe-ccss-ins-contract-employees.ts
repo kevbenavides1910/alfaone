@@ -1,5 +1,8 @@
 import { prisma } from "@/modules/core/db/prisma";
-import { scoreContractMatch } from "@/modules/presupuestos/business/contract-match";
+import {
+  normalizeRrhhContrato,
+  scoreContractMatch,
+} from "@/modules/presupuestos/business/contract-match";
 import { normalizeCedulaDigits } from "@/modules/presupuestos/business/cedula-normalize";
 
 const MIN_CONTRATO_SCORE = 55;
@@ -10,6 +13,31 @@ export type ContractEmployeeMatch = {
   source: "naf_contrato" | "rrhh_placement";
   nafNoEmple: string | null;
 };
+
+function addPlacementEmployees(
+  byDigits: Map<string, ContractEmployeeMatch>,
+  placements: {
+    employee: { cedula: string | null; cedulaNormalizada: string | null; nombre: string | null };
+  }[],
+) {
+  for (const p of placements) {
+    const digits =
+      normalizeCedulaDigits(p.employee.cedulaNormalizada) ||
+      normalizeCedulaDigits(p.employee.cedula);
+    if (!digits) continue;
+    const existing = byDigits.get(digits);
+    if (existing) {
+      if (!existing.nombre && p.employee.nombre) existing.nombre = p.employee.nombre;
+      continue;
+    }
+    byDigits.set(digits, {
+      cedulaDigits: digits,
+      nombre: p.employee.nombre,
+      source: "rrhh_placement",
+      nafNoEmple: null,
+    });
+  }
+}
 
 export async function getContractEmployeeCedulas(contractId: string): Promise<{
   licitacionNo: string;
@@ -23,6 +51,10 @@ export async function getContractEmployeeCedulas(contractId: string): Promise<{
   if (!contract) {
     throw new Error("Contrato no encontrado");
   }
+
+  // Contratos importados a veces traen espacios en licitacionNo (p. ej. Alajuela Sur REMES).
+  const licitacionNo = contract.licitacionNo.trim();
+  const licitacionNorm = normalizeRrhhContrato(licitacionNo) ?? licitacionNo;
 
   const byDigits = new Map<string, ContractEmployeeMatch>();
 
@@ -44,7 +76,7 @@ export async function getContractEmployeeCedulas(contractId: string): Promise<{
     const digits = normalizeCedulaDigits(n.cedula);
     if (!digits) continue;
     const contrato = n.contrato?.trim();
-    if (!contrato || scoreContractMatch(contrato, contract.licitacionNo) < MIN_CONTRATO_SCORE) {
+    if (!contrato || scoreContractMatch(contrato, licitacionNo) < MIN_CONTRATO_SCORE) {
       continue;
     }
     byDigits.set(digits, {
@@ -57,7 +89,9 @@ export async function getContractEmployeeCedulas(contractId: string): Promise<{
 
   // Muchos contratos activos (p. ej. REMES) no tienen `naf_employees.contrato` lleno;
   // la asignación RRHH (`employee_placements.contractId`) es la fuente confiable.
-  const [placements, rrhhLinks] = await Promise.all([
+  // Algunos (p. ej. Alajuela Sur) tienen placements con contratoNormalizado correcto
+  // pero `contractId` NULL y sin EmployeeContractLink.
+  const [placements, rrhhLinks, unlinkedContratoGroups] = await Promise.all([
     prisma.employeePlacement.findMany({
       where: { contractId: contract.id },
       select: {
@@ -70,16 +104,37 @@ export async function getContractEmployeeCedulas(contractId: string): Promise<{
       where: { contractId: contract.id },
       select: { contratoRrhh: true },
     }),
+    prisma.employeePlacement.groupBy({
+      by: ["contratoNormalizado"],
+      where: {
+        contractId: null,
+        contratoNormalizado: { not: null },
+        NOT: { contratoNormalizado: "" },
+      },
+    }),
   ]);
 
   const rrhhKeys = rrhhLinks.map((l) => l.contratoRrhh).filter(Boolean);
-  const placementsByLink =
-    rrhhKeys.length === 0
+  const fuzzyKeys = unlinkedContratoGroups
+    .map((g) => g.contratoNormalizado)
+    .filter((k): k is string => Boolean(k))
+    .filter((k) => {
+      const norm = normalizeRrhhContrato(k);
+      if (norm && norm === licitacionNorm) return true;
+      return scoreContractMatch(k, licitacionNo) >= MIN_CONTRATO_SCORE;
+    });
+
+  const placementKeys = [...new Set([...rrhhKeys, ...fuzzyKeys])];
+  const placementsByKey =
+    placementKeys.length === 0
       ? []
       : await prisma.employeePlacement.findMany({
           where: {
             contractId: null,
-            contratoNormalizado: { in: rrhhKeys },
+            OR: [
+              { contratoNormalizado: { in: placementKeys } },
+              { contrato: { in: placementKeys } },
+            ],
           },
           select: {
             employee: {
@@ -88,23 +143,8 @@ export async function getContractEmployeeCedulas(contractId: string): Promise<{
           },
         });
 
-  for (const p of [...placements, ...placementsByLink]) {
-    const digits =
-      normalizeCedulaDigits(p.employee.cedulaNormalizada) ||
-      normalizeCedulaDigits(p.employee.cedula);
-    if (!digits) continue;
-    const existing = byDigits.get(digits);
-    if (existing) {
-      if (!existing.nombre && p.employee.nombre) existing.nombre = p.employee.nombre;
-      continue;
-    }
-    byDigits.set(digits, {
-      cedulaDigits: digits,
-      nombre: p.employee.nombre,
-      source: "rrhh_placement",
-      nafNoEmple: null,
-    });
-  }
+  addPlacementEmployees(byDigits, placements);
+  addPlacementEmployees(byDigits, placementsByKey);
 
   return {
     licitacionNo: contract.licitacionNo,
