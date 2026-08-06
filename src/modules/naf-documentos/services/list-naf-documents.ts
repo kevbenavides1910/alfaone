@@ -45,8 +45,12 @@ export type NafDocumentosListResult = {
 };
 
 type ListInput = {
-  periodMonth: number;
-  periodYear: number;
+  /** Rango YYYY-MM-DD (preferido). */
+  dateFrom?: string;
+  dateTo?: string;
+  /** Compat mes/año cuando no hay dateFrom/dateTo. */
+  periodMonth?: number;
+  periodYear?: number;
   company?: string;
   tipoDoc?: string;
   search?: string;
@@ -81,6 +85,19 @@ function periodBounds(month: number, year: number) {
   const from = new Date(Date.UTC(year, month - 1, 1));
   const to = new Date(Date.UTC(year, month, 1));
   return { from, to };
+}
+
+function resolveDateBounds(input: ListInput): { from: Date; to: Date } {
+  if (input.dateFrom && input.dateTo) {
+    const from = new Date(`${input.dateFrom}T00:00:00.000Z`);
+    const toExclusive = new Date(`${input.dateTo}T00:00:00.000Z`);
+    toExclusive.setUTCDate(toExclusive.getUTCDate() + 1);
+    return { from, to: toExclusive };
+  }
+  if (input.periodMonth != null && input.periodYear != null) {
+    return periodBounds(input.periodMonth, input.periodYear);
+  }
+  throw new Error("Indique dateFrom/dateTo o periodMonth/periodYear");
 }
 
 async function loadCompanyMap(): Promise<Map<string, { code: string; name: string }>> {
@@ -136,7 +153,7 @@ function buildWhereClause(
   input: ListInput,
   noCia: string | null,
 ): { whereClause: string; binds: Record<string, unknown> } {
-  const { from, to } = periodBounds(input.periodMonth, input.periodYear);
+  const { from, to } = resolveDateBounds(input);
   const conditions = ["f.FECHA >= :fromDate", "f.FECHA < :toDate"];
   const binds: Record<string, unknown> = { fromDate: from, toDate: to };
 
@@ -156,11 +173,15 @@ function buildWhereClause(
     conditions.push(`(
       UPPER(f.NBR_CLIENTE) LIKE :searchLike
       OR UPPER(NVL(f.NO_CONTRATO, ' ')) LIKE :searchLike
+      OR TO_CHAR(f.NO_FACTU) LIKE :searchLike
       OR TO_CHAR(f.NO_FISICO) LIKE :searchLike
       OR NVL(f.CLAVE_FACTURA, ' ') LIKE :searchLike
       OR NVL(f.F_ELECTRONICA, ' ') LIKE :searchLike
+      OR LTRIM(NVL(f.F_ELECTRONICA, '0'), '0') LIKE :searchLikeTrim
     )`);
     binds.searchLike = `%${search.toUpperCase()}%`;
+    const trimmedDigits = search.replace(/^0+/, "") || search;
+    binds.searchLikeTrim = `%${trimmedDigits.toUpperCase()}%`;
   }
 
   return { whereClause: conditions.join("\n  AND "), binds };

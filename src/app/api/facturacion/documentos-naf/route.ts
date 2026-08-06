@@ -5,6 +5,19 @@ import { ok, badRequest, unauthorized, forbidden, serverError } from "@/lib/api/
 import { listNafDocuments } from "@/modules/naf-documentos/services/list-naf-documents";
 import { nafDocumentosListSchema } from "@/modules/presupuestos/validations/naf-documentos.schema";
 
+function firstDayOfMonthIso(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}-01`;
+}
+
+function todayIso(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return unauthorized();
@@ -12,9 +25,14 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const now = new Date();
+  const hasDateRange = searchParams.has("dateFrom") || searchParams.has("dateTo");
+  const hasPeriod = searchParams.has("periodMonth") || searchParams.has("periodYear");
+
   const parsed = nafDocumentosListSchema.safeParse({
-    periodMonth: searchParams.get("periodMonth") ?? String(now.getMonth() + 1),
-    periodYear: searchParams.get("periodYear") ?? String(now.getFullYear()),
+    dateFrom: searchParams.get("dateFrom") ?? (hasPeriod ? undefined : firstDayOfMonthIso(now)),
+    dateTo: searchParams.get("dateTo") ?? (hasPeriod ? undefined : todayIso(now)),
+    periodMonth: searchParams.get("periodMonth") ?? undefined,
+    periodYear: searchParams.get("periodYear") ?? undefined,
     company: searchParams.get("company") ?? undefined,
     tipoDoc: searchParams.get("tipoDoc") ?? undefined,
     search: searchParams.get("search") ?? undefined,
@@ -25,6 +43,12 @@ export async function GET(req: NextRequest) {
 
   if (!parsed.success) {
     return badRequest("Parámetros inválidos", parsed.error.flatten());
+  }
+
+  // Prefer explicit date range when both styles are sent.
+  if (hasDateRange && parsed.data.dateFrom && parsed.data.dateTo) {
+    parsed.data.periodMonth = undefined;
+    parsed.data.periodYear = undefined;
   }
 
   try {

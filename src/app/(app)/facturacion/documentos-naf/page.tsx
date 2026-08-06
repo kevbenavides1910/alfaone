@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { CalendarDateInput } from "@/components/ui/calendar-date-input";
 import {
   Select,
   SelectContent,
@@ -48,20 +49,28 @@ function canTryPdf(row: { claveFactura: string | null; consecutivoFe: string | n
   return Boolean(row.claveFactura?.trim() || row.consecutivoFe?.trim());
 }
 
-const MONTHS = [
-  { value: 1, label: "Enero" },
-  { value: 2, label: "Febrero" },
-  { value: 3, label: "Marzo" },
-  { value: 4, label: "Abril" },
-  { value: 5, label: "Mayo" },
-  { value: 6, label: "Junio" },
-  { value: 7, label: "Julio" },
-  { value: 8, label: "Agosto" },
-  { value: 9, label: "Septiembre" },
-  { value: 10, label: "Octubre" },
-  { value: 11, label: "Noviembre" },
-  { value: 12, label: "Diciembre" },
-];
+function isoToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function isoFirstOfMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/** Número consecutivo corto (últimos dígitos sin ceros a la izquierda) para lectura rápida. */
+function shortConsecutivoFe(consecutivo: string | null | undefined): string | null {
+  const raw = (consecutivo ?? "").trim();
+  if (!raw) return null;
+  // Consecutivo Hacienda 20 dígitos: tipo(2)+sucursal(3)+terminal(5)+tipoDoc(2)+numero(10)
+  if (/^\d{20}$/.test(raw)) {
+    const num = raw.slice(10).replace(/^0+/, "") || "0";
+    return num;
+  }
+  const trimmed = raw.replace(/^0+/, "");
+  return trimmed || raw;
+}
 
 const COMPANIES = [
   { code: "ALL", label: "Todas las compañías" },
@@ -78,15 +87,11 @@ const COMPANIES = [
 ];
 
 const REFETCH_MS = 30_000;
-
-function currentYear() {
-  return new Date().getFullYear();
-}
+const COLSPAN = 12;
 
 export default function DocumentosNafPage() {
-  const now = new Date();
-  const [periodMonth, setPeriodMonth] = useState(now.getMonth() + 1);
-  const [periodYear, setPeriodYear] = useState(now.getFullYear());
+  const [dateFrom, setDateFrom] = useState(isoFirstOfMonth);
+  const [dateTo, setDateTo] = useState(isoToday);
   const [company, setCompany] = useState("ALL");
   const [tipoDoc, setTipoDoc] = useState("ALL");
   const [search, setSearch] = useState("");
@@ -94,9 +99,7 @@ export default function DocumentosNafPage() {
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
-  const yearOptions = useMemo(() => [currentYear() - 1, currentYear(), currentYear() + 1], []);
-
-  const queryKey = ["facturacion-documentos-naf", periodMonth, periodYear, company, tipoDoc, search, ligadoFilter, page];
+  const queryKey = ["facturacion-documentos-naf", dateFrom, dateTo, company, tipoDoc, search, ligadoFilter, page];
 
   const { data, isLoading, isFetching, isError, error, refetch, dataUpdatedAt } = useQuery<{
     data: NafDocumentosListResult;
@@ -107,8 +110,8 @@ export default function DocumentosNafPage() {
     refetchIntervalInBackground: true,
     queryFn: async () => {
       const params = new URLSearchParams({
-        periodMonth: String(periodMonth),
-        periodYear: String(periodYear),
+        dateFrom,
+        dateTo,
         page: String(page),
         pageSize: String(pageSize),
       });
@@ -127,7 +130,7 @@ export default function DocumentosNafPage() {
   const rows = result?.rows ?? [];
   const total = result?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const monthLabel = MONTHS.find((m) => m.value === periodMonth)?.label ?? "";
+  const rangeLabel = useMemo(() => `${formatDate(dateFrom)} – ${formatDate(dateTo)}`, [dateFrom, dateTo]);
 
   return (
     <div className="p-6 space-y-6">
@@ -137,7 +140,7 @@ export default function DocumentosNafPage() {
           <p className="text-sm text-slate-500 mt-1 max-w-3xl">
             Facturas y documentos electrónicos emitidos en NAF (Oracle{" "}
             <code className="text-xs bg-slate-100 px-1 rounded">NAF5.ARFAFE</code>
-            ), agrupados por mes de emisión. Se actualiza automáticamente cada 30 segundos.
+            ). Filtre por rango de fechas; se actualiza automáticamente cada 30 segundos.
           </p>
         </div>
         <div className="text-xs text-slate-500 text-right">
@@ -155,42 +158,30 @@ export default function DocumentosNafPage() {
         <CardContent className="p-4 space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <CalendarDays className="h-5 w-5 text-slate-400" />
-            <Select
-              value={String(periodMonth)}
-              onValueChange={(v) => {
-                setPeriodMonth(parseInt(v, 10));
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Mes" />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTHS.map((m) => (
-                  <SelectItem key={m.value} value={String(m.value)}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={String(periodYear)}
-              onValueChange={(v) => {
-                setPeriodYear(parseInt(v, 10));
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Año" />
-              </SelectTrigger>
-              <SelectContent>
-                {yearOptions.map((y) => (
-                  <SelectItem key={y} value={String(y)}>
-                    {y}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Desde</span>
+              <CalendarDateInput
+                value={dateFrom}
+                onChange={(v) => {
+                  setDateFrom(v);
+                  setPage(1);
+                }}
+                showPicker
+                className="w-[140px]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Hasta</span>
+              <CalendarDateInput
+                value={dateTo}
+                onChange={(v) => {
+                  setDateTo(v);
+                  setPage(1);
+                }}
+                showPicker
+                className="w-[140px]"
+              />
+            </div>
             <Select
               value={company}
               onValueChange={(v) => {
@@ -252,7 +243,7 @@ export default function DocumentosNafPage() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="Cliente, contrato, clave FE, número…"
+                placeholder="Consecutivo FE, clave, cliente, contrato…"
                 className="pl-9 h-9"
               />
               {search && (
@@ -311,6 +302,7 @@ export default function DocumentosNafPage() {
                       <th data-col-key="compania" className="px-4 py-3 font-medium" style={{ width: 140 }}>Compañía</th>
                       <th data-col-key="tipo" className="px-4 py-3 font-medium" style={{ width: 70 }}>Tipo</th>
                       <th data-col-key="noFactu" className="px-4 py-3 font-medium" style={{ width: 120 }}>Nº Codisa (NO_FACTU)</th>
+                      <th data-col-key="consecutivoFe" className="px-4 py-3 font-medium" style={{ width: 160 }}>Nº documento FE</th>
                       <th data-col-key="cliente" className="px-4 py-3 font-medium" style={{ width: 180 }}>Cliente</th>
                       <th data-col-key="contrato" className="px-4 py-3 font-medium" style={{ width: 160 }}>Contrato / licitación</th>
                       <th data-col-key="total" className="px-4 py-3 font-medium text-right" style={{ width: 110 }}>Total</th>
@@ -323,12 +315,14 @@ export default function DocumentosNafPage() {
                   <tbody>
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={11} className="p-12 text-center text-slate-400">
-                          No hay documentos para {monthLabel} {periodYear}.
+                        <td colSpan={COLSPAN} className="p-12 text-center text-slate-400">
+                          No hay documentos para {rangeLabel}.
                         </td>
                       </tr>
                     ) : (
-                      rows.map((row) => (
+                      rows.map((row) => {
+                        const shortFe = shortConsecutivoFe(row.consecutivoFe);
+                        return (
                         <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/80">
                           <td className="px-4 py-3 whitespace-nowrap">{formatDate(row.fecha)}</td>
                           <td className="px-4 py-3">
@@ -347,6 +341,26 @@ export default function DocumentosNafPage() {
                             {row.noFisico && row.noFisico !== row.noFactu ? (
                               <div className="text-xs text-slate-400">Físico: {row.noFisico}</div>
                             ) : null}
+                          </td>
+                          <td className="px-4 py-3">
+                            {row.consecutivoFe ? (
+                              <div>
+                                <div
+                                  className="font-semibold tabular-nums text-slate-800"
+                                  title={row.consecutivoFe}
+                                >
+                                  {shortFe}
+                                </div>
+                                <div
+                                  className="font-mono text-[10px] text-slate-400 whitespace-nowrap"
+                                  title={row.consecutivoFe}
+                                >
+                                  {row.consecutivoFe}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
                           </td>
                           <td className="px-4 py-3 max-w-none">
                             <div className="whitespace-nowrap" title={row.cliente}>
@@ -383,14 +397,14 @@ export default function DocumentosNafPage() {
                               )}
                             </div>
                           </td>
-                                                    <td className="px-4 py-3">
+                          <td className="px-4 py-3">
                             {row.ligadoAFacturacion ? (
                               <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Sí</Badge>
                             ) : (
                               <Badge variant="outline" className="text-slate-500">No</Badge>
                             )}
                           </td>
-<td className="px-4 py-3 text-center">
+                          <td className="px-4 py-3 text-center">
                             {canTryPdf(row) ? (
                               <div className="flex flex-col items-center gap-1">
                                 <Button
@@ -450,7 +464,8 @@ export default function DocumentosNafPage() {
                             )}
                           </td>
                         </tr>
-                      ))
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
