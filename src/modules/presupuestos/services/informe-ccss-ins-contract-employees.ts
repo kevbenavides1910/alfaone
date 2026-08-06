@@ -7,7 +7,7 @@ const MIN_CONTRATO_SCORE = 55;
 export type ContractEmployeeMatch = {
   cedulaDigits: string;
   nombre: string | null;
-  source: "naf_contrato";
+  source: "naf_contrato" | "rrhh_placement";
   nafNoEmple: string | null;
 };
 
@@ -52,6 +52,57 @@ export async function getContractEmployeeCedulas(contractId: string): Promise<{
       nombre: n.nombre,
       source: "naf_contrato",
       nafNoEmple: n.noEmple,
+    });
+  }
+
+  // Muchos contratos activos (p. ej. REMES) no tienen `naf_employees.contrato` lleno;
+  // la asignación RRHH (`employee_placements.contractId`) es la fuente confiable.
+  const [placements, rrhhLinks] = await Promise.all([
+    prisma.employeePlacement.findMany({
+      where: { contractId: contract.id },
+      select: {
+        employee: {
+          select: { cedula: true, cedulaNormalizada: true, nombre: true },
+        },
+      },
+    }),
+    prisma.employeeContractLink.findMany({
+      where: { contractId: contract.id },
+      select: { contratoRrhh: true },
+    }),
+  ]);
+
+  const rrhhKeys = rrhhLinks.map((l) => l.contratoRrhh).filter(Boolean);
+  const placementsByLink =
+    rrhhKeys.length === 0
+      ? []
+      : await prisma.employeePlacement.findMany({
+          where: {
+            contractId: null,
+            contratoNormalizado: { in: rrhhKeys },
+          },
+          select: {
+            employee: {
+              select: { cedula: true, cedulaNormalizada: true, nombre: true },
+            },
+          },
+        });
+
+  for (const p of [...placements, ...placementsByLink]) {
+    const digits =
+      normalizeCedulaDigits(p.employee.cedulaNormalizada) ||
+      normalizeCedulaDigits(p.employee.cedula);
+    if (!digits) continue;
+    const existing = byDigits.get(digits);
+    if (existing) {
+      if (!existing.nombre && p.employee.nombre) existing.nombre = p.employee.nombre;
+      continue;
+    }
+    byDigits.set(digits, {
+      cedulaDigits: digits,
+      nombre: p.employee.nombre,
+      source: "rrhh_placement",
+      nafNoEmple: null,
     });
   }
 
