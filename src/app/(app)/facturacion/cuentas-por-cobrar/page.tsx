@@ -59,7 +59,8 @@ export type CuentaPorCobrarRow = {
   hasPartialPayment?: boolean;
   clientType?: "PUBLIC" | "PRIVATE" | null;
   subtotalCopied?: number | null;
-  ivaPctCopied?: number;
+  /** null = IVA desconocido (sin contrato/factura); 0 = exento conocido. */
+  ivaPctCopied?: number | null;
   ivaAmount?: number | null;
   totalCalculated: number | null;
   appliesRetention?: boolean;
@@ -201,10 +202,7 @@ export default function CuentasPorCobrarPage() {
         key: "iva",
         label: "% IVA",
         align: "right",
-        getValue: (r) =>
-          r.ivaAmount != null || (r.ivaPctCopied != null && r.ivaPctCopied > 0)
-            ? `${(r.ivaPctCopied ?? 0).toFixed(2)}%`
-            : "",
+        getValue: (r) => (r.ivaPctCopied != null ? `${r.ivaPctCopied.toFixed(2)}%` : ""),
       },
       {
         key: "ivaMonto",
@@ -235,12 +233,23 @@ export default function CuentasPorCobrarPage() {
         getValue: (r) => (r.netAmountExpected != null ? String(r.netAmountExpected) : ""),
       },
       {
+        key: "recibido",
+        label: "Recibido",
+        align: "right",
+        getValue: (r) => {
+          const received = r.totalAbonos ?? r.provisionalPaymentAmount ?? 0;
+          return received > 0 ? String(received) : "";
+        },
+      },
+      {
         key: "abonoSaldo",
-        label: "Abono / Saldo",
+        label: "Saldo",
         getValue: (r) =>
-          r.hasPartialPayment
-            ? `${r.totalAbonos ?? r.provisionalPaymentAmount ?? ""} ${r.remainingBalance ?? ""}`
-            : "",
+          r.remainingBalance != null
+            ? String(r.remainingBalance)
+            : r.paymentPending
+              ? String(r.adjustedCollectible ?? r.netAmountExpected ?? r.totalCalculated ?? "")
+              : "",
       },
       { key: "nroFactura", label: "Nº factura", getValue: (r) => r.invoiceNumber ?? "" },
       { key: "nroDocumento", label: "Nº documento (Codisa)", getValue: (r) => r.documentNumber ?? "" },
@@ -326,8 +335,8 @@ export default function CuentasPorCobrarPage() {
         "% Retención": row.appliesRetention && row.retentionPct != null ? row.retentionPct * 100 : "",
         "Monto retención": row.retentionAmount ?? "",
         "Neto esperado": row.netAmountExpected ?? "",
+        Recibido: row.totalAbonos ?? row.provisionalPaymentAmount ?? "",
         Saldo: row.remainingBalance ?? "",
-        Abono: row.totalAbonos ?? row.provisionalPaymentAmount ?? "",
         "Nº factura": row.invoiceNumber ?? "",
         "Nº documento (Codisa)": row.documentNumber ?? "",
         Emisión: formatDate(row.closedAt ?? row.expectedIssueDate),
@@ -474,7 +483,8 @@ export default function CuentasPorCobrarPage() {
                     retencionPct: 90,
                     retencionMonto: 110,
                     neto: 110,
-                    abonoSaldo: 120,
+                    recibido: 110,
+                    abonoSaldo: 110,
                     nroFactura: 180,
                     nroDocumento: 120,
                     emision: 100,
@@ -550,9 +560,7 @@ export default function CuentasPorCobrarPage() {
                         />
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-600">
-                        {row.ivaAmount != null || (row.ivaPctCopied != null && row.ivaPctCopied > 0)
-                          ? `${(row.ivaPctCopied ?? 0).toFixed(2)}%`
-                          : "—"}
+                        {row.ivaPctCopied != null ? `${row.ivaPctCopied.toFixed(2)}%` : "—"}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-600">
                         {row.ivaAmount != null ? formatCurrency(row.ivaAmount) : "—"}
@@ -575,26 +583,26 @@ export default function CuentasPorCobrarPage() {
                             ? formatCurrency(row.totalCalculated)
                             : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums min-w-[120px]">
-                        {row.hasPartialPayment ? (
-                          <div className="space-y-0.5">
-                            <div className="text-xs text-green-700">
-                              Abono: {formatCurrency(row.totalAbonos ?? row.provisionalPaymentAmount ?? 0)}
-                            </div>
-                            <div className="font-semibold text-amber-800">
-                              Saldo: {formatCurrency(row.remainingBalance ?? 0)}
-                            </div>
-                          </div>
-                        ) : row.totalAbonos != null && row.totalAbonos > 0 ? (
-                          <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">
-                            Abono total
-                          </Badge>
-                        ) : row.paymentPending ? (
-                          <span className="font-medium text-amber-800">
-                            {formatCurrency(row.remainingBalance ?? row.totalCalculated ?? 0)}
+                      <td className="px-4 py-3 text-right tabular-nums text-green-800 font-medium">
+                        {(row.totalAbonos ?? row.provisionalPaymentAmount ?? 0) > 0
+                          ? formatCurrency(row.totalAbonos ?? row.provisionalPaymentAmount ?? 0)
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums min-w-[110px]">
+                        {row.paymentPending ? (
+                          <span className="font-semibold text-amber-800">
+                            {formatCurrency(
+                              row.remainingBalance ??
+                                row.adjustedCollectible ??
+                                row.netAmountExpected ??
+                                row.totalCalculated ??
+                                0,
+                            )}
                           </span>
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">
+                            ₡0
+                          </Badge>
                         )}
                       </td>
                       <td className="px-4 py-3 text-slate-600 whitespace-nowrap tabular-nums" title={row.invoiceNumber ?? undefined}>
@@ -804,15 +812,11 @@ export default function CuentasPorCobrarPage() {
                       ? formatCurrency(numericTotals.netAmountSum)
                       : "—"}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    <div className="space-y-0.5">
-                      <div className="text-xs text-green-700 font-semibold">
-                        Abono: {formatCurrency(numericTotals.abonosSum)}
-                      </div>
-                      <div className="text-amber-800">
-                        Saldo: {formatCurrency(numericTotals.saldoSum)}
-                      </div>
-                    </div>
+                  <td className="px-4 py-3 text-right tabular-nums text-green-800">
+                    {formatCurrency(numericTotals.abonosSum)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-amber-800">
+                    {formatCurrency(numericTotals.saldoSum)}
                   </td>
                   <td colSpan={canEdit ? 11 : 10} className="px-4 py-3" />
                 </tr>

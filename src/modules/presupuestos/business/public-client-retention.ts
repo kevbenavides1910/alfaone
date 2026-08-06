@@ -7,6 +7,74 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function normalizeClientName(raw: string): string {
+  return raw
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Resuelve tipo de cliente para retención CxC.
+ * Si el documento no tiene contrato (import Codisa), infiere PUBLIC por nombre
+ * de instituciones típicas (CCSS, AyA, municipalidades, etc.).
+ */
+export function resolveClientTypeForCxc(
+  clientType: ClientType | null | undefined,
+  clientName: string | null | undefined,
+): ClientType | null {
+  if (clientType === "PUBLIC" || clientType === "PRIVATE") return clientType;
+  const n = normalizeClientName(clientName ?? "");
+  if (!n) return null;
+
+  if (
+    /\bCCSS\b/.test(n) ||
+    n.includes("CAJA COSTARRICENSE") ||
+    /\bAYA\b/.test(n) ||
+    n.includes("ACUEDUCT") ||
+    n.includes("ALCANTARILL") ||
+    n.includes("MUNICIPALIDAD") ||
+    n.includes("MINISTERIO") ||
+    n.includes("PODER JUDICIAL") ||
+    n.includes("CORTE SUPREMA") ||
+    /\bUTN\b/.test(n) ||
+    /\bINA\b/.test(n) ||
+    /\bPANI\b/.test(n) ||
+    /\bICE\b/.test(n) ||
+    n.includes("HOSPITAL") ||
+    n.includes("AREA DE SALUD") ||
+    n.includes("AREAS DE SALUD") ||
+    /^A\.?S\.?\s/.test(n)
+  ) {
+    return "PUBLIC";
+  }
+
+  return null;
+}
+
+/** IVA por defecto cuando no hay contrato/factura: CCSS/salud suele ir exento (0 %). */
+export function defaultIvaPctForPublicClient(
+  clientType: ClientType | null | undefined,
+  clientName: string | null | undefined,
+): number | null {
+  if (clientType !== "PUBLIC") return null;
+  const n = normalizeClientName(clientName ?? "");
+  if (!n) return null;
+  if (
+    /\bCCSS\b/.test(n) ||
+    n.includes("CAJA COSTARRICENSE") ||
+    n.includes("AREA DE SALUD") ||
+    n.includes("AREAS DE SALUD") ||
+    n.includes("HOSPITAL") ||
+    /^A\.?S\.?\s/.test(n)
+  ) {
+    return 0;
+  }
+  return null;
+}
+
 export function computePublicClientRetention(
   invoiceTotal: number | null | undefined,
   clientType: ClientType | null | undefined

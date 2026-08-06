@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { computeCxcBalance } from "@/modules/presupuestos/business/cxc-balance";
+import { resolveClientTypeForCxc } from "@/modules/presupuestos/business/public-client-retention";
 import {
   calendarDayUtc,
   facturaClosedOnTime,
@@ -92,6 +93,7 @@ function cxcGrossAmount(doc: {
 
 function cxcCollectibleAmount(
   doc: {
+    clientName?: string | null;
     montoOriginal: { toString(): string } | number | null;
     saldo: { toString(): string } | number;
     status: "PENDIENTE" | "COBRADO";
@@ -102,7 +104,7 @@ function cxcCollectibleAmount(
 ): number {
   const balance = computeCxcBalance({
     total: toAmount(doc.montoOriginal) || toAmount(doc.saldo),
-    clientType: doc.contract?.clientType ?? null,
+    clientType: resolveClientTypeForCxc(doc.contract?.clientType ?? null, doc.clientName ?? null),
     abonos: doc.abonos.map((a) => ({ amount: toAmount(a.amount) })),
     rebajos: doc.rebajos.map((r) => ({ amount: toAmount(r.amount) })),
     status: doc.status,
