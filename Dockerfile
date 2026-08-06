@@ -67,6 +67,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tslib ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/bytestreamjs ./node_modules/bytestreamjs
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@noble ./node_modules/@noble
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/fe-xades-bootstrap.cjs ./scripts/fe-xades-bootstrap.cjs
+# Informe CCSS/INS: standalone solo traza pdf.mjs; falta pdf.worker.mjs (+ fonts/cmaps)
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdfjs-dist ./node_modules/pdfjs-dist
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@napi-rs ./node_modules/@napi-rs
 # oracledb desde stage cacheado (solo COPY, sin npm install en cada rebuild)
 COPY --from=ora --chown=nextjs:nodejs /tmp/ora-install/node_modules/oracledb ./node_modules/oracledb
 

@@ -41,6 +41,8 @@ REQUIRED_DEPS=(
   "node_modules/tslib"
   "node_modules/xadesjs"
   "node_modules/bytestreamjs"
+  "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
+  "node_modules/@napi-rs/canvas"
 )
 missing=0
 for rel in "${REQUIRED_DEPS[@]}"; do
