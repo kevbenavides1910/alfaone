@@ -6,23 +6,17 @@ name: Publish GHCR
 on:
   push:
     branches: [main, master]
-    paths:
-      - "prisma/**"
-      - "package.json"
-      - "package-lock.json"
-      - "Dockerfile"
-      - "docker-compose*.yml"
-      - "next.config.ts"
-      - "tsconfig.json"
-      - "src/**"
-      - "public/**"
-      - "scripts/fe-xades-bootstrap.cjs"
-      - ".github/workflows/publish-ghcr.yml"
+    # Sin paths filter: pushes a main siempre publican.
+    # Antes, paths + flakiness de Actions/webhooks + cancel-in-progress dejaban
+    # commits sin imagen (agentes tenían que hacer workflow_dispatch a mano).
   workflow_dispatch:
 
 concurrency:
+  # false: evita pelear con cancel API (502) que dejaba jobs zombie "in_progress"
+  # bloqueando el runner (busy) mientras nuevos runs quedaban queued eternamente.
+  # Un solo self-hosted → los publishes se encolan en serie de forma natural.
   group: publish-ghcr-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   IMAGE_NAME: ghcr.io/kevbenavides1910/alfaone
@@ -31,6 +25,8 @@ jobs:
   publish:
     name: Build y push imagen
     runs-on: [self-hosted, linux, x64, alfaia]
+    # Evita jobs colgados tras restart del runner / BadGateway de Actions.
+    timeout-minutes: 25
     permissions:
       contents: read
       packages: write

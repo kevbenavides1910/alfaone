@@ -72,7 +72,7 @@ npm run dev
 
 ### Producción (Docker) — camino rápido
 
-1. Commit + push a `main` → workflow **Publish GHCR** (self-hosted) construye la imagen.
+1. Commit + push a `main` → workflow **Publish GHCR** (self-hosted) construye la imagen (sin `paths` filter: todo push a main publica).
 2. En el VPS (path canónico), **sin esperar a mano**:
 
 ```bash
@@ -81,15 +81,18 @@ npm run ops:ghcr-login   # una vez
 npm run ops:deploy:ghcr  # espera la imagen del SHA (local o GHCR) y recrea la app
 ```
 
+Si el push no crea el workflow (flakiness de Actions), `ops:deploy:ghcr` carga `/etc/alfa-one/ghcr.env` y hace `workflow_dispatch` automáticamente.
+
 Tiempos típicos tras estas optimizaciones:
 
 | Fase | Antes | Ahora (objetivo) |
 |------|-------|------------------|
 | Publish GHCR (`next build`) | ~3–5 min (compile + typecheck) | ~1.5–3 min (sin typecheck en Docker + cache `.next`) |
+| Capa pdfjs/napi en imagen | ~160MB (paquete completo + multi-arch) | ~35MB (worker + fonts/cmaps/wasm + canvas linux-x64-gnu) |
 | Esperar imagen + pull | polling manual del agente | `ops:deploy:ghcr` espera solo (imagen local del runner suele listo antes del push) |
 | Recreate app + smoke | ~30–60 s | igual |
 
-Variables útiles: `DEPLOY_GHCR_WAIT_SECONDS` (default **360** = 6 min), `DEPLOY_GHCR_POLL_SECONDS` (default 8). El script aborta antes si `gh` ve que Publish GHCR falló.
+Variables útiles: `DEPLOY_GHCR_WAIT_SECONDS` (default **360** = 6 min), `DEPLOY_GHCR_POLL_SECONDS` (default 5), `DEPLOY_GHCR_AUTO_DISPATCH=0` para desactivar el auto-dispatch. El script aborta si Publish falla tras un reintento.
 
 ### Producción — WIP local (sin push)
 

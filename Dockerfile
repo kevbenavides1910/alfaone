@@ -67,9 +67,17 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tslib ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/bytestreamjs ./node_modules/bytestreamjs
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@noble ./node_modules/@noble
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/fe-xades-bootstrap.cjs ./scripts/fe-xades-bootstrap.cjs
-# Informe CCSS/INS: standalone solo traza pdf.mjs; falta pdf.worker.mjs (+ fonts/cmaps)
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdfjs-dist ./node_modules/pdfjs-dist
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@napi-rs ./node_modules/@napi-rs
+# Informe CCSS/INS: standalone traza pdf.mjs pero falta worker + assets.
+# NO copiar pdfjs-dist completo (~101MB: .map + optionalDeps multi-arch anidados).
+# Solo runtime Node (legacy build + fonts/cmaps/wasm) y canvas glibc x64 (~35MB).
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdfjs-dist/package.json ./node_modules/pdfjs-dist/package.json
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdfjs-dist/legacy/build/pdf.mjs ./node_modules/pdfjs-dist/legacy/build/pdf.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs ./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdfjs-dist/standard_fonts ./node_modules/pdfjs-dist/standard_fonts
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdfjs-dist/cmaps ./node_modules/pdfjs-dist/cmaps
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdfjs-dist/wasm ./node_modules/pdfjs-dist/wasm
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@napi-rs/canvas ./node_modules/@napi-rs/canvas
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@napi-rs/canvas-linux-x64-gnu ./node_modules/@napi-rs/canvas-linux-x64-gnu
 # oracledb desde stage cacheado (solo COPY, sin npm install en cada rebuild)
 COPY --from=ora --chown=nextjs:nodejs /tmp/ora-install/node_modules/oracledb ./node_modules/oracledb
 
