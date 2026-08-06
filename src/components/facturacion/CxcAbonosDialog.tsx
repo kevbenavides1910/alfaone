@@ -203,6 +203,24 @@ export function CxcAbonosDialog({ row, open, onOpenChange, canEdit }: Props) {
         </DialogHeader>
 
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm space-y-2">
+          {row.totalCalculated != null && (
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-600">Total factura</span>
+              <span className="font-medium tabular-nums">{formatCurrency(row.totalCalculated)}</span>
+            </div>
+          )}
+          {row.ivaAmount != null && (
+            <div className="flex justify-between gap-4 text-slate-600">
+              <span>IVA ({(row.ivaPctCopied ?? 0).toFixed(2)}%)</span>
+              <span className="font-medium tabular-nums">{formatCurrency(row.ivaAmount)}</span>
+            </div>
+          )}
+          {row.appliesRetention && row.retentionAmount != null && (
+            <div className="flex justify-between gap-4 text-slate-600">
+              <span>Retención ({((row.retentionPct ?? 0) * 100).toFixed(2)}%)</span>
+              <span className="font-medium tabular-nums">− {formatCurrency(row.retentionAmount)}</span>
+            </div>
+          )}
           <div className="flex justify-between gap-4">
             <span className="text-slate-600">Neto a cobrar</span>
             <span className="font-medium tabular-nums">{formatCurrency(neto)}</span>

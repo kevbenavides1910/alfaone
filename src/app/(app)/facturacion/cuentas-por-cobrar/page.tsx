@@ -57,7 +57,14 @@ export type CuentaPorCobrarRow = {
   isReajuste?: boolean;
   hasContract?: boolean;
   hasPartialPayment?: boolean;
+  clientType?: "PUBLIC" | "PRIVATE" | null;
+  subtotalCopied?: number | null;
+  ivaPctCopied?: number;
+  ivaAmount?: number | null;
   totalCalculated: number | null;
+  appliesRetention?: boolean;
+  retentionPct?: number;
+  retentionAmount?: number | null;
   expectedIssueDate: string;
   closedAt: string | null;
   dueDate: string;
@@ -190,7 +197,43 @@ export default function CuentasPorCobrarPage() {
         getValue: (r) =>
           r.isReajuste ? FACTURA_BILLING_KIND_LABELS.reajuste : FACTURA_BILLING_KIND_LABELS.mensual,
       },
-      { key: "total", label: "Total", getValue: (r) => (r.totalCalculated != null ? String(r.totalCalculated) : "") },
+      {
+        key: "iva",
+        label: "% IVA",
+        align: "right",
+        getValue: (r) =>
+          r.ivaAmount != null || (r.ivaPctCopied != null && r.ivaPctCopied > 0)
+            ? `${(r.ivaPctCopied ?? 0).toFixed(2)}%`
+            : "",
+      },
+      {
+        key: "ivaMonto",
+        label: "Monto IVA",
+        align: "right",
+        getValue: (r) => (r.ivaAmount != null ? String(r.ivaAmount) : ""),
+      },
+      { key: "total", label: "Total", align: "right", getValue: (r) => (r.totalCalculated != null ? String(r.totalCalculated) : "") },
+      {
+        key: "retencionPct",
+        label: "% Retención",
+        align: "right",
+        getValue: (r) =>
+          r.appliesRetention && r.retentionPct != null
+            ? `${(r.retentionPct * 100).toFixed(2)}%`
+            : "",
+      },
+      {
+        key: "retencionMonto",
+        label: "Monto retención",
+        align: "right",
+        getValue: (r) => (r.retentionAmount != null ? String(r.retentionAmount) : ""),
+      },
+      {
+        key: "neto",
+        label: "Neto esperado",
+        align: "right",
+        getValue: (r) => (r.netAmountExpected != null ? String(r.netAmountExpected) : ""),
+      },
       {
         key: "abonoSaldo",
         label: "Abono / Saldo",
@@ -238,6 +281,9 @@ export default function CuentasPorCobrarPage() {
   const numericTotals = useMemo(() => {
     let totalSum = 0;
     let totalCount = 0;
+    let ivaAmountSum = 0;
+    let retentionAmountSum = 0;
+    let netAmountSum = 0;
     let abonosSum = 0;
     let saldoSum = 0;
     for (const row of displayedRows) {
@@ -245,12 +291,23 @@ export default function CuentasPorCobrarPage() {
         totalSum += row.totalCalculated;
         totalCount += 1;
       }
+      ivaAmountSum += row.ivaAmount ?? 0;
+      retentionAmountSum += row.retentionAmount ?? 0;
+      netAmountSum += row.netAmountExpected ?? row.totalCalculated ?? 0;
       abonosSum += row.totalAbonos ?? row.provisionalPaymentAmount ?? 0;
       saldoSum +=
         row.remainingBalance ??
-        (row.paymentPending ? row.totalCalculated ?? 0 : 0);
+        (row.paymentPending ? row.adjustedCollectible ?? row.netAmountExpected ?? row.totalCalculated ?? 0 : 0);
     }
-    return { totalSum, totalCount, abonosSum, saldoSum };
+    return {
+      totalSum,
+      totalCount,
+      ivaAmountSum,
+      retentionAmountSum,
+      netAmountSum,
+      abonosSum,
+      saldoSum,
+    };
   }, [displayedRows]);
 
   function handleExport() {
@@ -263,7 +320,12 @@ export default function CuentasPorCobrarPage() {
         Licitación: row.licitacionNo ?? "",
         Periodo: `${row.periodMonth}/${row.periodYear}`,
         Tipo: row.isReajuste ? FACTURA_BILLING_KIND_LABELS.reajuste : FACTURA_BILLING_KIND_LABELS.mensual,
+        "IVA %": row.ivaPctCopied ?? "",
+        "Monto IVA": row.ivaAmount ?? "",
         Total: row.totalCalculated ?? "",
+        "% Retención": row.appliesRetention && row.retentionPct != null ? row.retentionPct * 100 : "",
+        "Monto retención": row.retentionAmount ?? "",
+        "Neto esperado": row.netAmountExpected ?? "",
         Saldo: row.remainingBalance ?? "",
         Abono: row.totalAbonos ?? row.provisionalPaymentAmount ?? "",
         "Nº factura": row.invoiceNumber ?? "",
@@ -406,7 +468,12 @@ export default function CuentasPorCobrarPage() {
                     contacto: 160,
                     periodo: 80,
                     tipo: 100,
+                    iva: 70,
+                    ivaMonto: 100,
                     total: 110,
+                    retencionPct: 90,
+                    retencionMonto: 110,
+                    neto: 110,
                     abonoSaldo: 120,
                     nroFactura: 180,
                     nroDocumento: 120,
@@ -482,8 +549,31 @@ export default function CuentasPorCobrarPage() {
                           canEdit={canEdit && row.status !== "COBRADO" && Boolean(row.facturaMensualId)}
                         />
                       </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                        {row.ivaAmount != null || (row.ivaPctCopied != null && row.ivaPctCopied > 0)
+                          ? `${(row.ivaPctCopied ?? 0).toFixed(2)}%`
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                        {row.ivaAmount != null ? formatCurrency(row.ivaAmount) : "—"}
+                      </td>
                       <td className="px-4 py-3 text-right font-medium tabular-nums">
                         {row.totalCalculated != null ? formatCurrency(row.totalCalculated) : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                        {row.appliesRetention && row.retentionPct != null
+                          ? `${(row.retentionPct * 100).toFixed(2)}%`
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                        {row.retentionAmount != null ? formatCurrency(row.retentionAmount) : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                        {row.netAmountExpected != null
+                          ? formatCurrency(row.netAmountExpected)
+                          : row.totalCalculated != null
+                            ? formatCurrency(row.totalCalculated)
+                            : "—"}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums min-w-[120px]">
                         {row.hasPartialPayment ? (
@@ -692,9 +782,26 @@ export default function CuentasPorCobrarPage() {
                     Totales ({numericTotals.totalCount} con monto · {displayedRows.length}{" "}
                     {displayedRows.length === 1 ? "fila" : "filas"})
                   </td>
+                  <td className="px-4 py-3 text-right tabular-nums">—</td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {numericTotals.totalCount > 0
+                      ? formatCurrency(numericTotals.ivaAmountSum)
+                      : "—"}
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     {numericTotals.totalCount > 0
                       ? formatCurrency(numericTotals.totalSum)
+                      : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">—</td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {numericTotals.totalCount > 0
+                      ? formatCurrency(numericTotals.retentionAmountSum)
+                      : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {numericTotals.totalCount > 0
+                      ? formatCurrency(numericTotals.netAmountSum)
                       : "—"}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">

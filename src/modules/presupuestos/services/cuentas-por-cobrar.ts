@@ -95,7 +95,13 @@ type CxcDocumentoWithRelations = {
     licitacionNo?: string;
     hiringType?: string;
     clientType?: "PUBLIC" | "PRIVATE";
+    ivaPct?: { toString(): string } | number;
     clientContacts?: ClientContactRow[];
+  } | null;
+  facturaMensual?: {
+    subtotalCopied?: { toString(): string } | number | null;
+    ivaPctCopied?: { toString(): string } | number | null;
+    totalCalculated?: { toString(): string } | number | null;
   } | null;
   abonos?: {
     id: string;
@@ -156,6 +162,19 @@ export function serializeCuentaPorCobrar(row: CxcDocumentoWithRelations) {
     saldo: saldoRaw,
   });
 
+  const facturaSubtotal = toAmount(row.facturaMensual?.subtotalCopied ?? null);
+  const ivaPct =
+    toAmount(row.facturaMensual?.ivaPctCopied ?? null) ??
+    toAmount(row.contract?.ivaPct ?? null) ??
+    0;
+  let ivaAmount: number | null = null;
+  if (total != null && facturaSubtotal != null && total >= facturaSubtotal) {
+    ivaAmount = Math.round((total - facturaSubtotal) * 100) / 100;
+  } else if (total != null && ivaPct > 0) {
+    // Sin subtotal de factura: IVA implícito del total bruto.
+    ivaAmount = Math.round(((total * ivaPct) / (100 + ivaPct)) * 100) / 100;
+  }
+
   return {
     id: row.id,
     contractId: row.contractId ?? "",
@@ -165,9 +184,13 @@ export function serializeCuentaPorCobrar(row: CxcDocumentoWithRelations) {
     clientNameCopied: row.clientName,
     companyCodeCopied: row.companyCode ?? "",
     licitacionNo: row.contract?.licitacionNo,
+    clientType: row.contract?.clientType ?? null,
     documentNumber: row.documentNumber,
     docType: row.docType,
     invoiceNumber: row.invoiceNumber,
+    subtotalCopied: facturaSubtotal,
+    ivaPctCopied: ivaPct,
+    ivaAmount,
     totalCalculated: total,
     expectedIssueDate: row.documentDate?.toISOString() ?? new Date().toISOString(),
     closedAt: row.documentDate?.toISOString() ?? null,
@@ -185,6 +208,9 @@ export function serializeCuentaPorCobrar(row: CxcDocumentoWithRelations) {
     provisionalPaymentAmount,
     remainingBalance: balance.remainingBalance,
     hasPartialPayment: balance.hasPartialPayment,
+    appliesRetention: balance.appliesRetention,
+    retentionPct: balance.retentionPct,
+    retentionAmount: balance.retentionAmount,
     netAmountExpected: balance.netAmountExpected,
     totalRebajos: balance.totalRebajos,
     totalAbonos: balance.totalAbonos,
@@ -206,6 +232,7 @@ export const cxcDocumentInclude = {
       licitacionNo: true,
       hiringType: true,
       clientType: true,
+      ivaPct: true,
       clientContacts: {
         orderBy: { sortOrder: "asc" as const },
         select: {
@@ -218,6 +245,13 @@ export const cxcDocumentInclude = {
           sortOrder: true,
         },
       },
+    },
+  },
+  facturaMensual: {
+    select: {
+      subtotalCopied: true,
+      ivaPctCopied: true,
+      totalCalculated: true,
     },
   },
   abonos: { orderBy: { sortOrder: "asc" as const } },
