@@ -75,12 +75,18 @@ image_present() {
 }
 
 # JSON del run Publish más reciente para este SHA (o vacío).
+# Prefiere push/in_progress sobre workflow_dispatch queued (evita ruido en logs).
 publish_run_json() {
   local sha="$1"
   command -v gh >/dev/null 2>&1 || return 0
-  gh run list --workflow=publish-ghcr.yml --commit "$sha" --limit 1 \
+  gh run list --workflow=publish-ghcr.yml --commit "$sha" --limit 5 \
     --json status,conclusion,url,databaseId,event \
-    --jq '.[0] // empty' 2>/dev/null || true
+    --jq '
+      (map(select(.status == "in_progress" or .status == "queued" or .status == "pending" or .status == "waiting" or .status == "requested")) | .[0])
+      // (map(select(.conclusion == "success")) | .[0])
+      // .[0]
+      // empty
+    ' 2>/dev/null || true
 }
 
 # Devuelve 0 si el workflow Publish GHCR ya terminó en failure/cancelled para este SHA
@@ -135,22 +141,30 @@ ensure_publish_triggered() {
     return 0
   }
 
-  local json status conclusion
-  json="$(publish_run_json "$sha")"
-  if [ -n "$json" ]; then
-    status="$(printf '%s' "$json" | jq -r '.status // empty' 2>/dev/null || true)"
-    conclusion="$(printf '%s' "$json" | jq -r '.conclusion // empty' 2>/dev/null || true)"
-    case "$status" in
-      queued|in_progress|waiting|requested|pending)
-        echo "Publish ya en curso ($status) — no se re-dispara."
+  # Tras un push fresco, Actions tarda unos segundos en registrar el run.
+  # Esperar evita un workflow_dispatch duplicado que se encola detrás del push.
+  local json status conclusion attempt
+  for attempt in 1 2 3 4 5; do
+    json="$(publish_run_json "$sha")"
+    if [ -n "$json" ]; then
+      status="$(printf '%s' "$json" | jq -r '.status // empty' 2>/dev/null || true)"
+      conclusion="$(printf '%s' "$json" | jq -r '.conclusion // empty' 2>/dev/null || true)"
+      case "$status" in
+        queued|in_progress|waiting|requested|pending)
+          echo "Publish ya en curso ($status) — no se re-dispara."
+          return 0
+          ;;
+      esac
+      if [ "$status" = "completed" ] && [ "$conclusion" = "success" ]; then
+        echo "Publish ya success para $short."
         return 0
-        ;;
-    esac
-    if [ "$status" = "completed" ] && [ "$conclusion" = "success" ]; then
-      echo "Publish ya success para $short."
-      return 0
+      fi
+      # completed failure/cancelled → caer al dispatch abajo
+      break
     fi
-  fi
+    echo "Esperando registro del run Publish en Actions (${attempt}/5)…"
+    sleep 2
+  done
 
   section "Auto-disparo Publish GHCR (no hay run usable para $short)"
   if gh workflow run publish-ghcr.yml --ref "$(git rev-parse --abbrev-ref HEAD)" 2>&1; then
@@ -259,7 +273,7 @@ if [ -z "$RESOLVED" ]; then
           continue
         fi
       fi
-      die "Publish GHCR falló para $SHORT_SHA; no se espera más la imagen."
+      die "Publish GHCR fallo para $SHORT_SHA; no se espera mas la imagen."
     fi
 
     NOW="$(date +%s)"
@@ -268,13 +282,14 @@ if [ -z "$RESOLVED" ]; then
       break
     fi
     REMAIN=$((WAIT_SECS - ELAPSED))
-    echo "… imagen aún no lista (${ELAPSED}s). $(publish_status_line "$SHA") — reintento en ${POLL_SECS}s (queda ~${REMAIN}s)"
+    echo "... imagen aun no lista (${ELAPSED}s). $(publish_status_line "$SHA") - reintento en ${POLL_SECS}s (queda ~${REMAIN}s)"
     sleep "$POLL_SECS"
   done
 fi
 
-if [ -z "$RESOLVED" ]; then
-  die "no hay imagen GHCR/local para $SHORT_SHA (ni APP_IMAGE). Revise workflow Publish GHCR. $(publish_status_line "$SHA")"
+if [ -z "${RESOLVED:-}" ]; then
+  status_extra="$(publish_status_line "$SHA")"
+  die "no hay imagen GHCR/local para $SHORT_SHA ni APP_IMAGE. Revise workflow Publish GHCR. ${status_extra}"
 fi
 
 section "Pull + recreate: $RESOLVED"
