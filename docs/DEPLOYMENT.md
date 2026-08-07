@@ -85,14 +85,14 @@ Si el push no crea el workflow (flakiness de Actions), `ops:deploy:ghcr` carga `
 
 Tiempos típicos tras estas optimizaciones:
 
-| Fase | Antes | Ahora (objetivo) |
-|------|-------|------------------|
-| Publish GHCR (`next build`) | ~3–5 min (compile + typecheck) | ~1.5–3 min (sin typecheck en Docker + cache `.next`) |
-| Capa pdfjs/napi en imagen | ~160MB (paquete completo + multi-arch) | ~35MB (worker + fonts/cmaps/wasm + canvas linux-x64-gnu) |
-| Esperar imagen + pull | polling manual del agente | `ops:deploy:ghcr` espera solo (imagen local del runner suele listo antes del push) |
-| Recreate app + smoke | ~30–60 s | igual |
+| Fase | Antes (ago-2026) | Objetivo |
+|------|------------------|----------|
+| Publish GHCR (`next build`) | ~3.5–4.2 min (Build+push juntos) | ~2–3.5 min (cache `.next/cache` + push aparte) |
+| Wait imagen (ops:deploy:ghcr) | ~igual al Publish completo | Termina al **load local** (antes del push GHCR) |
+| Backup Postgres en deploy | ~15 s (`gzip -9` siempre) | ~0–3 s (skip si hay backup &lt;30 min; `gzip -1`) |
+| Recreate app + smoke | ~15–20 s | igual |
 
-Variables útiles: `DEPLOY_GHCR_WAIT_SECONDS` (default **360** = 6 min), `DEPLOY_GHCR_POLL_SECONDS` (default 5), `DEPLOY_GHCR_AUTO_DISPATCH=0` para desactivar el auto-dispatch. El script aborta si Publish falla tras un reintento.
+Variables útiles: `DEPLOY_GHCR_WAIT_SECONDS` (default **360** = 6 min), `DEPLOY_GHCR_POLL_SECONDS` (default **2**), `DEPLOY_GHCR_MANIFEST_EVERY` (default **15** polls antes de consultar registry), `DEPLOY_GHCR_AUTO_DISPATCH=0` para desactivar el auto-dispatch, `DEPLOY_SKIP_DB_BACKUP=1` / `DEPLOY_FORCE_DB_BACKUP=1` / `DEPLOY_DB_BACKUP_MAX_AGE_MIN` (default 30). El script aborta si Publish falla tras un reintento.
 
 ### Producción — WIP local (sin push)
 

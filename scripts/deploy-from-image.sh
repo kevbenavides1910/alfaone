@@ -130,15 +130,54 @@ bash "$ROOT/scripts/db-safety-preflight.sh"
 if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
   PREVIOUS_IMAGE="$(docker inspect "$APP_CONTAINER" --format '{{.Image}}')"
   SERVICE_IMAGE="$(docker inspect "$APP_CONTAINER" --format '{{.Config.Image}}')"
-  docker tag "$PREVIOUS_IMAGE" "$ROLLBACK_TAG"
-  echo "rollback_tag=$ROLLBACK_TAG previous=$SERVICE_IMAGE"
+  # Si el Image ID quedó huérfano (prune), usar el tag Config.Image si existe.
+  if ! docker image inspect "$PREVIOUS_IMAGE" >/dev/null 2>&1; then
+    echo "WARN: Image ID actual no inspectable ($PREVIOUS_IMAGE); intento tag $SERVICE_IMAGE"
+    if docker image inspect "$SERVICE_IMAGE" >/dev/null 2>&1; then
+      PREVIOUS_IMAGE="$SERVICE_IMAGE"
+    else
+      echo "WARN: sin imagen previa etiquetable — deploy sin rollback tag"
+      PREVIOUS_IMAGE=""
+    fi
+  fi
+  if [ -n "$PREVIOUS_IMAGE" ]; then
+    docker tag "$PREVIOUS_IMAGE" "$ROLLBACK_TAG"
+    echo "rollback_tag=$ROLLBACK_TAG previous=$SERVICE_IMAGE"
+  fi
 fi
 
 section "Respaldo PostgreSQL (security_contracts)"
-POSTGRES_DB=security_contracts bash "$ROOT/scripts/postgres-backup.sh"
+BACKUP_DIR="${BACKUP_DIR:-/mnt/data/backups/postgres}"
+# Evita dump en cada redeploy caliente: reutiliza backup reciente (default 30 min).
+# Forzar: DEPLOY_FORCE_DB_BACKUP=1. Saltar: DEPLOY_SKIP_DB_BACKUP=1.
+SKIP_BACKUP="${DEPLOY_SKIP_DB_BACKUP:-0}"
+FORCE_BACKUP="${DEPLOY_FORCE_DB_BACKUP:-0}"
+MAX_AGE_MIN="${DEPLOY_DB_BACKUP_MAX_AGE_MIN:-30}"
+if [ "$SKIP_BACKUP" = "1" ] || [ "$SKIP_BACKUP" = "true" ]; then
+  echo "SKIP backup (DEPLOY_SKIP_DB_BACKUP=1)"
+elif [ "$FORCE_BACKUP" != "1" ] && [ "$FORCE_BACKUP" != "true" ]; then
+  LATEST="$(ls -1t "$BACKUP_DIR"/security_contracts_*.sql.gz 2>/dev/null | head -1 || true)"
+  if [ -n "$LATEST" ]; then
+    AGE_SEC=$(( $(date +%s) - $(stat -c %Y "$LATEST") ))
+    MAX_AGE_SEC=$((MAX_AGE_MIN * 60))
+    if [ "$AGE_SEC" -lt "$MAX_AGE_SEC" ]; then
+      echo "SKIP backup: reciente $LATEST (hace ${AGE_SEC}s < ${MAX_AGE_MIN}m)"
+      SKIP_BACKUP=1
+    fi
+  fi
+fi
+if [ "$SKIP_BACKUP" != "1" ] && [ "$SKIP_BACKUP" != "true" ]; then
+  # gzip -1 en deploy (~3s); el cron diario puede usar GZIP_LEVEL=9.
+  GZIP_LEVEL="${GZIP_LEVEL:-1}" POSTGRES_DB=security_contracts bash "$ROOT/scripts/postgres-backup.sh"
+fi
 
 section "Pull imagen"
-docker pull "$APP_IMAGE"
+# Si la imagen ya está local (Publish en el mismo daemon), no esperar a GHCR.
+if docker image inspect "$APP_IMAGE" >/dev/null 2>&1; then
+  echo "OK: imagen local presente — omito docker pull ($APP_IMAGE)"
+else
+  docker pull "$APP_IMAGE"
+fi
 
 section "Recrear SOLO app (sin build)"
 "${COMPOSE[@]}" up -d --no-build --no-deps --force-recreate --pull never "$APP_SERVICE"

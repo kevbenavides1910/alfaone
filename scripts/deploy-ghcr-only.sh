@@ -4,8 +4,8 @@
 #      APP_IMAGE=ghcr.io/kevbenavides1910/alfaone:<sha> npm run ops:deploy:ghcr
 #
 # Si la imagen del SHA aún no está, espera (poll local + GHCR) en lugar de fallar al instante.
-# El runner Publish GHCR corre en el mismo daemon Docker → a menudo la imagen local
-# aparece antes de que el push a ghcr.io termine.
+# El runner Publish GHCR corre en el mismo daemon Docker → la imagen local
+# aparece al terminar el build (antes del push a ghcr.io).
 #
 # Aborta temprano si `gh` reporta que Publish GHCR falló/canceló para este commit
 # (evita esperar el timeout completo cuando el build rompe).
@@ -35,7 +35,9 @@ ALLOW_LATEST="${DEPLOY_GHCR_ALLOW_LATEST:-0}"
 # Publish GHCR suele estar listo en ~2–5 min. Default 6 min; override con DEPLOY_GHCR_WAIT_SECONDS.
 # 0 = no esperar (comportamiento antiguo).
 WAIT_SECS="${DEPLOY_GHCR_WAIT_SECONDS:-360}"
-POLL_SECS="${DEPLOY_GHCR_POLL_SECONDS:-5}"
+# Poll local rápido (docker image inspect ~0.1s). Manifest remoto es caro (~1.5s).
+POLL_SECS="${DEPLOY_GHCR_POLL_SECONDS:-2}"
+MANIFEST_EVERY="${DEPLOY_GHCR_MANIFEST_EVERY:-15}"
 AUTO_DISPATCH="${DEPLOY_GHCR_AUTO_DISPATCH:-1}"
 
 section() {
@@ -50,13 +52,23 @@ die() {
   exit 1
 }
 
+# Solo daemon local (rápido). Preferido: runner Publish y deploy comparten Docker.
+image_present_local() {
+  docker image inspect "$1" >/dev/null 2>&1
+}
+
+# Registry remoto (lento). Usar con poca frecuencia.
+image_present_remote() {
+  docker manifest inspect "$1" >/dev/null 2>&1
+}
+
 image_present() {
   local img="$1"
-  # Mismo host que el self-hosted runner: la imagen local basta (no esperar push).
-  if docker image inspect "$img" >/dev/null 2>&1; then
+  local allow_remote="${2:-1}"
+  if image_present_local "$img"; then
     return 0
   fi
-  if docker manifest inspect "$img" >/dev/null 2>&1; then
+  if [ "$allow_remote" = "1" ] && image_present_remote "$img"; then
     return 0
   fi
   return 1
@@ -150,6 +162,19 @@ ensure_publish_triggered() {
   fi
 }
 
+resolve_candidate() {
+  local allow_remote="$1"
+  local img
+  for img in "${CANDIDATES[@]}"; do
+    if image_present "$img" "$allow_remote"; then
+      RESOLVED="$img"
+      echo "OK: $img"
+      return 0
+    fi
+  done
+  return 1
+}
+
 section "Deploy GHCR-only (sin build local)"
 
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -181,6 +206,7 @@ if git rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
 fi
 
 RESOLVED="${APP_IMAGE:-}"
+CANDIDATES=()
 if [ -z "$RESOLVED" ]; then
   CANDIDATES=(
     "${DEFAULT_IMAGE_REPO}:${SHA}"
@@ -192,22 +218,35 @@ if [ -z "$RESOLVED" ]; then
   fi
 
   # Disparar Publish si push no lo hizo (o el run previo fue cancelado/zombie).
-  if ! image_present "${DEFAULT_IMAGE_REPO}:${SHA}" \
-    && ! image_present "${DEFAULT_IMAGE_REPO}:${SHORT_SHA}" \
-    && ! image_present "${DEFAULT_IMAGE_REPO}:sha-${SHORT_SHA}"; then
+  if ! image_present_local "${DEFAULT_IMAGE_REPO}:${SHA}" \
+    && ! image_present_local "${DEFAULT_IMAGE_REPO}:${SHORT_SHA}" \
+    && ! image_present_local "${DEFAULT_IMAGE_REPO}:sha-${SHORT_SHA}"; then
     ensure_publish_triggered "$SHA" "$SHORT_SHA"
   fi
 
-  section "Buscando imagen para ${SHORT_SHA} (espera hasta ${WAIT_SECS}s)"
+  section "Buscando imagen para ${SHORT_SHA} (espera hasta ${WAIT_SECS}s; poll local ${POLL_SECS}s)"
   START_TS="$(date +%s)"
+  POLL_N=0
   while true; do
-    for img in "${CANDIDATES[@]}"; do
-      if image_present "$img"; then
-        RESOLVED="$img"
-        echo "OK: $img"
-        break 2
+    # Remoto solo cada N polls o cuando el publish ya terminó OK (ahorra ~1.5s×3 por ciclo).
+    ALLOW_REMOTE=0
+    POLL_N=$((POLL_N + 1))
+    if [ $((POLL_N % MANIFEST_EVERY)) -eq 0 ]; then
+      ALLOW_REMOTE=1
+    else
+      json="$(publish_run_json "$SHA")"
+      if [ -n "$json" ]; then
+        st="$(printf '%s' "$json" | jq -r '.status // empty' 2>/dev/null || true)"
+        cj="$(printf '%s' "$json" | jq -r '.conclusion // empty' 2>/dev/null || true)"
+        if [ "$st" = "completed" ] && [ "$cj" = "success" ]; then
+          ALLOW_REMOTE=1
+        fi
       fi
-    done
+    fi
+
+    if resolve_candidate "$ALLOW_REMOTE"; then
+      break
+    fi
 
     if publish_ghcr_failed "$SHA"; then
       # Un cancel/zombie previo no debe tumbar el deploy: un re-dispatch y seguir esperando.

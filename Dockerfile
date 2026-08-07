@@ -25,8 +25,9 @@ ENV NEXTAUTH_SECRET=ci-build-placeholder-secret-min-32-characters!!
 ENV NODE_OPTIONS=--max-old-space-size=8192
 # Omite typecheck en next build (ver next.config.ts); cache webpack/SWC entre publishes.
 ENV DOCKER_BUILD=1
-# Sin cache mount de .next: evita chunks cliente vacíos/corruptos en rebuilds.
-RUN npm run build
+# Solo cache de compilación (.next/cache). NO montar .next completo: corrompía chunks.
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # Stage aislado: oracledb thick (glibc). Cache estable — no se reinstala en cada rebuild de Next.
 FROM node:20-bookworm-slim AS ora

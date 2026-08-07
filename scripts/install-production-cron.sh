@@ -38,7 +38,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 0 13 * * * $RUN_USER HEALTH_ALERT_ENV=$HEALTH_ENV LOG_DIR=$LOG_DIR $PROJECT_DIR/scripts/vps-health-daily-report.sh >> $LOG_DIR/cron-daily-report.log 2>&1
 
 # Respaldo PostgreSQL diario 02:15 UTC (+ sync remoto si backup-remote.env está activo)
-15 2 * * * root BACKUP_DIR=$BACKUP_DIR BACKUP_REMOTE_ENV=/etc/alfa-one/backup-remote.env $PROJECT_DIR/scripts/postgres-backup.sh >> $LOG_DIR/cron-backup.log 2>&1
+15 2 * * * root BACKUP_DIR=$BACKUP_DIR BACKUP_REMOTE_ENV=/etc/alfa-one/backup-remote.env GZIP_LEVEL=9 $PROJECT_DIR/scripts/postgres-backup.sh >> $LOG_DIR/cron-backup.log 2>&1
 
 # Respaldo Odoo 18 diario 02:25 UTC
 25 2 * * * $RUN_USER BACKUP_DIR=$ODOO_BACKUP_DIR $ODOO_BACKUP_SCRIPT >> $LOG_DIR/cron-odoo-backup.log 2>&1
