@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont, type PDFIm
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { embedBrandingLogo, embedDisciplinarySignatureImage } from "@/modules/disciplinario/services/disciplinary-pdf-logo";
+import { drawDocumentSignatureBlock } from "@/modules/disciplinario/services/disciplinary-pdf-signature-draw";
 import { DEFAULT_DOCUMENT_INTRO_TEMPLATE, renderMailTemplate } from "@/modules/disciplinario/services/disciplinary-settings";
 import { APP_DOCUMENT_FOOTER_EXTENDED } from "@/modules/plataforma/branding-constants";
 
@@ -450,38 +451,11 @@ export async function buildOmisionPdfBytes(rawInput: OmisionPdfInput): Promise<U
   });
   cursorY -= 22;
 
-  const sigSlotW = 280;
-  const sigSlotH = 88;
-  if (signatureImage) {
-    const scale = Math.min(sigSlotW / signatureImage.width, sigSlotH / signatureImage.height);
-    const sw = signatureImage.width * scale;
-    const sh = signatureImage.height * scale;
-    page.drawImage(signatureImage, {
-      x: closingMidX - sw / 2,
-      y: cursorY - sh,
-      width: sw,
-      height: sh,
-    });
-    cursorY -= sh + 10;
-  } else {
-    cursorY -= 6;
-    page.drawLine({
-      start: { x: closingMidX - sigSlotW / 2, y: cursorY },
-      end: { x: closingMidX + sigSlotW / 2, y: cursorY },
-      thickness: 0.5,
-      color: MUTED,
-    });
-    cursorY -= 12;
-  }
-  const firmaLabel = "Firma y sello";
-  page.drawText(firmaLabel, {
-    x: centerX(firmaLabel, 8, font, closingMidX),
-    y: cursorY,
-    size: 8,
-    font,
-    color: MUTED,
+  cursorY = drawDocumentSignatureBlock(page, cursorY, closingMidX, font, signatureImage, {
+    bold,
+    signerName: input.administrador?.trim() || null,
   });
-  cursorY -= 36;
+  cursorY -= 8;
 
   const colGap = 28;
   const colWidth = (bodyW - colGap) / 2;

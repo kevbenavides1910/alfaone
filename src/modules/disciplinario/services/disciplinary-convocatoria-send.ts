@@ -16,6 +16,7 @@ import {
   buildConvocatoriaPdfBytes,
   formatConvocatoriaHoraTexto,
 } from "@/modules/disciplinario/services/disciplinary-convocatoria-pdf";
+import { DISCIPLINARY_SIGNER_TITLE } from "@/modules/disciplinario/services/disciplinary-pdf-signature-draw";
 import { getEmployeesForDisciplinaryByCodes } from "@/modules/disciplinario/services/disciplinary-employee-lookup";
 
 const HORA_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
@@ -89,6 +90,8 @@ export async function sendDisciplinaryConvocatoriaEmail(opts: {
   const zd = mergeDefaultsForZoneTexts(zoneMap, ctx.zona);
   const zoneAdminCc = zd?.administratorEmail?.trim() || null;
   const cc = mergeDisciplinaryCc(ctx.email, settings.emailFixedCc, zoneAdminCc);
+  // Misma resolución de responsable que apercibimientos: registro previo o catálogo de zona.
+  const administrador = ctx.administrador?.trim() || zd?.administrator?.trim() || null;
 
   const horaTexto = formatConvocatoriaHoraTexto(horaNorm);
   const [brandingLogoFile, signatureImageFile] = await Promise.all([
@@ -101,6 +104,7 @@ export async function sendDisciplinaryConvocatoriaEmail(opts: {
     fechaCarta: new Date(),
     fechaConvocatoria: opts.fechaConvocatoria,
     horaConvocatoriaTexto: horaTexto,
+    administrador,
     documentFooter: settings.documentFooter,
     formCode: settings.documentFormCode,
     formRevision: settings.documentFormRevision,
@@ -116,10 +120,14 @@ export async function sendDisciplinaryConvocatoriaEmail(opts: {
   });
 
   const subject = `Convocatoria a oficinas — ${ctx.nombre}`;
+  const responsableBlock = administrador
+    ? `${administrador}\n${DISCIPLINARY_SIGNER_TITLE}\n\n`
+    : `${DISCIPLINARY_SIGNER_TITLE}\n\n`;
   const text =
     `Estimado/a ${ctx.nombre}:\n\n` +
     `${cuerpo}\n\n` +
-    `Atentamente\n\n` +
+    `Atentamente,\n\n` +
+    responsableBlock +
     `—\nAdjunto constancia en PDF. Mensaje enviado desde el sistema de control disciplinario.`;
 
   const safeFile = `Convocatoria-${codigo.replace(/[^a-zA-Z0-9-_.]/g, "_")}.pdf`;

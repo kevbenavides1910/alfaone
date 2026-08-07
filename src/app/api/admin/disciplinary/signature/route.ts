@@ -10,11 +10,12 @@ import {
   mimeForLogoPath,
   relativeDisciplinarySignaturePath,
 } from "@/modules/plataforma/services/app-branding";
+import { prepareDisciplinarySignaturePng } from "@/modules/disciplinario/services/disciplinary-signature-image";
+import { created, badRequest, forbidden, notFound, serverError, unauthorized } from "@/lib/api/response";
+import { ensureDisciplinarySettingsRow } from "@/modules/disciplinario/services/disciplinary-settings";
 
 /** Solo PNG/JPEG: el motor PDF no incrusta WebP. */
 const SIGNATURE_MIMES = new Set(["image/png", "image/jpeg"]);
-import { created, badRequest, forbidden, notFound, serverError, unauthorized } from "@/lib/api/response";
-import { ensureDisciplinarySettingsRow } from "@/modules/disciplinario/services/disciplinary-settings";
 
 export async function GET() {
   const session = await getSession();
@@ -29,6 +30,39 @@ export async function GET() {
 
     const abs = absoluteBrandingFile(rel);
     const buf = await readFile(abs);
+    const prepared = await prepareDisciplinarySignaturePng(new Uint8Array(buf));
+    if (prepared?.length) {
+      // Migra JPEG/recuadro antiguo a PNG limpio en disco (una sola vez).
+      const pngRel = relativeDisciplinarySignaturePath("image/png");
+      if (rel !== pngRel || !rel.toLowerCase().endsWith(".png")) {
+        try {
+          const pngAbs = absoluteBrandingFile(pngRel);
+          await mkdir(path.dirname(pngAbs), { recursive: true });
+          await writeFile(pngAbs, Buffer.from(prepared));
+          await prisma.appDisciplinarySettings.update({
+            where: { id: "default" },
+            data: { documentSignaturePath: pngRel },
+          });
+          if (rel !== pngRel) {
+            try {
+              await unlink(abs);
+            } catch {
+              /* ignore */
+            }
+          }
+        } catch {
+          /* servir en memoria aunque falle la migración */
+        }
+      }
+      return new NextResponse(Buffer.from(prepared), {
+        status: 200,
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "private, max-age=60",
+        },
+      });
+    }
+
     const mime = mimeForLogoPath(rel);
     return new NextResponse(buf, {
       status: 200,
@@ -61,7 +95,16 @@ export async function POST(req: NextRequest) {
       return badRequest("Use PNG o JPEG para la firma (así se verá correctamente en el PDF)");
     }
 
-    const rel = relativeDisciplinarySignaturePath(mime);
+    const raw = new Uint8Array(await blob.arrayBuffer());
+    const prepared = await prepareDisciplinarySignaturePng(raw);
+    if (!prepared?.length) {
+      return badRequest(
+        "No se detectó tinta en la imagen. Use una firma sobre fondo blanco o transparente.",
+      );
+    }
+
+    // Siempre PNG limpio (fondo transparente + recorte).
+    const rel = relativeDisciplinarySignaturePath("image/png");
     const abs = absoluteBrandingFile(rel);
     await mkdir(path.dirname(abs), { recursive: true });
 
@@ -73,8 +116,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const buf = Buffer.from(await blob.arrayBuffer());
-    await writeFile(abs, buf);
+    await writeFile(abs, Buffer.from(prepared));
 
     const updated = await prisma.appDisciplinarySettings.update({
       where: { id: "default" },

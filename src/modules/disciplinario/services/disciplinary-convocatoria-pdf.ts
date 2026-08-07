@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont, type PDFIm
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { embedBrandingLogo, embedDisciplinarySignatureImage } from "@/modules/disciplinario/services/disciplinary-pdf-logo";
+import { drawDocumentSignatureBlock } from "@/modules/disciplinario/services/disciplinary-pdf-signature-draw";
 import { APP_DOCUMENT_FOOTER } from "@/modules/plataforma/branding-constants";
 
 export const CONVOCATORIA_OFICINAS_TEXTO =
@@ -13,6 +14,8 @@ export type ConvocatoriaPdfInput = {
   fechaConvocatoria: Date;
   /** Texto legible, p. ej. «11 horas» o «11:30 horas». */
   horaConvocatoriaTexto: string;
+  /** Responsable / administrador de zona (misma fuente que apercibimientos). */
+  administrador?: string | null;
   documentFooter?: string | null;
   formCode?: string | null;
   formRevision?: string | null;
@@ -249,24 +252,22 @@ export async function buildConvocatoriaPdfBytes(rawInput: ConvocatoriaPdfInput):
   }
   cursorY -= 24;
 
-  const valediction = "Atentamente";
-  page.drawText(valediction, { x: bodyLeft, y: cursorY, size: 11, font, color: TEXT });
+  // Cierre alineado con apercibimientos: firma/sello centrado + responsable.
+  const closingMidX = PAGE_W / 2;
+  const valediction = "Atentamente,";
+  page.drawText(valediction, {
+    x: centerX(valediction, 11, font, closingMidX),
+    y: cursorY,
+    size: 11,
+    font,
+    color: TEXT,
+  });
   cursorY -= 22;
 
-  if (signatureImage) {
-    const sigSlotW = 220;
-    const sigSlotH = 72;
-    const scale = Math.min(sigSlotW / signatureImage.width, sigSlotH / signatureImage.height);
-    const sw = signatureImage.width * scale;
-    const sh = signatureImage.height * scale;
-    page.drawImage(signatureImage, {
-      x: bodyLeft,
-      y: cursorY - sh,
-      width: sw,
-      height: sh,
-    });
-    cursorY -= sh + 8;
-  }
+  cursorY = drawDocumentSignatureBlock(page, cursorY, closingMidX, font, signatureImage, {
+    bold,
+    signerName: sanitizePdfText(rawInput.administrador?.trim() || "") || null,
+  });
 
   const foot = rawInput.documentFooter?.trim() || APP_DOCUMENT_FOOTER;
   drawParagraph(page, foot, bodyLeft, Math.max(cursorY - 20, 72), bodyW, 8, font, MUTED, 10);

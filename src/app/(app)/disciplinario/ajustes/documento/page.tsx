@@ -208,16 +208,16 @@ export default function DisciplinarioAjustesDocumentoPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-slate-600">
-              Imagen que se imprime encima de «Firma y sello» en todos los apercibimientos (vista previa,
-              descarga y correos). Solo PNG o JPEG (requerido para el PDF). Fondo transparente o blanco. Ancho
-              recomendado ~400–800 px.
+              Imagen que se imprime encima de «Firma y sello» en apercibimientos y convocatorias. Solo PNG o
+              JPEG. Al subirla se elimina el fondo gris/blanco y se recorta al trazo para que se vea limpia en
+              el PDF. Ancho recomendado ~400–800 px.
             </p>
             {hasSignature && (
-              <div className="rounded border bg-card p-4 inline-block max-w-full">
+              <div className="inline-block max-w-full rounded-md border border-dashed border-slate-300 bg-white p-6">
                 <img
                   src={`/api/admin/disciplinary/signature?k=${signatureCacheBust}`}
                   alt="Vista previa de la firma configurada"
-                  className="max-h-24 w-auto object-contain"
+                  className="max-h-28 w-auto object-contain"
                 />
               </div>
             )}
