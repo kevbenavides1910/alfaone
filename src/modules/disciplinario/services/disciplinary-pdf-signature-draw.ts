@@ -2,7 +2,6 @@ import type { PDFFont, PDFImage, PDFPage } from "pdf-lib";
 import { rgb } from "pdf-lib";
 
 const MUTED = rgb(0.38, 0.38, 0.42);
-const TEXT = rgb(0.12, 0.12, 0.14);
 
 export const DISCIPLINARY_SIGNER_TITLE = "Encargado de disciplinario";
 
@@ -20,11 +19,6 @@ export function drawDocumentSignatureBlock(
   midX: number,
   font: PDFFont,
   signatureImage: PDFImage | null,
-  opts?: {
-    bold?: PDFFont;
-    /** Nombre del responsable (opcional). */
-    signerName?: string | null;
-  },
 ): number {
   // Hueco amplio horizontal: la firma ya viene recortada a la tinta.
   const sigSlotW = 280;
@@ -62,18 +56,6 @@ export function drawDocumentSignatureBlock(
     color: MUTED,
   });
   y -= 14;
-
-  const name = opts?.signerName?.trim() || "";
-  if (name && opts?.bold) {
-    page.drawText(name, {
-      x: centerX(name, 10, opts.bold, midX),
-      y,
-      size: 10,
-      font: opts.bold,
-      color: TEXT,
-    });
-    y -= 12;
-  }
 
   page.drawText(DISCIPLINARY_SIGNER_TITLE, {
     x: centerX(DISCIPLINARY_SIGNER_TITLE, 9, font, midX),

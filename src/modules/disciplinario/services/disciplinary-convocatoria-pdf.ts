@@ -14,8 +14,6 @@ export type ConvocatoriaPdfInput = {
   fechaConvocatoria: Date;
   /** Texto legible, p. ej. «11 horas» o «11:30 horas». */
   horaConvocatoriaTexto: string;
-  /** Responsable / administrador de zona (misma fuente que apercibimientos). */
-  administrador?: string | null;
   documentFooter?: string | null;
   formCode?: string | null;
   formRevision?: string | null;
@@ -264,10 +262,7 @@ export async function buildConvocatoriaPdfBytes(rawInput: ConvocatoriaPdfInput):
   });
   cursorY -= 22;
 
-  cursorY = drawDocumentSignatureBlock(page, cursorY, closingMidX, font, signatureImage, {
-    bold,
-    signerName: sanitizePdfText(rawInput.administrador?.trim() || "") || null,
-  });
+  cursorY = drawDocumentSignatureBlock(page, cursorY, closingMidX, font, signatureImage);
 
   const foot = rawInput.documentFooter?.trim() || APP_DOCUMENT_FOOTER;
   drawParagraph(page, foot, bodyLeft, Math.max(cursorY - 20, 72), bodyW, 8, font, MUTED, 10);

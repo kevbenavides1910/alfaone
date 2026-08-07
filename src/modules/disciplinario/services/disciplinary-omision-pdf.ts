@@ -451,10 +451,7 @@ export async function buildOmisionPdfBytes(rawInput: OmisionPdfInput): Promise<U
   });
   cursorY -= 22;
 
-  cursorY = drawDocumentSignatureBlock(page, cursorY, closingMidX, font, signatureImage, {
-    bold,
-    signerName: input.administrador?.trim() || null,
-  });
+  cursorY = drawDocumentSignatureBlock(page, cursorY, closingMidX, font, signatureImage);
   cursorY -= 8;
 
   const colGap = 28;
