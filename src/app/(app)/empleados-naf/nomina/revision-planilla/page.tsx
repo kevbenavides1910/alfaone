@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Download,
   FileSpreadsheet,
+  Filter,
   Loader2,
   Printer,
   RefreshCw,
@@ -210,6 +211,13 @@ function rangoKey(p: SelectedRango) {
 
 function sameRango(a: SelectedRango, b: SelectedRango) {
   return a.ano === b.ano && a.fDesde === b.fDesde && a.fHasta === b.fHasta;
+}
+
+function sameStringList(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.every((value, index) => value === right[index]);
 }
 
 function empresasQueryValue(noCias: string[]) {
@@ -435,12 +443,28 @@ export default function RevisionPlanillaPage() {
   const [selectedEmpresas, setSelectedEmpresas] = useState<string[]>([]);
   const [selectedPlanillas, setSelectedPlanillas] = useState<string[]>([]);
   const [selectedRango, setSelectedRango] = useState<SelectedRango | null>(null);
+  const [appliedEmpresas, setAppliedEmpresas] = useState<string[]>([]);
+  const [appliedPlanillas, setAppliedPlanillas] = useState<string[]>([]);
+  const [appliedRango, setAppliedRango] = useState<SelectedRango | null>(null);
   const [searchQ, setSearchQ] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
   const [pagoTarget, setPagoTarget] = useState<PagoTarget | null>(null);
 
   const empresasKey = empresasQueryValue(selectedEmpresas);
+  const filtersDirty =
+    !sameStringList(selectedEmpresas, appliedEmpresas) ||
+    !sameStringList(selectedPlanillas, appliedPlanillas) ||
+    (selectedRango == null) !== (appliedRango == null) ||
+    Boolean(selectedRango && appliedRango && !sameRango(selectedRango, appliedRango));
+  const canApply = selectedEmpresas.length > 0 && Boolean(selectedRango) && filtersDirty;
+
+  const applyFilters = () => {
+    if (selectedEmpresas.length === 0 || !selectedRango) return;
+    setAppliedEmpresas(selectedEmpresas);
+    setAppliedPlanillas(selectedPlanillas);
+    setAppliedRango(selectedRango);
+  };
 
   const { data: catalogData } = useQuery({
     queryKey: ["empleados-naf-revision-catalog"],
@@ -466,6 +490,7 @@ export default function RevisionPlanillaPage() {
         sp.set("fDesde", selectedRango.fDesde);
         sp.set("fHasta", selectedRango.fHasta);
       }
+      sp.set("catalog", "1");
       return fetchRevision(`?${sp}`) as Promise<PeriodosResponse>;
     },
     enabled: selectedEmpresas.length > 0,
@@ -473,14 +498,14 @@ export default function RevisionPlanillaPage() {
   });
 
   const detalleParams = useMemo(() => {
-    if (selectedEmpresas.length === 0 || !selectedRango) return null;
+    if (appliedEmpresas.length === 0 || !appliedRango) return null;
     const sp = new URLSearchParams();
-    for (const noCia of selectedEmpresas) sp.append("noCia", noCia);
-    sp.set("fDesde", selectedRango.fDesde);
-    sp.set("fHasta", selectedRango.fHasta);
-    for (const codPla of selectedPlanillas) sp.append("codPla", codPla);
+    for (const noCia of appliedEmpresas) sp.append("noCia", noCia);
+    sp.set("fDesde", appliedRango.fDesde);
+    sp.set("fHasta", appliedRango.fHasta);
+    for (const codPla of appliedPlanillas) sp.append("codPla", codPla);
     return sp.toString();
-  }, [selectedEmpresas, selectedRango, selectedPlanillas]);
+  }, [appliedEmpresas, appliedRango, appliedPlanillas]);
 
   const {
     data: detalleData,
@@ -569,14 +594,14 @@ export default function RevisionPlanillaPage() {
 
 
   const detailParams = useMemo(() => {
-    if (!detailTarget || !selectedRango) return null;
+    if (!detailTarget || !appliedRango) return null;
     const sp = new URLSearchParams();
     sp.set("noCia", detailTarget.noCia);
     sp.set("codPla", detailTarget.codPla);
-    sp.set("fDesde", selectedRango.fDesde);
-    sp.set("fHasta", selectedRango.fHasta);
+    sp.set("fDesde", appliedRango.fDesde);
+    sp.set("fHasta", appliedRango.fHasta);
     return sp.toString();
-  }, [detailTarget, selectedRango]);
+  }, [detailTarget, appliedRango]);
 
   const {
     data: detailData,
@@ -597,15 +622,15 @@ export default function RevisionPlanillaPage() {
   const planillaDetalle = detailData?.data.detalle ?? null;
 
   const pagoParams = useMemo(() => {
-    if (!pagoTarget || !selectedRango) return null;
+    if (!pagoTarget || !appliedRango) return null;
     const sp = new URLSearchParams();
     sp.set("noCia", pagoTarget.noCia);
     sp.set("codPla", pagoTarget.codPla);
-    sp.set("fDesde", selectedRango.fDesde);
-    sp.set("fHasta", selectedRango.fHasta);
+    sp.set("fDesde", appliedRango.fDesde);
+    sp.set("fHasta", appliedRango.fHasta);
     sp.set("canal", pagoTarget.canal);
     return sp.toString();
-  }, [pagoTarget, selectedRango]);
+  }, [pagoTarget, appliedRango]);
 
   const {
     data: pagoData,
@@ -647,15 +672,15 @@ export default function RevisionPlanillaPage() {
       field: ChecklistField;
       value: boolean;
     }) => {
-      if (!selectedRango) throw new Error("Seleccione una quincena");
+      if (!appliedRango) throw new Error("Seleccione una quincena");
       const res = await fetch("/api/empleados-naf/nomina/revision-planilla/checklist", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           noCia: payload.noCia,
           codPla: payload.codPla,
-          fDesde: selectedRango.fDesde,
-          fHasta: selectedRango.fHasta,
+          fDesde: appliedRango.fDesde,
+          fHasta: appliedRango.fHasta,
           field: payload.field,
           value: payload.value,
         }),
@@ -697,18 +722,38 @@ export default function RevisionPlanillaPage() {
         queryClient.setQueryData(["empleados-naf-revision-detalle", detalleParams], ctx.previous);
       }
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["empleados-naf-revision-detalle", detalleParams] });
+    onSuccess: (body, payload) => {
+      const flags = body.data.checklist;
+      queryClient.setQueryData<DetalleResponse>(
+        ["empleados-naf-revision-detalle", detalleParams],
+        (current) => {
+          if (!current?.data?.detalle) return current;
+          return {
+            ...current,
+            data: {
+              ...current.data,
+              detalle: {
+                ...current.data.detalle,
+                porPlanilla: current.data.detalle.porPlanilla.map((row) =>
+                  row.noCia === payload.noCia && row.codPla === payload.codPla
+                    ? { ...row, ...flags }
+                    : row,
+                ),
+              },
+            },
+          };
+        },
+      );
     },
   });
 
   const planillaActionBody = (row: RevisionRow) => {
-    if (!selectedRango) throw new Error("Seleccione una quincena");
+    if (!appliedRango) throw new Error("Seleccione una quincena");
     return {
       noCia: row.noCia,
       codPla: row.codPla,
-      fDesde: selectedRango.fDesde,
-      fHasta: selectedRango.fHasta,
+      fDesde: appliedRango.fDesde,
+      fHasta: appliedRango.fHasta,
     };
   };
 
@@ -764,7 +809,7 @@ export default function RevisionPlanillaPage() {
   });
 
   const downloadArchivo = async (row: RevisionRow, canal: "BN" | "DAV" | "CK") => {
-    if (!selectedRango) return;
+    if (!appliedRango) return;
     const sp = new URLSearchParams(planillaActionBody(row));
     sp.set("canal", canal);
     const res = await fetch(`/api/empleados-naf/nomina/revision-planilla/archivo?${sp}`);
@@ -945,8 +990,8 @@ export default function RevisionPlanillaPage() {
     [filteredBySearch, columnFilters, columnDefs],
   );
 
-  const exportStamp = selectedRango
-    ? `${selectedRango.ano}_${formatDate(selectedRango.fDesde).replace(/\//g, "-")}`
+  const exportStamp = appliedRango
+    ? `${appliedRango.ano}_${formatDate(appliedRango.fDesde).replace(/\//g, "-")}`
     : "all";
 
   const totales = detalle?.totales;
@@ -1114,7 +1159,15 @@ export default function RevisionPlanillaPage() {
         }
       />
 
-      <div className="flex flex-col xl:flex-row flex-wrap gap-3 items-stretch xl:items-center">
+      <div
+        className="flex flex-col xl:flex-row flex-wrap gap-3 items-stretch xl:items-center"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && canApply) {
+            e.preventDefault();
+            applyFilters();
+          }
+        }}
+      >
         <MultiSelect
           options={empresaOptions}
           value={selectedEmpresas}
@@ -1195,6 +1248,20 @@ export default function RevisionPlanillaPage() {
           className="w-full xl:w-[360px]"
         />
 
+        <Button
+          type="button"
+          onClick={applyFilters}
+          disabled={!canApply || detalleFetching}
+          title="Carga los totales y la tabla con los filtros elegidos"
+        >
+          {detalleFetching ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Filter className="h-4 w-4 mr-2" />
+          )}
+          {detalleFetching ? "Cargando…" : "Aplicar"}
+        </Button>
+
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
@@ -1249,13 +1316,20 @@ export default function RevisionPlanillaPage() {
               : "Planilla marcada como pagada."}
         </p>
       )}
-      {selectedRangoMeta && (
+      {(appliedRango || filtersDirty) && (
         <p className="text-sm text-slate-600">
-          Quincena {formatDate(selectedRangoMeta.fDesde)} – {formatDate(selectedRangoMeta.fHasta)}
-          {selectedEmpresas.length > 1
-            ? ` · ${selectedRangoMeta.empresas}/${selectedEmpresas.length} empresas con datos en este rango`
-            : ""}
-          {selectedRangoMeta.descri ? ` · ${selectedRangoMeta.descri}` : ""}
+          {appliedRango
+            ? `Quincena ${formatDate(appliedRango.fDesde)} – ${formatDate(appliedRango.fHasta)}`
+            : selectedRango
+              ? `Quincena ${formatDate(selectedRango.fDesde)} – ${formatDate(selectedRango.fHasta)}`
+              : ""}
+          {!filtersDirty && selectedRangoMeta && appliedEmpresas.length > 1
+            ? ` · ${selectedRangoMeta.empresas}/${appliedEmpresas.length} empresas con datos en este rango`
+            : appliedEmpresas.length > 1
+              ? ` · ${appliedEmpresas.length} empresas`
+              : ""}
+          {!filtersDirty && selectedRangoMeta?.descri ? ` · ${selectedRangoMeta.descri}` : ""}
+          {filtersDirty ? " · Filtros sin aplicar" : ""}
           {detalleFetching ? " · Actualizando…" : ""}
         </p>
       )}
@@ -1327,16 +1401,18 @@ export default function RevisionPlanillaPage() {
                     </td>
                   </tr>
                 )}
-                {!detalleLoading && selectedEmpresas.length === 0 && (
+                {!detalleLoading && appliedEmpresas.length === 0 && (
                   <tr>
                     <td colSpan={columnDefs.length} className="p-6 text-center text-muted-foreground">
-                      Seleccione empresas y un periodo de planilla para revisar.
+                      {canApply
+                        ? "Pulse Aplicar para cargar la revisión con los filtros elegidos."
+                        : "Seleccione empresas y un periodo, luego pulse Aplicar."}
                     </td>
                   </tr>
                 )}
                 {!detalleLoading &&
-                  selectedEmpresas.length > 0 &&
-                  selectedRango &&
+                  appliedEmpresas.length > 0 &&
+                  appliedRango &&
                   visibleRows.length === 0 && (
                     <tr>
                       <td colSpan={columnDefs.length} className="p-6 text-center text-muted-foreground">
@@ -1711,8 +1787,8 @@ export default function RevisionPlanillaPage() {
                 : "Detalle de planilla"}
             </DialogTitle>
             <DialogDescription>
-              {selectedRango
-                ? `Quincena ${formatDate(selectedRango.fDesde)} – ${formatDate(selectedRango.fHasta)}`
+              {appliedRango
+                ? `Quincena ${formatDate(appliedRango.fDesde)} – ${formatDate(appliedRango.fHasta)}`
                 : ""}
               {planillaDetalle?.estadoLabel ? ` · ${planillaDetalle.estadoLabel}` : ""}
               {planillaDetalle?.fuente === "abierta" ? " · En vivo NAF" : planillaDetalle ? " · Histórico NAF" : ""}
@@ -1853,8 +1929,8 @@ export default function RevisionPlanillaPage() {
                     pagoTarget.nominaNombre ? ` · ${pagoTarget.nominaNombre}` : ""
                   }`
                 : ""}
-              {selectedRango
-                ? ` · Quincena ${formatDate(selectedRango.fDesde)} – ${formatDate(selectedRango.fHasta)}`
+              {appliedRango
+                ? ` · Quincena ${formatDate(appliedRango.fDesde)} – ${formatDate(appliedRango.fHasta)}`
                 : ""}
             </DialogDescription>
           </DialogHeader>

@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
     const fDesde = sp.get("fDesde");
     const fHasta = sp.get("fHasta");
     const codPlas = parseCodPlas(sp);
+    const catalogOnly = sp.get("catalog") === "1" || sp.get("detalle") === "0";
 
     const [empresas, lastSync] = await Promise.all([
       listRevisionPlanillaEmpresas(),
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
         ? await listRevisionPlanillaPlanillas(noCias, fDesde ?? undefined, fHasta ?? undefined)
         : [];
 
-    if (fDesde && fHasta && noCias.length > 0) {
+    if (fDesde && fHasta && noCias.length > 0 && !catalogOnly) {
       const detalle = await getRevisionPlanillaByDateRange(fDesde, fHasta, noCias, {
         codPlas: codPlas.length > 0 ? codPlas : undefined,
       });
