@@ -281,7 +281,7 @@ export const cxcDocumentInclude = {
  * - la factura ligada ya está cerrada (FACTURADO/COBRADO con closedAt).
  * Nunca mostrar cobro de una factura mensual aún abierta.
  */
-const cxcVisibleFacturaFilter: Prisma.CxcDocumentoWhereInput = {
+export const cxcVisibleFacturaFilter: Prisma.CxcDocumentoWhereInput = {
   OR: [
     { facturaMensualId: null },
     {

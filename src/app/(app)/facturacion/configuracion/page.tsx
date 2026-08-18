@@ -404,7 +404,7 @@ export default function FacturacionCobroConfigPage() {
             <span className="text-sm">
               <span className="font-medium text-slate-800">Recordatorio por vencer automático</span>
               <span className="block text-slate-500 mt-0.5">
-                Para facturas pendientes que vencen dentro de la ventana; reenvía cada N días (intervalo abajo).
+                Para documentos pendientes en Cuentas por cobrar que vencen dentro de la ventana; reenvía cada N días (intervalo abajo).
               </span>
             </span>
           </label>
@@ -420,7 +420,7 @@ export default function FacturacionCobroConfigPage() {
             <span className="text-sm">
               <span className="font-medium text-slate-800">Cobro automático tras vencimiento</span>
               <span className="block text-slate-500 mt-0.5">
-                Desde el día de vencimiento, reenvía el correo de cobro cada N días hasta registrar el pago.
+                Desde el día de vencimiento, reenvía el correo de cobro cada N días mientras el documento siga pendiente en Cuentas por cobrar.
               </span>
             </span>
           </label>

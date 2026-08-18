@@ -1,8 +1,11 @@
 import { prisma } from "@/modules/core/db/prisma";
 import { daysUntilDue } from "@/lib/utils/due-date-urgency";
-import { pickBillingContact } from "@/modules/presupuestos/services/cuentas-por-cobrar";
+import {
+  cxcListWhere,
+  pickBillingContact,
+} from "@/modules/presupuestos/services/cuentas-por-cobrar";
 import { ensureFacturacionCobroSettingsRow } from "@/modules/presupuestos/services/facturacion-cobro-settings";
-import { sendCollectionEmailForFactura } from "@/modules/presupuestos/services/facturacion-cobro-email";
+import { sendCollectionEmailForCxcDocumento } from "@/modules/presupuestos/services/facturacion-cobro-email";
 
 function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -45,7 +48,7 @@ export function shouldSendAutoCollection(
 }
 
 export type AutoCobroEmailFailure = {
-  facturaId: string;
+  cxcDocumentoId: string;
   kind: "due_reminder" | "collection";
   message: string;
 };
@@ -56,6 +59,14 @@ export type AutoCobroEmailRunResult = {
   collection: { sent: number; skipped: number; failed: AutoCobroEmailFailure[] };
   disabled: { dueReminder: boolean; collection: boolean };
 };
+
+function resolveCxcDueDate(doc: {
+  dueDate: Date | null;
+  cxcExpectedPaymentDate: Date | null;
+  documentDate: Date | null;
+}): Date | null {
+  return doc.dueDate ?? doc.cxcExpectedPaymentDate ?? doc.documentDate;
+}
 
 export async function runAutomaticCobroEmails(asOf: Date = new Date()): Promise<AutoCobroEmailRunResult> {
   const settings = await ensureFacturacionCobroSettingsRow();
@@ -73,11 +84,13 @@ export async function runAutomaticCobroEmails(asOf: Date = new Date()): Promise<
     return result;
   }
 
-  const facturas = await prisma.facturaMensual.findMany({
-    where: { status: "FACTURADO" },
+  const documentos = await prisma.cxcDocumento.findMany({
+    where: cxcListWhere({ filter: "pending" }),
     select: {
       id: true,
       dueDate: true,
+      cxcExpectedPaymentDate: true,
+      documentDate: true,
       lastDueReminderEmailAt: true,
       lastCollectionEmailAt: true,
       contract: {
@@ -99,32 +112,39 @@ export async function runAutomaticCobroEmails(asOf: Date = new Date()): Promise<
     },
   });
 
-  for (const factura of facturas) {
-    const contact = pickBillingContact(factura.contract?.clientContacts ?? []);
+  for (const doc of documentos) {
+    const contact = pickBillingContact(doc.contract?.clientContacts ?? []);
     if (!contact?.email?.trim()) {
       if (settings.autoDueReminderEnabled) result.dueReminder.skipped += 1;
       if (settings.autoCollectionEnabled) result.collection.skipped += 1;
       continue;
     }
 
-    const daysLeft = daysUntilDue(factura.dueDate, asOf);
+    const dueDate = resolveCxcDueDate(doc);
+    if (!dueDate) {
+      if (settings.autoDueReminderEnabled) result.dueReminder.skipped += 1;
+      if (settings.autoCollectionEnabled) result.collection.skipped += 1;
+      continue;
+    }
+
+    const daysLeft = daysUntilDue(dueDate, asOf);
 
     if (settings.autoDueReminderEnabled) {
       if (
         shouldSendAutoDueReminder(
-          factura.lastDueReminderEmailAt,
+          doc.lastDueReminderEmailAt,
           daysLeft,
           settings.dueReminderDaysBefore,
           settings.collectionEmailIntervalDays,
           asOf
         )
       ) {
-        const send = await sendCollectionEmailForFactura(factura.id, "due_reminder");
+        const send = await sendCollectionEmailForCxcDocumento(doc.id, "due_reminder");
         if (send.ok) {
           result.dueReminder.sent += 1;
         } else {
           result.dueReminder.failed.push({
-            facturaId: factura.id,
+            cxcDocumentoId: doc.id,
             kind: "due_reminder",
             message: send.message,
           });
@@ -137,18 +157,18 @@ export async function runAutomaticCobroEmails(asOf: Date = new Date()): Promise<
     if (settings.autoCollectionEnabled) {
       if (
         shouldSendAutoCollection(
-          factura.lastCollectionEmailAt,
+          doc.lastCollectionEmailAt,
           daysLeft,
           settings.collectionEmailIntervalDays,
           asOf
         )
       ) {
-        const send = await sendCollectionEmailForFactura(factura.id, "collection");
+        const send = await sendCollectionEmailForCxcDocumento(doc.id, "collection");
         if (send.ok) {
           result.collection.sent += 1;
         } else {
           result.collection.failed.push({
-            facturaId: factura.id,
+            cxcDocumentoId: doc.id,
             kind: "collection",
             message: send.message,
           });

@@ -94,67 +94,108 @@ export type SendCobroEmailResult =
       message: string;
     };
 
-async function loadFacturaForEmail(facturaId: string) {
-  return prisma.facturaMensual.findUnique({
-    where: { id: facturaId },
-    include: {
-      contract: {
+function toAmount(v: { toString(): string } | number | null | undefined): number | null {
+  if (v === null || v === undefined) return null;
+  return typeof v === "number" ? v : parseFloat(v.toString());
+}
+
+function resolveCxcDueDate(doc: {
+  dueDate: Date | null;
+  cxcExpectedPaymentDate: Date | null;
+  documentDate: Date | null;
+}): Date | null {
+  return doc.dueDate ?? doc.cxcExpectedPaymentDate ?? doc.documentDate;
+}
+
+function periodLabel(doc: {
+  servicePeriodDate: Date | null;
+  documentDate: Date | null;
+  facturaMensual: { periodMonth: number; periodYear: number } | null;
+}): string {
+  if (doc.facturaMensual) {
+    return `${doc.facturaMensual.periodMonth}/${doc.facturaMensual.periodYear}`;
+  }
+  const ref = doc.servicePeriodDate ?? doc.documentDate;
+  if (!ref) return "—";
+  return `${ref.getUTCMonth() + 1}/${ref.getUTCFullYear()}`;
+}
+
+const cxcEmailInclude = {
+  contract: {
+    select: {
+      licitacionNo: true,
+      clientContacts: {
+        orderBy: { sortOrder: "asc" as const },
         select: {
-          licitacionNo: true,
-          clientContacts: {
-            orderBy: { sortOrder: "asc" },
-            select: {
-              name: true,
-              jobTitle: true,
-              phone: true,
-              phone2: true,
-              email: true,
-              isBillingContact: true,
-              sortOrder: true,
-            },
-          },
+          name: true,
+          jobTitle: true,
+          phone: true,
+          phone2: true,
+          email: true,
+          isBillingContact: true,
+          sortOrder: true,
         },
       },
     },
+  },
+  facturaMensual: {
+    select: { periodMonth: true, periodYear: true },
+  },
+};
+
+async function loadCxcForEmail(documentoId: string) {
+  return prisma.cxcDocumento.findUnique({
+    where: { id: documentoId },
+    include: cxcEmailInclude,
   });
 }
 
-export async function sendCollectionEmailForFactura(
-  facturaId: string,
+export async function sendCollectionEmailForCxcDocumento(
+  documentoId: string,
   kind: CobroEmailKind = "collection",
   overrides?: CobroEmailTemplateOverrides
 ): Promise<SendCobroEmailResult> {
-  const factura = await loadFacturaForEmail(facturaId);
+  const doc = await loadCxcForEmail(documentoId);
 
-  if (!factura) {
-    return { ok: false, code: "NOT_FOUND", message: "Factura no encontrada" };
+  if (!doc) {
+    return { ok: false, code: "NOT_FOUND", message: "Documento de cuentas por cobrar no encontrado" };
   }
 
-  if (factura.status !== "FACTURADO") {
+  const saldo = toAmount(doc.saldo) ?? 0;
+  if (doc.status !== "PENDIENTE" || saldo <= 0) {
     return {
       ok: false,
       code: "INVALID_STATUS",
-      message: "Solo se pueden enviar correos a facturas pendientes de pago (estado Facturado)",
+      message: "Solo se envían correos a documentos pendientes de cobro en cuentas por cobrar",
     };
   }
 
-  const daysLeft = daysUntilDue(factura.dueDate);
+  const dueDate = resolveCxcDueDate(doc);
+  if (!dueDate) {
+    return {
+      ok: false,
+      code: "NOT_FOUND",
+      message: "El documento no tiene fecha de vencimiento",
+    };
+  }
+
+  const daysLeft = daysUntilDue(dueDate);
   if (kind === "due_reminder" && daysLeft <= 0) {
     return {
       ok: false,
       code: "ALREADY_OVERDUE",
-      message: "La factura ya venció. Use el correo de cobro por vencimiento.",
+      message: "El documento ya venció. Use el correo de cobro por vencimiento.",
     };
   }
   if (kind === "collection" && daysLeft > 0) {
     return {
       ok: false,
       code: "NOT_DUE_YET",
-      message: "La factura aún no vence. Use el recordatorio por vencer.",
+      message: "El documento aún no vence. Use el recordatorio por vencer.",
     };
   }
 
-  const billingContact = pickBillingContact(factura.contract?.clientContacts ?? []);
+  const billingContact = pickBillingContact(doc.contract?.clientContacts ?? []);
   if (!billingContact?.email?.trim()) {
     return {
       ok: false,
@@ -184,12 +225,12 @@ export async function sendCollectionEmailForFactura(
 
   const values = buildCobroEmailTemplateValues({
     contactoNombre: billingContact.name,
-    cliente: factura.clientNameCopied,
-    licitacion: factura.contract?.licitacionNo ?? "",
-    periodo: `${factura.periodMonth}/${factura.periodYear}`,
-    numeroFactura: factura.invoiceNumber?.trim() || "—",
-    total: Number(factura.totalCalculated),
-    dueDate: factura.dueDate,
+    cliente: doc.clientName,
+    licitacion: doc.contract?.licitacionNo ?? "",
+    periodo: periodLabel(doc),
+    numeroFactura: doc.invoiceNumber?.trim() || doc.documentNumber || "—",
+    total: toAmount(doc.montoOriginal) ?? saldo,
+    dueDate,
   });
 
   const { subject, text } = buildCobroEmailContent(settings, values, kind, overrides);
@@ -213,15 +254,44 @@ export async function sendCollectionEmailForFactura(
   }
 
   const now = new Date();
-  await prisma.facturaMensual.update({
-    where: { id: facturaId },
-    data:
-      kind === "due_reminder"
-        ? { lastDueReminderEmailAt: now }
-        : { lastCollectionEmailAt: now, collectionEmailCount: { increment: 1 } },
+  const emailStamp =
+    kind === "due_reminder"
+      ? { lastDueReminderEmailAt: now }
+      : { lastCollectionEmailAt: now, collectionEmailCount: { increment: 1 as const } };
+
+  await prisma.cxcDocumento.update({
+    where: { id: documentoId },
+    data: emailStamp,
   });
+  if (doc.facturaMensualId) {
+    await prisma.facturaMensual.update({
+      where: { id: doc.facturaMensualId },
+      data: emailStamp,
+    });
+  }
 
   return { ok: true, sentTo: to, cc };
+}
+
+/** Compat: busca el CxC ligado y envía según estado de cuentas por cobrar. */
+export async function sendCollectionEmailForFactura(
+  facturaId: string,
+  kind: CobroEmailKind = "collection",
+  overrides?: CobroEmailTemplateOverrides
+): Promise<SendCobroEmailResult> {
+  const cxc = await prisma.cxcDocumento.findFirst({
+    where: { facturaMensualId: facturaId, docType: { in: ["FC", "FM"] } },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!cxc) {
+    return {
+      ok: false,
+      code: "NOT_FOUND",
+      message: "No hay documento de cuentas por cobrar para esta factura",
+    };
+  }
+  return sendCollectionEmailForCxcDocumento(cxc.id, kind, overrides);
 }
 
 export function sampleCobroTemplateValues(kind: CobroEmailKind): Record<string, string> {

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/api/middleware";
 import { badRequest, forbidden, ok, unauthorized } from "@/lib/api/response";
 import { hasPermission } from "@/lib/permissions/check";
-import { sendCollectionEmailForFactura } from "@/modules/presupuestos/services/facturacion-cobro-email";
+import { sendCollectionEmailForCxcDocumento } from "@/modules/presupuestos/services/facturacion-cobro-email";
 
 const bodySchema = z.object({
   type: z.enum(["collection", "due_reminder"]).default("collection"),
@@ -27,7 +27,7 @@ export async function POST(
     /* body vacío → collection */
   }
 
-  const result = await sendCollectionEmailForFactura(id, kind);
+  const result = await sendCollectionEmailForCxcDocumento(id, kind);
   if (!result.ok) {
     return badRequest(result.message);
   }
