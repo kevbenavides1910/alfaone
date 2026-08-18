@@ -3,10 +3,14 @@ import { prisma } from "@/modules/core/db/prisma";
 import { withNafOracleConnection } from "@/modules/empleados-naf/services/oracle-client";
 import { listNafDocuments, type NafDocumentoRow } from "@/modules/naf-documentos/services/list-naf-documents";
 import { resolveEmisionSubtotals } from "@/modules/presupuestos/business/administration-billing-amount";
+import {
+  calculateInvoiceTotal,
+  computeAdministrationIvaTotals,
+  extractBillingLineCatalog,
+} from "@/modules/presupuestos/business/billing-line-iva";
 import { resolveContractMonthlyBilling } from "@/modules/presupuestos/business/contractPeriodBilling";
 import { addDaysUtc } from "@/modules/presupuestos/import/cxc-rows";
 import {
-  calculateInvoiceTotal,
   calendarDayUtc,
   defaultDueDateFromIssue,
 } from "@/modules/presupuestos/services/facturacion-cobro";
@@ -368,12 +372,14 @@ export async function recomputeEmisionFromNafLinks(
       id: true,
       facturaMensualId: true,
       invoiceReceivedAt: true,
+      dueDate: true,
       facturaMensual: {
         select: {
           id: true,
           invoiceReceivedAt: true,
           dueDate: true,
           expectedIssueDate: true,
+          _count: { select: { emisiones: true } },
         },
       },
     },
@@ -388,12 +394,15 @@ export async function recomputeEmisionFromNafLinks(
     };
   }
 
+  const isolate = emision.facturaMensual._count.emisiones > 1;
+
   const emisionData: {
     subtotalFacturadoNaf: Prisma.Decimal;
     totalFacturadoNaf: Prisma.Decimal;
     invoiceNumber: string | null;
     documentNumber: string | null;
     invoiceReceivedAt?: Date;
+    dueDate?: Date;
   } = {
     subtotalFacturadoNaf: new Prisma.Decimal(signedSubtotal.toFixed(2)),
     totalFacturadoNaf: new Prisma.Decimal(signedTotal.toFixed(2)),
@@ -406,17 +415,18 @@ export async function recomputeEmisionFromNafLinks(
     documentNumber?: string | null;
     invoiceReceivedAt?: Date;
     dueDate?: Date;
-  } = {
-    invoiceNumber: picked.invoiceNumber,
-    documentNumber: picked.documentNumber,
-  };
+  } = isolate
+    ? {}
+    : {
+        invoiceNumber: picked.invoiceNumber,
+        documentNumber: picked.documentNumber,
+      };
 
   if (applyNafDates && picked.nafFecha) {
-    const hasReceived =
-      emision.invoiceReceivedAt != null || emision.facturaMensual.invoiceReceivedAt != null;
+    const hasReceived = emision.invoiceReceivedAt != null;
     if (!hasReceived) {
       emisionData.invoiceReceivedAt = picked.nafFecha;
-      parentData.invoiceReceivedAt = picked.nafFecha;
+      if (!isolate) parentData.invoiceReceivedAt = picked.nafFecha;
     }
 
     const plazo =
@@ -424,12 +434,14 @@ export async function recomputeEmisionFromNafLinks(
         ? Math.trunc(options.plazoDays)
         : null;
     if (plazo != null && plazo >= 0) {
-      const currentDue = emision.facturaMensual.dueDate;
+      const currentDue = isolate ? emision.dueDate : emision.facturaMensual.dueDate;
       const defaultDue = defaultDueDateFromIssue(emision.facturaMensual.expectedIssueDate);
       const stillDefault =
         !currentDue || calendarDayUtc(currentDue) === calendarDayUtc(defaultDue);
       if (stillDefault) {
-        parentData.dueDate = addDaysUtc(picked.nafFecha, plazo);
+        const nextDue = addDaysUtc(picked.nafFecha, plazo);
+        emisionData.dueDate = nextDue;
+        if (!isolate) parentData.dueDate = nextDue;
       }
     }
   }
@@ -488,7 +500,7 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
                 select: {
                   billingLineId: true,
                   monthlyAmount: true,
-                  billingLine: { select: { monthlyAmount: true } },
+                  billingLine: { select: { monthlyAmount: true, appliesIva: true } },
                 },
               },
             },
@@ -511,6 +523,7 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
     select: {
       monthlyBilling: true,
       hiringType: true,
+      billingLines: { select: { id: true, monthlyAmount: true, appliesIva: true } },
       billingHistory: { select: { periodMonth: true, monthlyBilling: true }, orderBy: { periodMonth: "asc" } },
       demandBilling: {
         where: { periodYear: factura.periodYear, periodMonth: factura.periodMonth },
@@ -548,6 +561,22 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
     });
   }
 
+  const billingCatalog =
+    contractBilling?.billingLines && contractBilling.billingLines.length > 0
+      ? contractBilling.billingLines
+      : extractBillingLineCatalog(administrations);
+
+  function emisionTotalForAdmin(adminId: string | null | undefined, baseSubtotal: number): number {
+    if (adminId) {
+      const admin = administrations.find((a) => a.id === adminId);
+      if (admin) {
+        const mixed = computeAdministrationIvaTotals(admin, billingCatalog, ivaPct);
+        if (mixed) return mixed.total;
+      }
+    }
+    return calculateInvoiceTotal(baseSubtotal, ivaPct);
+  }
+
   let sumSubtotal = 0;
   let sumTotal = 0;
   factura.emisiones.forEach((e, idx) => {
@@ -566,7 +595,7 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
       (factura.emisiones.length === 1 ? baselineSubtotal : 0);
     const sub = emSub ?? 0;
     sumSubtotal += sub;
-    sumTotal += calculateInvoiceTotal(sub, ivaPct);
+    sumTotal += emisionTotalForAdmin(e.contractAdministrationId, sub);
   });
 
   // Only overwrite parent montos when there is at least one NAF link, or when clearing
@@ -592,7 +621,7 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
               (e.contractAdministrationId
                 ? emisionSubtotalsByAdmin.get(e.contractAdministrationId)
                 : undefined) ?? 0;
-            return calculateInvoiceTotal(emSub, ivaPct);
+            return emisionTotalForAdmin(e.contractAdministrationId, emSub);
           })();
     await syncCxcFromFacturaEmision(db, factura.id, e.id, round2(total));
   }
@@ -624,7 +653,10 @@ export async function linkNafDocumento(
 ): Promise<LinkNafResult> {
   const emision = await db.facturaMensualEmision.findFirst({
     where: { id: input.emisionId, facturaMensualId: input.facturaId },
-    select: { id: true },
+    select: {
+      id: true,
+      facturaMensual: { select: { _count: { select: { emisiones: true } } } },
+    },
   });
   if (!emision) {
     return { ok: false, code: "NOT_FOUND", message: "Emisión no encontrada en esta factura" };
@@ -704,6 +736,7 @@ export async function linkNafDocumento(
   });
 
   // User-selected form dates win over NAF FECHA/PLAZO defaults.
+  // Con varias administraciones no se escriben en el padre (se pegaban en las demás).
   const formDates: {
     invoiceReceivedAt?: Date | null;
     dueDate?: Date;
@@ -715,14 +748,15 @@ export async function linkNafDocumento(
     formDates.dueDate = input.dueDate;
   }
   if (Object.keys(formDates).length > 0) {
-    await db.facturaMensual.update({
-      where: { id: input.facturaId },
+    await db.facturaMensualEmision.update({
+      where: { id: input.emisionId },
       data: formDates,
     });
-    if (formDates.invoiceReceivedAt !== undefined) {
-      await db.facturaMensualEmision.update({
-        where: { id: input.emisionId },
-        data: { invoiceReceivedAt: formDates.invoiceReceivedAt },
+    const isolate = emision.facturaMensual._count.emisiones > 1;
+    if (!isolate) {
+      await db.facturaMensual.update({
+        where: { id: input.facturaId },
+        data: formDates,
       });
     }
   }

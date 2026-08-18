@@ -17,12 +17,12 @@ type CxcRowForFilter = {
   totalCalculated: number | null;
   invoiceNumber: string | null;
   dueDate: string;
-  provisionalReceiptNumber: string | null;
-  provisionalPaymentAmount: number | null;
+  provisionalReceiptNumber?: string | null;
+  provisionalPaymentAmount?: number | null;
   totalAbonos?: number;
   abonos?: { receiptNumber: string | null }[];
-  remainingBalance: number | null;
-  hasPartialPayment: boolean;
+  remainingBalance?: number | null;
+  hasPartialPayment?: boolean;
   collectionEmailCount: number;
   cxcObservations: string | null;
   paymentPending: boolean;
@@ -84,6 +84,7 @@ export function expandFacturasForList(rows: FacturaMensualRow[]): FacturaListExp
       continue;
     }
     emisiones.forEach((em, idx) => {
+      const multi = emisiones.length > 1;
       out.push({
         ...factura,
         listKey: `${factura.id}-${em.id}`,
@@ -95,6 +96,10 @@ export function expandFacturasForList(rows: FacturaMensualRow[]): FacturaListExp
         emisionTotal: emisiones.length,
         status: em.status ?? factura.status,
         closedAt: em.closedAt ?? factura.closedAt,
+        invoiceNumber: em.invoiceNumber ?? (multi ? null : factura.invoiceNumber),
+        documentNumber: em.documentNumber ?? (multi ? null : factura.documentNumber),
+        invoiceReceivedAt: em.invoiceReceivedAt ?? (multi ? null : factura.invoiceReceivedAt),
+        dueDate: em.dueDate ?? factura.dueDate,
       });
     });
   }
@@ -1055,8 +1060,13 @@ export function filterFacturacionRows(rows: FacturaListExpandedRow[], f: Factura
         .toLowerCase();
       if (!haystack.includes(q)) return false;
     }
+    if (!matchesFilter(row.clientNameCopied, f.client)) return false;
+    if (!matchesFilter(row.licitacionNo, f.licitacion)) return false;
     if (!matchesFilter(row.administrationName, f.administration)) return false;
     if (!matchesFilter(row.zoneName, f.zone)) return false;
+    if (!matchesDateRange(row.expectedIssueDate, f.expectedFrom, f.expectedTo)) return false;
+    if (!matchesDateRange(row.closedAt, f.issuedFrom, f.issuedTo)) return false;
+    if (!matchesDateRange(row.invoiceReceivedAt, f.receivedFrom, f.receivedTo)) return false;
     if (!matchesFilter(HIRING_TYPE_LABELS[row.hiringTypeCopied ?? "FIXED"], f.hiring)) return false;
     if (
       !matchesFilter(
@@ -1065,7 +1075,13 @@ export function filterFacturacionRows(rows: FacturaListExpandedRow[], f: Factura
       )
     )
       return false;
-    if (!matchesFilter(`${row.ivaPctCopied.toFixed(2)}%`, f.iva)) return false;
+    if (
+      !matchesFilter(
+        row.ivaPctCopied != null ? `${Number(row.ivaPctCopied).toFixed(2)}%` : "",
+        f.iva
+      )
+    )
+      return false;
     if (
       !matchesFilter(
         row.amountDefined && row.totalCalculated != null ? formatCurrency(row.totalCalculated) : "",

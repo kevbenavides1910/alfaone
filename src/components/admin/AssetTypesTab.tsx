@@ -155,9 +155,9 @@ export function AssetTypesTab({ readOnly }: { readOnly?: boolean }) {
             type="button"
             variant="outline"
             className="gap-2"
-            disabled={rows.length === 0}
+            disabled={displayedRows.length === 0}
             onClick={() => {
-              const exportRows = rows.map((r) => {
+              const exportRows = displayedRows.map((r) => {
                 const fields: ExtraField[] = Array.isArray(r.fields) ? r.fields : [];
                 return {
                   Código: r.code,
@@ -178,7 +178,7 @@ export function AssetTypesTab({ readOnly }: { readOnly?: boolean }) {
             }}
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Exportar a Excel ({rows.length})
+            Exportar a Excel ({displayedRows.length})
           </Button>
           {!readOnly && (
             <Button className="gap-2" onClick={openAdd}>

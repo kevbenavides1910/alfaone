@@ -368,8 +368,8 @@ export default function DisciplinarioListPage() {
   }
 
   function handleExport() {
-    if (rows.length === 0) return;
-    const exportRows = rows.map((r) => ({
+    if (displayedRows.length === 0) return;
+    const exportRows = displayedRows.map((r) => ({
       "N° Apercibimiento": r.numero,
       "Fecha Emisión": formatDate(r.fechaEmision),
       Código: r.codigoEmpleado,
@@ -576,11 +576,11 @@ export default function DisciplinarioListPage() {
                 size="sm"
                 variant="outline"
                 className="h-9 gap-2"
-                disabled={rows.length === 0}
+                disabled={displayedRows.length === 0}
                 onClick={handleExport}
               >
                 <FileSpreadsheet className="h-4 w-4" />
-                Exportar a Excel ({rows.length})
+                Exportar a Excel ({displayedRows.length})
               </Button>
             </div>
           </CardContent>

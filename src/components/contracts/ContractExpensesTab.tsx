@@ -237,9 +237,9 @@ export function ContractExpensesTab({
             variant="outline"
             size="sm"
             className="h-8 gap-2"
-            disabled={displayedExpenses.length === 0}
+            disabled={filteredByColumn.length === 0}
             onClick={() => {
-              const exportRows = displayedExpenses.map((e) => {
+              const exportRows = filteredByColumn.map((e) => {
                 const ti = typeInfo(e.type, typeConfigs);
                 return {
                   Tipo: ti.label,
@@ -270,7 +270,7 @@ export function ContractExpensesTab({
                 Período: "",
                 Registrado: "",
                 "Registrado por": "",
-                Monto: total,
+                Monto: filteredByColumn.reduce((s, e) => s + e.amount, 0),
               };
               exportRowsToExcel({
                 filename: `gastos_contrato_${contractId}`,
@@ -282,7 +282,7 @@ export function ContractExpensesTab({
             }}
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Exportar a Excel ({displayedExpenses.length})
+            Exportar a Excel ({filteredByColumn.length})
           </Button>
         </div>
       </div>

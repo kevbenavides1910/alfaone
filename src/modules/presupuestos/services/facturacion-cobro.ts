@@ -10,11 +10,19 @@ import { resolveEmisionSubtotals } from "@/modules/presupuestos/business/adminis
 import { resolveContractMonthlyBilling } from "@/modules/presupuestos/business/contractPeriodBilling";
 import { normalizeRequirementKey } from "@/modules/presupuestos/business/contractBillingRequirementsDefaults";
 import { computeServicePeriodForInvoice } from "@/lib/utils/format";
+import {
+  calculateInvoiceTotal,
+  computeAdministrationIvaTotals,
+  extractBillingLineCatalog,
+  resolveFacturaTotalsFromBilling,
+} from "@/modules/presupuestos/business/billing-line-iva";
+import { administrationBillingLinesSelect } from "@/modules/presupuestos/services/facturacion-includes";
 
 type Db = Pick<
   PrismaClient,
   | "contract"
   | "contractAdministration"
+  | "contractBillingLine"
   | "facturaMensual"
   | "facturaRequisito"
   | "billingHistory"
@@ -23,6 +31,8 @@ type Db = Pick<
 >;
 
 export type { Db };
+
+export { calculateInvoiceTotal };
 
 function toNum(v: { toString(): string } | number): number {
   return typeof v === "number" ? v : parseFloat(v.toString());
@@ -37,10 +47,6 @@ export function expectedIssueDateForPeriod(
   const lastDay = new Date(Date.UTC(periodYear, periodMonth, 0)).getUTCDate();
   const day = Math.min(Math.max(1, billingDay), lastDay);
   return new Date(Date.UTC(periodYear, periodMonth - 1, day));
-}
-
-export function calculateInvoiceTotal(subtotal: number, ivaPct: number): number {
-  return Math.round(subtotal * (1 + ivaPct / 100) * 100) / 100;
 }
 
 /** Vencimiento por defecto: un mes calendario después de la fecha de emisión. */
@@ -444,6 +450,13 @@ export async function syncFacturasForPeriod(
     },
     include: {
       billingRequirements: { orderBy: { sortOrder: "asc" } },
+      billingLines: {
+        select: { id: true, monthlyAmount: true, appliesIva: true },
+      },
+      administrations: {
+        orderBy: { sortOrder: "asc" },
+        select: { billingLines: { select: administrationBillingLinesSelect } },
+      },
       billingHistory: {
         select: { periodMonth: true, monthlyBilling: true, updatedAt: true },
       },
@@ -462,7 +475,15 @@ export async function syncFacturasForPeriod(
     const subtotal = resolveSubtotalForContract(contract, periodYear, periodMonth, asOf);
     const payload = buildSyncPayload(contract, periodYear, periodMonth, subtotal);
     const amountDefined = subtotal !== null && subtotal > 0;
-    const total = amountDefined ? calculateInvoiceTotal(subtotal!, payload.ivaPct) : 0;
+    const totals = amountDefined
+      ? resolveFacturaTotalsFromBilling(
+          subtotal!,
+          payload.ivaPct,
+          contract.billingLines,
+          contract.administrations
+        )
+      : { subtotal: 0, ivaAmount: 0, total: 0 };
+    const total = totals.total;
 
     const existing = await db.facturaMensual.findUnique({
       where: {
@@ -487,7 +508,7 @@ export async function syncFacturasForPeriod(
         where: { id: existing.id },
         data: {
           status: nextStatus,
-          subtotalCopied: amountDefined ? subtotal! : 0,
+          subtotalCopied: amountDefined ? totals.subtotal : 0,
           ivaPctCopied: payload.ivaPct,
           totalCalculated: total,
           expectedIssueDate: payload.expectedIssueDate,
@@ -519,7 +540,7 @@ export async function syncFacturasForPeriod(
         dueDate: defaultDueDateFromIssue(payload.expectedIssueDate),
         lastPriceUpdateCopied: payload.lastPriceUpdateCopied,
         status: amountDefined ? "PENDIENTE" : "PENDIENTE_DEFINIR",
-        subtotalCopied: amountDefined ? subtotal! : 0,
+        subtotalCopied: amountDefined ? totals.subtotal : 0,
         ivaPctCopied: payload.ivaPct,
         totalCalculated: total,
         clientNameCopied: contract.client,
@@ -854,6 +875,7 @@ export function serializeFacturaMensual(
       invoiceNumber?: string | null;
       documentNumber?: string | null;
       invoiceReceivedAt?: Date | null;
+      dueDate?: Date | null;
       subtotalFacturadoNaf?: { toString(): string } | number | null;
       totalFacturadoNaf?: { toString(): string } | number | null;
       subtotalCopied?: number | null;
@@ -896,8 +918,16 @@ export function serializeFacturaMensual(
         billingLines: {
           billingLineId: string;
           monthlyAmount: { toString(): string } | null;
-          billingLine?: { monthlyAmount: { toString(): string } | null } | null;
+          billingLine?: {
+            monthlyAmount: { toString(): string } | null;
+            appliesIva?: boolean;
+          } | null;
         }[];
+      }[];
+      billingLines?: {
+        id: string;
+        monthlyAmount: { toString(): string } | null;
+        appliesIva: boolean;
       }[];
     };
   }
@@ -939,8 +969,37 @@ export function serializeFacturaMensual(
       : { billing: null, amountDefined: false };
   const contractVentaSubtotal =
     contractVenta.amountDefined && contractVenta.billing != null ? contractVenta.billing : null;
+  const billingCatalog =
+    row.contract?.billingLines && row.contract.billingLines.length > 0
+      ? row.contract.billingLines
+      : extractBillingLineCatalog(administrations);
+
+  function emisionTotalsForAdmin(
+    adminId: string | null | undefined,
+    baseSubtotal: number | null
+  ): { subtotal: number | null; total: number | null } {
+    if (baseSubtotal == null) return { subtotal: null, total: null };
+    if (adminId) {
+      const admin = administrations.find((a) => a.id === adminId);
+      if (admin) {
+        const mixed = computeAdministrationIvaTotals(admin, billingCatalog, ivaPct);
+        if (mixed) {
+          return { subtotal: mixed.subtotal, total: mixed.total };
+        }
+      }
+    }
+    return { subtotal: baseSubtotal, total: calculateInvoiceTotal(baseSubtotal, ivaPct) };
+  }
+
   const contractVentaTotal =
-    contractVentaSubtotal != null ? calculateInvoiceTotal(contractVentaSubtotal, ivaPct) : null;
+    contractVentaSubtotal != null
+      ? resolveFacturaTotalsFromBilling(
+          contractVentaSubtotal,
+          ivaPct,
+          billingCatalog,
+          administrations
+        ).total
+      : null;
   const nafParentSubtotal = (() => {
     const withNaf = emisiones.filter(
       (e) => e.nafDocumentos && e.nafDocumentos.length > 0 && e.subtotalFacturadoNaf != null
@@ -1057,12 +1116,11 @@ export function serializeFacturaMensual(
           : undefined) ??
         null;
       const emSubtotal = hasNaf && nafSubtotal != null ? nafSubtotal : contractEmSubtotal;
+      const emMixed = emisionTotalsForAdmin(e.contractAdministrationId, contractEmSubtotal);
       const emTotal =
         hasNaf && nafTotal != null
           ? nafTotal
-          : emSubtotal != null
-            ? calculateInvoiceTotal(emSubtotal, ivaPct)
-            : null;
+          : emMixed.total;
       const ventaDelta =
         emSubtotal != null && contractEmSubtotal != null
           ? Math.round((emSubtotal - contractEmSubtotal) * 100) / 100
@@ -1077,6 +1135,7 @@ export function serializeFacturaMensual(
         invoiceNumber: e.invoiceNumber ?? null,
         documentNumber: e.documentNumber ?? null,
         invoiceReceivedAt: e.invoiceReceivedAt?.toISOString() ?? null,
+        dueDate: e.dueDate?.toISOString() ?? null,
         status:
           row.status === "COBRADO"
             ? "COBRADO"
@@ -1088,8 +1147,7 @@ export function serializeFacturaMensual(
         subtotalFacturadoNaf: nafSubtotal,
         totalFacturadoNaf: nafTotal,
         contractVentaSubtotal: contractEmSubtotal,
-        contractVentaTotal:
-          contractEmSubtotal != null ? calculateInvoiceTotal(contractEmSubtotal, ivaPct) : null,
+        contractVentaTotal: emMixed.total,
         ventaFacturadoDelta: ventaDelta,
         nafLinks,
       };

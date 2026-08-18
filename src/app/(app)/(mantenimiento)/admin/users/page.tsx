@@ -333,9 +333,9 @@ export default function UsersPage() {
               type="button"
               variant="outline"
               className="gap-2"
-              disabled={users.length === 0}
+              disabled={displayedRows.length === 0}
               onClick={() => {
-                const exportRows = users.map((u) => ({
+                const exportRows = displayedRows.map((u) => ({
                   Nombre: u.name,
                   Email: u.email,
                   Rol: u.roleName ?? u.roleCode ?? "—",
@@ -352,7 +352,7 @@ export default function UsersPage() {
               }}
             >
               <FileSpreadsheet className="h-4 w-4" />
-              Exportar a Excel ({users.length})
+              Exportar a Excel ({displayedRows.length})
             </Button>
             <Button className="gap-2" onClick={openCreate}>
               <Plus className="h-4 w-4" /> Nuevo Usuario

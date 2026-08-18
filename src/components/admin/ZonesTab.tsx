@@ -163,9 +163,9 @@ export function ZonesTab({ readOnly }: { readOnly?: boolean }) {
             type="button"
             variant="outline"
             className="gap-2"
-            disabled={rows.length === 0}
+            disabled={displayedRows.length === 0}
             onClick={() => {
-              const exportRows = rows.map((z) => ({
+              const exportRows = displayedRows.map((z) => ({
                 Nombre: z.name,
                 Descripción: z.description ?? "",
                 "Administrador disciplinario": z.disciplinaryAdministrator ?? "",
@@ -183,7 +183,7 @@ export function ZonesTab({ readOnly }: { readOnly?: boolean }) {
             }}
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Exportar a Excel ({rows.length})
+            Exportar a Excel ({displayedRows.length})
           </Button>
           {!readOnly && (
             <Button className="gap-2" onClick={openAdd}>

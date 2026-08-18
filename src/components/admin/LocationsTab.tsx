@@ -187,9 +187,9 @@ export function LocationsTab({ readOnly }: { readOnly?: boolean }) {
           variant="outline"
           size="sm"
           className="gap-2 ml-auto"
-          disabled={filtered.length === 0}
+          disabled={displayed.length === 0}
           onClick={() => {
-            const exportRows = filtered.map((loc) => ({
+            const exportRows = displayed.map((loc) => ({
               Ubicación: loc.name,
               Descripción: loc.description ?? "",
               Contrato: loc.contract.licitacionNo,
@@ -208,7 +208,7 @@ export function LocationsTab({ readOnly }: { readOnly?: boolean }) {
           }}
         >
           <FileSpreadsheet className="h-4 w-4" />
-          Exportar a Excel ({filtered.length})
+          Exportar a Excel ({displayed.length})
         </Button>
       </div>
 

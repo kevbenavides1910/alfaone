@@ -24,6 +24,7 @@ import {
   appendCxcFilters,
   CxcListFilters,
   EMPTY_CXC_FILTERS,
+  filterCxcRows,
   type CxcSearchFilters,
 } from "@/components/facturacion/FacturacionListFilters";
 import type { DueDateUrgency } from "@/lib/utils/due-date-urgency";
@@ -277,14 +278,19 @@ export default function CuentasPorCobrarPage() {
     ];
   }, []);
 
+  const searchedRows = useMemo(
+    () => filterCxcRows(rows, searchFilters),
+    [rows, searchFilters]
+  );
+
   const displayedRows = useMemo(
     () =>
       filterRowsByColumnFilters(
-        rows,
+        searchedRows,
         columnFilters,
         columnDefs.map((c) => ({ key: c.key, getValue: c.getValue, mode: c.mode, filterable: c.filterable }))
       ),
-    [rows, columnDefs, columnFilters]
+    [searchedRows, columnDefs, columnFilters]
   );
 
   const numericTotals = useMemo(() => {
@@ -468,7 +474,7 @@ export default function CuentasPorCobrarPage() {
                 <TableColumnFilterHead
                   tableId="facturacion-cuentas-por-cobrar"
                   columns={columnDefs}
-                  rows={rows}
+                  rows={searchedRows}
                   filters={columnFilters}
                   onFilterChange={onColumnFilterChange}
                   filterRowClassName="bg-slate-50"

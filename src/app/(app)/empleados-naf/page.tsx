@@ -299,13 +299,13 @@ export default function EmpleadosNafPage() {
             onClick={() =>
               exportRowsToExcel({
                 filename: "empleados_naf_cuentas_bancarias",
-                rows: rows.map((r) => ({
+                rows: displayedRows.map((r) => ({
                   ...nafReportRowToExcel(r),
                   Estado: r.estado ?? "",
                 })),
               })
             }
-            disabled={!rows.length}
+            disabled={!displayedRows.length}
           >
             Exportar Excel
           </Button>

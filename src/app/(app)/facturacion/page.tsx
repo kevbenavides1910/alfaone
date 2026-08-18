@@ -31,10 +31,12 @@ import {
   EMPTY_FACTURACION_FILTERS,
   expandFacturasForList,
   FacturacionListFilters,
+  filterFacturacionRows,
   type FacturaListExpandedRow,
   type FacturacionSearchFilters,
 } from "@/components/facturacion/FacturacionListFilters";
 import { FacturaTimelinessBadge } from "@/components/facturacion/FacturaTimelinessBadge";
+import { getFacturaIvaAmount } from "@/components/facturacion/facturacion-amount-change";
 
 const MONTHS = [
   { value: 1, label: "Enero" },
@@ -64,6 +66,16 @@ const STATUS_VARIANT: Record<
 
 function currentYear() {
   return new Date().getFullYear();
+}
+
+function effectiveIvaPct(row: Parameters<typeof getFacturaIvaAmount>[0]): number {
+  const iva = getFacturaIvaAmount(row);
+  const sub = row.subtotalCopied;
+  if (iva != null && sub != null && sub > 0) {
+    return Math.round((iva / sub) * 10000) / 100;
+  }
+  const pct = Number(row.ivaPctCopied);
+  return Number.isFinite(pct) ? pct : 0;
 }
 
 export default function FacturacionPage() {
@@ -146,28 +158,56 @@ export default function FacturacionPage() {
       const em = row.emisionId
         ? row.emisiones?.find((e) => e.id === row.emisionId)
         : null;
-      if (em?.subtotalCopied != null && em.totalCalculated != null) {
+      if (em) {
+        const subtotalCopied =
+          em.subtotalCopied ?? (row.emisionTotal > 1 ? null : row.subtotalCopied);
+        const totalCalculated =
+          em.totalCalculated ?? (row.emisionTotal > 1 ? null : row.totalCalculated);
+        let contractVentaSubtotal = em.contractVentaSubtotal ?? null;
+        let contractVentaTotal = em.contractVentaTotal ?? null;
+        let ventaFacturadoDelta = em.ventaFacturadoDelta ?? null;
+        if (contractVentaSubtotal == null && row.contractVentaSubtotal != null) {
+          contractVentaSubtotal =
+            row.emisionTotal > 1
+              ? row.contractVentaSubtotal / row.emisionTotal
+              : row.contractVentaSubtotal;
+        }
+        if (contractVentaTotal == null && row.contractVentaTotal != null) {
+          contractVentaTotal =
+            row.emisionTotal > 1
+              ? row.contractVentaTotal / row.emisionTotal
+              : row.contractVentaTotal;
+        }
+        if (ventaFacturadoDelta == null && subtotalCopied != null && contractVentaSubtotal != null) {
+          ventaFacturadoDelta = subtotalCopied - contractVentaSubtotal;
+        }
         return {
           ...row,
-          subtotalCopied: em.subtotalCopied,
-          totalCalculated: em.totalCalculated,
-          contractVentaSubtotal: row.contractVentaSubtotal,
-          contractVentaTotal: row.contractVentaTotal,
-          ventaFacturadoDelta: row.ventaFacturadoDelta,
+          subtotalCopied,
+          totalCalculated,
+          contractVentaSubtotal,
+          contractVentaTotal,
+          ventaFacturadoDelta,
         };
       }
       if (!row.amountDefined || row.emisionTotal <= 1) return row;
       const share = 1 / row.emisionTotal;
+      const subtotalCopied = row.subtotalCopied != null ? row.subtotalCopied * share : null;
+      const contractVentaSubtotal =
+        row.contractVentaSubtotal != null ? row.contractVentaSubtotal * share : null;
+      const ventaFacturadoDelta =
+        subtotalCopied != null && contractVentaSubtotal != null
+          ? subtotalCopied - contractVentaSubtotal
+          : row.ventaFacturadoDelta != null
+            ? row.ventaFacturadoDelta * share
+            : null;
       return {
         ...row,
-        subtotalCopied: row.subtotalCopied != null ? row.subtotalCopied * share : null,
+        subtotalCopied,
         totalCalculated: row.totalCalculated != null ? row.totalCalculated * share : null,
-        contractVentaSubtotal:
-          row.contractVentaSubtotal != null ? row.contractVentaSubtotal * share : null,
-        contractVentaTotal:
-          row.contractVentaTotal != null ? row.contractVentaTotal * share : null,
-        ventaFacturadoDelta:
-          row.ventaFacturadoDelta != null ? row.ventaFacturadoDelta * share : null,
+        contractVentaSubtotal,
+        contractVentaTotal: row.contractVentaTotal != null ? row.contractVentaTotal * share : null,
+        ventaFacturadoDelta,
       };
     });
   }, [rows]);
@@ -177,7 +217,11 @@ export default function FacturacionPage() {
     { key: "administracion", label: "Administración", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => r.administrationName ?? "" },
     { key: "contratacion", label: "Contratación", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (r) => HIRING_TYPE_LABELS[r.hiringTypeCopied ?? "FIXED"] },
     { key: "subtotal", label: "Subtotal", align: "right", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => r.amountDefined && r.subtotalCopied != null ? formatCurrency(r.subtotalCopied) : "—" },
-    { key: "iva", label: "% IVA", align: "right", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => `${r.ivaPctCopied.toFixed(2)}%` },
+    { key: "iva", label: "% IVA", align: "right", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => `${effectiveIvaPct(r).toFixed(2)}%` },
+    { key: "ivaMonto", label: "Monto IVA", align: "right", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => {
+      const iva = getFacturaIvaAmount(r);
+      return r.amountDefined && iva != null ? formatCurrency(iva) : "—";
+    } },
     { key: "total", label: "Total", align: "right", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => r.amountDefined && r.totalCalculated != null ? formatCurrency(r.totalCalculated) : "—" },
     { key: "ventaContrato", label: "Venta contrato", align: "right", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => r.contractVentaSubtotal != null ? formatCurrency(r.contractVentaSubtotal) : "—" },
     { key: "diferenciaVenta", label: "Diferencia", align: "right", headerClassName: "text-right px-4 py-3 font-semibold text-slate-600", getValue: (r) => r.ventaFacturadoDelta != null ? formatCurrency(r.ventaFacturadoDelta) : "—" },
@@ -189,9 +233,14 @@ export default function FacturacionPage() {
     { key: "actions", label: "", filterable: false, headerClassName: "px-4 py-3", getValue: () => "" },
   ], []);
 
+  const searchedRows = useMemo(
+    () => filterFacturacionRows(expandedListRows, searchFilters),
+    [expandedListRows, searchFilters]
+  );
+
   const displayedRows = useMemo(
-    () => filterRowsByColumnFilters(expandedListRows, columnFilters, facturaColumnDefs),
-    [expandedListRows, columnFilters, facturaColumnDefs]
+    () => filterRowsByColumnFilters(searchedRows, columnFilters, facturaColumnDefs),
+    [searchedRows, columnFilters, facturaColumnDefs]
   );
 
   const numericTotals = useMemo(() => {
@@ -206,11 +255,12 @@ export default function FacturacionPage() {
     const deltaSum = withAmount.every((r) => r.ventaFacturadoDelta != null)
       ? withAmount.reduce((s, r) => s + (r.ventaFacturadoDelta ?? 0), 0)
       : null;
+    const ivaAmountSum = withAmount.reduce((s, r) => s + (getFacturaIvaAmount(r) ?? 0), 0);
     const weightedIvaPct =
       subtotalSum > 0
-        ? withAmount.reduce((s, r) => s + (r.subtotalCopied ?? 0) * r.ivaPctCopied, 0) / subtotalSum
+        ? withAmount.reduce((s, r) => s + (r.subtotalCopied ?? 0) * effectiveIvaPct(r), 0) / subtotalSum
         : null;
-    return { subtotalSum, totalSum, contractVentaSum, deltaSum, weightedIvaPct, withAmountCount: withAmount.length };
+    return { subtotalSum, totalSum, contractVentaSum, deltaSum, weightedIvaPct, ivaAmountSum, withAmountCount: withAmount.length };
   }, [displayedRows]);
 
   const columnFilterKeys = useMemo(
@@ -240,7 +290,8 @@ export default function FacturacionPage() {
         Administración: row.administrationName ?? "",
         Contratación: HIRING_TYPE_LABELS[row.hiringTypeCopied ?? "FIXED"],
         Subtotal: row.subtotalCopied ?? "",
-        "IVA %": row.ivaPctCopied,
+        "IVA %": effectiveIvaPct(row),
+        "Monto IVA": getFacturaIvaAmount(row) ?? "",
         Total: row.totalCalculated ?? "",
         "Venta contrato": row.contractVentaSubtotal ?? "",
         Diferencia: row.ventaFacturadoDelta ?? "",
@@ -250,7 +301,7 @@ export default function FacturacionPage() {
         "Últ. act. precio": formatDate(row.lastPriceUpdateCopied),
         Estado: FACTURA_MENSUAL_STATUS_LABELS[row.status],
       })),
-      columnWidths: [28, 16, 18, 14, 12, 8, 12, 14, 14, 16, 14, 14],
+      columnWidths: [28, 16, 18, 14, 8, 12, 12, 14, 14, 16, 14, 14],
     });
   }
 
@@ -388,7 +439,7 @@ export default function FacturacionPage() {
                   <TableColumnFilterHead
                     tableId="facturacion-listado"
                     columns={facturaColumnDefs}
-                    rows={expandedListRows}
+                    rows={searchedRows}
                     filters={columnFilters}
                     onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
                     headerRowClassName="border-b border-slate-200 bg-slate-50"
@@ -399,6 +450,7 @@ export default function FacturacionPage() {
                       contratacion: 110,
                       subtotal: 110,
                       iva: 70,
+                      ivaMonto: 110,
                       total: 110,
                       ventaContrato: 110,
                       diferenciaVenta: 100,
@@ -450,7 +502,13 @@ export default function FacturacionPage() {
                           : "—"}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
-                        {row.ivaPctCopied.toFixed(2)}%
+                        {effectiveIvaPct(row).toFixed(2)}%
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {(() => {
+                          const iva = getFacturaIvaAmount(row);
+                          return row.amountDefined && iva != null ? formatCurrency(iva) : "—";
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums font-medium">
                         {row.amountDefined && row.totalCalculated != null
@@ -539,6 +597,11 @@ export default function FacturacionPage() {
                     <td className="px-4 py-3 text-right tabular-nums">
                       {numericTotals.weightedIvaPct != null
                         ? `${numericTotals.weightedIvaPct.toFixed(2)}%`
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {numericTotals.withAmountCount > 0
+                        ? formatCurrency(numericTotals.ivaAmountSum)
                         : "—"}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">

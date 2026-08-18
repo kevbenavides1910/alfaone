@@ -2,7 +2,7 @@
 export const administrationBillingLinesSelect = {
   billingLineId: true,
   monthlyAmount: true,
-  billingLine: { select: { monthlyAmount: true } },
+  billingLine: { select: { monthlyAmount: true, appliesIva: true } },
 } as const;
 
 /** Include mínimo para serializar montos por emisión/administración. */
@@ -18,6 +18,9 @@ export const facturaListSerializeInclude = {
       },
       demandBilling: {
         select: { periodYear: true, periodMonth: true, monthlyBilling: true },
+      },
+      billingLines: {
+        select: { id: true, monthlyAmount: true, appliesIva: true },
       },
       administrations: {
         orderBy: { sortOrder: "asc" as const },
@@ -48,6 +51,7 @@ export const facturaListSerializeInclude = {
       invoiceNumber: true,
       documentNumber: true,
       invoiceReceivedAt: true,
+      dueDate: true,
       subtotalFacturadoNaf: true,
       totalFacturadoNaf: true,
       nafDocumentos: {

@@ -53,12 +53,12 @@ export default function BandecoRegistroPage() {
         <Button
           variant="outline"
           className="gap-2"
-          disabled={rows.length === 0}
+          disabled={displayedRows.length === 0}
           onClick={() =>
             exportRowsToExcel({
               filename: `bandeco-registro-${new Date().toISOString().slice(0, 10)}`,
               sheetName: "Registro",
-              rows: rows.map((r) => ({
+              rows: displayedRows.map((r) => ({
                 Fecha: new Date(r.activatedAt).toLocaleString("es-CR"),
                 Código: r.alarmNumber,
                 Finca: r.finca,

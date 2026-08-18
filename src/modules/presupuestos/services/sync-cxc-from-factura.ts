@@ -26,10 +26,13 @@ export function isSyntheticFmDocumentNumber(value: string | null | undefined): b
  */
 function resolveDocumentNumber(
   factura: { documentNumber: string | null },
-  emisionDocumentNumber: string | null | undefined
+  emisionDocumentNumber: string | null | undefined,
+  allowParentFallback: boolean
 ): string | null {
   const fromEmision = emisionDocumentNumber?.trim();
   if (fromEmision && !isSyntheticFmDocumentNumber(fromEmision)) return fromEmision;
+
+  if (!allowParentFallback) return null;
 
   const fromFactura = factura.documentNumber?.trim();
   if (fromFactura && !isSyntheticFmDocumentNumber(fromFactura)) return fromFactura;
@@ -38,10 +41,14 @@ function resolveDocumentNumber(
 }
 
 function resolveInvoiceNumber(
+  emisionInvoice: string | null | undefined,
   facturaInvoice: string | null,
-  emisionInvoice: string | null | undefined
+  allowParentFallback: boolean
 ): string | null {
-  return facturaInvoice?.trim() || emisionInvoice?.trim() || null;
+  const fromEmision = emisionInvoice?.trim();
+  if (fromEmision) return fromEmision;
+  if (!allowParentFallback) return null;
+  return facturaInvoice?.trim() || null;
 }
 
 function resolveServicePeriodDate(factura: {
@@ -91,9 +98,11 @@ type CxcPayload = {
  */
 async function upsertCxcDocumento(
   db: Db,
-  payload: CxcPayload
+  payload: CxcPayload,
+  options?: { migrateFacturaLinkedRow?: boolean }
 ): Promise<SyncCxcFromFacturaResult> {
   const { companySapCode, documentNumber, facturaMensualId } = payload;
+  const migrateFacturaLinkedRow = options?.migrateFacturaLinkedRow !== false;
 
   const existingByKey = await db.cxcDocumento.findUnique({
     where: {
@@ -102,14 +111,23 @@ async function upsertCxcDocumento(
     select: { id: true, facturaMensualId: true },
   });
 
-  const existingLinked = await db.cxcDocumento.findFirst({
-    where: {
-      facturaMensualId,
-      docType: { in: ["FC", "FM"] },
-    },
-    orderBy: { createdAt: "asc" as const },
-    select: { id: true, documentNumber: true, companySapCode: true },
-  });
+  const existingLinked = migrateFacturaLinkedRow
+    ? await db.cxcDocumento.findFirst({
+        where: {
+          facturaMensualId,
+          docType: { in: ["FC", "FM"] },
+        },
+        orderBy: { createdAt: "asc" as const },
+        select: { id: true, documentNumber: true, companySapCode: true },
+      })
+    : await db.cxcDocumento.findFirst({
+        where: {
+          facturaMensualId,
+          documentNumber,
+          docType: { in: ["FC", "FM"] },
+        },
+        select: { id: true, documentNumber: true, companySapCode: true },
+      });
 
   if (existingByKey) {
     if (existingLinked && existingLinked.id !== existingByKey.id) {
@@ -187,6 +205,7 @@ export async function syncCxcFromFacturaMensual(
           documentNumber: true,
           invoiceNumber: true,
           invoiceReceivedAt: true,
+          dueDate: true,
           totalFacturadoNaf: true,
           _count: { select: { nafDocumentos: true } },
         },
@@ -213,7 +232,7 @@ export async function syncCxcFromFacturaMensual(
 
   const firstEmision = factura.emisiones[0];
   const companySapCode = normalizeCompanySapCode(company?.sapCode, factura.companyCodeCopied);
-  const documentNumber = resolveDocumentNumber(factura, firstEmision?.documentNumber);
+  const documentNumber = resolveDocumentNumber(factura, firstEmision?.documentNumber, true);
   if (!documentNumber) {
     return {
       ok: false,
@@ -223,7 +242,7 @@ export async function syncCxcFromFacturaMensual(
     };
   }
 
-  const invoiceNumber = resolveInvoiceNumber(factura.invoiceNumber, firstEmision?.invoiceNumber);
+  const invoiceNumber = resolveInvoiceNumber(firstEmision?.invoiceNumber, factura.invoiceNumber, true);
   const total =
     firstEmision && firstEmision._count.nafDocumentos > 0 && firstEmision.totalFacturadoNaf != null
       ? toAmount(firstEmision.totalFacturadoNaf)
@@ -233,7 +252,7 @@ export async function syncCxcFromFacturaMensual(
   const saldo = cobrado ? 0 : total;
   const documentDate = factura.closedAt ?? factura.updatedAt;
   const invoiceReceivedAt =
-    factura.invoiceReceivedAt ?? firstEmision?.invoiceReceivedAt ?? null;
+    firstEmision?.invoiceReceivedAt ?? factura.invoiceReceivedAt ?? null;
 
   const payload: CxcPayload = {
     contractId: factura.contractId,
@@ -249,8 +268,8 @@ export async function syncCxcFromFacturaMensual(
     montoOriginal: total,
     saldo,
     clientName: factura.clientNameCopied,
-    dueDate: factura.dueDate,
-    cxcExpectedPaymentDate: factura.cxcExpectedPaymentDate ?? factura.dueDate,
+    dueDate: firstEmision?.dueDate ?? factura.dueDate,
+    cxcExpectedPaymentDate: factura.cxcExpectedPaymentDate ?? firstEmision?.dueDate ?? factura.dueDate,
     provisionalReceiptNumber: factura.provisionalReceiptNumber,
     provisionalPaymentAmount: factura.provisionalPaymentAmount,
     cxcObservations: factura.cxcObservations,
@@ -280,6 +299,7 @@ export async function syncCxcFromFacturaEmision(
           documentNumber: true,
           invoiceNumber: true,
           invoiceReceivedAt: true,
+          dueDate: true,
           totalFacturadoNaf: true,
           _count: { select: { nafDocumentos: true } },
         },
@@ -305,8 +325,13 @@ export async function syncCxcFromFacturaEmision(
     select: { sapCode: true },
   });
 
+  const emisionCount = await db.facturaMensualEmision.count({
+    where: { facturaMensualId: facturaId },
+  });
+  const isolate = emisionCount > 1;
+
   const companySapCode = normalizeCompanySapCode(company?.sapCode, factura.companyCodeCopied);
-  const documentNumber = resolveDocumentNumber(factura, emision.documentNumber);
+  const documentNumber = resolveDocumentNumber(factura, emision.documentNumber, !isolate);
   if (!documentNumber) {
     return {
       ok: false,
@@ -316,7 +341,7 @@ export async function syncCxcFromFacturaEmision(
     };
   }
 
-  const invoiceNumber = resolveInvoiceNumber(factura.invoiceNumber, emision.invoiceNumber);
+  const invoiceNumber = resolveInvoiceNumber(emision.invoiceNumber, factura.invoiceNumber, !isolate);
   const nafTotal =
     emision._count.nafDocumentos > 0 && emision.totalFacturadoNaf != null
       ? toAmount(emision.totalFacturadoNaf)
@@ -326,7 +351,8 @@ export async function syncCxcFromFacturaEmision(
   const cxcStatus: CxcDocumentoStatus = cobrado ? "COBRADO" : "PENDIENTE";
   const saldo = cobrado ? 0 : resolvedTotal;
   const documentDate = emision.closedAt ?? factura.updatedAt;
-  const invoiceReceivedAt = emision.invoiceReceivedAt ?? factura.invoiceReceivedAt ?? null;
+  const invoiceReceivedAt = emision.invoiceReceivedAt ?? (isolate ? null : factura.invoiceReceivedAt);
+  const dueDate = emision.dueDate ?? (isolate ? null : factura.dueDate);
 
   const payload: CxcPayload = {
     contractId: factura.contractId,
@@ -342,8 +368,8 @@ export async function syncCxcFromFacturaEmision(
     montoOriginal: resolvedTotal,
     saldo,
     clientName: factura.clientNameCopied,
-    dueDate: factura.dueDate,
-    cxcExpectedPaymentDate: factura.cxcExpectedPaymentDate ?? factura.dueDate,
+    dueDate,
+    cxcExpectedPaymentDate: factura.cxcExpectedPaymentDate ?? dueDate,
     provisionalReceiptNumber: factura.provisionalReceiptNumber,
     provisionalPaymentAmount: factura.provisionalPaymentAmount,
     cxcObservations: factura.cxcObservations,
@@ -352,7 +378,7 @@ export async function syncCxcFromFacturaEmision(
     isReajuste: factura.isReajuste ?? false,
   };
 
-  return upsertCxcDocumento(db, payload);
+  return upsertCxcDocumento(db, payload, { migrateFacturaLinkedRow: !isolate });
 }
 
 export async function syncAllMissingCxcFromFacturas(db: Db): Promise<{
@@ -374,6 +400,31 @@ export async function syncAllMissingCxcFromFacturas(db: Db): Promise<{
   const errors: string[] = [];
 
   for (const factura of facturas) {
+    const closedEmisiones = await db.facturaMensualEmision.findMany({
+      where: { facturaMensualId: factura.id, closedAt: { not: null } },
+      select: { id: true, totalFacturadoNaf: true },
+      orderBy: { sortOrder: "asc" },
+    });
+
+    if (closedEmisiones.length > 1) {
+      for (const emision of closedEmisiones) {
+        const total =
+          emision.totalFacturadoNaf != null ? toAmount(emision.totalFacturadoNaf) : 0;
+        const result = await syncCxcFromFacturaEmision(db, factura.id, emision.id, total);
+        if (!result.ok) {
+          if (result.code === "NO_DOCUMENT_NUMBER") {
+            skipped += 1;
+            continue;
+          }
+          errors.push(`${factura.id}/${emision.id}: ${result.message}`);
+          continue;
+        }
+        if (result.created) created += 1;
+        else updated += 1;
+      }
+      continue;
+    }
+
     const linked = await db.cxcDocumento.findFirst({
       where: {
         facturaMensualId: factura.id,

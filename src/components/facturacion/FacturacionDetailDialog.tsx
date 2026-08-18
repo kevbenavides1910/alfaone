@@ -27,6 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatCurrency, formatDate, calendarDateInputValue, formatServicePeriodDates } from "@/lib/utils/format";
 import { FACTURA_BILLING_KIND_LABELS, FACTURA_MENSUAL_STATUS_LABELS } from "@/lib/utils/constants";
 import { FacturaTimelinessBadge } from "@/components/facturacion/FacturaTimelinessBadge";
+import { getFacturaIvaAmount } from "@/components/facturacion/facturacion-amount-change";
 
 export type FacturaRequisitoRow = {
   id: string;
@@ -76,7 +77,7 @@ export type FacturaMensualRow = {
   companyCodeCopied: string;
   licitacionNo?: string;
   requisitos: FacturaRequisitoRow[];
-  emisiones?: {
+    emisiones?: {
     id: string;
     administrationName?: string | null;
     managerName?: string | null;
@@ -84,8 +85,15 @@ export type FacturaMensualRow = {
     sortOrder?: number;
     closedAt?: string | null;
     status?: keyof typeof FACTURA_MENSUAL_STATUS_LABELS;
+    invoiceNumber?: string | null;
+    documentNumber?: string | null;
+    invoiceReceivedAt?: string | null;
+    dueDate?: string | null;
     subtotalCopied?: number | null;
     totalCalculated?: number | null;
+    contractVentaSubtotal?: number | null;
+    contractVentaTotal?: number | null;
+    ventaFacturadoDelta?: number | null;
   }[];
   returnRequestStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   returnRequestType?: "DOCUMENTATION" | "AMOUNT" | null;
@@ -142,18 +150,32 @@ export function FacturacionDetailDialog({
   const [viewEmisionId, setViewEmisionId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (factura) {
-      setObservationLog(factura.observationLog ?? "");
-      setFinalNotes(factura.finalNotes ?? "");
-      setInvoiceNumber(factura.invoiceNumber ?? "");
-      setDocumentNumber(factura.documentNumber ?? "");
-      setServicePeriodFromDate(calendarDateInputValue(factura.servicePeriodFromDate ?? ""));
-      setServicePeriodToDate(calendarDateInputValue(factura.servicePeriodToDate ?? ""));
-      setInvoiceReceivedAt(calendarDateInputValue(factura.invoiceReceivedAt ?? ""));
-      setDueDate(calendarDateInputValue(factura.dueDate));
-      setIsReajuste(factura.isReajuste ?? false);
+    if (!factura) return;
+    setObservationLog(factura.observationLog ?? "");
+    setFinalNotes(factura.finalNotes ?? "");
+    setIsReajuste(factura.isReajuste ?? false);
+
+    const multiAdmin = (factura.emisiones?.length ?? 0) > 1;
+    const emId =
+      viewEmisionId ?? focusedEmisionId ?? (multiAdmin ? factura.emisiones?.[0]?.id : null) ?? null;
+    const em = emId ? factura.emisiones?.find((e) => e.id === emId) : null;
+
+    if (multiAdmin && em) {
+      setInvoiceNumber(em.invoiceNumber ?? "");
+      setDocumentNumber(em.documentNumber ?? "");
+      setInvoiceReceivedAt(calendarDateInputValue(em.invoiceReceivedAt ?? ""));
+      setDueDate(calendarDateInputValue(em.dueDate ?? factura.dueDate));
+    } else {
+      setInvoiceNumber(em?.invoiceNumber ?? factura.invoiceNumber ?? "");
+      setDocumentNumber(em?.documentNumber ?? factura.documentNumber ?? "");
+      setInvoiceReceivedAt(
+        calendarDateInputValue(em?.invoiceReceivedAt ?? factura.invoiceReceivedAt ?? "")
+      );
+      setDueDate(calendarDateInputValue(em?.dueDate ?? factura.dueDate));
     }
-  }, [factura]);
+    setServicePeriodFromDate(calendarDateInputValue(factura.servicePeriodFromDate ?? ""));
+    setServicePeriodToDate(calendarDateInputValue(factura.servicePeriodToDate ?? ""));
+  }, [factura, viewEmisionId, focusedEmisionId]);
 
   useEffect(() => {
     if (!open) {
@@ -175,6 +197,7 @@ export function FacturacionDetailDialog({
     mutationFn: async (payload: {
       observationLog?: string;
       finalNotes?: string;
+      emisionId?: string;
       invoiceNumber?: string | null;
       servicePeriodFromDate?: string | null;
       servicePeriodToDate?: string | null;
@@ -419,6 +442,43 @@ export function FacturacionDetailDialog({
           </p>
         </DialogHeader>
 
+        {hasEmisiones && (factura.emisiones?.length ?? 0) > 1 && (
+          <div className="flex flex-wrap gap-2">
+            {(factura.emisiones ?? []).map((em) => {
+              const reqs = (factura.requisitos ?? []).filter(
+                (r) => r.facturaMensualEmisionId === em.id
+              );
+              const pending = reqs.filter((r) => !r.isComplete).length;
+              const active = effectiveFocusedEmisionId === em.id;
+              const emClosed =
+                em.status === "FACTURADO" || em.status === "COBRADO" || Boolean(em.closedAt);
+              return (
+                <button
+                  key={em.id}
+                  type="button"
+                  onClick={() => setViewEmisionId(em.id)}
+                  className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                    active
+                      ? "border-red-600 bg-red-600 text-white"
+                      : emClosed
+                        ? "border-green-300 bg-green-50 text-green-900 hover:bg-green-100"
+                        : pending > 0
+                          ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {em.administrationName ?? `Administración ${(em.sortOrder ?? 0) + 1}`}
+                  {reqs.length > 0 && (
+                    <span className={`ml-1.5 text-xs ${active ? "text-white/90" : "text-slate-500"}`}>
+                      {emClosed ? "Cerrada" : `(${reqs.length - pending}/${reqs.length})`}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {amountPending && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             El monto de este mes aún no está definido. Indíquelo en el contrato, pestaña{" "}
@@ -429,36 +489,68 @@ export function FacturacionDetailDialog({
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-3 text-sm bg-slate-50 rounded-lg p-3">
-          <div>
-            <p className="text-xs text-slate-500">Subtotal</p>
-            <p className="font-semibold">
-              {factura.amountDefined &&
-              (focusedEmision?.subtotalCopied != null || factura.subtotalCopied != null)
-                ? formatCurrency(focusedEmision?.subtotalCopied ?? factura.subtotalCopied!)
-                : "Pendiente de definir"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">IVA</p>
-            <p className="font-semibold">{factura.ivaPctCopied.toFixed(2)}%</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Total</p>
-            <p className="font-semibold text-slate-700">
-              {factura.amountDefined &&
-              (focusedEmision?.totalCalculated != null || factura.totalCalculated != null)
-                ? formatCurrency(focusedEmision?.totalCalculated ?? factura.totalCalculated!)
-                : "—"}
-            </p>
-          </div>
-        </div>
+        {(() => {
+          const displaySubtotal = focusedEmision?.subtotalCopied ?? factura.subtotalCopied;
+          const displayTotal = focusedEmision?.totalCalculated ?? factura.totalCalculated;
+          const amountRow = {
+            ...factura,
+            subtotalCopied: displaySubtotal,
+            totalCalculated: displayTotal,
+          };
+          const ivaMonto = getFacturaIvaAmount(amountRow);
+          const ivaPct =
+            ivaMonto != null && displaySubtotal != null && displaySubtotal > 0
+              ? Math.round((ivaMonto / displaySubtotal) * 10000) / 100
+              : factura.ivaPctCopied;
+          return (
+            <div className="grid grid-cols-4 gap-3 text-sm bg-slate-50 rounded-lg p-3">
+              <div>
+                <p className="text-xs text-slate-500">Subtotal</p>
+                <p className="font-semibold">
+                  {factura.amountDefined && displaySubtotal != null
+                    ? formatCurrency(displaySubtotal)
+                    : "Pendiente de definir"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">% IVA</p>
+                <p className="font-semibold">{ivaPct.toFixed(2)}%</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Monto IVA</p>
+                <p className="font-semibold">
+                  {factura.amountDefined && ivaMonto != null
+                    ? formatCurrency(ivaMonto)
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Total</p>
+                <p className="font-semibold text-slate-700">
+                  {factura.amountDefined && displayTotal != null
+                    ? formatCurrency(displayTotal)
+                    : "—"}
+                </p>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="rounded-lg border border-slate-200 p-4 space-y-4">
           <div>
-            <h4 className="text-sm font-semibold text-slate-800">Datos de la factura</h4>
+            <h4 className="text-sm font-semibold text-slate-800">
+              Datos de la factura
+              {focusedEmision?.administrationName && (factura.emisiones?.length ?? 0) > 1 ? (
+                <span className="font-normal text-slate-500">
+                  {" "}
+                  · {focusedEmision.administrationName}
+                </span>
+              ) : null}
+            </h4>
             <p className="text-xs text-slate-500">
-              Referencias del documento emitido y periodo de servicio que se factura.
+              {hasEmisiones && (factura.emisiones?.length ?? 0) > 1
+                ? "Número, recibido y vencimiento son de esta administración. No se copian a las demás."
+                : "Referencias del documento emitido y periodo de servicio que se factura."}
             </p>
           </div>
 
@@ -559,6 +651,9 @@ export function FacturacionDetailDialog({
                   servicePeriodToDate: servicePeriodToDate || null,
                   invoiceReceivedAt: invoiceReceivedAt || null,
                   ...(isClosed ? {} : { dueDate: dueDate || undefined }),
+                  ...((factura.emisiones?.length ?? 0) > 0 && effectiveFocusedEmisionId
+                    ? { emisionId: effectiveFocusedEmisionId }
+                    : {}),
                 })
               }
             >
@@ -635,41 +730,6 @@ export function FacturacionDetailDialog({
                 : "Los requisitos con evidencia deben tener un archivo adjunto. Los demás se marcan como cumplidos con el check."}
             </p>
           </div>
-          {hasEmisiones && (factura.emisiones?.length ?? 0) > 1 && (
-            <div className="flex flex-wrap gap-2">
-              {(factura.emisiones ?? []).map((em) => {
-                const reqs = (factura.requisitos ?? []).filter(
-                  (r) => r.facturaMensualEmisionId === em.id
-                );
-                const pending = reqs.filter((r) => !r.isComplete).length;
-                const active = effectiveFocusedEmisionId === em.id;
-                const emClosed = em.status === "FACTURADO" || em.status === "COBRADO" || Boolean(em.closedAt);
-                return (
-                  <button
-                    key={em.id}
-                    type="button"
-                    onClick={() => setViewEmisionId(em.id)}
-                    className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                      active
-                        ? "border-red-600 bg-red-600 text-white"
-                        : emClosed
-                          ? "border-green-300 bg-green-50 text-green-900 hover:bg-green-100"
-                          : pending > 0
-                            ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
-                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                    }`}
-                  >
-                    {em.administrationName ?? `Administración ${(em.sortOrder ?? 0) + 1}`}
-                    {reqs.length > 0 && (
-                      <span className={`ml-1.5 text-xs ${active ? "text-white/90" : "text-slate-500"}`}>
-                        {emClosed ? "Cerrada" : `(${reqs.length - pending}/${reqs.length})`}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
           {activeRequisitos.length === 0 ? (
             <p className="text-sm text-slate-400 italic">Sin requisitos configurados en el contrato.</p>
           ) : (

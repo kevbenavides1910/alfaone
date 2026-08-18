@@ -725,12 +725,12 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
   }
 
   function exportExpensesToExcel() {
-    if (expenses.length === 0) {
+    if (displayedExpenses.length === 0) {
       toast.info("No hay gastos para exportar");
       return;
     }
 
-    const rows = expenses.map((e) => {
+    const rows = displayedExpenses.map((e) => {
       const typeLabel = EXPENSE_TYPES.find((t) => t.value === e.type)?.label ?? e.type;
       const deferredScope =
         e.isDeferred
@@ -875,7 +875,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                 "Cargando totales…"
               ) : (
                 <>
-                  {expenses.length} registros · Total: <span className="font-semibold text-foreground">{formatCurrency(total)}</span>
+                  {displayedExpenses.length} registros · Total: <span className="font-semibold text-foreground">{formatCurrency(total)}</span>
                 </>
               )}
             </p>
@@ -886,9 +886,9 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
               variant="outline"
               className="gap-2"
               onClick={exportExpensesToExcel}
-              disabled={expenses.length === 0}
+              disabled={displayedExpenses.length === 0}
               title={
-                expenses.length === 0
+                displayedExpenses.length === 0
                   ? "No hay gastos para exportar"
                   : "Exportar a Excel los gastos visibles (aplicando filtros y búsqueda)"
               }

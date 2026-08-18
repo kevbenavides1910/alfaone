@@ -102,11 +102,11 @@ export default function HombreVivoHistorialPage() {
   }
 
   function handleExport() {
-    if (filas.length === 0) return;
+    if (displayedRows.length === 0) return;
     exportRowsToExcel({
       filename: "recorridos_hombre_vivo",
       sheetName: "Historial",
-      rows: filas.map((f) => ({
+      rows: displayedRows.map((f) => ({
         Programada: formatDateTime(f.scheduledAt),
         Confirmada: f.acknowledgedAt ? formatDateTime(f.acknowledgedAt) : "",
         Ruta: f.routeCode,
@@ -174,7 +174,7 @@ export default function HombreVivoHistorialPage() {
           <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
             Actualizar
           </Button>
-          <Button variant="outline" onClick={handleExport} disabled={filas.length === 0}>
+          <Button variant="outline" onClick={handleExport} disabled={displayedRows.length === 0}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Exportar Excel
           </Button>

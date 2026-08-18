@@ -140,6 +140,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
           invoiceNumber: true,
           documentNumber: true,
           invoiceReceivedAt: true,
+          dueDate: true,
+          facturaMensual: { select: { _count: { select: { emisiones: true } } } },
         },
       }),
       prisma.facturaMensual.findUnique({
@@ -152,14 +154,17 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         },
       }),
     ]);
+    const isolate = (emisionRow?.facturaMensual._count.emisiones ?? 0) > 1;
     return ok({
       link: result.link,
       links,
-      invoiceNumber: emisionRow?.invoiceNumber ?? facturaRow?.invoiceNumber ?? null,
-      documentNumber: emisionRow?.documentNumber ?? facturaRow?.documentNumber ?? null,
+      invoiceNumber: emisionRow?.invoiceNumber ?? (isolate ? null : facturaRow?.invoiceNumber) ?? null,
+      documentNumber:
+        emisionRow?.documentNumber ?? (isolate ? null : facturaRow?.documentNumber) ?? null,
       invoiceReceivedAt:
-        (emisionRow?.invoiceReceivedAt ?? facturaRow?.invoiceReceivedAt)?.toISOString() ?? null,
-      dueDate: facturaRow?.dueDate?.toISOString() ?? null,
+        (emisionRow?.invoiceReceivedAt ?? (isolate ? null : facturaRow?.invoiceReceivedAt))?.toISOString() ??
+        null,
+      dueDate: (emisionRow?.dueDate ?? (isolate ? null : facturaRow?.dueDate))?.toISOString() ?? null,
     });
   } catch (e) {
     return serverError("Error al ligar documento NAF", e);

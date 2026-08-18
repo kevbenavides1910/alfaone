@@ -646,6 +646,8 @@ model FacturaMensualEmision {
   invoiceNumber              String?
   documentNumber             String?
   invoiceReceivedAt          DateTime?
+  /// Vencimiento de la factura de esta administración (independiente de las demás).
+  dueDate                    DateTime?
   /// Neto subtotal NAF ligado (FC/ND − NC/AN), snapshot recalculado al ligar/desligar.
   subtotalFacturadoNaf       Decimal?  @db.Decimal(15, 2)
   /// Neto total NAF ligado (con IVA), oficial para cierre/CxC.

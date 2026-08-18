@@ -186,8 +186,8 @@ export default function ResumenEmpleadosPage() {
   }
 
   function handleExport() {
-    if (rows.length === 0) return;
-    const exportRows = rows.map((r) => {
+    if (displayedRows.length === 0) return;
+    const exportRows = displayedRows.map((r) => {
       const t = describeTreatmentState(r.treatment, r.ultimoCierre);
       return {
         Código: r.codigoEmpleado,
@@ -377,11 +377,11 @@ export default function ResumenEmpleadosPage() {
                 size="sm"
                 variant="outline"
                 className="gap-2"
-                disabled={rows.length === 0}
+                disabled={displayedRows.length === 0}
                 onClick={handleExport}
               >
                 <FileSpreadsheet className="h-4 w-4" />
-                Exportar a Excel ({rows.length})
+                Exportar a Excel ({displayedRows.length})
               </Button>
             </div>
           </CardContent>

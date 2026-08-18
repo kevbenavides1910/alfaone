@@ -243,9 +243,9 @@ export function BillingHistoryTab({
             variant="outline"
             size="sm"
             className="gap-1.5"
-            disabled={entries.length === 0}
+            disabled={filteredEntries.length === 0}
             onClick={() => {
-              const exportRows = entries.map((e) => {
+              const exportRows = filteredEntries.map((e) => {
                 const diff = e.monthlyBilling - contractBaseBilling;
                 const pct = contractBaseBilling > 0 ? (diff / contractBaseBilling) * 100 : 0;
                 return {
@@ -265,7 +265,7 @@ export function BillingHistoryTab({
             }}
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Exportar ventas ({entries.length})
+            Exportar ventas ({filteredEntries.length})
           </Button>
           {!readOnly && (
             <Button

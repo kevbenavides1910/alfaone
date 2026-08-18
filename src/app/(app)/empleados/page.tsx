@@ -119,7 +119,7 @@ export default function EmpleadosPage() {
     exportRowsToExcel({
       filename: "directorio_empleados",
       sheetName: "Empleados",
-      rows: rows.map((r) => ({
+      rows: displayedRows.map((r) => ({
         Código: r.codigoEmpleado,
         Nombre: r.nombre ?? "",
         Cédula: r.cedula ?? "",
@@ -156,7 +156,7 @@ export default function EmpleadosPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={rows.length === 0}>
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={displayedRows.length === 0}>
               <FileSpreadsheet className="h-4 w-4 mr-1" /> Exportar
             </Button>
             {canImport && (

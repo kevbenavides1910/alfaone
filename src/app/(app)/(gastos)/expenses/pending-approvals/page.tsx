@@ -259,7 +259,7 @@ export default function PendingApprovalsPage() {
   const displayedRows = filterRowsByColumnFilters(rows, columnFilters, filterCols);
 
   function handleExport() {
-    const exportRows = rows.map((e) => {
+    const exportRows = displayedRows.map((e) => {
       const done = e.approvals.filter((a) => a.decision === "APPROVED").length;
       return {
         "N°": e.sequentialNo != null ? `#${String(e.sequentialNo).padStart(5, "0")}` : "",
@@ -302,11 +302,11 @@ export default function PendingApprovalsPage() {
             variant="outline"
             className="gap-2 shrink-0"
             onClick={handleExport}
-            disabled={rows.length === 0}
+            disabled={displayedRows.length === 0}
             title="Descargar las aprobaciones pendientes a Excel"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Exportar a Excel ({rows.length})
+            Exportar a Excel ({displayedRows.length})
           </Button>
         </div>
 

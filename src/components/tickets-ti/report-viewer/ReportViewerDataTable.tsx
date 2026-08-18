@@ -70,11 +70,16 @@ export function ReportViewerDataTable({ rows, columns, isDark }: Props) {
   const statusCol = findColumnByPattern(columns, PATTERNS.status)?.id;
   const severityCol = findColumnByPattern(columns, PATTERNS.severity)?.id;
 
+  function filteredDataRows(): DataRow[] {
+    return table.getFilteredRowModel().rows.map((r) => r.original);
+  }
+
   function exportCsv() {
+    const data = filteredDataRows();
     const headers = columns.map((c) => c.label);
     const lines = [
       headers.join(","),
-      ...rows.map((r) =>
+      ...data.map((r) =>
         columns.map((c) => `"${String(r[c.id] ?? "").replace(/"/g, '""')}"`).join(",")
       ),
     ];
@@ -91,7 +96,7 @@ export function ReportViewerDataTable({ rows, columns, isDark }: Props) {
     exportRowsToExcel({
       filename: "reporte_tickets",
       sheetName: "Datos",
-      rows: rows.map((r) => {
+      rows: filteredDataRows().map((r) => {
         const out: Record<string, string | number | null> = {};
         columns.forEach((c) => {
           out[c.label] = r[c.id] == null ? null : String(r[c.id]);
@@ -106,8 +111,9 @@ export function ReportViewerDataTable({ rows, columns, isDark }: Props) {
   }
 
   function copyTable() {
+    const data = filteredDataRows();
     const headers = columns.map((c) => c.label).join("\t");
-    const body = rows
+    const body = data
       .map((r) => columns.map((c) => String(r[c.id] ?? "")).join("\t"))
       .join("\n");
     void navigator.clipboard.writeText(`${headers}\n${body}`);

@@ -44,6 +44,8 @@ export const facturaMensualUpdateSchema = z.object({
   observationLog: z.string().max(10000).optional(),
   finalNotes: z.string().max(5000).optional(),
   isReajuste: z.boolean().optional(),
+  /** Administración activa: número, recibido y vencimiento no se copian a las demás. */
+  emisionId: z.string().trim().min(1).optional(),
   invoiceNumber: optionalTrimmedString(100),
   servicePeriodFromDate: optionalCalendarDate,
   servicePeriodToDate: optionalCalendarDate,

@@ -56,9 +56,21 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const parsed = facturaMensualUpdateSchema.safeParse(body);
     if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
 
-    const existing = await prisma.facturaMensual.findUnique({ where: { id } });
+    const existing = await prisma.facturaMensual.findUnique({
+      where: { id },
+      include: { emisiones: { select: { id: true, closedAt: true, totalFacturadoNaf: true } } },
+    });
     if (!existing) return notFound("Factura mensual no encontrada");
 
+    const emisionId = parsed.data.emisionId?.trim();
+    const targetEmision = emisionId
+      ? existing.emisiones.find((e) => e.id === emisionId)
+      : undefined;
+    if (emisionId && !targetEmision) {
+      return notFound("Administración no encontrada en esta factura");
+    }
+
+    const isolateEmision = Boolean(emisionId) && existing.emisiones.length > 1;
     const isClosed =
       existing.status === "FACTURADO" || existing.status === "COBRADO";
 
@@ -91,9 +103,6 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (parsed.data.observationLog !== undefined) data.observationLog = parsed.data.observationLog;
     if (parsed.data.finalNotes !== undefined) data.finalNotes = parsed.data.finalNotes;
     if (parsed.data.isReajuste !== undefined) data.isReajuste = parsed.data.isReajuste;
-    if (parsed.data.invoiceNumber !== undefined) {
-      data.invoiceNumber = parsed.data.invoiceNumber;
-    }
     // documentNumber solo se escribe desde NAF (ligar documento); se ignora en PATCH.
     if (parsed.data.servicePeriodFromDate !== undefined) {
       data.servicePeriodFromDate = parsed.data.servicePeriodFromDate
@@ -105,14 +114,26 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         ? parseCalendarDateInput(parsed.data.servicePeriodToDate)
         : null;
     }
-    if (parsed.data.invoiceReceivedAt !== undefined) {
-      data.invoiceReceivedAt = parsed.data.invoiceReceivedAt
-        ? parseCalendarDateInput(parsed.data.invoiceReceivedAt)
-        : null;
+
+    const invoiceNumber =
+      parsed.data.invoiceNumber !== undefined ? parsed.data.invoiceNumber : undefined;
+    const invoiceReceivedAt =
+      parsed.data.invoiceReceivedAt !== undefined
+        ? parsed.data.invoiceReceivedAt
+          ? parseCalendarDateInput(parsed.data.invoiceReceivedAt)
+          : null
+        : undefined;
+    const dueDate =
+      parsed.data.dueDate !== undefined
+        ? parseCalendarDateInput(parsed.data.dueDate)
+        : undefined;
+
+    if (!isolateEmision) {
+      if (invoiceNumber !== undefined) data.invoiceNumber = invoiceNumber;
+      if (invoiceReceivedAt !== undefined) data.invoiceReceivedAt = invoiceReceivedAt;
+      if (dueDate !== undefined) data.dueDate = dueDate;
     }
-    if (parsed.data.dueDate !== undefined) {
-      data.dueDate = parseCalendarDateInput(parsed.data.dueDate);
-    }
+
     if (
       !isClosed &&
       (parsed.data.observationLog !== undefined || parsed.data.dueDate !== undefined) &&
@@ -121,26 +142,56 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       data.status = "EN_PROCESO";
     }
 
+    const emisionData: {
+      invoiceNumber?: string | null;
+      invoiceReceivedAt?: Date | null;
+      dueDate?: Date;
+    } = {};
+    if (invoiceNumber !== undefined) emisionData.invoiceNumber = invoiceNumber;
+    if (invoiceReceivedAt !== undefined) emisionData.invoiceReceivedAt = invoiceReceivedAt;
+    if (dueDate !== undefined) emisionData.dueDate = dueDate;
+
+    if (targetEmision && Object.keys(emisionData).length > 0) {
+      await prisma.facturaMensualEmision.update({
+        where: { id: targetEmision.id },
+        data: emisionData,
+      });
+    } else if (!isolateEmision && existing.emisiones.length === 1 && Object.keys(emisionData).length > 0) {
+      await prisma.facturaMensualEmision.update({
+        where: { id: existing.emisiones[0].id },
+        data: emisionData,
+      });
+    }
+
     const updated = await prisma.facturaMensual.update({
       where: { id },
       data,
       include: facturaListSerializeInclude,
     });
 
-    if (
-      isClosed &&
-      (parsed.data.isReajuste !== undefined ||
-        parsed.data.servicePeriodFromDate !== undefined ||
-        parsed.data.servicePeriodToDate !== undefined ||
-        parsed.data.invoiceReceivedAt !== undefined)
-    ) {
-      const syncResult = await syncCxcFromFacturaMensual(prisma, id);
-      if (
-        !syncResult.ok &&
-        syncResult.code !== "NO_DOCUMENT_NUMBER"
-      ) {
-        // No fallar el PATCH por sync CxC; el número solo llega vía NAF.
-        console.warn(`[facturacion PATCH] sync CxC: ${syncResult.message}`);
+    const shouldSyncCxc =
+      parsed.data.isReajuste !== undefined ||
+      parsed.data.servicePeriodFromDate !== undefined ||
+      parsed.data.servicePeriodToDate !== undefined ||
+      parsed.data.invoiceReceivedAt !== undefined ||
+      parsed.data.invoiceNumber !== undefined;
+
+    if (shouldSyncCxc) {
+      if (targetEmision?.closedAt) {
+        const emisionRow = updated.emisiones.find((e) => e.id === targetEmision.id);
+        const total =
+          emisionRow?.totalFacturadoNaf != null
+            ? Number(emisionRow.totalFacturadoNaf)
+            : Number(updated.totalCalculated);
+        const syncResult = await syncCxcFromFacturaEmision(prisma, id, targetEmision.id, total);
+        if (!syncResult.ok && syncResult.code !== "NO_DOCUMENT_NUMBER") {
+          console.warn(`[facturacion PATCH] sync CxC emisión: ${syncResult.message}`);
+        }
+      } else if (isClosed && existing.emisiones.length <= 1) {
+        const syncResult = await syncCxcFromFacturaMensual(prisma, id);
+        if (!syncResult.ok && syncResult.code !== "NO_DOCUMENT_NUMBER") {
+          console.warn(`[facturacion PATCH] sync CxC: ${syncResult.message}`);
+        }
       }
     }
 

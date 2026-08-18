@@ -107,7 +107,7 @@ export default function MarcasFueraRutaPage() {
 
   function exportExcel() {
     exportRowsToExcel({
-      rows: filas.map((f) => ({
+      rows: displayedRows.map((f) => ({
         Fecha: f.fecha,
         Hora: formatDateTime(f.markedAt),
         IMEI: f.imei,
@@ -165,7 +165,7 @@ export default function MarcasFueraRutaPage() {
           <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
             Actualizar
           </Button>
-          <Button variant="outline" onClick={exportExcel} disabled={!filas.length}>
+          <Button variant="outline" onClick={exportExcel} disabled={!displayedRows.length}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Exportar Excel
           </Button>
