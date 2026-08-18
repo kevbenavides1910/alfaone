@@ -5819,6 +5819,11 @@ model AppFingerSettings {
   attConnectionType    String?
   attSmbShare          String?
   attDatabaseName      String?
+  attWindowsPath       String?
+  attAccessUser        String?   @default("Admin")
+  attBlankPassword     Boolean   @default(true)
+  attDriveMappings     Json?
+  linkRrhhEmployees    Boolean   @default(false)
   syncAutoEnabled      Boolean   @default(false)
   syncIntervalMinutes  Int       @default(15)
   lastAutoSyncAt       DateTime?

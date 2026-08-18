@@ -1,5 +1,11 @@
 import { prisma } from "@/modules/core/db/prisma";
 import { FINGER_ENV } from "@/modules/finger-system/config/finger.config";
+import {
+  buildWindowsPathFromParts,
+  normalizeAttDriveMappings,
+  resolveAttDatabasePath,
+} from "@/modules/finger-system/integrations/att2016/path-resolver";
+import type { AttDriveMapping } from "@/modules/finger-system/integrations/att2016/path-resolver";
 
 export async function ensureFingerSettingsRow() {
   return prisma.appFingerSettings.upsert({
@@ -9,6 +15,12 @@ export async function ensureFingerSettingsRow() {
       attReadOnly: true,
       attSmbShare: FINGER_ENV.attSmbShare(),
       attDatabaseName: FINGER_ENV.attDatabaseName(),
+      attWindowsPath: buildWindowsPathFromParts({
+        driveLetter: "X",
+        databaseName: FINGER_ENV.attDatabaseName(),
+      }),
+      attAccessUser: "Admin",
+      attBlankPassword: true,
     },
     update: {},
   });
@@ -21,6 +33,17 @@ export async function getFingerSettingsPublic() {
     attConnectionType: row.attConnectionType,
     attSmbShare: row.attSmbShare,
     attDatabaseName: row.attDatabaseName,
+    attWindowsPath:
+      row.attWindowsPath ??
+      buildWindowsPathFromParts({
+        driveLetter: "X",
+        databaseName: row.attDatabaseName ?? "ATT2016.MDB",
+        smbShare: row.attSmbShare,
+      }),
+    attAccessUser: row.attAccessUser ?? "Admin",
+    attBlankPassword: row.attBlankPassword ?? true,
+    attDriveMappings: row.attDriveMappings,
+    linkRrhhEmployees: row.linkRrhhEmployees,
     syncAutoEnabled: row.syncAutoEnabled,
     syncIntervalMinutes: row.syncIntervalMinutes,
     lastAutoSyncAt: row.lastAutoSyncAt?.toISOString() ?? null,
@@ -33,12 +56,17 @@ export async function getFingerSettingsPublic() {
 
 export type FingerSettingsPatch = {
   attReadOnly?: boolean;
+  linkRrhhEmployees?: boolean;
   syncAutoEnabled?: boolean;
   syncIntervalMinutes?: number;
   discoveryDefaultPort?: number;
   backupPath?: string | null;
   attSmbShare?: string | null;
   attDatabaseName?: string | null;
+  attWindowsPath?: string | null;
+  attAccessUser?: string | null;
+  attBlankPassword?: boolean;
+  attDriveMappings?: AttDriveMapping[] | null;
 };
 
 function normalizeSmbShare(input: string | null | undefined): string | null {
@@ -65,6 +93,7 @@ export async function updateFingerSettings(patch: FingerSettingsPatch) {
   const data: Record<string, unknown> = {};
 
   if (patch.attReadOnly !== undefined) data.attReadOnly = patch.attReadOnly;
+  if (patch.linkRrhhEmployees !== undefined) data.linkRrhhEmployees = patch.linkRrhhEmployees;
   if (patch.syncAutoEnabled !== undefined) data.syncAutoEnabled = patch.syncAutoEnabled;
   if (patch.syncIntervalMinutes !== undefined) {
     const mins = Math.min(1440, Math.max(5, Math.round(patch.syncIntervalMinutes)));
@@ -75,8 +104,33 @@ export async function updateFingerSettings(patch: FingerSettingsPatch) {
     data.discoveryDefaultPort = port;
   }
   if (patch.backupPath !== undefined) data.backupPath = patch.backupPath?.trim() || null;
-  if (patch.attSmbShare !== undefined) data.attSmbShare = normalizeSmbShare(patch.attSmbShare);
-  if (patch.attDatabaseName !== undefined) data.attDatabaseName = normalizeDatabaseFile(patch.attDatabaseName);
+
+  const row = await ensureFingerSettingsRow();
+  const mappings = patch.attDriveMappings ?? row.attDriveMappings;
+
+  if (patch.attWindowsPath !== undefined) {
+    const path = patch.attWindowsPath?.trim();
+    if (!path) {
+      data.attWindowsPath = null;
+    } else {
+      const resolved = resolveAttDatabasePath(path, mappings);
+      data.attWindowsPath = resolved.windowsPath;
+      data.attSmbShare = resolved.smbShare;
+      data.attDatabaseName = resolved.databaseName;
+    }
+  } else {
+    if (patch.attSmbShare !== undefined) data.attSmbShare = normalizeSmbShare(patch.attSmbShare);
+    if (patch.attDatabaseName !== undefined) {
+      data.attDatabaseName = normalizeDatabaseFile(patch.attDatabaseName);
+    }
+  }
+
+  if (patch.attAccessUser !== undefined) data.attAccessUser = patch.attAccessUser?.trim() || "Admin";
+  if (patch.attBlankPassword !== undefined) data.attBlankPassword = patch.attBlankPassword;
+  if (patch.attDriveMappings !== undefined) {
+    data.attDriveMappings =
+      patch.attDriveMappings === null ? null : normalizeAttDriveMappings(patch.attDriveMappings);
+  }
 
   await prisma.appFingerSettings.update({
     where: { id: "default" },

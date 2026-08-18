@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withPermission } from "@/lib/permissions/middleware";
-import { ok, badRequest, notFound, serverError, noContent } from "@/lib/api/response";
+import { hasPermission } from "@/lib/permissions/check";
+import { ok, badRequest, notFound, serverError, noContent, forbidden } from "@/lib/api/response";
 import {
   deleteFingerDevice,
   getFingerDevice,
@@ -59,11 +60,34 @@ export const POST = withPermission(
   async (req: NextRequest, { session, params }) => {
     try {
       const body = await req.json().catch(() => ({}));
-      if (body.action === "probe") {
+      const action = typeof body.action === "string" ? body.action : "";
+
+      if (
+        (action === "pull-users" || action === "pull-attendance") &&
+        !hasPermission(session, "fingerSystem.dispositivos", "edit")
+      ) {
+        return forbidden();
+      }
+
+      if (action === "probe") {
         const result = await probeFingerDevice(params.id);
         return ok(result);
       }
-      if (body.action === "pull-users") {
+      if (action === "connect") {
+        const { connectFingerDevice } = await import(
+          "@/modules/finger-system/services/finger-device-connect"
+        );
+        const result = await connectFingerDevice({
+          deviceId: params.id,
+          userId: session!.user!.id,
+          ipAddress:
+            req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+            req.headers.get("x-real-ip") ||
+            null,
+        });
+        return ok(result);
+      }
+      if (action === "pull-users") {
         const result = await pullFingerDeviceUsers({
           deviceId: params.id,
           userId: session!.user!.id,
@@ -74,7 +98,7 @@ export const POST = withPermission(
         });
         return ok(result);
       }
-      if (body.action === "pull-attendance") {
+      if (action === "pull-attendance") {
         const to = new Date();
         const from = new Date();
         from.setDate(from.getDate() - 7);
@@ -97,5 +121,5 @@ export const POST = withPermission(
     }
   },
   "fingerSystem.dispositivos",
-  "edit",
+  "view",
 );

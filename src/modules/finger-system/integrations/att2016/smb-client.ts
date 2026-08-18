@@ -34,6 +34,53 @@ export async function isAtt2016SmbConfigured(): Promise<boolean> {
   return (await resolveAtt2016SmbConfig()) != null;
 }
 
+function parseSharePath(sharePath: string): { smbTarget: string; host: string; shareName: string } {
+  const shareMatch = sharePath.match(/^\/\/([^/]+)\/(.+)$/);
+  if (!shareMatch) {
+    throw new Error("Formato de share SMB inválido. Use //servidor/carpeta.");
+  }
+  const [, host, shareName] = shareMatch;
+  return { smbTarget: `//${host}/${shareName}`, host, shareName };
+}
+
+/** Lista archivos en el share SMB (filtra .mdb / .accdb). */
+export async function listAtt2016ShareFiles(shareOverride?: string): Promise<{
+  share: string;
+  files: { name: string; sizeBytes: number | null }[];
+}> {
+  const config = await resolveAtt2016SmbConfig();
+  if (!config) {
+    throw new Error("Configure ATT2016_SMB_PASSWORD en el servidor para explorar el share.");
+  }
+
+  const share = shareOverride?.trim() || config.share;
+  const { smbTarget } = parseSharePath(share);
+
+  const args = [
+    smbTarget,
+    "-U",
+    config.user ? `${config.user}%${config.password}` : `%${config.password}`,
+    "-c",
+    "ls",
+  ];
+
+  const { stdout } = await execFileAsync("smbclient", args, { timeout: 30_000, maxBuffer: 2 * 1024 * 1024 });
+  const files: { name: string; sizeBytes: number | null }[] = [];
+
+  for (const line of stdout.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith(".") || trimmed.startsWith("blocks")) continue;
+    const match = trimmed.match(/^(.+?)\s+[ADHRS]+\s+(\d+)/i);
+    if (!match) continue;
+    const name = match[1]!.trim();
+    if (!/\.(mdb|accdb)$/i.test(name)) continue;
+    files.push({ name, sizeBytes: Number.parseInt(match[2]!, 10) || null });
+  }
+
+  files.sort((a, b) => a.name.localeCompare(b.name));
+  return { share, files };
+}
+
 /** Descarga ATT2016.MDB del share SMB a un archivo temporal (solo lectura). */
 export async function fetchAtt2016MdbCopy(): Promise<{ localPath: string; cleanup: () => Promise<void> }> {
   const config = await resolveAtt2016SmbConfig();

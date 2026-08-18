@@ -7,6 +7,7 @@ const CMD_PREPARE_DATA = 1500;
 const CMD_DATA = 1501;
 const CMD_ATTLOG_RRQ = 13;
 const CMD_USERTEMP_RRQ = 9;
+const CMD_STARTENROLL = 61;
 
 export type ZkAttendanceRecord = {
   userId: number;
@@ -204,6 +205,37 @@ export class ZkProtocolClient {
     await this.connect();
     const payload = await this.readDataPayload(CMD_USERTEMP_RRQ);
     return parseUserChunk(payload);
+  }
+
+  /** Coloca el dispositivo en modo enrolamiento para un usuario/dedo. */
+  async startEnrollment(userPin: string, fingerId: number): Promise<{ ok: boolean; message: string }> {
+    await this.connect();
+    const pin = userPin.trim().slice(0, 9);
+    if (!pin) throw new Error("Número de empleado (badge) requerido para enrolar.");
+
+    const data = Buffer.alloc(3);
+    data.writeUInt8(fingerId & 0xff, 0);
+    data.write(pin, 1, 1, "ascii");
+
+    try {
+      const reply = await this.sendReceive(CMD_STARTENROLL, data);
+      const cmd = reply.readUInt16LE(0);
+      if (cmd === CMD_ACK_OK) {
+        return {
+          ok: true,
+          message: `Dispositivo listo. Coloque el dedo indicado (${fingerId}) para ${pin}.`,
+        };
+      }
+      return {
+        ok: false,
+        message: "El dispositivo no aceptó el modo enrolamiento. Verifique modelo y firmware ZK.",
+      };
+    } catch (e) {
+      return {
+        ok: false,
+        message: e instanceof Error ? e.message : "Error al iniciar enrolamiento.",
+      };
+    }
   }
 }
 

@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { FingerCompanyFilterHint } from "@/components/finger-system/FingerCompanyFilterHint";
 import { fingerApiUrl, useFingerCompany } from "@/components/finger-system/finger-company-context";
+import { useFingerPermissions } from "@/components/finger-system/use-finger-permissions";
 import type { FingerDeviceRow } from "@/modules/finger-system/services/finger-devices";
 import type { AttMachineImportPreview } from "@/modules/finger-system/services/att2016-machines-import";
 
@@ -21,24 +22,26 @@ type ListResponse = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  ONLINE: "En línea",
-  OFFLINE: "Fuera de línea",
+  ONLINE: "Conectado",
+  OFFLINE: "Desconectado",
   ERROR: "Error",
   UNKNOWN: "Sin verificar",
 };
 
 const STATUS_TONE: Record<string, string> = {
-  ONLINE: "bg-emerald-100 text-emerald-800",
-  OFFLINE: "bg-slate-100 text-slate-700",
-  ERROR: "bg-red-100 text-red-800",
-  UNKNOWN: "bg-amber-100 text-amber-800",
+  ONLINE: "text-emerald-700 font-medium",
+  OFFLINE: "text-blue-700 font-medium",
+  ERROR: "text-red-700 font-medium",
+  UNKNOWN: "text-amber-700 font-medium",
 };
 
 export function FingerDevicesPanel() {
   const queryClient = useQueryClient();
   const { companyCode } = useFingerCompany();
+  const { canEditDevices } = useFingerPermissions();
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
+  const [connectingId, setConnectingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,6 +64,7 @@ export function FingerDevicesPanel() {
 
   const importPreviewQuery = useQuery<{ data: AttMachineImportPreview }>({
     queryKey: ["finger-att2016-machines-preview"],
+    enabled: canEditDevices,
     queryFn: async () => {
       const res = await fetch("/api/finger-system/devices/att2016/preview", { credentials: "same-origin" });
       const json = await res.json();
@@ -101,18 +105,20 @@ export function FingerDevicesPanel() {
     },
   });
 
-  const probeOneMutation = useMutation({
-    mutationFn: async (payload: { id: string; action: string }) => {
-      const res = await fetch(`/api/finger-system/devices/${payload.id}`, {
+  const connectMutation = useMutation({
+    mutationFn: async (id: string) => {
+      setConnectingId(id);
+      const res = await fetch(`/api/finger-system/devices/${id}`, {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: payload.action }),
+        body: JSON.stringify({ action: "connect" }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error?.message ?? "Error en dispositivo");
+      if (!res.ok) throw new Error(json.error?.message ?? "Error al conectar");
       return json.data;
     },
+    onSettled: () => setConnectingId(null),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["finger-devices"] }),
   });
 
@@ -135,27 +141,29 @@ export function FingerDevicesPanel() {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Agregar reloj biométrico manualmente</CardTitle>
-          <p className="text-sm text-slate-500">
-            Registre cada equipo con nombre, dirección IP y puerto TCP (4370 por defecto en ZKTeco).
-          </p>
-        </CardHeader>
-        <CardContent>
-          <CreateDeviceForm
-            companyCode={companyCode}
-            onSuccess={() => queryClient.invalidateQueries({ queryKey: ["finger-devices"] })}
-          />
-        </CardContent>
-      </Card>
+      {canEditDevices ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Agregar reloj biométrico manualmente</CardTitle>
+            <p className="text-sm text-slate-500">
+              Registre cada equipo con nombre, dirección IP y puerto TCP (4370 por defecto en ZKTeco).
+            </p>
+          </CardHeader>
+          <CardContent>
+            <CreateDeviceForm
+              companyCode={companyCode}
+              onSuccess={() => queryClient.invalidateQueries({ queryKey: ["finger-devices"] })}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base">Dispositivos registrados</CardTitle>
+            <CardTitle className="text-base">Lista / Máquinas</CardTitle>
             <p className="mt-1 text-sm text-slate-500">
-              Relojes en red. Use Editar para cambiar IP, puerto o ubicación.
+              Relojes biométricos en red (TCP/IP). Conecte cada equipo para actualizar estado y contadores.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -165,7 +173,7 @@ export function FingerDevicesPanel() {
               onClick={() => probeAllMutation.mutate()}
               disabled={probeAllMutation.isPending}
             >
-              {probeAllMutation.isPending ? "Verificando…" : "Verificar todos"}
+              {probeAllMutation.isPending ? "Conectando…" : "Conectar todos"}
             </Button>
           </div>
         </CardHeader>
@@ -196,22 +204,27 @@ export function FingerDevicesPanel() {
           {data ? (
             <>
               <div className="overflow-auto rounded-lg border">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
+                <table className="min-w-[1200px] w-full text-xs">
+                  <thead className="bg-blue-700 text-white">
                     <tr>
-                      <th className="px-3 py-2 text-left font-medium">Nombre</th>
-                      <th className="px-3 py-2 text-left font-medium">Empresa</th>
-                      <th className="px-3 py-2 text-left font-medium">IP:Puerto</th>
-                      <th className="px-3 py-2 text-left font-medium">Serial</th>
-                      <th className="px-3 py-2 text-left font-medium">Estado</th>
-                      <th className="px-3 py-2 text-left font-medium">Acciones</th>
+                      <th className="px-2 py-2 text-left font-medium">NombreDisp</th>
+                      <th className="px-2 py-2 text-left font-medium">Estado</th>
+                      <th className="px-2 py-2 text-left font-medium">TipoComm</th>
+                      <th className="px-2 py-2 text-left font-medium">Dirrec. IP</th>
+                      <th className="px-2 py-2 text-left font-medium">Puerta</th>
+                      <th className="px-2 py-2 text-left font-medium">NombreProd</th>
+                      <th className="px-2 py-2 text-right font-medium">CuentaUsu</th>
+                      <th className="px-2 py-2 text-right font-medium">CuentaFP</th>
+                      <th className="px-2 py-2 text-right font-medium">CuentaReg</th>
+                      <th className="px-2 py-2 text-left font-medium">Número Serial</th>
+                      <th className="px-2 py-2 text-left font-medium">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.items.map((row) =>
-                      editingId === row.id ? (
+                      canEditDevices && editingId === row.id ? (
                         <tr key={row.id} className="border-t bg-slate-50">
-                          <td colSpan={6} className="px-3 py-3">
+                          <td colSpan={11} className="px-3 py-3">
                             <EditDeviceForm
                               device={row}
                               companyCode={companyCode}
@@ -224,71 +237,69 @@ export function FingerDevicesPanel() {
                           </td>
                         </tr>
                       ) : (
-                        <tr key={row.id} className="border-t">
-                          <td className="px-3 py-2">
-                            <div>{row.name}</div>
-                            {row.location ? (
-                              <div className="text-xs text-slate-500">{row.location}</div>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-xs">{row.company ?? "—"}</td>
-                          <td className="px-3 py-2 font-mono">
-                            {row.ipAddress}:{row.port}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-xs">{row.serialNumber ?? "—"}</td>
-                          <td className="px-3 py-2">
-                            <Badge className={STATUS_TONE[row.status] ?? ""}>
-                              {STATUS_LABEL[row.status] ?? row.status}
-                            </Badge>
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex flex-wrap gap-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setEditingId(row.id)}
-                              >
-                                Editar
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={probeOneMutation.isPending}
-                                onClick={() => probeOneMutation.mutate({ id: row.id, action: "probe" })}
-                              >
-                                Verificar
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={probeOneMutation.isPending}
-                                onClick={() =>
-                                  probeOneMutation.mutate({ id: row.id, action: "pull-users" })
-                                }
-                              >
-                                Usuarios ZK
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={probeOneMutation.isPending}
-                                onClick={() =>
-                                  probeOneMutation.mutate({ id: row.id, action: "pull-attendance" })
-                                }
-                              >
-                                Marcas ZK
-                              </Button>
+                        <tr key={row.id} className="border-t hover:bg-slate-50/80">
+                          <td className="px-2 py-2">
+                            <div className="flex items-center gap-1">
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                className="text-red-600"
-                                disabled={deleteMutation.isPending}
-                                onClick={() => {
-                                  if (confirm(`¿Eliminar ${row.name}?`)) deleteMutation.mutate(row.id);
-                                }}
+                                size="icon"
+                                className="h-6 w-6"
+                                title="Conectar / actualizar"
+                                disabled={connectMutation.isPending && connectingId === row.id}
+                                onClick={() => connectMutation.mutate(row.id)}
                               >
-                                Eliminar
+                                <RefreshCw
+                                  className={`h-3.5 w-3.5 ${connectingId === row.id ? "animate-spin" : ""}`}
+                                />
                               </Button>
+                              <span>{row.name}</span>
+                            </div>
+                          </td>
+                          <td className={`px-2 py-2 ${STATUS_TONE[row.status] ?? ""}`}>
+                            {STATUS_LABEL[row.status] ?? row.status}
+                          </td>
+                          <td className="px-2 py-2">TCP/IP</td>
+                          <td className="px-2 py-2 font-mono">{row.ipAddress}</td>
+                          <td className="px-2 py-2 font-mono">{row.port}</td>
+                          <td className="px-2 py-2">{row.model ?? row.brand ?? "—"}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {row.employeeCount.toLocaleString("es-CR")}
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {row.fingerprintCount.toLocaleString("es-CR")}
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {row.punchCount.toLocaleString("es-CR")}
+                          </td>
+                          <td className="px-2 py-2 font-mono">{row.serialNumber ?? "—"}</td>
+                          <td className="px-2 py-2">
+                            <div className="flex flex-wrap gap-1">
+                              {canEditDevices ? (
+                                <Button variant="outline" size="sm" onClick={() => setEditingId(row.id)}>
+                                  Editar
+                                </Button>
+                              ) : null}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={connectMutation.isPending && connectingId === row.id}
+                                onClick={() => connectMutation.mutate(row.id)}
+                              >
+                                {connectingId === row.id ? "…" : "Conectar"}
+                              </Button>
+                              {canEditDevices ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-600"
+                                  disabled={deleteMutation.isPending}
+                                  onClick={() => {
+                                    if (confirm(`¿Eliminar ${row.name}?`)) deleteMutation.mutate(row.id);
+                                  }}
+                                >
+                                  Eliminar
+                                </Button>
+                              ) : null}
                             </div>
                           </td>
                         </tr>
@@ -296,8 +307,8 @@ export function FingerDevicesPanel() {
                     )}
                     {data.items.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
-                          Sin dispositivos. Importe desde ATT2016 o agregue manualmente.
+                        <td colSpan={11} className="px-3 py-6 text-center text-slate-500">
+                          Sin dispositivos. Importe desde ATT2016 o agregue manualmente por IP.
                         </td>
                       </tr>
                     ) : null}
@@ -329,55 +340,57 @@ export function FingerDevicesPanel() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <div>
-            <CardTitle className="text-base">Importar desde ATT2016</CardTitle>
-            <p className="mt-1 text-sm text-slate-500">
-              Tabla Machines de ATT2016.MDB (Piso 01, Piso 02, Alajuela, WELL, etc.).
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => importPreviewQuery.refetch()}
-            disabled={importPreviewQuery.isFetching}
-          >
-            Actualizar
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {importPreviewQuery.isError ? (
-            <p className="text-sm text-red-600">{(importPreviewQuery.error as Error).message}</p>
-          ) : null}
-          {importPreview ? (
-            <>
-              <div className="grid gap-3 sm:grid-cols-4">
-                <MiniStat label="En ATT2016" value={importPreview.attTotal} />
-                <MiniStat label="Importables" value={importPreview.importable} />
-                <MiniStat label="Sin IP" value={importPreview.missingIp} />
-                <MiniStat label="Ya registrados" value={importPreview.alreadyRegistered} />
-              </div>
-              <Button
-                onClick={() => importMutation.mutate()}
-                disabled={importMutation.isPending || importPreview.importable === 0}
-              >
-                {importMutation.isPending
-                  ? "Importando…"
-                  : `Confirmar importación (${importPreview.importable})`}
-              </Button>
-              {importMutation.isSuccess ? (
-                <p className="text-sm text-emerald-700">
-                  Importados {importMutation.data.rowsInserted}, actualizados{" "}
-                  {importMutation.data.rowsUpdated}.
-                </p>
-              ) : null}
-            </>
-          ) : importPreviewQuery.isLoading ? (
-            <p className="text-sm text-slate-500">Analizando ATT2016…</p>
-          ) : null}
-        </CardContent>
-      </Card>
+      {canEditDevices ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Importar desde ATT2016</CardTitle>
+              <p className="mt-1 text-sm text-slate-500">
+                Tabla Machines de ATT2016.MDB (Piso 01, Piso 02, Alajuela, WELL, etc.).
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => importPreviewQuery.refetch()}
+              disabled={importPreviewQuery.isFetching}
+            >
+              Actualizar
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {importPreviewQuery.isError ? (
+              <p className="text-sm text-red-600">{(importPreviewQuery.error as Error).message}</p>
+            ) : null}
+            {importPreview ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <MiniStat label="En ATT2016" value={importPreview.attTotal} />
+                  <MiniStat label="Importables" value={importPreview.importable} />
+                  <MiniStat label="Sin IP" value={importPreview.missingIp} />
+                  <MiniStat label="Ya registrados" value={importPreview.alreadyRegistered} />
+                </div>
+                <Button
+                  onClick={() => importMutation.mutate()}
+                  disabled={importMutation.isPending || importPreview.importable === 0}
+                >
+                  {importMutation.isPending
+                    ? "Importando…"
+                    : `Confirmar importación (${importPreview.importable})`}
+                </Button>
+                {importMutation.isSuccess ? (
+                  <p className="text-sm text-emerald-700">
+                    Importados {importMutation.data.rowsInserted}, actualizados{" "}
+                    {importMutation.data.rowsUpdated}.
+                  </p>
+                ) : null}
+              </>
+            ) : importPreviewQuery.isLoading ? (
+              <p className="text-sm text-slate-500">Analizando ATT2016…</p>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

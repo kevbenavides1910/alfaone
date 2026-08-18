@@ -810,12 +810,12 @@ export const PERMISSION_REGISTRY = {
       },
       empresas: {
         label: "Empresas",
-        uiRoutes: ["/finger-system/empresas"],
+        uiRoutes: ["/finger-system/empresas", "/finger-system/empleados"],
         apiPrefixes: ["/api/finger-system"],
         actions: { view: "Consultar empresas", edit: "Administrar empresas biométricas" },
       },
       empleados: {
-        label: "Empleados",
+        label: "Lista Empleados",
         uiRoutes: ["/finger-system/empleados"],
         apiPrefixes: ["/api/finger-system"],
         actions: { view: "Consultar empleados", edit: "Administrar empleados biométricos" },
@@ -830,7 +830,10 @@ export const PERMISSION_REGISTRY = {
         label: "Dispositivos",
         uiRoutes: ["/finger-system/dispositivos"],
         apiPrefixes: ["/api/finger-system"],
-        actions: { view: "Consultar dispositivos", edit: "Administrar dispositivos" },
+        actions: {
+          view: "Consultar y conectar relojes",
+          edit: "Registrar, editar e importar dispositivos",
+        },
       },
       marcasEnVivo: {
         label: "Marcas en vivo",
@@ -878,7 +881,10 @@ export const PERMISSION_REGISTRY = {
         label: "Configuración",
         uiRoutes: ["/finger-system/configuracion"],
         apiPrefixes: ["/api/finger-system/settings"],
-        actions: { view: "Ver configuración", admin: "Modificar configuración biométrica" },
+        actions: {
+          view: "Ver configuración biométrica",
+          admin: "Administrar ruta ATT2016 y ajustes del módulo",
+        },
       },
     },
   },

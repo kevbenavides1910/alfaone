@@ -25,12 +25,19 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const updated = await updateFingerSettings({
       attReadOnly: typeof body.attReadOnly === "boolean" ? body.attReadOnly : undefined,
+      linkRrhhEmployees:
+        typeof body.linkRrhhEmployees === "boolean" ? body.linkRrhhEmployees : undefined,
       syncAutoEnabled: typeof body.syncAutoEnabled === "boolean" ? body.syncAutoEnabled : undefined,
       syncIntervalMinutes:
         typeof body.syncIntervalMinutes === "number" ? body.syncIntervalMinutes : undefined,
       backupPath: body.backupPath !== undefined ? String(body.backupPath) : undefined,
       attSmbShare: body.attSmbShare !== undefined ? String(body.attSmbShare) : undefined,
       attDatabaseName: body.attDatabaseName !== undefined ? String(body.attDatabaseName) : undefined,
+      attWindowsPath: body.attWindowsPath !== undefined ? String(body.attWindowsPath) : undefined,
+      attAccessUser: body.attAccessUser !== undefined ? String(body.attAccessUser) : undefined,
+      attBlankPassword:
+        typeof body.attBlankPassword === "boolean" ? body.attBlankPassword : undefined,
+      attDriveMappings: Array.isArray(body.attDriveMappings) ? body.attDriveMappings : undefined,
       discoveryDefaultPort:
         typeof body.discoveryDefaultPort === "number" ? body.discoveryDefaultPort : undefined,
     });

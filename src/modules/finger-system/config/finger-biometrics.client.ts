@@ -14,3 +14,8 @@ const FINGER_LABELS: Record<number, string> = {
 export function fingerLabel(fingerId: number): string {
   return FINGER_LABELS[fingerId] ?? `Dedo ${fingerId}`;
 }
+
+export const FINGER_OPTIONS = Object.entries(FINGER_LABELS).map(([id, label]) => ({
+  id: Number.parseInt(id, 10),
+  label,
+}));

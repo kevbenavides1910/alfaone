@@ -31,8 +31,12 @@ const TABS: Tab[] = [
     permission: "fingerSystem.dashboard",
     isActive: (p) => p === "/finger-system",
   },
-  { href: "/finger-system/empresas", label: "Empresas", permission: "fingerSystem.empresas" },
-  { href: "/finger-system/empleados", label: "Empleados", permission: "fingerSystem.empleados" },
+  {
+    href: "/finger-system/empleados",
+    label: "Lista Empleados",
+    permission: "fingerSystem.empleados",
+    isActive: (p) => p.startsWith("/finger-system/empleados") || p.startsWith("/finger-system/empresas"),
+  },
   { href: "/finger-system/biometria", label: "Biometría", permission: "fingerSystem.biometria" },
   { href: "/finger-system/dispositivos", label: "Dispositivos", permission: "fingerSystem.dispositivos" },
   {
@@ -54,6 +58,7 @@ const TABS: Tab[] = [
     href: "/finger-system/configuracion",
     label: "Configuración",
     permission: "fingerSystem.configuracion",
+    isActive: (p) => p.startsWith("/finger-system/configuracion"),
   },
 ];
 
@@ -66,7 +71,15 @@ export function FingerSystemShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "";
   const { data: session } = useSession();
   const { companyCode, setCompanyCode, isMultiCompany, companies } = useFingerCompany();
-  const visibleTabs = TABS.filter((tab) => hasPermission(session, tab.permission, "view"));
+  const visibleTabs = TABS.filter((tab) => {
+    if (tab.href === "/finger-system/empleados") {
+      return (
+        hasPermission(session, "fingerSystem.empleados", "view") ||
+        hasPermission(session, "fingerSystem.empresas", "view")
+      );
+    }
+    return hasPermission(session, tab.permission, "view");
+  });
 
   const selectCompanyValue =
     companyCode && companies.some((c) => c.code === companyCode) ? companyCode : undefined;

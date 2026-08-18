@@ -19,5 +19,5 @@ export const POST = withPermission(
     }
   },
   "fingerSystem.dispositivos",
-  "edit",
+  "view",
 );

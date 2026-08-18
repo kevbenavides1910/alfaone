@@ -9,4 +9,8 @@ export interface BiometricDeviceAdapter {
   getUsers(): Promise<unknown[]>;
   getAttendance(from: Date, to: Date): Promise<unknown[]>;
   sync(): Promise<{ ok: boolean; message: string }>;
+  startFingerprintEnrollment(params: {
+    userPin: string;
+    fingerId: number;
+  }): Promise<{ ok: boolean; message: string }>;
 }
