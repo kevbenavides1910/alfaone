@@ -28,9 +28,15 @@ export async function POST(req: NextRequest) {
       databaseName = resolved.databaseName;
     }
 
-    const result = await probeAtt2016Connection({ sharePath, databaseName });
+    const result = await probeAtt2016Connection({
+      sharePath,
+      databaseName,
+      smbUser: typeof body.attSmbUser === "string" ? body.attSmbUser : undefined,
+      smbPassword: typeof body.attSmbPassword === "string" ? body.attSmbPassword : undefined,
+    });
     return ok({
       ...result,
+      reachable: result.reachable,
       windowsPath: body.attWindowsPath ?? null,
       resolvedShare: sharePath ?? null,
       resolvedDatabase: databaseName ?? null,

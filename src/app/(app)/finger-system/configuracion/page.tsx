@@ -51,14 +51,16 @@ export default function FingerConfiguracionPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Credenciales en el servidor (.env)</CardTitle>
+          <CardTitle className="text-base">Credenciales de red</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1 font-mono text-xs text-slate-600">
-          <p>ATT2016_SMB_USER — usuario del share</p>
-          <p>ATT2016_SMB_PASSWORD — contraseña (obligatoria)</p>
-          <p className="pt-2 text-slate-500">
-            La ruta del share y el archivo MDB los define un administrador biométrico desde esta
-            pantalla.
+        <CardContent className="space-y-1 text-sm text-slate-600">
+          <p>
+            El usuario y contraseña SMB se configuran en el diálogo <strong>Propiedades de vínculo de datos</strong>.
+            Deben tener permiso de lectura y administración en la carpeta compartida (DB-Biometrico).
+          </p>
+          <p className="text-slate-500">
+            La contraseña se almacena cifrada en la base de datos de Finger System; no use variables
+            ATT2016_SMB_* en el servidor.
           </p>
         </CardContent>
       </Card>

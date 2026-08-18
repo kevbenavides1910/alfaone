@@ -6,6 +6,7 @@ import {
   resolveAttDatabasePath,
 } from "@/modules/finger-system/integrations/att2016/path-resolver";
 import type { AttDriveMapping } from "@/modules/finger-system/integrations/att2016/path-resolver";
+import { encryptFingerSmbPassword } from "@/modules/finger-system/utils/finger-smb-crypto";
 
 export async function ensureFingerSettingsRow() {
   return prisma.appFingerSettings.upsert({
@@ -32,6 +33,8 @@ export async function getFingerSettingsPublic() {
     attReadOnly: row.attReadOnly,
     attConnectionType: row.attConnectionType,
     attSmbShare: row.attSmbShare,
+    attSmbUser: row.attSmbUser,
+    attSmbPasswordSet: Boolean(row.attSmbPasswordEnc),
     attDatabaseName: row.attDatabaseName,
     attWindowsPath:
       row.attWindowsPath ??
@@ -50,7 +53,7 @@ export async function getFingerSettingsPublic() {
     discoveryDefaultPort: row.discoveryDefaultPort,
     backupPath: row.backupPath,
     updatedAt: row.updatedAt.toISOString(),
-    smbConfigured: Boolean(FINGER_ENV.attSmbPassword() || FINGER_ENV.attConnectionString()),
+    smbConfigured: Boolean(row.attSmbPasswordEnc) || Boolean(FINGER_ENV.attConnectionString()),
   };
 }
 
@@ -62,6 +65,9 @@ export type FingerSettingsPatch = {
   discoveryDefaultPort?: number;
   backupPath?: string | null;
   attSmbShare?: string | null;
+  attSmbUser?: string | null;
+  attSmbPassword?: string | null;
+  clearAttSmbPassword?: boolean;
   attDatabaseName?: string | null;
   attWindowsPath?: string | null;
   attAccessUser?: string | null;
@@ -130,6 +136,15 @@ export async function updateFingerSettings(patch: FingerSettingsPatch) {
   if (patch.attDriveMappings !== undefined) {
     data.attDriveMappings =
       patch.attDriveMappings === null ? null : normalizeAttDriveMappings(patch.attDriveMappings);
+  }
+
+  if (patch.attSmbUser !== undefined) {
+    data.attSmbUser = patch.attSmbUser?.trim() || null;
+  }
+  if (patch.clearAttSmbPassword) {
+    data.attSmbPasswordEnc = null;
+  } else if (typeof patch.attSmbPassword === "string" && patch.attSmbPassword.trim()) {
+    data.attSmbPasswordEnc = encryptFingerSmbPassword(patch.attSmbPassword.trim());
   }
 
   await prisma.appFingerSettings.update({

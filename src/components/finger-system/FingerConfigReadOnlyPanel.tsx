@@ -8,6 +8,8 @@ type Settings = {
   attReadOnly: boolean;
   attWindowsPath: string | null;
   attSmbShare: string | null;
+  attSmbUser: string | null;
+  attSmbPasswordSet: boolean;
   attDatabaseName: string | null;
   attAccessUser: string | null;
   attBlankPassword: boolean;
@@ -52,6 +54,11 @@ export function FingerConfigReadOnlyPanel() {
           <>
             <Row label="Ruta Windows (Access)" value={settings.attWindowsPath ?? "—"} mono />
             <Row label="Share SMB (servidor)" value={settings.attSmbShare ?? "—"} mono />
+            <Row label="Usuario de red SMB" value={settings.attSmbUser ?? "—"} />
+            <Row
+              label="Contraseña de red"
+              value={settings.attSmbPasswordSet ? "Guardada (cifrada)" : "No configurada"}
+            />
             <Row label="Usuario Access" value={settings.attAccessUser ?? "Admin"} />
             <Row
               label="Contraseña Access"
@@ -70,7 +77,7 @@ export function FingerConfigReadOnlyPanel() {
             ) : null}
             <div className="flex flex-wrap gap-2 pt-1">
               <Badge variant={settings.smbConfigured ? "default" : "secondary"}>
-                Credenciales SMB: {settings.smbConfigured ? "OK" : "pendientes"}
+                Credenciales SMB: {settings.smbConfigured ? "configuradas" : "pendientes"}
               </Badge>
               <Badge variant={settings.attReadOnly ? "outline" : "destructive"}>
                 ATT2016 {settings.attReadOnly ? "solo lectura" : "escritura"}

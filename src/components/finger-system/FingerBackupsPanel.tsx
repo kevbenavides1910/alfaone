@@ -142,7 +142,7 @@ export function FingerBackupsPanel() {
               {(data?.items.length ?? 0) === 0 && !listQuery.isLoading ? (
                 <tr>
                   <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
-                    Sin respaldos. Configure ATT2016_SMB_* y cree el primero.
+                    Sin respaldos. Configure credenciales de red SMB y cree el primero.
                   </td>
                 </tr>
               ) : null}

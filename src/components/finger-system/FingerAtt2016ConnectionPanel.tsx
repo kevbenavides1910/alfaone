@@ -11,6 +11,8 @@ import type { AttDriveMapping } from "@/modules/finger-system/integrations/att20
 type Settings = {
   attWindowsPath: string | null;
   attSmbShare: string | null;
+  attSmbUser: string | null;
+  attSmbPasswordSet: boolean;
   attDatabaseName: string | null;
   attAccessUser: string | null;
   attBlankPassword: boolean;
@@ -33,9 +35,22 @@ type BrowseResponse = {
 type ProbeResult = {
   reachable: boolean;
   message: string;
+  canReadDatabase?: boolean;
+  canWriteShare?: boolean;
   resolvedShare?: string | null;
   resolvedDatabase?: string | null;
 };
+
+function smbCredentialsPayload(
+  smbUser: string,
+  smbPassword: string,
+  passwordSet: boolean,
+) {
+  const payload: Record<string, string> = { attSmbUser: smbUser.trim() };
+  if (smbPassword.trim()) payload.attSmbPassword = smbPassword;
+  else if (!passwordSet) payload.attSmbPassword = "";
+  return payload;
+}
 
 const WIN = {
   dialog: "border border-[#808080] bg-[#d4d0c8] shadow-lg",
@@ -55,6 +70,9 @@ export function FingerAtt2016ConnectionPanel() {
   const { canAdminConfig } = useFingerPermissions();
   const [tab, setTab] = useState<"proveedor" | "conexion" | "avanzado" | "all">("conexion");
   const [windowsPath, setWindowsPath] = useState("X:\\ATT2016.MDB");
+  const [smbUser, setSmbUser] = useState("");
+  const [smbPassword, setSmbPassword] = useState("");
+  const [saveSmbPassword, setSaveSmbPassword] = useState(true);
   const [accessUser, setAccessUser] = useState("Admin");
   const [accessPassword, setAccessPassword] = useState("");
   const [blankPassword, setBlankPassword] = useState(true);
@@ -97,6 +115,7 @@ export function FingerAtt2016ConnectionPanel() {
   useEffect(() => {
     if (!settings) return;
     setWindowsPath(settings.attWindowsPath ?? "X:\\ATT2016.MDB");
+    setSmbUser(settings.attSmbUser ?? "");
     setAccessUser(settings.attAccessUser ?? "Admin");
     setBlankPassword(settings.attBlankPassword ?? true);
     setLinkRrhhEmployees(settings.linkRrhhEmployees ?? false);
@@ -112,9 +131,25 @@ export function FingerAtt2016ConnectionPanel() {
 
   const browseMutation = useMutation({
     mutationFn: async (share: string) => {
-      const qs = new URLSearchParams({ share });
-      const res = await fetch(`/api/finger-system/settings/browse?${qs}`, {
+      const passwordSet = settings?.attSmbPasswordSet ?? false;
+      const useStored = passwordSet && !smbPassword.trim();
+      if (useStored) {
+        const qs = new URLSearchParams({ share });
+        const res = await fetch(`/api/finger-system/settings/browse?${qs}`, {
+          credentials: "same-origin",
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error?.message ?? "No fue posible abrir la carpeta");
+        return json.data as BrowseResponse;
+      }
+      const res = await fetch("/api/finger-system/settings/browse", {
+        method: "POST",
         credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          share,
+          ...smbCredentialsPayload(smbUser, smbPassword, passwordSet),
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error?.message ?? "No fue posible abrir la carpeta");
@@ -134,6 +169,7 @@ export function FingerAtt2016ConnectionPanel() {
           attAccessUser: accessUser,
           attBlankPassword: blankPassword,
           attDriveMappings: driveMappings,
+          ...smbCredentialsPayload(smbUser, smbPassword, settings?.attSmbPasswordSet ?? false),
         }),
       });
       const json = await res.json();
@@ -145,6 +181,19 @@ export function FingerAtt2016ConnectionPanel() {
 
   const saveMutation = useMutation({
     mutationFn: async (payload?: { mappingsOnly?: boolean }) => {
+      const passwordSet = settings?.attSmbPasswordSet ?? false;
+      if (!payload?.mappingsOnly) {
+        if (!smbUser.trim()) throw new Error("Indique el usuario de red SMB.");
+        if (!smbPassword.trim() && !passwordSet) {
+          throw new Error("Indique la contraseña de red SMB.");
+        }
+      }
+
+      const smbPatch =
+        saveSmbPassword && smbPassword.trim()
+          ? { attSmbPassword: smbPassword.trim() }
+          : {};
+
       const res = await fetch("/api/finger-system/settings", {
         method: "PATCH",
         credentials: "same-origin",
@@ -156,6 +205,8 @@ export function FingerAtt2016ConnectionPanel() {
                 attWindowsPath: windowsPath.trim(),
                 attAccessUser: accessUser.trim(),
                 attBlankPassword: blankPassword,
+                attSmbUser: smbUser.trim(),
+                ...smbPatch,
                 linkRrhhEmployees,
                 attDriveMappings: driveMappings,
               },
@@ -169,6 +220,7 @@ export function FingerAtt2016ConnectionPanel() {
       queryClient.invalidateQueries({ queryKey: ["finger-system-settings"] });
       queryClient.invalidateQueries({ queryKey: ["finger-network-locations"] });
       queryClient.invalidateQueries({ queryKey: ["finger-att2016-machines-preview"] });
+      setSmbPassword("");
     },
   });
 
@@ -266,6 +318,53 @@ export function FingerAtt2016ConnectionPanel() {
             </div>
 
             <fieldset className={WIN.group}>
+              <legend className="px-1">Credenciales de red (carpeta compartida SMB)</legend>
+              <p className="mb-2 text-[10px] text-slate-600">
+                Usuario de Windows con permiso de lectura y administración en el share (ej. DB-Biometrico).
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>
+                  <Label className="text-[10px]">Usuario de red:</Label>
+                  <input
+                    value={smbUser}
+                    onChange={(e) => setSmbUser(e.target.value)}
+                    className={`${WIN.field} mt-0.5`}
+                    placeholder="DOMINIO\\usuario o usuario"
+                    autoComplete="username"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px]">Contraseña de red:</Label>
+                  <input
+                    type="password"
+                    value={smbPassword}
+                    onChange={(e) => setSmbPassword(e.target.value)}
+                    className={`${WIN.field} mt-0.5`}
+                    placeholder={
+                      settings?.attSmbPasswordSet ? "(guardada — escriba para cambiar)" : "Contraseña SMB"
+                    }
+                    autoComplete="current-password"
+                  />
+                </div>
+              </div>
+              <label className="mt-2 flex items-center gap-2 text-[10px]">
+                <input
+                  type="checkbox"
+                  checked={saveSmbPassword}
+                  onChange={(e) => setSaveSmbPassword(e.target.checked)}
+                />
+                Permitir guardar contraseña de red
+              </label>
+              {settings?.attSmbPasswordSet ? (
+                <p className="mt-1 text-[10px] text-emerald-800">Contraseña de red guardada en el servidor (cifrada).</p>
+              ) : (
+                <p className="mt-1 text-[10px] text-amber-800">
+                  Debe ingresar credenciales de red para probar y guardar la conexión.
+                </p>
+              )}
+            </fieldset>
+
+            <fieldset className={WIN.group}>
               <legend className="px-1">Información de inicio de sesión en la base de datos</legend>
               <div className="grid gap-2 sm:grid-cols-2">
                 <div>
@@ -306,16 +405,21 @@ export function FingerAtt2016ConnectionPanel() {
             ) : null}
 
             {probeResult ? (
-              <p
+              <div
                 className={`text-[11px] ${probeResult.reachable ? "text-emerald-800" : "text-red-700"}`}
               >
-                {probeResult.message}
+                <p>{probeResult.message}</p>
                 {probeResult.resolvedShare ? (
                   <span className="block font-mono text-[10px] text-slate-500">
                     → {probeResult.resolvedShare} / {probeResult.resolvedDatabase}
                   </span>
                 ) : null}
-              </p>
+                {probeResult.reachable && probeResult.canWriteShare === false ? (
+                  <p className="mt-1 text-amber-800">
+                    Advertencia: el usuario puede leer el MDB pero no tiene permiso de escritura en el share.
+                  </p>
+                ) : null}
+              </div>
             ) : null}
 
             {saveMutation.isSuccess ? (
@@ -362,8 +466,10 @@ export function FingerAtt2016ConnectionPanel() {
         {tab === "all" ? (
           <div className="space-y-1 font-mono text-[10px] text-slate-600">
             <p>SMB share: {settings?.attSmbShare ?? "—"}</p>
+            <p>Usuario red: {settings?.attSmbUser ?? smbUser ?? "—"}</p>
+            <p>Contraseña red: {settings?.attSmbPasswordSet ? "guardada" : "pendiente"}</p>
             <p>Archivo: {settings?.attDatabaseName ?? "—"}</p>
-            <p>Credenciales servidor: {settings?.smbConfigured ? "OK (.env)" : "pendiente"}</p>
+            <p>Credenciales: {settings?.smbConfigured ? "configuradas en Finger System" : "pendientes"}</p>
             <p className="pt-1">Mapeos ({driveMappings.length}):</p>
             {driveMappings.map((m) => (
               <p key={m.letter}>
@@ -378,7 +484,7 @@ export function FingerAtt2016ConnectionPanel() {
         <button
           type="button"
           className={WIN.btn}
-          disabled={probeMutation.isPending || !windowsPath.trim()}
+          disabled={probeMutation.isPending || !windowsPath.trim() || !smbUser.trim() || (!smbPassword.trim() && !settings?.attSmbPasswordSet)}
           onClick={() => probeMutation.mutate()}
         >
           {probeMutation.isPending ? "Probando…" : "Probar conexión"}

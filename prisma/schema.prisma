@@ -5818,6 +5818,8 @@ model AppFingerSettings {
   attReadOnly          Boolean  @default(true)
   attConnectionType    String?
   attSmbShare          String?
+  attSmbUser           String?
+  attSmbPasswordEnc    String?
   attDatabaseName      String?
   attWindowsPath       String?
   attAccessUser        String?   @default("Admin")

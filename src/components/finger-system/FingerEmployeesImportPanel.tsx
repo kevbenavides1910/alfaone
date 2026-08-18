@@ -71,7 +71,7 @@ export function FingerEmployeesImportPanel() {
           {previewQuery.isError ? (
             <p className="text-sm text-red-600">
               {(previewQuery.error as Error).message ||
-                "No fue posible conectar con ATT2016. Verifique ATT2016_SMB_* en el servidor."}
+                "No fue posible conectar con ATT2016. Configure credenciales de red en Configuración biométrica."}
             </p>
           ) : null}
 

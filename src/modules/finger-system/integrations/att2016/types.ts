@@ -1,3 +1,21 @@
+export type Att2016ProbeResult = {
+  configured: boolean;
+  reachable: boolean;
+  readOnly: boolean;
+  connectionType: "smb" | "mdb" | "mssql" | "unknown";
+  sharePath: string;
+  databaseName: string;
+  message: string;
+  canReadDatabase?: boolean;
+  canWriteShare?: boolean;
+};
+
+export type Att2016SchemaSnapshot = {
+  probedAt: string;
+  tables: { name: string; rowCount?: number }[];
+  message: string;
+};
+
 export type Att2016UserInfo = {
   attUserId: number;
   badgeNumber: string;
