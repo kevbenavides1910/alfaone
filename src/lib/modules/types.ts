@@ -19,6 +19,7 @@ export type AppModuleId =
   | "monitoreo"
   | "expedienteDigital"
   | "solicitudesRrhh"
+  | "fingerSystem"
   | "plataforma";
 
 export type AppModuleMeta = {

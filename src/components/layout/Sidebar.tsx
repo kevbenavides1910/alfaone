@@ -32,7 +32,7 @@ const NAV_GROUPS: GroupDef[] = [
   {
     id: "operaciones",
     label: "Operaciones",
-    hrefs: ["/inventory", "/disciplinario/importar", "/empleados", "/solicitudes-rrhh/ajustes", "/sig", "/ventas"],
+    hrefs: ["/inventory", "/disciplinario/importar", "/empleados", "/finger-system", "/solicitudes-rrhh/ajustes", "/sig", "/ventas"],
   },
   {
     id: "digital",

@@ -17,6 +17,7 @@ import {
   UsersRound,
   ClipboardCheck,
   FolderOpen,
+  Fingerprint,
   Wallet,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
@@ -211,6 +212,17 @@ export const HOME_MODULE_TILES: HomeModuleTile[] = [
     href: "/recorridos",
     icon: MapPinned,
     permissionTileId: "recorridos",
+    accent: "bg-white",
+    tile: "",
+  },
+  {
+    id: "finger_system",
+    label: "Finger System",
+    description: "Asistencia biométrica y planillas",
+    href: "/finger-system",
+    icon: Fingerprint,
+    permissionTileId: "finger_system",
+    moduleId: "fingerSystem",
     accent: "bg-white",
     tile: "",
   },

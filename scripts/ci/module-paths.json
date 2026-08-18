@@ -91,6 +91,14 @@
       "src/app/(app)/cuentas-por-pagar/**",
       "src/app/api/cuentas-por-pagar/**",
       "src/components/cuentas-por-pagar/**"
+    ],
+    "fingerSystem": [
+      "src/modules/finger-system/**",
+      "src/app/(app)/finger-system/**",
+      "src/app/api/finger-system/**",
+      "src/components/finger-system/**",
+      "prisma/migrations/*finger_system*",
+      "docs/finger-system/**"
     ]
   }
 }

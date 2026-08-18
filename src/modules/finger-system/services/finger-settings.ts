@@ -1,0 +1,87 @@
+import { prisma } from "@/modules/core/db/prisma";
+import { FINGER_ENV } from "@/modules/finger-system/config/finger.config";
+
+export async function ensureFingerSettingsRow() {
+  return prisma.appFingerSettings.upsert({
+    where: { id: "default" },
+    create: {
+      id: "default",
+      attReadOnly: true,
+      attSmbShare: FINGER_ENV.attSmbShare(),
+      attDatabaseName: FINGER_ENV.attDatabaseName(),
+    },
+    update: {},
+  });
+}
+
+export async function getFingerSettingsPublic() {
+  const row = await ensureFingerSettingsRow();
+  return {
+    attReadOnly: row.attReadOnly,
+    attConnectionType: row.attConnectionType,
+    attSmbShare: row.attSmbShare,
+    attDatabaseName: row.attDatabaseName,
+    syncAutoEnabled: row.syncAutoEnabled,
+    syncIntervalMinutes: row.syncIntervalMinutes,
+    lastAutoSyncAt: row.lastAutoSyncAt?.toISOString() ?? null,
+    discoveryDefaultPort: row.discoveryDefaultPort,
+    backupPath: row.backupPath,
+    updatedAt: row.updatedAt.toISOString(),
+    smbConfigured: Boolean(FINGER_ENV.attSmbPassword() || FINGER_ENV.attConnectionString()),
+  };
+}
+
+export type FingerSettingsPatch = {
+  attReadOnly?: boolean;
+  syncAutoEnabled?: boolean;
+  syncIntervalMinutes?: number;
+  discoveryDefaultPort?: number;
+  backupPath?: string | null;
+  attSmbShare?: string | null;
+  attDatabaseName?: string | null;
+};
+
+function normalizeSmbShare(input: string | null | undefined): string | null {
+  const value = input?.trim();
+  if (!value) return null;
+  if (!/^\/\/[^/\\s]+\/[^/\\s]+/.test(value)) {
+    throw new Error(
+      "Share SMB inválido. Use formato //servidor/carpeta (ej. //10.1.1.3/DB-Biometrico).",
+    );
+  }
+  return value;
+}
+
+function normalizeDatabaseFile(input: string | null | undefined): string | null {
+  const value = input?.trim();
+  if (!value) return null;
+  if (/[/\\]/.test(value) || value.includes("..")) {
+    throw new Error("Nombre de archivo MDB inválido. Solo el nombre del archivo (ej. ATT2016.MDB).");
+  }
+  return value;
+}
+
+export async function updateFingerSettings(patch: FingerSettingsPatch) {
+  const data: Record<string, unknown> = {};
+
+  if (patch.attReadOnly !== undefined) data.attReadOnly = patch.attReadOnly;
+  if (patch.syncAutoEnabled !== undefined) data.syncAutoEnabled = patch.syncAutoEnabled;
+  if (patch.syncIntervalMinutes !== undefined) {
+    const mins = Math.min(1440, Math.max(5, Math.round(patch.syncIntervalMinutes)));
+    data.syncIntervalMinutes = mins;
+  }
+  if (patch.discoveryDefaultPort !== undefined) {
+    const port = Math.min(65535, Math.max(1, Math.round(patch.discoveryDefaultPort)));
+    data.discoveryDefaultPort = port;
+  }
+  if (patch.backupPath !== undefined) data.backupPath = patch.backupPath?.trim() || null;
+  if (patch.attSmbShare !== undefined) data.attSmbShare = normalizeSmbShare(patch.attSmbShare);
+  if (patch.attDatabaseName !== undefined) data.attDatabaseName = normalizeDatabaseFile(patch.attDatabaseName);
+
+  await prisma.appFingerSettings.update({
+    where: { id: "default" },
+    data,
+  });
+
+  return getFingerSettingsPublic();
+}

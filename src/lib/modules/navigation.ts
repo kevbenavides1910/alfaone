@@ -24,6 +24,7 @@ import {
   FolderOpen,
   ScrollText,
   Wallet,
+  Fingerprint,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
 
@@ -162,6 +163,13 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     icon: MapPinned,
     moduleId: "recorridos",
     isActive: (p) => p.startsWith("/recorridos"),
+  },
+  {
+    href: "/finger-system",
+    label: "Finger System",
+    icon: Fingerprint,
+    moduleId: "fingerSystem",
+    isActive: (p) => p.startsWith("/finger-system"),
   },
   { href: "/reports/annual", label: "Reporte Anual", icon: TrendingUp, moduleId: "reportes" },
   { href: "/reports", label: "Reporte mensual", icon: BarChart3, moduleId: "reportes" },

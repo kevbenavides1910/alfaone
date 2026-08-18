@@ -63,6 +63,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 # Archivo automático de notificaciones (>3 días → historial) diario 05:00 UTC
 0 5 * * * $RUN_USER BASE_URL=http://127.0.0.1:3000 $PROJECT_DIR/scripts/cron/notifications-archive.sh >> $LOG_DIR/cron-notifications-archive.log 2>&1
+
+# Finger System: sync automática biométrica (cada 5 min; intervalo interno en settings)
+*/5 * * * * $RUN_USER BASE_URL=http://127.0.0.1:3000 LOG_DIR=$LOG_DIR $PROJECT_DIR/scripts/cron-finger-sync.sh >> $LOG_DIR/finger-sync.log 2>&1
 EOF
 
 chmod 644 "$CRON_FILE"
@@ -77,6 +80,7 @@ chmod +x "$PROJECT_DIR/scripts/vps-health-monitor.sh" \
   "$PROJECT_DIR/scripts/cron-fe-jobs.sh" \
   "$PROJECT_DIR/scripts/cron-fe-imap.sh" \
   "$PROJECT_DIR/scripts/cron-facturacion-cobro-emails.sh" \
+  "$PROJECT_DIR/scripts/cron-finger-sync.sh" \
   "$PROJECT_DIR/scripts/cron/notifications-archive.sh" \
   "$PROJECT_DIR/scripts/expediente-digital-backup.sh" \
   "$PROJECT_DIR/scripts/verify-expediente-digital-backup.sh" \

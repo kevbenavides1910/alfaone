@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
@@ -14,6 +15,7 @@ export type ModuleSubnavTab = {
 type Props = {
   tabs: ModuleSubnavTab[];
   ariaLabel: string;
+  trailing?: ReactNode;
   /**
    * alfa — barra oscura marca Alfa (default)
    * light — barra clara con acento rojo
@@ -26,6 +28,7 @@ type Props = {
 export function ModuleSubnav({
   tabs,
   ariaLabel,
+  trailing,
   variant = "alfa",
   accentClass = "from-[#1a1a1a] to-[#0a0a0a] border-[#2a2a2a]",
 }: Props) {
@@ -71,6 +74,7 @@ export function ModuleSubnav({
             </Link>
           );
         })}
+        {trailing ? <div className="ml-auto shrink-0 py-0.5">{trailing}</div> : null}
       </div>
     </nav>
   );

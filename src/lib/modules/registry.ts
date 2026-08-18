@@ -266,6 +266,30 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     prismaModels: [],
   },
 
+  fingerSystem: {
+    id: "fingerSystem",
+    label: "Finger System",
+    description: "Asistencia biométrica, dispositivos, marcas y planillas.",
+    uiRoutePrefixes: ["/finger-system"],
+    apiRoutePrefixes: ["/api/finger-system"],
+    codePaths: [
+      "src/app/(app)/finger-system",
+      "src/components/finger-system",
+      "src/modules/finger-system",
+    ],
+    prismaModels: [
+      "AppFingerSettings",
+      "FingerDevice",
+      "FingerEmployeeLink",
+      "FingerSyncLog",
+      "FingerOperationLog",
+      "FingerImportBatch",
+      "FingerPunch",
+      "FingerShiftSchedule",
+      "FingerAttendanceDay",
+    ],
+  },
+
   monitoreo: {
     id: "monitoreo",
     label: "Monitoreo",
@@ -428,6 +452,7 @@ export function resolveModuleFromPath(pathname: string): AppModuleId {
     "sig",
     "recorridos",
     "ticketsTi",
+    "fingerSystem",
     "formularios",
     "monitoreo",
     "facturacionElectronica",

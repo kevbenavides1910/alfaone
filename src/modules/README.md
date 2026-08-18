@@ -22,6 +22,7 @@ Carpetas para **lógica de dominio** (servicios, reglas, validaciones). Las ruta
 | `sig` | [`sig/`](./sig/) | Documentos SIG, formularios de seguridad | Migrado |
 | `recorridos` | — | Recorridos de patrulla, mapas (código en `src/app/api/recorridos/`) | Parcial |
 | `ticketsTi` | [`tickets-ti/`](./tickets-ti/) | Sistema de tickets internos de TI | Migrado |
+| `fingerSystem` | [`finger-system/`](./finger-system/) | Asistencia biométrica, ATT2016, dispositivos | Fase 1 |
 | `formularios` | [`formularios/`](./formularios/) | Formularios dinámicos | Parcial |
 | `monitoreo` | [`monitoreo/`](./monitoreo/) | Alarmas, pilas, aperturas/cierres, eventos | Migrado |
 | `syntra` | [`syntra/`](./syntra/) | API móvil de patrulla Syntra (JWT device auth) | Migrado |
