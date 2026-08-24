@@ -24,6 +24,7 @@ import {
   FolderOpen,
   ScrollText,
   Wallet,
+  CreditCard,
   Fingerprint,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
@@ -60,6 +61,13 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     isActive: (p) => p.startsWith("/cuentas-por-pagar"),
   },
   { href: "/expenses", label: "Gastos", icon: DollarSign, moduleId: "presupuestos" },
+  {
+    href: "/pagos",
+    label: "Pagos",
+    icon: CreditCard,
+    moduleId: "pagos",
+    isActive: (p) => p.startsWith("/pagos"),
+  },
   {
     href: "/expenses/pending-approvals",
     label: "Aprobaciones",

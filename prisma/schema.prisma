@@ -49,7 +49,6 @@ enum NotificationStatus {
   DELETED
 }
 
-
 enum ClientType {
   PUBLIC
   PRIVATE
@@ -205,17 +204,17 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users              User[]
-  contracts          Contract[]
-  deferredExpenses   DeferredExpense[]
-  adminExpenses      AdminExpense[]
-  expenses           Expense[]
-  employees          Employee[]
-  employeePlacements EmployeePlacement[]
-  sigDocuments       SigDocument[]
-  feEmpresa          FeEmpresa?
-  fingerDevices      FingerDevice[]
-  fingerEmployeeLinks FingerEmployeeLink[]
+  users                User[]
+  contracts            Contract[]
+  deferredExpenses     DeferredExpense[]
+  adminExpenses        AdminExpense[]
+  expenses             Expense[]
+  employees            Employee[]
+  employeePlacements   EmployeePlacement[]
+  sigDocuments         SigDocument[]
+  feEmpresa            FeEmpresa?
+  fingerDevices        FingerDevice[]
+  fingerEmployeeLinks  FingerEmployeeLink[]
   fingerShiftSchedules FingerShiftSchedule[]
 
   @@map("companies")
@@ -269,10 +268,12 @@ model User {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  accounts  Account[]
-  sessions  Session[]
-  auditLogs AuditLog[]
-  expenses  Expense[]  @relation("ExpenseCreatedBy")
+  accounts        Account[]
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  expenses        Expense[]  @relation("ExpenseCreatedBy")
+  paymentsCreated Payment[]  @relation("PaymentCreatedBy")
+  paymentsUpdated Payment[]  @relation("PaymentUpdatedBy")
 
   expenseTypeApprovalSteps               ExpenseTypeApprovalStep[]     @relation("ExpenseTypeApprovalApprover")
   expenseApprovals                       ExpenseApproval[]             @relation("ExpenseApprovalApprover")
@@ -317,29 +318,29 @@ model User {
   facturaReturnRequestsSubmitted         FacturaMensual[]              @relation("FacturaReturnRequestedBy")
   facturaReturnRequestsReviewed          FacturaMensual[]              @relation("FacturaReturnReviewedBy")
   facturacionInvoiceModificationSettings AppFacturacionCobroSettings[] @relation("FacturacionInvoiceModifier")
-  facturaEmisionNafLinks                 FacturaEmisionNafDocumento[]    @relation("FacturaEmisionNafLinkedBy")
+  facturaEmisionNafLinks                 FacturaEmisionNafDocumento[]  @relation("FacturaEmisionNafLinkedBy")
   formsCreated                           FormDefinition[]              @relation("FormCreator")
   formSubmissions                        FormSubmission[]              @relation("FormSubmissionUser")
 
-  ticketsRequested            Ticket[]             @relation("TicketRequester")
-  ticketsAssigned             Ticket[]             @relation("TicketAssignee")
-  ticketCommentsAuthored      TicketComment[]      @relation("TicketCommentAuthor")
-  ticketAttachmentsUploaded   TicketAttachment[]   @relation("TicketAttachmentUploader")
-  ticketHistoriesChanged      TicketHistory[]      @relation("TicketHistoryChanger")
-  ticketNotificationsReceived TicketNotification[] @relation("TicketNotificationUser")
-  appNotificationsReceived  AppNotification[]      @relation("AppNotificationUser")
-  appNotificationsActed     AppNotification[]      @relation("AppNotificationActor")
-  notificationPreferences NotificationPreference[]
-  ticketAuditsPerformed       TicketAudit[]        @relation("TicketAuditUser")
-  ticketWorkLogs              TicketWorkLog[]      @relation("TicketWorkLogTechnician")
-  assetsDeleted               Asset[]              @relation("AssetDeletedBy")
-  assetsUpdated               Asset[]              @relation("AssetUpdatedBy")
-  expensesDeleted             Expense[]            @relation("ExpenseDeletedBy")
-  expensesUpdated             Expense[]            @relation("ExpenseUpdatedBy")
-  ticketTechnicianProfile     TicketTechnician?
-  fingerSyncLogsTriggered    FingerSyncLog[]       @relation("FingerSyncTriggeredBy")
-  fingerOperationLogs        FingerOperationLog[]  @relation("FingerOperationUser")
-  fingerImportBatchesTriggered FingerImportBatch[] @relation("FingerImportTriggeredBy")
+  ticketsRequested             Ticket[]                 @relation("TicketRequester")
+  ticketsAssigned              Ticket[]                 @relation("TicketAssignee")
+  ticketCommentsAuthored       TicketComment[]          @relation("TicketCommentAuthor")
+  ticketAttachmentsUploaded    TicketAttachment[]       @relation("TicketAttachmentUploader")
+  ticketHistoriesChanged       TicketHistory[]          @relation("TicketHistoryChanger")
+  ticketNotificationsReceived  TicketNotification[]     @relation("TicketNotificationUser")
+  appNotificationsReceived     AppNotification[]        @relation("AppNotificationUser")
+  appNotificationsActed        AppNotification[]        @relation("AppNotificationActor")
+  notificationPreferences      NotificationPreference[]
+  ticketAuditsPerformed        TicketAudit[]            @relation("TicketAuditUser")
+  ticketWorkLogs               TicketWorkLog[]          @relation("TicketWorkLogTechnician")
+  assetsDeleted                Asset[]                  @relation("AssetDeletedBy")
+  assetsUpdated                Asset[]                  @relation("AssetUpdatedBy")
+  expensesDeleted              Expense[]                @relation("ExpenseDeletedBy")
+  expensesUpdated              Expense[]                @relation("ExpenseUpdatedBy")
+  ticketTechnicianProfile      TicketTechnician?
+  fingerSyncLogsTriggered      FingerSyncLog[]          @relation("FingerSyncTriggeredBy")
+  fingerOperationLogs          FingerOperationLog[]     @relation("FingerOperationUser")
+  fingerImportBatchesTriggered FingerImportBatch[]      @relation("FingerImportTriggeredBy")
 
   @@map("users")
 }
@@ -427,29 +428,29 @@ model Contract {
   createdById          String?
   updatedById          String?
 
-  periods               ContractPeriod[]
-  billingHistory        BillingHistory[]
-  billingRequirements   ContractBillingRequirement[]
-  specialServices       ContractSpecialService[]
-  clientContacts        ContractClientContact[]
-  uniformExpenses       UniformExpense[]
-  auditFindings         AuditFinding[]
-  deferredDistributions DeferredDistribution[]
-  adminDistributions    AdminDistribution[]
-  auditLogs             AuditLog[]
-  expenses              Expense[]
-  expenseDistributions  ExpenseDistribution[]        @relation("ExpenseDistributions")
-  locations             ContractLocation[]
-  employeePlacements    EmployeePlacement[]
-  employeeContractLinks        EmployeeContractLink[]
-  nafNominaManualAllocations   NafNominaManualAllocation[]
-  monthLaborCaches             ContractMonthLaborCache[]
-  patrolRoutes                 PatrolRoute[]
-  demandBilling         ContractDemandBilling[]
-  facturasMensuales     FacturaMensual[]
-  cxcDocumentos         CxcDocumento[]
-  billingLines          ContractBillingLine[]
-  administrations       ContractAdministration[]
+  periods                    ContractPeriod[]
+  billingHistory             BillingHistory[]
+  billingRequirements        ContractBillingRequirement[]
+  specialServices            ContractSpecialService[]
+  clientContacts             ContractClientContact[]
+  uniformExpenses            UniformExpense[]
+  auditFindings              AuditFinding[]
+  deferredDistributions      DeferredDistribution[]
+  adminDistributions         AdminDistribution[]
+  auditLogs                  AuditLog[]
+  expenses                   Expense[]
+  expenseDistributions       ExpenseDistribution[]        @relation("ExpenseDistributions")
+  locations                  ContractLocation[]
+  employeePlacements         EmployeePlacement[]
+  employeeContractLinks      EmployeeContractLink[]
+  nafNominaManualAllocations NafNominaManualAllocation[]
+  monthLaborCaches           ContractMonthLaborCache[]
+  patrolRoutes               PatrolRoute[]
+  demandBilling              ContractDemandBilling[]
+  facturasMensuales          FacturaMensual[]
+  cxcDocumentos              CxcDocumento[]
+  billingLines               ContractBillingLine[]
+  administrations            ContractAdministration[]
 
   @@index([company])
   @@index([status])
@@ -1334,6 +1335,7 @@ model Expense {
   attachments                ExpenseAttachment[]
   assetsAcquired             Asset[]               @relation("AssetAcquisitionExpense")
   assetMovements             AssetMovement[]       @relation("AssetMovementExpense")
+  payments                   Payment[]             @relation("PaymentExpense")
 
   @@index([contractId])
   @@index([positionId])
@@ -1692,9 +1694,9 @@ model Employee {
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
-  placements         EmployeePlacement[]
-  fingerEmployeeLink FingerEmployeeLink?
-  fingerPunches       FingerPunch[]
+  placements           EmployeePlacement[]
+  fingerEmployeeLink   FingerEmployeeLink?
+  fingerPunches        FingerPunch[]
   fingerAttendanceDays FingerAttendanceDay[]
 
   @@index([nombre])
@@ -1840,20 +1842,20 @@ model HrDocumentRequestSettings {
 
 /// Sesión OTP / descarga de solicitud pública de documentos RRHH.
 model HrDocumentRequestSession {
-  id                  String    @id @default(cuid())
-  cedulaNormalizada   String
-  tramite             String
-  email               String
-  codeHash            String
-  expiresAt           DateTime
-  verifiedAt          DateTime?
-  downloadTokenHash   String?
-  downloadExpiresAt   DateTime?
-  downloadUsedAt      DateTime?
+  id                String    @id @default(cuid())
+  cedulaNormalizada String
+  tramite           String
+  email             String
+  codeHash          String
+  expiresAt         DateTime
+  verifiedAt        DateTime?
+  downloadTokenHash String?
+  downloadExpiresAt DateTime?
+  downloadUsedAt    DateTime?
   /// Snapshot del empleo al solicitar (nombre, fechas, puesto, empresa, etc.).
-  empleoSnapshot      Json
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  empleoSnapshot    Json
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([cedulaNormalizada, createdAt])
   @@index([downloadTokenHash])
@@ -1949,21 +1951,21 @@ model SigProcess {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  documents            SigDocument[]
-  requirementLinks     SigRequirementProcess[]
-  evidences            SigEvidence[]
-  controlLinks         SigControlProcess[]
-  controlsPrimary      SigControl[]            @relation("SigControlPrimaryProcess")
-  riskLinks            SigRiskProcess[]
-  risksPrimary         SigRisk[]               @relation("SigRiskPrimaryProcess")
-  legalLinks           SigLegalProcess[]
-  legalPrimary         SigLegalRequirement[]   @relation("SigLegalPrimaryProcess")
-  indicatorLinks       SigIndicatorProcess[]
-  indicatorsPrimary    SigIndicator[]          @relation("SigIndicatorPrimaryProcess")
-  incidentLinks        SigIncidentProcess[]
-  incidentsPrimary     SigIncident[]           @relation("SigIncidentPrimaryProcess")
+  documents             SigDocument[]
+  requirementLinks      SigRequirementProcess[]
+  evidences             SigEvidence[]
+  controlLinks          SigControlProcess[]
+  controlsPrimary       SigControl[]                 @relation("SigControlPrimaryProcess")
+  riskLinks             SigRiskProcess[]
+  risksPrimary          SigRisk[]                    @relation("SigRiskPrimaryProcess")
+  legalLinks            SigLegalProcess[]
+  legalPrimary          SigLegalRequirement[]        @relation("SigLegalPrimaryProcess")
+  indicatorLinks        SigIndicatorProcess[]
+  indicatorsPrimary     SigIndicator[]               @relation("SigIndicatorPrimaryProcess")
+  incidentLinks         SigIncidentProcess[]
+  incidentsPrimary      SigIncident[]                @relation("SigIncidentPrimaryProcess")
   managementReviewLinks SigManagementReviewProcess[]
-  auditProgramItems    AuditProgramItem[]
+  auditProgramItems     AuditProgramItem[]
 
   @@index([parentId])
   @@map("sig_processes")
@@ -2110,21 +2112,21 @@ model SigStandard {
 
 /// Requisito / cláusula de una norma (matriz maestra del SIG).
 model SigRequirement {
-  id            String         @id @default(cuid())
-  standardId    String
-  standard      SigStandard    @relation(fields: [standardId], references: [id], onDelete: Restrict)
-  code          String
-  title         String
-  description   String?        @db.Text
-  parentId      String?
-  parent        SigRequirement?  @relation("SigRequirementTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children      SigRequirement[] @relation("SigRequirementTree")
-  isApplicable  Boolean        @default(true)
-  sortOrder     Int            @default(0)
-  createdById   String?
-  createdBy     User?          @relation("SigRequirementCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id           String           @id @default(cuid())
+  standardId   String
+  standard     SigStandard      @relation(fields: [standardId], references: [id], onDelete: Restrict)
+  code         String
+  title        String
+  description  String?          @db.Text
+  parentId     String?
+  parent       SigRequirement?  @relation("SigRequirementTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     SigRequirement[] @relation("SigRequirementTree")
+  isApplicable Boolean          @default(true)
+  sortOrder    Int              @default(0)
+  createdById  String?
+  createdBy    User?            @relation("SigRequirementCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   processLinks   SigRequirementProcess[]
   documentLinks  SigRequirementDocument[]
@@ -2168,21 +2170,21 @@ model SigRequirementDocument {
 
 /// Control del SIG: puente entre requisito, proceso, documento y evidencia.
 model SigControl {
-  id                 String           @id @default(cuid())
-  code               String           @unique
-  title              String
-  description        String?          @db.Text
-  status             SigControlStatus @default(ACTIVE)
-  processId          String?
-  process            SigProcess?      @relation("SigControlPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
-  ownerUserId        String?
-  ownerUser          User?            @relation("SigControlOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  id                   String           @id @default(cuid())
+  code                 String           @unique
+  title                String
+  description          String?          @db.Text
+  status               SigControlStatus @default(ACTIVE)
+  processId            String?
+  process              SigProcess?      @relation("SigControlPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
+  ownerUserId          String?
+  ownerUser            User?            @relation("SigControlOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   /// Días esperados entre evidencias del control (alerta de frescura).
   evidenceIntervalDays Int?
-  createdById        String
-  createdBy          User             @relation("SigControlCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  createdById          String
+  createdBy            User             @relation("SigControlCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
   requirementLinks SigControlRequirement[]
   processLinks     SigControlProcess[]
@@ -2270,16 +2272,16 @@ model SigEvidence {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
-  requirementLinks  SigEvidenceRequirement[]
-  auditLinks        SigEvidenceAudit[]
-  checklistLinks    SigEvidenceChecklistItem[]
-  findingLinks      SigEvidenceFinding[]
-  actionPlanLinks   SigEvidenceActionPlan[]
-  controlLinks      SigControlEvidence[]
-  riskLinks         SigRiskEvidence[]
-  legalLinks        SigLegalEvidence[]
+  requirementLinks      SigEvidenceRequirement[]
+  auditLinks            SigEvidenceAudit[]
+  checklistLinks        SigEvidenceChecklistItem[]
+  findingLinks          SigEvidenceFinding[]
+  actionPlanLinks       SigEvidenceActionPlan[]
+  controlLinks          SigControlEvidence[]
+  riskLinks             SigRiskEvidence[]
+  legalLinks            SigLegalEvidence[]
   indicatorMeasurements SigIndicatorMeasurement[]
-  incidentLinks     SigIncidentEvidence[]
+  incidentLinks         SigIncidentEvidence[]
   managementReviewLinks SigManagementReviewEvidence[]
 
   @@index([processId])
@@ -2304,36 +2306,36 @@ enum SigRiskStatus {
 
 /// Riesgo u oportunidad del SIG (ISO 9001 6.1 / Manual).
 model SigRisk {
-  id                   String        @id @default(cuid())
-  code                 String        @unique
-  title                String
-  description          String?       @db.Text
-  kind                 SigRiskKind   @default(RISK)
-  status               SigRiskStatus @default(IDENTIFIED)
-  processId            String?
-  process              SigProcess?   @relation("SigRiskPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
-  ownerUserId          String?
-  ownerUser            User?         @relation("SigRiskOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  id                 String        @id @default(cuid())
+  code               String        @unique
+  title              String
+  description        String?       @db.Text
+  kind               SigRiskKind   @default(RISK)
+  status             SigRiskStatus @default(IDENTIFIED)
+  processId          String?
+  process            SigProcess?   @relation("SigRiskPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
+  ownerUserId        String?
+  ownerUser          User?         @relation("SigRiskOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   /// Probabilidad inherente 1–5.
-  likelihood           Int           @default(3)
+  likelihood         Int           @default(3)
   /// Impacto inherente 1–5.
-  impact               Int           @default(3)
-  inherentScore        Int           @default(9)
-  residualLikelihood   Int?
-  residualImpact       Int?
-  residualScore        Int?
-  treatment            String?       @db.Text
-  reviewDate           DateTime?
-  nextReviewDate       DateTime?
-  createdById          String
-  createdBy            User          @relation("SigRiskCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  impact             Int           @default(3)
+  inherentScore      Int           @default(9)
+  residualLikelihood Int?
+  residualImpact     Int?
+  residualScore      Int?
+  treatment          String?       @db.Text
+  reviewDate         DateTime?
+  nextReviewDate     DateTime?
+  createdById        String
+  createdBy          User          @relation("SigRiskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
-  processLinks      SigRiskProcess[]
-  controlLinks      SigRiskControl[]
-  requirementLinks  SigRiskRequirement[]
-  evidenceLinks     SigRiskEvidence[]
+  processLinks     SigRiskProcess[]
+  controlLinks     SigRiskControl[]
+  requirementLinks SigRiskRequirement[]
+  evidenceLinks    SigRiskEvidence[]
 
   @@index([processId])
   @@index([status])
@@ -2407,33 +2409,33 @@ enum SigLegalComplianceStatus {
 
 /// Requisito legal / reglamentario del SIG (matriz de cumplimiento).
 model SigLegalRequirement {
-  id               String                    @id @default(cuid())
-  code             String                    @unique
+  id               String                   @id @default(cuid())
+  code             String                   @unique
   title            String
-  description      String?                   @db.Text
+  description      String?                  @db.Text
   legalSource      String
   authority        String?
   articleRef       String?
-  jurisdiction     String?                   @default("CR")
+  jurisdiction     String?                  @default("CR")
   processId        String?
-  process          SigProcess?               @relation("SigLegalPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
+  process          SigProcess?              @relation("SigLegalPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
   ownerUserId      String?
-  ownerUser        User?                     @relation("SigLegalRequirementOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  complianceStatus SigLegalComplianceStatus  @default(NOT_EVALUATED)
-  evaluationNotes  String?                   @db.Text
+  ownerUser        User?                    @relation("SigLegalRequirementOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  complianceStatus SigLegalComplianceStatus @default(NOT_EVALUATED)
+  evaluationNotes  String?                  @db.Text
   effectiveFrom    DateTime?
   effectiveUntil   DateTime?
   lastEvaluatedAt  DateTime?
   nextReviewDate   DateTime?
   createdById      String
-  createdBy        User                      @relation("SigLegalRequirementCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt        DateTime                  @default(now())
-  updatedAt        DateTime                  @updatedAt
+  createdBy        User                     @relation("SigLegalRequirementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
 
-  processLinks   SigLegalProcess[]
-  documentLinks  SigLegalDocument[]
-  controlLinks   SigLegalControl[]
-  evidenceLinks  SigLegalEvidence[]
+  processLinks  SigLegalProcess[]
+  documentLinks SigLegalDocument[]
+  controlLinks  SigLegalControl[]
+  evidenceLinks SigLegalEvidence[]
 
   @@index([processId])
   @@index([complianceStatus])
@@ -2517,32 +2519,32 @@ enum SigIndicatorStatus {
 
 /// Indicador / KPI del SIG (ISO 9001 9.1).
 model SigIndicator {
-  id                 String                 @id @default(cuid())
-  code               String                 @unique
-  title              String
-  description        String?                @db.Text
-  processId          String?
-  process            SigProcess?            @relation("SigIndicatorPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
-  ownerUserId        String?
-  ownerUser          User?                  @relation("SigIndicatorOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  unit               String?
-  direction          SigIndicatorDirection  @default(HIGHER_BETTER)
-  frequency          SigIndicatorFrequency  @default(MONTHLY)
+  id                String                @id @default(cuid())
+  code              String                @unique
+  title             String
+  description       String?               @db.Text
+  processId         String?
+  process           SigProcess?           @relation("SigIndicatorPrimaryProcess", fields: [processId], references: [id], onDelete: SetNull)
+  ownerUserId       String?
+  ownerUser         User?                 @relation("SigIndicatorOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  unit              String?
+  direction         SigIndicatorDirection @default(HIGHER_BETTER)
+  frequency         SigIndicatorFrequency @default(MONTHLY)
   /// Meta del indicador.
-  targetValue        Decimal?               @db.Decimal(15, 4)
+  targetValue       Decimal?              @db.Decimal(15, 4)
   /// Umbral de alerta (amarillo).
-  warningThreshold   Decimal?               @db.Decimal(15, 4)
+  warningThreshold  Decimal?              @db.Decimal(15, 4)
   /// Umbral crítico (rojo).
-  criticalThreshold  Decimal?               @db.Decimal(15, 4)
-  status             SigIndicatorStatus     @default(ACTIVE)
-  formulaNotes       String?                @db.Text
-  createdById        String
-  createdBy          User                   @relation("SigIndicatorCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
+  criticalThreshold Decimal?              @db.Decimal(15, 4)
+  status            SigIndicatorStatus    @default(ACTIVE)
+  formulaNotes      String?               @db.Text
+  createdById       String
+  createdBy         User                  @relation("SigIndicatorCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
 
-  processLinks  SigIndicatorProcess[]
-  measurements  SigIndicatorMeasurement[]
+  processLinks SigIndicatorProcess[]
+  measurements SigIndicatorMeasurement[]
 
   @@index([processId])
   @@index([status])
@@ -2725,32 +2727,32 @@ enum SigManagementReviewActionStatus {
 
 /// Acta de revisión por la dirección (ISO 9001 9.3 / F-SIG-18).
 model SigManagementReview {
-  id                      String                     @id @default(cuid())
-  code                    String                     @unique
-  title                   String
-  status                  SigManagementReviewStatus  @default(DRAFT)
-  meetingDate             DateTime
-  periodStart             DateTime?
-  periodEnd               DateTime?
-  location                String?
-  attendees               String?                    @db.Text
-  agenda                  String?                    @db.Text
-  minutesSummary          String?                    @db.Text
-  outputImprovements      String?                    @db.Text
-  outputQmsChanges        String?                    @db.Text
-  outputResourceNeeds     String?                    @db.Text
-  formCode                String                     @default("F-SIG-18")
-  followUpFormCode        String                     @default("F-SIG-19")
-  chairUserId             String?
-  chairUser               User?                      @relation("SigManagementReviewChair", fields: [chairUserId], references: [id], onDelete: SetNull)
-  previousReviewId        String?
-  previousReview          SigManagementReview?       @relation("SigManagementReviewChain", fields: [previousReviewId], references: [id], onDelete: SetNull)
-  nextReviews             SigManagementReview[]      @relation("SigManagementReviewChain")
-  closedAt                DateTime?
-  createdById             String
-  createdBy               User                       @relation("SigManagementReviewCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt               DateTime                   @default(now())
-  updatedAt               DateTime                   @updatedAt
+  id                  String                    @id @default(cuid())
+  code                String                    @unique
+  title               String
+  status              SigManagementReviewStatus @default(DRAFT)
+  meetingDate         DateTime
+  periodStart         DateTime?
+  periodEnd           DateTime?
+  location            String?
+  attendees           String?                   @db.Text
+  agenda              String?                   @db.Text
+  minutesSummary      String?                   @db.Text
+  outputImprovements  String?                   @db.Text
+  outputQmsChanges    String?                   @db.Text
+  outputResourceNeeds String?                   @db.Text
+  formCode            String                    @default("F-SIG-18")
+  followUpFormCode    String                    @default("F-SIG-19")
+  chairUserId         String?
+  chairUser           User?                     @relation("SigManagementReviewChair", fields: [chairUserId], references: [id], onDelete: SetNull)
+  previousReviewId    String?
+  previousReview      SigManagementReview?      @relation("SigManagementReviewChain", fields: [previousReviewId], references: [id], onDelete: SetNull)
+  nextReviews         SigManagementReview[]     @relation("SigManagementReviewChain")
+  closedAt            DateTime?
+  createdById         String
+  createdBy           User                      @relation("SigManagementReviewCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
 
   inputs        SigManagementReviewInput[]
   actions       SigManagementReviewAction[]
@@ -2765,15 +2767,15 @@ model SigManagementReview {
 }
 
 model SigManagementReviewInput {
-  id         String                      @id @default(cuid())
-  reviewId   String
-  review     SigManagementReview         @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  inputKey   SigManagementReviewInputKey
-  covered    Boolean                     @default(false)
-  notes      String?                     @db.Text
-  sortOrder  Int                         @default(0)
-  createdAt  DateTime                    @default(now())
-  updatedAt  DateTime                    @updatedAt
+  id        String                      @id @default(cuid())
+  reviewId  String
+  review    SigManagementReview         @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  inputKey  SigManagementReviewInputKey
+  covered   Boolean                     @default(false)
+  notes     String?                     @db.Text
+  sortOrder Int                         @default(0)
+  createdAt DateTime                    @default(now())
+  updatedAt DateTime                    @updatedAt
 
   @@unique([reviewId, inputKey])
   @@index([inputKey])
@@ -2782,19 +2784,19 @@ model SigManagementReviewInput {
 
 /// Pendientes de seguimiento (F-SIG-19).
 model SigManagementReviewAction {
-  id               String                           @id @default(cuid())
-  reviewId         String
-  review           SigManagementReview              @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  title            String
-  description      String?                          @db.Text
-  status           SigManagementReviewActionStatus  @default(PENDING)
-  dueDate          DateTime?
-  completedAt      DateTime?
-  efficacyNotes    String?                          @db.Text
-  ownerUserId      String?
-  ownerUser        User?                            @relation("SigManagementReviewActionOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  createdAt        DateTime                         @default(now())
-  updatedAt        DateTime                         @updatedAt
+  id            String                          @id @default(cuid())
+  reviewId      String
+  review        SigManagementReview             @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?                         @db.Text
+  status        SigManagementReviewActionStatus @default(PENDING)
+  dueDate       DateTime?
+  completedAt   DateTime?
+  efficacyNotes String?                         @db.Text
+  ownerUserId   String?
+  ownerUser     User?                           @relation("SigManagementReviewActionOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  createdAt     DateTime                        @default(now())
+  updatedAt     DateTime                        @updatedAt
 
   @@index([reviewId])
   @@index([status])
@@ -2804,12 +2806,12 @@ model SigManagementReviewAction {
 }
 
 model SigManagementReviewProcess {
-  id        String               @id @default(cuid())
+  id        String              @id @default(cuid())
   reviewId  String
-  review    SigManagementReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  review    SigManagementReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
   processId String
-  process   SigProcess           @relation(fields: [processId], references: [id], onDelete: Cascade)
-  createdAt DateTime             @default(now())
+  process   SigProcess          @relation(fields: [processId], references: [id], onDelete: Cascade)
+  createdAt DateTime            @default(now())
 
   @@unique([reviewId, processId])
   @@index([processId])
@@ -2817,12 +2819,12 @@ model SigManagementReviewProcess {
 }
 
 model SigManagementReviewEvidence {
-  id         String               @id @default(cuid())
+  id         String              @id @default(cuid())
   reviewId   String
-  review     SigManagementReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  review     SigManagementReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
   evidenceId String
-  evidence   SigEvidence          @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
-  createdAt  DateTime             @default(now())
+  evidence   SigEvidence         @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  createdAt  DateTime            @default(now())
 
   @@unique([reviewId, evidenceId])
   @@index([evidenceId])
@@ -2985,28 +2987,28 @@ model AuditProgram {
 
 /// Ítem del programa: proceso/procedimiento planificado en un mes.
 model AuditProgramItem {
-  id              String                @id @default(cuid())
-  programId       String
-  program         AuditProgram          @relation(fields: [programId], references: [id], onDelete: Cascade)
-  processId       String?
-  process         SigProcess?           @relation(fields: [processId], references: [id], onDelete: SetNull)
-  procedureId     String?
-  procedure       SigDocument?          @relation(fields: [procedureId], references: [id], onDelete: SetNull)
-  plannedMonth    Int
-  plannedQuarter  Int
-  priority        AuditProgramPriority  @default(MEDIUM)
-  priorityScore   Int                   @default(0)
-  priorityReason  String?               @db.Text
-  scope           String?               @db.Text
-  objective       String?               @db.Text
-  notes           String?               @db.Text
-  status          AuditProgramItemStatus @default(PLANNED)
-  auditorId       String?
-  auditor         User?                 @relation("AuditProgramItemAuditor", fields: [auditorId], references: [id], onDelete: SetNull)
-  linkedAuditId   String?
-  linkedAudit     Audit?                @relation(fields: [linkedAuditId], references: [id], onDelete: SetNull)
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  id             String                 @id @default(cuid())
+  programId      String
+  program        AuditProgram           @relation(fields: [programId], references: [id], onDelete: Cascade)
+  processId      String?
+  process        SigProcess?            @relation(fields: [processId], references: [id], onDelete: SetNull)
+  procedureId    String?
+  procedure      SigDocument?           @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+  plannedMonth   Int
+  plannedQuarter Int
+  priority       AuditProgramPriority   @default(MEDIUM)
+  priorityScore  Int                    @default(0)
+  priorityReason String?                @db.Text
+  scope          String?                @db.Text
+  objective      String?                @db.Text
+  notes          String?                @db.Text
+  status         AuditProgramItemStatus @default(PLANNED)
+  auditorId      String?
+  auditor        User?                  @relation("AuditProgramItemAuditor", fields: [auditorId], references: [id], onDelete: SetNull)
+  linkedAuditId  String?
+  linkedAudit    Audit?                 @relation(fields: [linkedAuditId], references: [id], onDelete: SetNull)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
 
   @@index([programId])
   @@index([processId])
@@ -3019,25 +3021,25 @@ model AuditProgramItem {
 }
 
 model AuditChecklistItem {
-  id            String               @id @default(cuid())
-  auditId       String
-  audit         Audit                @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  stage         String
-  requirement   String?              @db.Text
-  requirementId String?
-  sigRequirement SigRequirement?     @relation(fields: [requirementId], references: [id], onDelete: SetNull)
-  result        AuditChecklistResult @default(PENDING)
-  notes         String?              @db.Text
-  evidence      String?              @db.Text
-  sortOrder     Int                  @default(0)
-  reviewedAt    DateTime?
-  reviewedById  String?
-  reviewedBy    User?                @relation("AuditChecklistReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  id             String               @id @default(cuid())
+  auditId        String
+  audit          Audit                @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  stage          String
+  requirement    String?              @db.Text
+  requirementId  String?
+  sigRequirement SigRequirement?      @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+  result         AuditChecklistResult @default(PENDING)
+  notes          String?              @db.Text
+  evidence       String?              @db.Text
+  sortOrder      Int                  @default(0)
+  reviewedAt     DateTime?
+  reviewedById   String?
+  reviewedBy     User?                @relation("AuditChecklistReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
-  findings       Finding[]
-  evidenceLinks  SigEvidenceChecklistItem[]
+  findings      Finding[]
+  evidenceLinks SigEvidenceChecklistItem[]
 
   @@index([auditId])
   @@index([result])
@@ -3046,16 +3048,16 @@ model AuditChecklistItem {
 }
 
 model AuditSample {
-  id                     String            @id @default(cuid())
-  auditId                String
-  audit                  Audit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  populationDescription  String            @db.Text
-  populationSize         Int?
-  sampleSize             Int?
-  method                 AuditSampleMethod @default(AUDITOR_JUDGMENT)
-  notes                  String?           @db.Text
-  createdAt              DateTime          @default(now())
-  updatedAt              DateTime          @updatedAt
+  id                    String            @id @default(cuid())
+  auditId               String
+  audit                 Audit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  populationDescription String            @db.Text
+  populationSize        Int?
+  sampleSize            Int?
+  method                AuditSampleMethod @default(AUDITOR_JUDGMENT)
+  notes                 String?           @db.Text
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
   items AuditSampleItem[]
 
@@ -3078,24 +3080,24 @@ model AuditSampleItem {
 }
 
 model Finding {
-  id                      String          @id @default(cuid())
-  auditId                 String
-  audit                   Audit           @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  title                   String
-  description             String          @db.Text
-  findingType             FindingType     @default(NONCONFORMITY)
-  severity                FindingSeverity @default(MEDIUM)
-  status                  FindingStatus   @default(OPEN)
-  criterionText           String?         @db.Text
-  evidenceStatement       String?         @db.Text
-  nonconformityStatement  String?         @db.Text
-  rootCause               String?         @db.Text
-  checklistItemId         String?
-  checklistItem           AuditChecklistItem? @relation(fields: [checklistItemId], references: [id], onDelete: SetNull)
-  createdById             String
-  createdBy               User            @relation("FindingCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt               DateTime        @default(now())
-  updatedAt               DateTime        @updatedAt
+  id                     String              @id @default(cuid())
+  auditId                String
+  audit                  Audit               @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  title                  String
+  description            String              @db.Text
+  findingType            FindingType         @default(NONCONFORMITY)
+  severity               FindingSeverity     @default(MEDIUM)
+  status                 FindingStatus       @default(OPEN)
+  criterionText          String?             @db.Text
+  evidenceStatement      String?             @db.Text
+  nonconformityStatement String?             @db.Text
+  rootCause              String?             @db.Text
+  checklistItemId        String?
+  checklistItem          AuditChecklistItem? @relation(fields: [checklistItemId], references: [id], onDelete: SetNull)
+  createdById            String
+  createdBy              User                @relation("FindingCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
 
   actionPlans      ActionPlan[]
   evidenceLinks    SigEvidenceFinding[]
@@ -3609,20 +3611,20 @@ model BandecoPilaFinca {
 
 /// Registro diario de llenado de pilas (operación).
 model BandecoPilaLlenado {
-  id               String          @id @default(cuid())
-  fecha            DateTime        @db.Date
-  finca            String
-  pilaFincaId      String?
-  pilaFinca        BandecoPilaFinca? @relation(fields: [pilaFincaId], references: [id], onDelete: SetNull)
-  desmane          String?
-  paneo            String?
-  observaciones    String?
-  recomendaciones  String?         @db.Text
-  operadorName     String
-  operadorId       String?
-  imagenes         Json?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id              String            @id @default(cuid())
+  fecha           DateTime          @db.Date
+  finca           String
+  pilaFincaId     String?
+  pilaFinca       BandecoPilaFinca? @relation(fields: [pilaFincaId], references: [id], onDelete: SetNull)
+  desmane         String?
+  paneo           String?
+  observaciones   String?
+  recomendaciones String?           @db.Text
+  operadorName    String
+  operadorId      String?
+  imagenes        Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   @@unique([fecha, finca])
   @@index([fecha])
@@ -3862,24 +3864,24 @@ model NafNominaRevisionChecklist {
 
 /// Lote de preparación de cheques/transferencias (espejo operativo de NAF5.ARPLCK).
 model NafNominaPagoLote {
-  id           String   @id @default(cuid())
+  id           String               @id @default(cuid())
   noCia        String
   codPla       String
-  fDesde       DateTime @db.Date
-  fHasta       DateTime @db.Date
-  fechaPago    DateTime @db.Date
+  fDesde       DateTime             @db.Date
+  fHasta       DateTime             @db.Date
+  fechaPago    DateTime             @db.Date
   /// Secuencias NAF usadas (JSON array string[]).
   secuencias   Json
-  estado       String   @default("preparado")
-  totalCheque  Decimal  @db.Decimal(18, 2) @default(0)
-  totalDav     Decimal  @db.Decimal(18, 2) @default(0)
-  totalBn      Decimal  @db.Decimal(18, 2) @default(0)
-  totalOtro    Decimal  @db.Decimal(18, 2) @default(0)
-  totalGeneral Decimal  @db.Decimal(18, 2) @default(0)
-  empleados    Int      @default(0)
+  estado       String               @default("preparado")
+  totalCheque  Decimal              @default(0) @db.Decimal(18, 2)
+  totalDav     Decimal              @default(0) @db.Decimal(18, 2)
+  totalBn      Decimal              @default(0) @db.Decimal(18, 2)
+  totalOtro    Decimal              @default(0) @db.Decimal(18, 2)
+  totalGeneral Decimal              @default(0) @db.Decimal(18, 2)
+  empleados    Int                  @default(0)
   createdBy    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
   lineas       NafNominaPagoLinea[]
 
   @@index([noCia, codPla, fDesde, fHasta])
@@ -3887,7 +3889,7 @@ model NafNominaPagoLote {
 }
 
 model NafNominaPagoLinea {
-  id           String   @id @default(cuid())
+  id           String            @id @default(cuid())
   loteId       String
   lote         NafNominaPagoLote @relation(fields: [loteId], references: [id], onDelete: Cascade)
   noEmple      String
@@ -3901,7 +3903,7 @@ model NafNominaPagoLinea {
   bancoOrigen  String?
   ctaOrigen    String?
   noSecuencia  String
-  liquido      Decimal  @db.Decimal(18, 2)
+  liquido      Decimal           @db.Decimal(18, 2)
 
   @@index([loteId])
   @@index([noEmple])
@@ -5675,22 +5677,22 @@ model TicketWorkLog {
 // ─── Centro de notificaciones (plataforma) ───────────────────────────────────
 
 model NotificationType {
-  id             String               @id @default(cuid())
-  code           String               @unique
-  moduleKey      String
-  label          String
-  description    String?
-  priority       NotificationPriority @default(INFO)
-  icon           String?
-  permissionKey  String?
-  hrefTemplate   String?
-  active         Boolean              @default(true)
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  id            String               @id @default(cuid())
+  code          String               @unique
+  moduleKey     String
+  label         String
+  description   String?
+  priority      NotificationPriority @default(INFO)
+  icon          String?
+  permissionKey String?
+  hrefTemplate  String?
+  active        Boolean              @default(true)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
-  roleRules      NotificationRoleRule[]
-  preferences    NotificationPreference[]
-  notifications  AppNotification[]
+  roleRules     NotificationRoleRule[]
+  preferences   NotificationPreference[]
+  notifications AppNotification[]
 
   @@index([moduleKey])
   @@map("notification_types")
@@ -5814,8 +5816,8 @@ enum FingerAttendanceStatus {
 }
 
 model AppFingerSettings {
-  id                   String   @id @default("default")
-  attReadOnly          Boolean  @default(true)
+  id                   String    @id @default("default")
+  attReadOnly          Boolean   @default(true)
   attConnectionType    String?
   attSmbShare          String?
   attSmbUser           String?
@@ -5925,18 +5927,18 @@ model FingerOperationLog {
 }
 
 model FingerImportBatch {
-  id            String    @id @default(cuid())
+  id            String        @id @default(cuid())
   type          String
-  rowsProcessed Int       @default(0)
-  rowsInserted  Int       @default(0)
-  rowsUpdated   Int       @default(0)
-  rowsSkipped   Int       @default(0)
+  rowsProcessed Int           @default(0)
+  rowsInserted  Int           @default(0)
+  rowsUpdated   Int           @default(0)
+  rowsSkipped   Int           @default(0)
   errorsJson    Json?
   detailJson    Json?
-  startedAt     DateTime  @default(now())
+  startedAt     DateTime      @default(now())
   finishedAt    DateTime?
   triggeredById String?
-  triggeredBy   User?     @relation("FingerImportTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  triggeredBy   User?         @relation("FingerImportTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
   punches       FingerPunch[]
 
   @@index([type, startedAt(sort: Desc)])
@@ -6012,4 +6014,50 @@ model FingerAttendanceDay {
   @@index([status])
   @@index([shiftId])
   @@map("finger_attendance_days")
+}
+
+// ─── Módulo de Pagos ─────────────────────────────────────────────────────────
+/// Origen de un pago en el calendario de pagos.
+enum PaymentSource {
+  EXPENSE /// Gasto aprobado del módulo de Gastos
+  APEX /// Gasto fijo del calendario APEX (Oracle/ADMFINC)
+  MANUAL /// Pago agregado a mano
+}
+
+/// Pago del calendario de pagos. Unifica gastos aprobados, gastos fijos APEX y pagos manuales.
+/// El marcado pagado/pendiente se persiste aquí (Postgres); no escribe de vuelta a Oracle.
+model Payment {
+  id              String        @id @default(cuid())
+  source          PaymentSource
+  /// Si source=EXPENSE: gasto aprobado vinculado (solo lectura del enlace).
+  expenseId       String?
+  expense         Expense?      @relation("PaymentExpense", fields: [expenseId], references: [id], onDelete: SetNull)
+  /// Si source=APEX: id del registro de calendario (ID_CALENDARIO_PAGO) y de su base recurrente.
+  apexPagoId      Int?
+  apexPagoBaseId  Int?
+  /// Datos descriptivos (para APEX/manual; para EXPENSE se copian del gasto).
+  description     String
+  amount          Decimal       @db.Decimal(15, 2)
+  paymentDate     DateTime      @db.Date
+  company         String?
+  /// Tipo de gasto (para APEX: TIPO 1/2/3/21; para EXPENSE: tipo del gasto).
+  refType         String?
+  /// Referencia/observación de origen (ej. cuenta, proveedor).
+  referenceNumber String?
+  /// Estado de pago, persistido aquí.
+  paid            Boolean       @default(false)
+  paidAt          DateTime?
+  notes           String?       @db.Text
+  createdById     String?
+  createdBy       User?         @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById     String?
+  updatedBy       User?         @relation("PaymentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([apexPagoId, source])
+  @@index([paymentDate])
+  @@index([company])
+  @@index([paid])
+  @@map("payments")
 }

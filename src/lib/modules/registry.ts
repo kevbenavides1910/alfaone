@@ -101,6 +101,22 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     prismaModels: [],
   },
 
+  pagos: {
+    id: "pagos",
+    label: "Pagos",
+    description:
+      "Calendario de pagos que unifica gastos aprobados, gastos fijos del calendario APEX y pagos manuales.",
+    uiRoutePrefixes: ["/pagos"],
+    apiRoutePrefixes: ["/api/pagos"],
+    codePaths: [
+      "src/modules/pagos",
+      "src/app/(app)/pagos",
+      "src/app/api/pagos",
+      "src/components/pagos",
+    ],
+    prismaModels: ["Payment"],
+  },
+
   reportes: {
     id: "reportes",
     label: "Reportes",

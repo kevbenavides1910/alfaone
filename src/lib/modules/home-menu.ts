@@ -19,6 +19,7 @@ import {
   FolderOpen,
   Fingerprint,
   Wallet,
+  CreditCard,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
 import type { PermissionKey } from "@/lib/permissions/registry";
@@ -80,6 +81,18 @@ export const HOME_MODULE_TILES: HomeModuleTile[] = [
     href: "/expenses",
     icon: DollarSign,
     permissionTileId: "gastos",
+    accent: "bg-white",
+    tile: "",
+  },
+  {
+    id: "pagos",
+    label: "Pagos",
+    description: "Calendario de pagos y gastos fijos",
+    href: "/pagos",
+    icon: CreditCard,
+    permissionTileId: "pagos",
+    requiredPermission: "pagos.calendario",
+    moduleId: "pagos",
     accent: "bg-white",
     tile: "",
   },

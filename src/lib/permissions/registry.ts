@@ -315,6 +315,22 @@ export const PERMISSION_REGISTRY = {
       },
     },
   },
+  pagos: {
+    label: "Pagos",
+    moduleId: "pagos" as const,
+    screens: {
+      calendario: {
+        label: "Calendario de pagos",
+        uiRoutes: ["/pagos"],
+        apiPrefixes: ["/api/pagos"],
+        actions: {
+          view: "Ver calendario de pagos",
+          edit: "Marcar pagado y agregar pagos",
+          admin: "Administrar pagos",
+        },
+      },
+    },
+  },
   disciplinario: {
     label: "Disciplinario",
     moduleId: "disciplinario" as const,
@@ -1082,6 +1098,7 @@ export const HOME_MODULE_PERMISSION_GROUPS: {
   { tileId: "facturacion_cobro", label: "Facturación y cobro", moduleKeys: ["facturacion"] },
   { tileId: "cuentas_por_pagar", label: "Cuentas por pagar", moduleKeys: ["cuentasPorPagar"] },
   { tileId: "gastos", label: "Gastos", moduleKeys: ["gastos"] },
+  { tileId: "pagos", label: "Pagos", moduleKeys: ["pagos"] },
   { tileId: "disciplinario", label: "Disciplinario", moduleKeys: ["disciplinario"] },
   { tileId: "empleados", label: "Empleados", moduleKeys: ["empleados"] },
   { tileId: "solicitudes_rrhh", label: "Solicitudes RRHH", moduleKeys: ["solicitudesRrhh"] },
