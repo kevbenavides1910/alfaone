@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Link2, Loader2, Search, Unlink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
 import { toast } from "@/components/ui/toaster";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { labelTipoDoc } from "@/modules/naf-documentos/business/document-labels";
+import { normalizeFeConsecutivo } from "@/modules/naf-documentos/business/fe-consecutivo";
 import type { FacturaEmisionNafLinkSerialized } from "@/modules/presupuestos/types/factura-naf-link";
 
 type NafCandidate = {
@@ -46,6 +47,8 @@ type Props = {
   companyCode: string;
   canEdit: boolean;
   linkedDocs: FacturaEmisionNafLinkSerialized[];
+  /** Nº FE actual en el formulario (puede no estar guardado aún). */
+  invoiceNumber?: string;
   invoiceReceivedAt?: string;
   dueDate?: string;
   onNumbersChange: (values: FacturacionNafNumbers) => void;
@@ -68,6 +71,7 @@ export function FacturacionNafDocPicker({
   companyCode,
   canEdit,
   linkedDocs,
+  invoiceNumber,
   invoiceReceivedAt,
   dueDate,
   onNumbersChange,
@@ -77,25 +81,67 @@ export function FacturacionNafDocPicker({
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
+  const [debouncedFe, setDebouncedFe] = useState("");
+  const appliedAutoKey = useRef<string | null>(null);
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(t);
   }, [search]);
 
-  const linksQueryKey = ["facturacion-naf-links", facturaId, emisionId];
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedFe(normalizeFeConsecutivo(invoiceNumber) ?? ""), 400);
+    return () => clearTimeout(t);
+  }, [invoiceNumber]);
+
+  useEffect(() => {
+    appliedAutoKey.current = null;
+  }, [emisionId]);
+
+  const linksQueryKey = ["facturacion-naf-links", facturaId, emisionId, debouncedFe];
 
   const { data: linksData, isFetching: linksLoading } = useQuery({
     queryKey: linksQueryKey,
     enabled: Boolean(emisionId),
     queryFn: async () => {
-      const r = await fetch(`/api/facturacion/${facturaId}/emisiones/${emisionId}/naf-docs`);
+      const params = new URLSearchParams();
+      if (canEdit && debouncedFe) {
+        params.set("autoResolve", "1");
+        params.set("invoiceNumber", invoiceNumber?.trim() ?? debouncedFe);
+      }
+      const r = await fetch(
+        `/api/facturacion/${facturaId}/emisiones/${emisionId}/naf-docs?${params}`,
+      );
       const json = await r.json();
       if (json.error) throw new Error(json.error.message || "Error al cargar vínculos NAF");
-      return json.data as { links: FacturaEmisionNafLinkSerialized[] };
+      return json.data as {
+        links: FacturaEmisionNafLinkSerialized[];
+        autoLinked?: boolean;
+        invoiceNumber?: string | null;
+        documentNumber?: string | null;
+        invoiceReceivedAt?: string | null;
+        dueDate?: string | null;
+      };
     },
   });
 
   const links = linksData?.links ?? linkedDocs;
+
+  useEffect(() => {
+    if (!linksData?.autoLinked || !linksData.documentNumber) return;
+    const key = `${emisionId}:${linksData.documentNumber}`;
+    if (appliedAutoKey.current === key) return;
+    appliedAutoKey.current = key;
+    onNumbersChange({
+      invoiceNumber: linksData.invoiceNumber ?? null,
+      documentNumber: linksData.documentNumber ?? null,
+      invoiceReceivedAt: linksData.invoiceReceivedAt ?? null,
+      dueDate: linksData.dueDate ?? null,
+    });
+    qc.invalidateQueries({ queryKey: ["facturacion"] });
+    qc.invalidateQueries({ queryKey: ["cuentas-por-cobrar"] });
+    toast.success("Documento NAF vinculado automáticamente");
+  }, [linksData, emisionId, onNumbersChange, qc]);
 
   const { data: candidatesData, isFetching: candidatesLoading } = useQuery({
     queryKey: ["facturacion-naf-candidates", facturaId, emisionId, debouncedSearch, periodMonth, periodYear],
@@ -226,7 +272,7 @@ export function FacturacionNafDocPicker({
         )}
         {linksLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
         <span className="text-xs text-slate-500">
-          El número de factura y el Nº Codisa se asignan al ligar el documento NAF.
+          Con el Nº FE válido se vincula el documento NAF y se completan Codisa y totales automáticamente.
         </span>
       </div>
 

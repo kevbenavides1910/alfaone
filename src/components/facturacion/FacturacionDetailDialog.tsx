@@ -669,6 +669,7 @@ export function FacturacionDetailDialog({
               companyCode={factura.companyCodeCopied}
               canEdit={canEdit}
               linkedDocs={focusedEmision?.nafLinks ?? []}
+              invoiceNumber={invoiceNumber}
               invoiceReceivedAt={invoiceReceivedAt || undefined}
               dueDate={dueDate || undefined}
               onNumbersChange={applyNafNumbers}

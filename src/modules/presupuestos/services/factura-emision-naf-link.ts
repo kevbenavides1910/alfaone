@@ -15,6 +15,7 @@ import {
   defaultDueDateFromIssue,
 } from "@/modules/presupuestos/services/facturacion-cobro";
 import { syncCxcFromFacturaEmision, syncCxcFromFacturaMensual } from "@/modules/presupuestos/services/sync-cxc-from-factura";
+import { normalizeFeConsecutivo } from "@/modules/naf-documentos/business/fe-consecutivo";
 
 type Db = PrismaClient;
 
@@ -624,6 +625,178 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
 export type LinkNafResult =
   | { ok: true; link: FacturaEmisionNafLinkSerialized }
   | { ok: false; code: "NOT_FOUND" | "INVALID_TIPO" | "ALREADY_LINKED" | "EMISION_MISMATCH"; message: string };
+
+export type AutoLinkNafFromFeResult =
+  | {
+      ok: true;
+      linked: true;
+      link: FacturaEmisionNafLinkSerialized;
+      invoiceNumber: string | null;
+      documentNumber: string | null;
+      invoiceReceivedAt: string | null;
+      dueDate: string | null;
+    }
+  | { ok: true; linked: false; reason: "already_linked" | "invalid_fe" | "no_sap_code" | "not_found" | "ambiguous" }
+  | { ok: false; code: "NOT_FOUND" | "ALREADY_LINKED"; message: string };
+
+export async function lookupNafDocKeysByFe(noCia: string, feRaw: string): Promise<NafDocKey[]> {
+  const fe = normalizeFeConsecutivo(feRaw);
+  if (!fe) return [];
+  const cia = noCia.trim();
+  if (!cia) return [];
+
+  return withNafOracleConnection(async (conn) => {
+    const result = await conn.execute(
+      `
+      SELECT f.NO_CIA, f.TIPO_DOC, TO_CHAR(f.NO_FACTU) NO_FACTU
+      FROM NAF5.ARFAFE f
+      WHERE f.NO_CIA = :noCia
+        AND f.F_ELECTRONICA = :fe
+        AND f.TIPO_DOC IN ('FC', 'ND', 'NC', 'AN')
+      ORDER BY ABS(f.TOTAL) DESC
+      `,
+      { noCia: cia, fe },
+    );
+    const rows = (result.rows ?? []) as OracleRow[];
+    return rows
+      .map((row) => ({
+        noCia: asString(row.NO_CIA) ?? cia,
+        tipoDoc: (asString(row.TIPO_DOC) ?? "").toUpperCase(),
+        noFactu: asString(row.NO_FACTU) ?? "",
+      }))
+      .filter((k) => k.noFactu && NAF_LINKABLE_TIPOS.has(k.tipoDoc));
+  });
+}
+
+export async function resolveEmisionNafNumbers(
+  db: Db,
+  facturaId: string,
+  emisionId: string,
+): Promise<{
+  invoiceNumber: string | null;
+  documentNumber: string | null;
+  invoiceReceivedAt: string | null;
+  dueDate: string | null;
+}> {
+  const [emisionRow, facturaRow] = await Promise.all([
+    db.facturaMensualEmision.findUnique({
+      where: { id: emisionId },
+      select: {
+        invoiceNumber: true,
+        documentNumber: true,
+        invoiceReceivedAt: true,
+        dueDate: true,
+        facturaMensual: { select: { _count: { select: { emisiones: true } } } },
+      },
+    }),
+    db.facturaMensual.findUnique({
+      where: { id: facturaId },
+      select: {
+        invoiceNumber: true,
+        documentNumber: true,
+        invoiceReceivedAt: true,
+        dueDate: true,
+      },
+    }),
+  ]);
+  const isolate = (emisionRow?.facturaMensual._count.emisiones ?? 0) > 1;
+  return {
+    invoiceNumber: emisionRow?.invoiceNumber ?? (isolate ? null : facturaRow?.invoiceNumber) ?? null,
+    documentNumber:
+      emisionRow?.documentNumber ?? (isolate ? null : facturaRow?.documentNumber) ?? null,
+    invoiceReceivedAt:
+      (emisionRow?.invoiceReceivedAt ?? (isolate ? null : facturaRow?.invoiceReceivedAt))?.toISOString() ??
+      null,
+    dueDate: (emisionRow?.dueDate ?? (isolate ? null : facturaRow?.dueDate))?.toISOString() ?? null,
+  };
+}
+
+export async function autoLinkNafFromFe(
+  db: Db,
+  input: {
+    facturaId: string;
+    emisionId: string;
+    invoiceNumber?: string | null;
+    userId?: string | null;
+    invoiceReceivedAt?: Date | null;
+    dueDate?: Date | null;
+  },
+): Promise<AutoLinkNafFromFeResult> {
+  const existingLinks = await db.facturaEmisionNafDocumento.count({
+    where: { facturaMensualEmisionId: input.emisionId },
+  });
+  if (existingLinks > 0) {
+    return { ok: true, linked: false, reason: "already_linked" };
+  }
+
+  const emision = await db.facturaMensualEmision.findFirst({
+    where: { id: input.emisionId, facturaMensualId: input.facturaId },
+    select: {
+      invoiceNumber: true,
+      facturaMensual: {
+        select: {
+          companyCodeCopied: true,
+          invoiceNumber: true,
+          _count: { select: { emisiones: true } },
+        },
+      },
+    },
+  });
+  if (!emision) {
+    return { ok: false, code: "NOT_FOUND", message: "Emisión no encontrada" };
+  }
+
+  const isolate = emision.facturaMensual._count.emisiones > 1;
+  const feCandidate =
+    input.invoiceNumber?.trim() ||
+    emision.invoiceNumber?.trim() ||
+    (!isolate ? emision.facturaMensual.invoiceNumber?.trim() : "") ||
+    "";
+  const fe = normalizeFeConsecutivo(feCandidate);
+  if (!fe) {
+    return { ok: true, linked: false, reason: "invalid_fe" };
+  }
+
+  const company = await db.company.findUnique({
+    where: { code: emision.facturaMensual.companyCodeCopied },
+    select: { sapCode: true },
+  });
+  const noCia = (company?.sapCode ?? "").trim().replace(/^0+/, "") || company?.sapCode?.trim();
+  if (!noCia) {
+    return { ok: true, linked: false, reason: "no_sap_code" };
+  }
+
+  const keys = await lookupNafDocKeysByFe(noCia, fe);
+  if (keys.length === 0) {
+    return { ok: true, linked: false, reason: "not_found" };
+  }
+  if (keys.length > 1) {
+    return { ok: true, linked: false, reason: "ambiguous" };
+  }
+
+  const linkResult = await linkNafDocumento(db, {
+    facturaId: input.facturaId,
+    emisionId: input.emisionId,
+    key: keys[0]!,
+    userId: input.userId,
+    invoiceReceivedAt: input.invoiceReceivedAt,
+    dueDate: input.dueDate,
+  });
+  if (!linkResult.ok) {
+    if (linkResult.code === "ALREADY_LINKED") {
+      return { ok: false, code: "ALREADY_LINKED", message: linkResult.message };
+    }
+    return { ok: true, linked: false, reason: "not_found" };
+  }
+
+  const numbers = await resolveEmisionNafNumbers(db, input.facturaId, input.emisionId);
+  return {
+    ok: true,
+    linked: true,
+    link: linkResult.link,
+    ...numbers,
+  };
+}
 
 export async function linkNafDocumento(
   db: Db,

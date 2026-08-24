@@ -12,9 +12,11 @@ import {
 } from "@/lib/api/response";
 import { hasPermission } from "@/lib/permissions/check";
 import {
+  autoLinkNafFromFe,
   linkNafDocumento,
   listEmisionNafLinks,
   listLinkableNafDocs,
+  resolveEmisionNafNumbers,
   unlinkNafDocumento,
 } from "@/modules/presupuestos/services/factura-emision-naf-link";
 import { parseCalendarDateInput } from "@/modules/presupuestos/services/facturacion-cobro";
@@ -63,14 +65,45 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     const emision = await assertEmision(id, emisionId);
     if (!emision) return notFound("Emisión no encontrada");
 
-    const links = await listEmisionNafLinks(prisma, emisionId);
+    let links = await listEmisionNafLinks(prisma, emisionId);
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search")?.trim() || undefined;
     const includeSearch = searchParams.get("includeSearch") === "1" || Boolean(search);
+    const autoResolve = searchParams.get("autoResolve") === "1";
+    const invoiceNumberHint = searchParams.get("invoiceNumber")?.trim() || undefined;
     const periodMonth = Number(searchParams.get("periodMonth") ?? emision.facturaMensual.periodMonth);
     const periodYear = Number(searchParams.get("periodYear") ?? emision.facturaMensual.periodYear);
     const page = Number(searchParams.get("page") ?? "1");
     const pageSize = Number(searchParams.get("pageSize") ?? "30");
+
+    let autoLinked = false;
+    let autoResolveReason: string | null = null;
+    let numbers: Awaited<ReturnType<typeof resolveEmisionNafNumbers>> | null = null;
+
+    if (
+      autoResolve &&
+      links.length === 0 &&
+      hasPermission(session, "facturacion.cobro", "edit")
+    ) {
+      const auto = await autoLinkNafFromFe(prisma, {
+        facturaId: id,
+        emisionId,
+        invoiceNumber: invoiceNumberHint,
+        userId: session.user.id,
+      });
+      if (auto.ok && auto.linked) {
+        autoLinked = true;
+        links = await listEmisionNafLinks(prisma, emisionId);
+        numbers = {
+          invoiceNumber: auto.invoiceNumber,
+          documentNumber: auto.documentNumber,
+          invoiceReceivedAt: auto.invoiceReceivedAt,
+          dueDate: auto.dueDate,
+        };
+      } else if (auto.ok && !auto.linked) {
+        autoResolveReason = auto.reason;
+      }
+    }
 
     let candidates = null;
     if (includeSearch) {
@@ -91,6 +124,9 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       periodMonth,
       periodYear,
       companyCode: emision.facturaMensual.companyCodeCopied,
+      autoLinked,
+      autoResolveReason,
+      ...(numbers ?? {}),
     });
   } catch (e) {
     return serverError("Error al listar documentos NAF ligados", e);
