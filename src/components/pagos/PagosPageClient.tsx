@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Receipt, Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Receipt, Pencil, Trash2, CalendarDays, GanttChartSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,9 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Tabs, TabsList, TabsTrigger, TabsContent,
+} from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toaster";
 import { formatCurrency } from "@/lib/utils/format";
 import { useSession } from "@/lib/auth/client-session";
@@ -279,18 +282,40 @@ export function PagosPageClient({ initialCompany }: Props) {
         </div>
       </div>
 
-      {/* Calendario */}
+      {/* Vistas */}
       <Card className="flex-1 min-h-0 overflow-auto">
-        <CardContent className="p-3">
-          <CalendarGrid
-            month={month}
-            today={today}
-            byDate={byDate}
-            canEdit={canEdit}
-            onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
-            onDelete={(id) => deleteMutation.mutate(id)}
-          />
-        </CardContent>
+        <Tabs defaultValue="calendario" className="h-full flex flex-col">
+          <div className="px-3 pt-3">
+            <TabsList>
+              <TabsTrigger value="calendario" className="flex items-center gap-1.5">
+                <CalendarDays className="h-4 w-4" /> Calendario
+              </TabsTrigger>
+              <TabsTrigger value="cronograma" className="flex items-center gap-1.5">
+                <GanttChartSquare className="h-4 w-4" /> Cronograma
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="calendario" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
+            <CalendarGrid
+              month={month}
+              today={today}
+              byDate={byDate}
+              canEdit={canEdit}
+              onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
+              onDelete={(id) => deleteMutation.mutate(id)}
+            />
+          </TabsContent>
+          <TabsContent value="cronograma" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
+            <CronogramaGrid
+              month={month}
+              today={today}
+              calendar={calendar}
+              canEdit={canEdit}
+              onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
+              onDelete={(id) => deleteMutation.mutate(id)}
+            />
+          </TabsContent>
+        </Tabs>
       </Card>
 
       {/* Dialog nuevo pago */}
@@ -508,5 +533,171 @@ function PaymentRow({
         </button>
       )}
     </div>
+  );
+}
+
+/** Cronograma (Gantt) del mes: barras por día sobre la línea de tiempo. */
+function CronogramaGrid({
+  month, today, calendar, canEdit, onTogglePaid, onDelete,
+}: {
+  month: string;
+  today: string;
+  calendar: CalendarDay[];
+  canEdit: boolean;
+  onTogglePaid: (id: string, paid: boolean) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [y, m, totalDays] = useMemo(() => {
+    const [yy, mm] = month.split("-").map(Number);
+    return [yy, mm, new Date(yy, mm, 0).getDate()];
+  }, [month]);
+
+  const days = useMemo(() => Array.from({ length: totalDays }, (_, i) => i + 1), [totalDays]);
+  const todayNum = useMemo(() => {
+    const t = new Date(today + "T00:00:00Z");
+    return t.getUTCFullYear() === y && t.getUTCMonth() + 1 === m ? t.getUTCDate() : null;
+  }, [today, y, m]);
+
+  // Todos los pagos del mes aplanados, ordenados por día
+  const allPayments = useMemo(() => {
+    const flat: (PagoDto & { day: number })[] = [];
+    for (const day of calendar) {
+      const dd = Number(day.date.split("-")[2]);
+      for (const p of day.payments) flat.push({ ...p, day: dd });
+    }
+    return flat.sort((a, b) => a.day - b.day || a.amount - b.amount);
+  }, [calendar]);
+
+  const gridCols = `minmax(150px, 220px) repeat(${totalDays}, minmax(22px, 1fr))`;
+
+  return (
+    <div className="w-full overflow-auto">
+      {/* Encabezado de días */}
+      <div className="grid gap-px rounded-md border bg-muted/20" style={{ gridTemplateColumns: gridCols, minWidth: 160 + totalDays * 24 }}>
+        <div className="p-2 text-xs font-semibold text-muted-foreground sticky left-0 bg-background z-10">
+          Día / Pago
+        </div>
+        {days.map((d) => (
+          <div
+            key={d}
+            className={[
+              "p-1.5 text-center text-[11px] font-semibold items-center justify-center",
+              d === todayNum ? "bg-primary text-primary-foreground rounded" : "text-muted-foreground",
+            ].join(" ")}
+          >
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Filas de pagos */}
+      {allPayments.length === 0 ? (
+        <div className="text-sm text-muted-foreground py-8 text-center">
+          Sin pagos para este mes.
+        </div>
+      ) : (
+        <div className="mt-2 grid gap-px rounded-md border bg-muted/20" style={{ gridTemplateColumns: gridCols, minWidth: 160 + totalDays * 24 }}>
+          {allPayments.map((p) => (
+            <CronogramRow
+              key={p.id}
+              p={p}
+              totalDays={totalDays}
+              todayNum={todayNum}
+              canEdit={canEdit}
+              onTogglePaid={(id, paid) => onTogglePaid(id, paid)}
+              onDelete={(id) => onDelete(id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Leyenda */}
+      <div className="flex flex-wrap items-center gap-4 mt-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-sm bg-emerald-100 border border-emerald-400" /> Pagado
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-sm bg-amber-100 border border-amber-400" /> Pendiente
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-sm bg-sky-100 border border-sky-400" /> Gasto aprobado
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-sm bg-amber-50 border border-amber-300" /> E. fijo APEX
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-sm bg-violet-100 border border-violet-400" /> Manual
+        </span>
+        {todayNum && (
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-full bg-primary" /> Hoy
+          </span>
+        )}
+        <span className="ml-auto">Clic en la barra para marcar pagado/pendiente</span>
+      </div>
+    </div>
+  );
+}
+
+function CronogramRow({
+  p, totalDays, todayNum, canEdit, onTogglePaid, onDelete,
+}: {
+  p: PagoDto & { day: number };
+  totalDays: number;
+  todayNum: number | null;
+  canEdit: boolean;
+  onTogglePaid: (id: string, paid: boolean) => void;
+  onDelete: (id: string) => void;
+}) {
+  const cellBg = p.paid ? "bg-emerald-50" : "bg-amber-50";
+
+  return (
+    <>
+      {/* Etiqueta del pago */}
+      <div className={["p-2 flex items-center gap-1.5 sticky left-0", cellBg].join(" ")}>
+        <Badge className={["h-4 px-1 text-[9px] shrink-0", FUENTE_BADGE[p.source]].join(" ")}>
+          {FUENTE_LABEL[p.source]}
+        </Badge>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[11px] font-medium">{p.description}</div>
+          <div className="text-[10px] text-muted-foreground">
+            {formatCurrency(p.amount)}
+            {p.company ? ` · ${p.company}` : ""}
+          </div>
+        </div>
+        {canEdit && p.source === "MANUAL" && (
+          <button
+            className="text-destructive hover:opacity-70 shrink-0"
+            onClick={() => onDelete(p.id)}
+            aria-label="Eliminar"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      {/* Barra de tiempo (celdas por día) */}
+      {Array.from({ length: totalDays }, (_, i) => {
+        const dayNum = i + 1;
+        const isPayday = dayNum === p.day;
+        const isToday = dayNum === todayNum;
+        const bg = isPayday
+          ? p.paid
+            ? "bg-emerald-400/70 ring-1 ring-emerald-500"
+            : "bg-amber-400/70 ring-1 ring-amber-500"
+          : isToday
+            ? "bg-primary/15"
+            : "bg-transparent";
+        return (
+          <button
+            key={dayNum}
+            onClick={() => canEdit && isPayday && onTogglePaid(p.id, !p.paid)}
+            title={isPayday ? `${p.description} — ${formatCurrency(p.amount)} (${p.paid ? "pagado" : "pendiente"})` : undefined}
+            disabled={!canEdit || !isPayday}
+            className={["min-h-[34px] transition-colors", bg, canEdit && isPayday && "cursor-pointer hover:opacity-80"].join(" ")}
+          />
+        );
+      })}
+    </>
   );
 }
