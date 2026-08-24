@@ -1,4 +1,5 @@
 import { computeCxcBalance } from "./cxc-balance";
+import { resolveCxcSubtotalForDocument } from "./public-client-retention";
 import type { ClientType } from "@prisma/client";
 
 /**
@@ -7,6 +8,10 @@ import type { ClientType } from "@prisma/client";
 export type CxcAbonoContext = {
   /** Total calculado o monto original del documento. */
   totalCalculated: number | null;
+  /** Subtotal copiado de la factura (base para retención). */
+  subtotalCopied?: number | null;
+  /** Porcentaje de IVA conocido (para derivar subtotal si falta). */
+  ivaPctCopied?: number | null;
   /** Monto neto esperado después de retenciones (si aplica cliente público). */
   netAmountExpected?: number | null;
   /** Monto ajustado después de rebajos. Si no se provee, se recalcula. */
@@ -35,8 +40,15 @@ export function calculateMaxNewAbono(context: CxcAbonoContext): number {
   }
 
   const total = context.totalCalculated ?? context.netAmountExpected ?? context.saldo ?? 0;
+  const subtotal = resolveCxcSubtotalForDocument({
+    total,
+    clientType: context.clientType ?? null,
+    subtotalCopied: context.subtotalCopied,
+    ivaPctCopied: context.ivaPctCopied,
+  });
   const balance = computeCxcBalance({
     total,
+    subtotal,
     clientType: context.clientType ?? null,
     abonos: [{ amount: context.totalAbonos ?? 0 }],
     rebajos: [{ amount: context.totalRebajos ?? 0 }],

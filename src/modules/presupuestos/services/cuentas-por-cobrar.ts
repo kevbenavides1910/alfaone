@@ -5,6 +5,7 @@ import { daysUntilDue, dueDateUrgency } from "@/lib/utils/due-date-urgency";
 import {
   defaultIvaPctForPublicClient,
   resolveClientTypeForCxc,
+  resolveCxcSubtotalForDocument,
 } from "@/modules/presupuestos/business/public-client-retention";
 import {
   computeCxcBalance,
@@ -29,6 +30,27 @@ function clientTypeForCxcDoc(doc: {
   contract?: { clientType?: "PUBLIC" | "PRIVATE" | null } | null;
 }): "PUBLIC" | "PRIVATE" | null {
   return resolveClientTypeForCxc(doc.contract?.clientType ?? null, doc.clientName ?? null);
+}
+
+function subtotalForCxcDoc(
+  doc: {
+    clientName: string;
+    contract?: { clientType?: "PUBLIC" | "PRIVATE" | null; ivaPct?: { toString(): string } | number } | null;
+    facturaMensual?: {
+      subtotalCopied?: { toString(): string } | number | null;
+      ivaPctCopied?: { toString(): string } | number | null;
+    } | null;
+  },
+  total: number | null
+): number | null {
+  return resolveCxcSubtotalForDocument({
+    total,
+    clientName: doc.clientName,
+    clientType: doc.contract?.clientType ?? null,
+    subtotalCopied: toAmount(doc.facturaMensual?.subtotalCopied ?? null),
+    ivaPctCopied: toAmount(doc.facturaMensual?.ivaPctCopied ?? null),
+    contractIvaPct: toAmount(doc.contract?.ivaPct ?? null),
+  });
 }
 
 /** Reajustes importados desde SAP (tipos RT/ND/NC… sin vínculo a factura mensual). */
@@ -165,8 +187,17 @@ export function serializeCuentaPorCobrar(row: CxcDocumentoWithRelations) {
     }));
 
   const clientType = clientTypeForCxcDoc(row);
+  const facturaSubtotal = toAmount(row.facturaMensual?.subtotalCopied ?? null);
+  const ivaPctKnown =
+    toAmount(row.facturaMensual?.ivaPctCopied ?? null) ??
+    toAmount(row.contract?.ivaPct ?? null) ??
+    defaultIvaPctForPublicClient(clientType, row.clientName);
+  const ivaPct = ivaPctKnown ?? 0;
+  const retentionSubtotal = subtotalForCxcDoc(row, total);
+
   const balance = computeCxcBalance({
     total,
+    subtotal: retentionSubtotal,
     clientType,
     abonos,
     rebajos,
@@ -174,13 +205,6 @@ export function serializeCuentaPorCobrar(row: CxcDocumentoWithRelations) {
     saldo: saldoRaw,
   });
 
-  const facturaSubtotal = toAmount(row.facturaMensual?.subtotalCopied ?? null);
-  // Distinguir IVA conocido (incl. 0 %) vs desconocido (sin contrato/factura).
-  const ivaPctKnown =
-    toAmount(row.facturaMensual?.ivaPctCopied ?? null) ??
-    toAmount(row.contract?.ivaPct ?? null) ??
-    defaultIvaPctForPublicClient(clientType, row.clientName);
-  const ivaPct = ivaPctKnown ?? 0;
   let ivaAmount: number | null = null;
   if (ivaPctKnown != null && total != null) {
     if (facturaSubtotal != null && total >= facturaSubtotal) {
@@ -378,7 +402,8 @@ async function loadDocumentForMutation(db: Db, documentoId: string) {
     include: {
       abonos: true,
       rebajos: true,
-      contract: { select: { clientType: true } },
+      contract: { select: { clientType: true, ivaPct: true } },
+      facturaMensual: { select: { subtotalCopied: true, ivaPctCopied: true } },
     },
   });
 }
@@ -390,6 +415,7 @@ async function refreshCxcSaldo(db: Db, documentoId: string): Promise<void> {
   const total = toAmount(doc.montoOriginal) ?? toAmount(doc.saldo);
   const balance = computeCxcBalance({
     total,
+    subtotal: subtotalForCxcDoc(doc, total),
     clientType: clientTypeForCxcDoc(doc),
     abonos: doc.abonos.map((a) => ({ amount: toAmount(a.amount) ?? 0 })),
     rebajos: doc.rebajos.map((r) => ({ amount: toAmount(r.amount) ?? 0 })),
@@ -624,6 +650,7 @@ export async function createCxcAbono(
   const total = toAmount(doc.montoOriginal) ?? toAmount(doc.saldo);
   const balance = computeCxcBalance({
     total,
+    subtotal: subtotalForCxcDoc(doc, total),
     clientType: clientTypeForCxcDoc(doc),
     abonos: doc.abonos.map((a) => ({ amount: toAmount(a.amount) ?? 0 })),
     rebajos: doc.rebajos.map((r) => ({ amount: toAmount(r.amount) ?? 0 })),
@@ -676,6 +703,7 @@ export async function updateCxcAbono(
     const total = toAmount(doc.montoOriginal) ?? toAmount(doc.saldo);
     const balance = computeCxcBalance({
       total,
+      subtotal: subtotalForCxcDoc(doc, total),
       clientType: clientTypeForCxcDoc(doc),
       abonos: others.map((a) => ({ amount: toAmount(a.amount) ?? 0 })),
       rebajos: doc.rebajos.map((r) => ({ amount: toAmount(r.amount) ?? 0 })),

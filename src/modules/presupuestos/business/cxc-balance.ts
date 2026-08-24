@@ -33,13 +33,19 @@ export function sumAbonos(abonos: { amount: number }[]): number {
 
 export function computeCxcBalance(input: {
   total: number | null;
+  /** Subtotal (base antes de IVA) para retención del 2 % en clientes públicos. */
+  subtotal?: number | null;
   clientType: ClientType | null;
   abonos: { amount: number }[];
   rebajos: { amount: number }[];
   status: CxcDocumentoStatus;
   saldo: number;
 }) {
-  const retention = computePublicClientRetention(input.total, input.clientType);
+  const retention = computePublicClientRetention(
+    input.total,
+    input.clientType,
+    input.subtotal
+  );
   const collectibleBase = retention.netAmountExpected ?? input.total;
   const totalRebajos = sumRebajos(input.rebajos);
   const adjustedCollectible =
@@ -57,13 +63,13 @@ export function computeCxcBalance(input: {
   let remainingBalance: number | null = null;
   if (input.status === "COBRADO" || input.saldo <= CXC_SALDO_TOLERANCE_CRC) {
     remainingBalance = 0;
-  } else if (!hasPaymentActivity && persistedSaldoMatchesTotal) {
-    remainingBalance = roundMoney(input.saldo);
   } else if (adjustedCollectible != null) {
     remainingBalance =
       totalAbonos > 0
         ? roundMoney(Math.max(0, adjustedCollectible - totalAbonos))
         : adjustedCollectible;
+  } else if (!hasPaymentActivity && persistedSaldoMatchesTotal) {
+    remainingBalance = roundMoney(input.saldo);
   } else {
     remainingBalance = input.saldo > 0 ? input.saldo : 0;
   }

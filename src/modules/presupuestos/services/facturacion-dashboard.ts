@@ -1,6 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 import { computeCxcBalance } from "@/modules/presupuestos/business/cxc-balance";
-import { resolveClientTypeForCxc } from "@/modules/presupuestos/business/public-client-retention";
+import {
+  resolveClientTypeForCxc,
+  resolveCxcSubtotalForDocument,
+} from "@/modules/presupuestos/business/public-client-retention";
 import {
   calendarDayUtc,
   facturaClosedOnTime,
@@ -97,14 +100,32 @@ function cxcCollectibleAmount(
     montoOriginal: { toString(): string } | number | null;
     saldo: { toString(): string } | number;
     status: "PENDIENTE" | "COBRADO";
-    contract?: { clientType: "PUBLIC" | "PRIVATE" | null } | null;
+    contract?: {
+      clientType: "PUBLIC" | "PRIVATE" | null;
+      ivaPct?: { toString(): string } | number | null;
+    } | null;
+    facturaMensual?: {
+      subtotalCopied?: { toString(): string } | number | null;
+      ivaPctCopied?: { toString(): string } | number | null;
+    } | null;
     rebajos: { amount: { toString(): string } | number }[];
     abonos: { amount: { toString(): string } | number }[];
   }
 ): number {
+  const total = toAmount(doc.montoOriginal) || toAmount(doc.saldo);
+  const clientType = resolveClientTypeForCxc(doc.contract?.clientType ?? null, doc.clientName ?? null);
+  const subtotal = resolveCxcSubtotalForDocument({
+    total,
+    clientName: doc.clientName,
+    clientType,
+    subtotalCopied: toAmount(doc.facturaMensual?.subtotalCopied ?? null),
+    ivaPctCopied: toAmount(doc.facturaMensual?.ivaPctCopied ?? null),
+    contractIvaPct: toAmount(doc.contract?.ivaPct ?? null),
+  });
   const balance = computeCxcBalance({
-    total: toAmount(doc.montoOriginal) || toAmount(doc.saldo),
-    clientType: resolveClientTypeForCxc(doc.contract?.clientType ?? null, doc.clientName ?? null),
+    total,
+    subtotal,
+    clientType,
     abonos: doc.abonos.map((a) => ({ amount: toAmount(a.amount) })),
     rebajos: doc.rebajos.map((r) => ({ amount: toAmount(r.amount) })),
     status: doc.status,
@@ -322,7 +343,9 @@ export async function buildFacturacionDashboard(db: Db, year: number) {
   const months = Array.from({ length: 12 }, (_, i) => emptyMonthRow(i + 1, year));
 
   const cxcBaseInclude = {
-    contract: { select: { clientType: true } },
+    clientName: true,
+    contract: { select: { clientType: true, ivaPct: true } },
+    facturaMensual: { select: { subtotalCopied: true, ivaPctCopied: true } },
     rebajos: { select: { amount: true } },
     abonos: { select: { amount: true } },
   } as const;

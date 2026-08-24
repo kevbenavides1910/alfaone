@@ -75,9 +75,50 @@ export function defaultIvaPctForPublicClient(
   return null;
 }
 
+/** Subtotal (base imponible) para retención: copiado de factura o derivado del total + IVA. */
+export function resolveCxcSubtotal(input: {
+  total: number | null;
+  subtotalCopied?: number | null;
+  ivaPct?: number | null;
+}): number | null {
+  const { total, subtotalCopied, ivaPct } = input;
+  if (subtotalCopied != null && subtotalCopied >= 0) {
+    return roundMoney(subtotalCopied);
+  }
+  if (total == null || total <= 0) return null;
+  if (ivaPct != null && ivaPct > 0) {
+    return roundMoney((total * 100) / (100 + ivaPct));
+  }
+  if (ivaPct === 0) {
+    return roundMoney(total);
+  }
+  return null;
+}
+
+export function resolveCxcSubtotalForDocument(input: {
+  total: number | null;
+  clientName?: string | null;
+  clientType?: ClientType | null;
+  subtotalCopied?: number | null;
+  ivaPctCopied?: number | null;
+  contractIvaPct?: number | null;
+}): number | null {
+  const clientType = resolveClientTypeForCxc(input.clientType, input.clientName);
+  const ivaPctKnown =
+    input.ivaPctCopied ??
+    input.contractIvaPct ??
+    defaultIvaPctForPublicClient(clientType, input.clientName);
+  return resolveCxcSubtotal({
+    total: input.total,
+    subtotalCopied: input.subtotalCopied,
+    ivaPct: ivaPctKnown,
+  });
+}
+
 export function computePublicClientRetention(
   invoiceTotal: number | null | undefined,
-  clientType: ClientType | null | undefined
+  clientType: ClientType | null | undefined,
+  retentionBaseSubtotal?: number | null
 ): {
   appliesRetention: boolean;
   retentionPct: number;
@@ -94,7 +135,11 @@ export function computePublicClientRetention(
   }
 
   if (clientType === "PUBLIC") {
-    const retentionAmount = roundMoney(invoiceTotal * PUBLIC_CLIENT_RETENTION_PCT);
+    const base =
+      retentionBaseSubtotal != null && retentionBaseSubtotal > 0
+        ? retentionBaseSubtotal
+        : invoiceTotal;
+    const retentionAmount = roundMoney(base * PUBLIC_CLIENT_RETENTION_PCT);
     return {
       appliesRetention: true,
       retentionPct: PUBLIC_CLIENT_RETENTION_PCT,
