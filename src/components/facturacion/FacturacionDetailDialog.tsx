@@ -28,6 +28,11 @@ import { formatCurrency, formatDate, calendarDateInputValue, formatServicePeriod
 import { FACTURA_BILLING_KIND_LABELS, FACTURA_MENSUAL_STATUS_LABELS } from "@/lib/utils/constants";
 import { FacturaTimelinessBadge } from "@/components/facturacion/FacturaTimelinessBadge";
 import { getFacturaIvaAmount } from "@/components/facturacion/facturacion-amount-change";
+import {
+  FacturacionNafDocPicker,
+  type FacturacionNafNumbers,
+} from "@/components/facturacion/FacturacionNafDocPicker";
+import type { FacturaEmisionNafLinkSerialized } from "@/modules/presupuestos/types/factura-naf-link";
 
 export type FacturaRequisitoRow = {
   id: string;
@@ -94,6 +99,7 @@ export type FacturaMensualRow = {
     contractVentaSubtotal?: number | null;
     contractVentaTotal?: number | null;
     ventaFacturadoDelta?: number | null;
+    nafLinks?: FacturaEmisionNafLinkSerialized[];
   }[];
   returnRequestStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   returnRequestType?: "DOCUMENTATION" | "AMOUNT" | null;
@@ -406,6 +412,23 @@ export function FacturacionDetailDialog({
     ? factura?.emisiones?.find((e) => e.id === effectiveFocusedEmisionId)
     : null;
 
+  function applyNafNumbers(values: FacturacionNafNumbers) {
+    if (values.invoiceNumber != null) setInvoiceNumber(values.invoiceNumber);
+    else setInvoiceNumber("");
+    if (values.documentNumber != null) setDocumentNumber(values.documentNumber);
+    else setDocumentNumber("");
+    if (values.invoiceReceivedAt != null) {
+      setInvoiceReceivedAt(calendarDateInputValue(values.invoiceReceivedAt));
+    }
+    if (values.dueDate != null) {
+      setDueDate(calendarDateInputValue(values.dueDate));
+    }
+  }
+
+  const hasNafLinked = Boolean(
+    (focusedEmision?.nafLinks?.length ?? 0) > 0 || documentNumber.trim(),
+  );
+
   const isClosed =
     factura?.status === "COBRADO" ||
     (hasEmisiones && focusedEmision
@@ -557,15 +580,20 @@ export function FacturacionDetailDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
             <div className="space-y-1.5">
               <Label htmlFor="invoiceNumber" className="text-xs text-slate-500 font-normal">
-                Número de factura
+                Número de factura (consecutivo FE)
               </Label>
               <Input
                 id="invoiceNumber"
-                disabled={!canEdit}
+                disabled={!canEdit || hasNafLinked}
                 value={invoiceNumber}
                 onChange={(e) => setInvoiceNumber(e.target.value)}
-                placeholder="Ej. A-12345"
+                placeholder="Seleccione un documento NAF"
                 maxLength={100}
+                title={
+                  hasNafLinked
+                    ? "Asignado desde el documento NAF ligado"
+                    : "Use «Buscar en documentos NAF» o ingrese manualmente"
+                }
               />
             </div>
             <div className="space-y-1.5">
@@ -631,6 +659,21 @@ export function FacturacionDetailDialog({
               />
             </div>
           </div>
+
+          {factura && (
+            <FacturacionNafDocPicker
+              facturaId={factura.id}
+              emisionId={effectiveFocusedEmisionId}
+              periodMonth={factura.periodMonth}
+              periodYear={factura.periodYear}
+              companyCode={factura.companyCodeCopied}
+              canEdit={canEdit}
+              linkedDocs={focusedEmision?.nafLinks ?? []}
+              invoiceReceivedAt={invoiceReceivedAt || undefined}
+              dueDate={dueDate || undefined}
+              onNumbersChange={applyNafNumbers}
+            />
+          )}
 
           {servicePeriodFromDate && servicePeriodToDate && (
             <p className="text-xs text-slate-500">

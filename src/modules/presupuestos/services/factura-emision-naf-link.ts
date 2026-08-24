@@ -26,23 +26,9 @@ export type NafDocKey = {
   noFactu: string;
 };
 
-export type FacturaEmisionNafLinkSerialized = {
-  id: string;
-  nafNoCia: string;
-  nafTipoDoc: string;
-  nafNoFactu: string;
-  nafNoFisico: string | null;
-  nafSerieFisico: string | null;
-  nafConsecutivoFe: string | null;
-  nafClaveFactura: string | null;
-  nafFecha: string | null;
-  subtotal: number;
-  impuesto: number;
-  total: number;
-  amountSign: number;
-  signedTotal: number;
-  linkedAt: string;
-};
+import type { FacturaEmisionNafLinkSerialized } from "@/modules/presupuestos/types/factura-naf-link";
+
+export type { FacturaEmisionNafLinkSerialized };
 
 type OracleRow = Record<string, unknown>;
 
