@@ -576,6 +576,36 @@ export type CloseFacturaResult =
   | { ok: true; facturaId: string; emisionId?: string }
   | { ok: false; code: "NOT_FOUND" | "ALREADY_CLOSED" | "REQUISITOS_INCOMPLETOS" | "MONTO_PENDIENTE"; message: string; pending?: string[] };
 
+/** Si todas las emisiones están cerradas, vuelve el encabezado a FACTURADO (p. ej. tras regreso por documentación). */
+export async function reconcileFacturaMensualStatusFromEmisiones(
+  db: Db,
+  facturaId: string
+): Promise<boolean> {
+  const factura = await db.facturaMensual.findUnique({
+    where: { id: facturaId },
+    include: {
+      emisiones: { select: { closedAt: true }, orderBy: { sortOrder: "desc" } },
+    },
+  });
+  if (!factura || factura.emisiones.length === 0) return false;
+  if (factura.status === "COBRADO") return false;
+  const allClosed = factura.emisiones.every((e) => e.closedAt != null);
+  if (!allClosed) return false;
+  if (factura.status === "FACTURADO" && factura.closedAt) return false;
+
+  const closedAt =
+    factura.emisiones
+      .map((e) => e.closedAt)
+      .filter((d): d is Date => d != null)
+      .sort((a, b) => b.getTime() - a.getTime())[0] ?? new Date();
+
+  await db.facturaMensual.update({
+    where: { id: facturaId },
+    data: { status: "FACTURADO", closedAt },
+  });
+  return true;
+}
+
 export async function closeFacturaMensual(
   db: Db,
   facturaId: string,
@@ -623,6 +653,10 @@ export async function closeFacturaMensual(
     }
 
     if (emision.closedAt) {
+      const reconciled = await reconcileFacturaMensualStatusFromEmisiones(db, facturaId);
+      if (reconciled) {
+        return { ok: true, facturaId, emisionId };
+      }
       return {
         ok: false,
         code: "ALREADY_CLOSED",

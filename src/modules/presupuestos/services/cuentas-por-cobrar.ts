@@ -302,8 +302,9 @@ export const cxcDocumentInclude = {
 /**
  * CxC visible solo si:
  * - no está ligado a factura mensual (import SAP / standalone), o
- * - la factura ligada ya está cerrada (FACTURADO/COBRADO con closedAt).
- * Nunca mostrar cobro de una factura mensual aún abierta.
+ * - la factura ligada ya está cerrada (FACTURADO/COBRADO con closedAt), o
+ * - multi-administración: al menos una emisión cerrada (CxC por administración).
+ * Nunca mostrar cobro de una factura mensual cuya administración aún no se cerró.
  */
 export const cxcVisibleFacturaFilter: Prisma.CxcDocumentoWhereInput = {
   OR: [
@@ -312,6 +313,11 @@ export const cxcVisibleFacturaFilter: Prisma.CxcDocumentoWhereInput = {
       facturaMensual: {
         status: { in: ["FACTURADO", "COBRADO"] },
         closedAt: { not: null },
+      },
+    },
+    {
+      facturaMensual: {
+        emisiones: { some: { closedAt: { not: null } } },
       },
     },
   ],

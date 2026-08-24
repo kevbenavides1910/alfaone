@@ -13,6 +13,7 @@ import { addDaysUtc } from "@/modules/presupuestos/import/cxc-rows";
 import {
   calendarDayUtc,
   defaultDueDateFromIssue,
+  reconcileFacturaMensualStatusFromEmisiones,
 } from "@/modules/presupuestos/services/facturacion-cobro";
 import { syncCxcFromFacturaEmision, syncCxcFromFacturaMensual } from "@/modules/presupuestos/services/sync-cxc-from-factura";
 import { normalizeFeConsecutivo } from "@/modules/naf-documentos/business/fe-consecutivo";
@@ -612,6 +613,8 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
           })();
     await syncCxcFromFacturaEmision(db, factura.id, e.id, round2(total));
   }
+
+  await reconcileFacturaMensualStatusFromEmisiones(db, factura.id);
 
   if (
     (factura.status === "FACTURADO" || factura.status === "COBRADO") &&

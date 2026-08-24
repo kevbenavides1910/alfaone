@@ -17,6 +17,7 @@ import {
 import {
   closeFacturaMensual,
   parseCalendarDateInput,
+  reconcileFacturaMensualStatusFromEmisiones,
   serializeFacturaMensual,
 } from "@/modules/presupuestos/services/facturacion-cobro";
 import { facturaListSerializeInclude } from "@/modules/presupuestos/services/facturacion-includes";
@@ -193,9 +194,19 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           console.warn(`[facturacion PATCH] sync CxC: ${syncResult.message}`);
         }
       }
+      await reconcileFacturaMensualStatusFromEmisiones(prisma, id);
     }
 
-    return ok(serializeFacturaMensual(updated));
+    const serialized = serializeFacturaMensual(
+      shouldSyncCxc
+        ? await prisma.facturaMensual.findUniqueOrThrow({
+            where: { id },
+            include: facturaListSerializeInclude,
+          })
+        : updated
+    );
+
+    return ok(serialized);
   } catch (e) {
     return serverError("Error al actualizar factura", e);
   }
