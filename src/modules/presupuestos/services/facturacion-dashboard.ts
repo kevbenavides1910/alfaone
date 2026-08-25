@@ -343,7 +343,6 @@ export async function buildFacturacionDashboard(db: Db, year: number) {
   const months = Array.from({ length: 12 }, (_, i) => emptyMonthRow(i + 1, year));
 
   const cxcBaseInclude = {
-    clientName: true,
     contract: { select: { clientType: true, ivaPct: true } },
     facturaMensual: { select: { subtotalCopied: true, ivaPctCopied: true } },
     rebajos: { select: { amount: true } },
