@@ -892,19 +892,23 @@ function CronogramaGrid({
   }, [calendar]);
 
   const gridCols = `minmax(150px, 220px) repeat(${totalDays}, minmax(22px, 1fr))`;
+  const gridMinWidth = 160 + totalDays * 24;
 
   return (
-    <div className="w-full overflow-auto">
-      <div className="grid gap-px rounded-md border bg-muted/20" style={{ gridTemplateColumns: gridCols, minWidth: 160 + totalDays * 24 }}>
-        <div className="p-2 text-xs font-semibold text-muted-foreground sticky left-0 bg-background z-10">
+    <div className="w-full min-h-0">
+      <div
+        className="grid gap-px rounded-t-md border bg-muted/20 sticky top-0 z-20 shadow-sm"
+        style={{ gridTemplateColumns: gridCols, minWidth: gridMinWidth }}
+      >
+        <div className="p-2 text-xs font-semibold text-muted-foreground sticky left-0 top-0 z-30 bg-background">
           Día / Pago
         </div>
         {days.map((d) => (
           <div
             key={d}
             className={[
-              "p-1.5 text-center text-[11px] font-semibold items-center justify-center",
-              d === todayNum ? "bg-primary text-primary-foreground rounded" : "text-muted-foreground",
+              "p-1.5 text-center text-[11px] font-semibold bg-background",
+              d === todayNum ? "bg-primary text-primary-foreground" : "text-muted-foreground",
             ].join(" ")}
           >
             {d}
@@ -913,11 +917,14 @@ function CronogramaGrid({
       </div>
 
       {allPayments.length === 0 ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">
+        <div className="text-sm text-muted-foreground py-8 text-center border border-t-0 rounded-b-md">
           Sin pagos para este mes.
         </div>
       ) : (
-        <div className="mt-2 grid gap-px rounded-md border bg-muted/20" style={{ gridTemplateColumns: gridCols, minWidth: 160 + totalDays * 24 }}>
+        <div
+          className="grid gap-px rounded-b-md border border-t-0 bg-muted/20"
+          style={{ gridTemplateColumns: gridCols, minWidth: gridMinWidth }}
+        >
           {allPayments.map((p) => (
             <CronogramRow
               key={p.id}
@@ -975,7 +982,7 @@ function CronogramRow({
 
   return (
     <>
-      <div className={["p-2 flex items-center gap-1.5 sticky left-0", cellBg].join(" ")}>
+      <div className={["p-2 flex items-center gap-1.5 sticky left-0 z-10", cellBg].join(" ")}>
         <Badge className={["h-4 px-1 text-[9px] shrink-0", FUENTE_BADGE[p.source]].join(" ")}>
           {FUENTE_LABEL[p.source]}
         </Badge>
