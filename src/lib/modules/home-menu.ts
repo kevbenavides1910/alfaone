@@ -87,7 +87,7 @@ export const HOME_MODULE_TILES: HomeModuleTile[] = [
   {
     id: "pagos",
     label: "Pagos",
-    description: "Calendario de pagos y gastos fijos",
+    description: "Pagos diarios y gastos fijos de Oracle",
     href: "/pagos",
     icon: CreditCard,
     permissionTileId: "pagos",

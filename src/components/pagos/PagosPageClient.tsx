@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Receipt, Pencil, Trash2, CalendarDays, GanttChartSquare } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -15,7 +16,7 @@ import {
   Tabs, TabsList, TabsTrigger, TabsContent,
 } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toaster";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils/format";
 import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 
@@ -106,9 +107,22 @@ function daysInGrid(month: string): { date: string; dayOfMonth: number; inMonth:
   return cells;
 }
 
-function parseDay(iso: string): { day: string; month: string } {
-  const [y, m, dd] = iso.split("-");
-  return { day: dd, month: `${y}-${m}` };
+function filterCalendar(calendar: CalendarDay[], sources: PagoFuente[]): CalendarDay[] {
+  return calendar.map((day) => {
+    const payments = day.payments.filter((p) => sources.includes(p.source));
+    return {
+      date: day.date,
+      payments,
+      total: payments.reduce((s, p) => s + p.amount, 0),
+      totalPaid: payments.filter((p) => p.paid).reduce((s, p) => s + p.amount, 0),
+    };
+  });
+}
+
+function calendarTotals(calendar: CalendarDay[]) {
+  const total = calendar.reduce((s, d) => s + d.total, 0);
+  const paid = calendar.reduce((s, d) => s + d.totalPaid, 0);
+  return { total, paid, pending: total - paid };
 }
 
 type Props = {
@@ -122,6 +136,9 @@ export function PagosPageClient({ initialCompany }: Props) {
   const [company, setCompany] = useState<string>(initialCompany ?? "all");
   const [showNew, setShowNew] = useState(false);
   const [draft, setDraft] = useState<NewPaymentDraft>(EMPTY_DRAFT);
+  const [detailPayment, setDetailPayment] = useState<PagoDto | null>(null);
+  const [dayDialog, setDayDialog] = useState<CalendarDay | null>(null);
+  const [activeTab, setActiveTab] = useState<"diarios" | "fijos">("diarios");
 
   const canEdit = useMemo(
     () => hasPermission(session, "pagos.calendario", "edit"),
@@ -194,14 +211,32 @@ export function PagosPageClient({ initialCompany }: Props) {
     setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }, [month]);
 
-  const byDate = useMemo(() => {
-    const map = new Map<string, CalendarDay>();
-    for (const day of calendar) map.set(day.date, day);
-    return map;
-  }, [calendar]);
+  const dailyCalendar = useMemo(
+    () => filterCalendar(calendar, ["EXPENSE", "MANUAL"]),
+    [calendar],
+  );
+  const fixedCalendar = useMemo(
+    () => filterCalendar(calendar, ["APEX"]),
+    [calendar],
+  );
 
-  const monthTotal = useMemo(() => calendar.reduce((s, d) => s + d.total, 0), [calendar]);
-  const monthPaid = useMemo(() => calendar.reduce((s, d) => s + d.totalPaid, 0), [calendar]);
+  const dailyByDate = useMemo(() => {
+    const map = new Map<string, CalendarDay>();
+    for (const day of dailyCalendar) map.set(day.date, day);
+    return map;
+  }, [dailyCalendar]);
+
+  const fixedByDate = useMemo(() => {
+    const map = new Map<string, CalendarDay>();
+    for (const day of fixedCalendar) map.set(day.date, day);
+    return map;
+  }, [fixedCalendar]);
+
+  const activeCalendar = activeTab === "diarios" ? dailyCalendar : fixedCalendar;
+  const { total: monthTotal, paid: monthPaid, pending: monthPending } = useMemo(
+    () => calendarTotals(activeCalendar),
+    [activeCalendar],
+  );
 
   const submitNew = () => {
     if (!draft.description.trim()) return toast.error("Escribí una descripción");
@@ -228,7 +263,7 @@ export function PagosPageClient({ initialCompany }: Props) {
         <div>
           <h1 className="text-xl font-semibold">Calendario de Pagos</h1>
           <p className="text-sm text-muted-foreground">
-            Gastos aprobados, gastos fijos y pagos manuales
+            Pagos diarios (gastos aprobados y manuales) y pagos fijos de Oracle
           </p>
         </div>
         {canEdit && (
@@ -273,7 +308,7 @@ export function PagosPageClient({ initialCompany }: Props) {
         </select>
         <div className="ml-auto flex items-center gap-4 text-sm">
           <span className="text-muted-foreground">Pendiente:</span>
-          <span className="font-semibold text-amber-600">{formatCurrency(monthTotal - monthPaid)}</span>
+          <span className="font-semibold text-amber-600">{formatCurrency(monthPending)}</span>
           <span className="text-muted-foreground">Pagado:</span>
           <span className="font-semibold text-emerald-600">{formatCurrency(monthPaid)}</span>
           <span className="text-muted-foreground">Total:</span>
@@ -284,39 +319,62 @@ export function PagosPageClient({ initialCompany }: Props) {
 
       {/* Vistas */}
       <Card className="flex-1 min-h-0 overflow-auto">
-        <Tabs defaultValue="calendario" className="h-full flex flex-col">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "diarios" | "fijos")} className="h-full flex flex-col">
           <div className="px-3 pt-3">
             <TabsList>
-              <TabsTrigger value="calendario" className="flex items-center gap-1.5">
-                <CalendarDays className="h-4 w-4" /> Calendario
+              <TabsTrigger value="diarios" className="flex items-center gap-1.5">
+                <CalendarDays className="h-4 w-4" /> Calendario de pagos diarios
               </TabsTrigger>
-              <TabsTrigger value="cronograma" className="flex items-center gap-1.5">
-                <GanttChartSquare className="h-4 w-4" /> Cronograma
+              <TabsTrigger value="fijos" className="flex items-center gap-1.5">
+                <Repeat className="h-4 w-4" /> Pagos fijos
               </TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="calendario" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
+          <TabsContent value="diarios" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
             <CalendarGrid
               month={month}
               today={today}
-              byDate={byDate}
+              byDate={dailyByDate}
               canEdit={canEdit}
               onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
               onDelete={(id) => deleteMutation.mutate(id)}
+              onViewDetail={setDetailPayment}
+              onViewDay={setDayDialog}
             />
           </TabsContent>
-          <TabsContent value="cronograma" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
-            <CronogramaGrid
+          <TabsContent value="fijos" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
+            <p className="text-xs text-muted-foreground mb-3">
+              Gastos fijos recurrentes sincronizados desde Oracle (APEX). El estado pagado/pendiente se guarda localmente.
+            </p>
+            <CalendarGrid
               month={month}
               today={today}
-              calendar={calendar}
+              byDate={fixedByDate}
               canEdit={canEdit}
               onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
               onDelete={(id) => deleteMutation.mutate(id)}
+              onViewDetail={setDetailPayment}
+              onViewDay={setDayDialog}
             />
           </TabsContent>
         </Tabs>
       </Card>
+
+      <PaymentDetailDialog
+        payment={detailPayment}
+        onClose={() => setDetailPayment(null)}
+        canEdit={canEdit}
+        onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
+      />
+
+      <DayPaymentsDialog
+        day={dayDialog}
+        onClose={() => setDayDialog(null)}
+        canEdit={canEdit}
+        onViewDetail={setDetailPayment}
+        onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
+        onDelete={(id) => deleteMutation.mutate(id)}
+      />
 
       {/* Dialog nuevo pago */}
       <Dialog open={showNew} onOpenChange={setShowNew}>
@@ -408,7 +466,7 @@ function monthOptions(): [string, string][] {
 }
 
 function CalendarGrid({
-  month, today, byDate, canEdit, onTogglePaid, onDelete,
+  month, today, byDate, canEdit, onTogglePaid, onDelete, onViewDetail, onViewDay,
 }: {
   month: string;
   today: string;
@@ -416,6 +474,8 @@ function CalendarGrid({
   canEdit: boolean;
   onTogglePaid: (id: string, paid: boolean) => void;
   onDelete: (id: string) => void;
+  onViewDetail: (p: PagoDto) => void;
+  onViewDay: (day: CalendarDay) => void;
 }) {
   const cells = daysInGrid(month);
   const weekdayLabels = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -470,12 +530,17 @@ function CalendarGrid({
                     canEdit={canEdit}
                     onTogglePaid={onTogglePaid}
                     onDelete={onDelete}
+                    onViewDetail={onViewDetail}
                   />
                 ))}
                 {payments.length > 3 && (
-                  <span className="text-[10px] text-muted-foreground px-1">
+                  <button
+                    type="button"
+                    className="text-[10px] text-primary font-medium px-1 py-0.5 rounded hover:bg-primary/10 text-left w-full"
+                    onClick={() => dayData && onViewDay(dayData)}
+                  >
                     +{payments.length - 3} más…
-                  </span>
+                  </button>
                 )}
                 {payments.length === 0 && (
                   <div className="text-[11px] text-muted-foreground/60 px-1 py-0.5">—</div>
@@ -490,42 +555,73 @@ function CalendarGrid({
 }
 
 function PaymentRow({
-  p, canEdit, onTogglePaid, onDelete,
+  p, canEdit, onTogglePaid, onDelete, onViewDetail, compact,
 }: {
   p: PagoDto;
   canEdit: boolean;
   onTogglePaid: (id: string, paid: boolean) => void;
   onDelete: (id: string) => void;
+  onViewDetail: (p: PagoDto) => void;
+  compact?: boolean;
 }) {
   return (
     <div
       className={[
-        "group relative rounded px-1 py-0.5 text-[11px] leading-tight cursor-pointer",
+        "group relative rounded px-1 py-0.5 text-[11px] leading-tight",
         p.paid ? "bg-emerald-50 text-emerald-800" : "bg-background hover:bg-muted",
       ].join(" ")}
       title={`${p.description} — ${formatCurrency(p.amount)}`}
-      onClick={() => canEdit && onTogglePaid(p.id, !p.paid)}
     >
       <div className="flex items-center gap-1">
-        {p.paid ? (
-          <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-600" />
-        ) : (
-          <Circle className="h-3 w-3 shrink-0 text-muted-foreground" />
-        )}
-        <span className="truncate flex-1">{p.description}</span>
-        <Badge className={["h-4 px-1 text-[9px]", FUENTE_BADGE[p.source]].join(" ")}>
+        <button
+          type="button"
+          className="shrink-0"
+          onClick={() => canEdit && onTogglePaid(p.id, !p.paid)}
+          disabled={!canEdit}
+          aria-label={p.paid ? "Marcar pendiente" : "Marcar pagado"}
+        >
+          {p.paid ? (
+            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+          ) : (
+            <Circle className="h-3 w-3 text-muted-foreground" />
+          )}
+        </button>
+        <button
+          type="button"
+          className="truncate flex-1 text-left"
+          onClick={() => onViewDetail(p)}
+        >
+          {p.description}
+        </button>
+        <Badge className={["h-4 px-1 text-[9px] shrink-0", FUENTE_BADGE[p.source]].join(" ")}>
           {FUENTE_LABEL[p.source]}
         </Badge>
+        <button
+          type="button"
+          className={[
+            "shrink-0 text-muted-foreground hover:text-foreground",
+            compact ? "" : "opacity-60 group-hover:opacity-100",
+          ].join(" ")}
+          onClick={() => onViewDetail(p)}
+          aria-label="Ver detalle"
+          title="Ver detalle"
+        >
+          <Eye className="h-3 w-3" />
+        </button>
       </div>
-      <div className="pl-4 text-[10px] font-medium">
+      <button
+        type="button"
+        className="pl-4 text-[10px] font-medium text-left w-full"
+        onClick={() => onViewDetail(p)}
+      >
         {formatCurrency(p.amount)}
         <span className="text-muted-foreground font-normal">
           {p.company ? ` · ${p.company}` : ""}
         </span>
-      </div>
+      </button>
       {canEdit && p.source === "MANUAL" && (
         <button
-          className="absolute top-0.5 right-0.5 hidden group-hover:inline-flex text-destructive"
+          className="absolute top-0.5 right-5 hidden group-hover:inline-flex text-destructive"
           onClick={(e) => { e.stopPropagation(); onDelete(p.id); }}
           aria-label="Eliminar"
         >
@@ -536,168 +632,219 @@ function PaymentRow({
   );
 }
 
-/** Cronograma (Gantt) del mes: barras por día sobre la línea de tiempo. */
-function CronogramaGrid({
-  month, today, calendar, canEdit, onTogglePaid, onDelete,
+type ExpenseSummary = {
+  type?: string;
+  notes?: string | null;
+  registroCxp?: string | null;
+  registroTr?: string | null;
+  approvalStatus?: string;
+};
+
+function PaymentDetailDialog({
+  payment,
+  onClose,
+  canEdit,
+  onTogglePaid,
 }: {
-  month: string;
-  today: string;
-  calendar: CalendarDay[];
+  payment: PagoDto | null;
+  onClose: () => void;
   canEdit: boolean;
   onTogglePaid: (id: string, paid: boolean) => void;
-  onDelete: (id: string) => void;
 }) {
-  const [y, m, totalDays] = useMemo(() => {
-    const [yy, mm] = month.split("-").map(Number);
-    return [yy, mm, new Date(yy, mm, 0).getDate()];
-  }, [month]);
+  const { data: expenseExtra } = useQuery({
+    queryKey: ["pagos-expense-detail", payment?.expenseId],
+    enabled: !!payment?.expenseId,
+    queryFn: async () => {
+      const res = await fetch(`/api/expenses/${payment!.expenseId}`);
+      if (!res.ok) return null;
+      const json = await res.json();
+      const e = json.data ?? json;
+      return {
+        type: e.type,
+        notes: e.notes,
+        registroCxp: e.registroCxp,
+        registroTr: e.registroTr,
+        approvalStatus: e.approvalStatus,
+      } as ExpenseSummary;
+    },
+  });
 
-  const days = useMemo(() => Array.from({ length: totalDays }, (_, i) => i + 1), [totalDays]);
-  const todayNum = useMemo(() => {
-    const t = new Date(today + "T00:00:00Z");
-    return t.getUTCFullYear() === y && t.getUTCMonth() + 1 === m ? t.getUTCDate() : null;
-  }, [today, y, m]);
-
-  // Todos los pagos del mes aplanados, ordenados por día
-  const allPayments = useMemo(() => {
-    const flat: (PagoDto & { day: number })[] = [];
-    for (const day of calendar) {
-      const dd = Number(day.date.split("-")[2]);
-      for (const p of day.payments) flat.push({ ...p, day: dd });
-    }
-    return flat.sort((a, b) => a.day - b.day || a.amount - b.amount);
-  }, [calendar]);
-
-  const gridCols = `minmax(150px, 220px) repeat(${totalDays}, minmax(22px, 1fr))`;
+  const p = payment;
 
   return (
-    <div className="w-full overflow-auto">
-      {/* Encabezado de días */}
-      <div className="grid gap-px rounded-md border bg-muted/20" style={{ gridTemplateColumns: gridCols, minWidth: 160 + totalDays * 24 }}>
-        <div className="p-2 text-xs font-semibold text-muted-foreground sticky left-0 bg-background z-10">
-          Día / Pago
-        </div>
-        {days.map((d) => (
-          <div
-            key={d}
-            className={[
-              "p-1.5 text-center text-[11px] font-semibold items-center justify-center",
-              d === todayNum ? "bg-primary text-primary-foreground rounded" : "text-muted-foreground",
-            ].join(" ")}
-          >
-            {d}
+    <Dialog open={!!p} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-lg max-h-[min(90vh,720px)] flex flex-col gap-0 overflow-hidden">
+        <DialogHeader className="shrink-0">
+          <DialogTitle className="flex items-center gap-2 pr-6">
+            <span>Detalle del pago</span>
+            {p && (
+              <Badge className={FUENTE_BADGE[p.source]}>
+                {FUENTE_LABEL[p.source]}
+              </Badge>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+
+        {p && (
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3 text-sm bg-muted/40 rounded-lg p-4">
+              <DetailField label="Descripción" value={p.description} className="col-span-2" />
+              <DetailField label="Monto" value={formatCurrency(p.amount)} emphasize />
+              <DetailField label="Fecha de pago" value={formatDate(p.paymentDate)} />
+              <DetailField label="Compañía" value={p.company ?? "—"} />
+              <DetailField
+                label="Estado"
+                value={p.paid ? "Pagado" : "Pendiente"}
+                valueClassName={p.paid ? "text-emerald-600" : "text-amber-600"}
+              />
+              {p.paidAt && (
+                <DetailField label="Pagado el" value={formatDateTime(p.paidAt)} className="col-span-2" />
+              )}
+              {p.refType && <DetailField label="Tipo" value={p.refType} />}
+              {p.referenceNumber && (
+                <DetailField label="Referencia" value={p.referenceNumber} />
+              )}
+              {p.notes && (
+                <DetailField label="Notas" value={p.notes} className="col-span-2" />
+              )}
+              {p.source === "APEX" && p.apexPagoBaseId != null && (
+                <DetailField label="Pago fijo Oracle" value={`#${p.apexPagoBaseId}`} />
+              )}
+            </div>
+
+            {p.source === "EXPENSE" && expenseExtra && (
+              <div className="rounded-lg border p-4 space-y-2 text-sm">
+                <p className="font-medium text-muted-foreground">Gasto vinculado</p>
+                {expenseExtra.type && <DetailField label="Tipo de gasto" value={expenseExtra.type} />}
+                {expenseExtra.registroCxp && (
+                  <DetailField label="Registro CxP" value={expenseExtra.registroCxp} />
+                )}
+                {expenseExtra.registroTr && (
+                  <DetailField label="Registro TR" value={expenseExtra.registroTr} />
+                )}
+                {expenseExtra.notes && (
+                  <DetailField label="Notas del gasto" value={expenseExtra.notes} />
+                )}
+                <Button variant="outline" size="sm" asChild className="mt-2">
+                  <Link href="/expenses">Ver en Gastos</Link>
+                </Button>
+              </div>
+            )}
           </div>
-        ))}
-      </div>
-
-      {/* Filas de pagos */}
-      {allPayments.length === 0 ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">
-          Sin pagos para este mes.
-        </div>
-      ) : (
-        <div className="mt-2 grid gap-px rounded-md border bg-muted/20" style={{ gridTemplateColumns: gridCols, minWidth: 160 + totalDays * 24 }}>
-          {allPayments.map((p) => (
-            <CronogramRow
-              key={p.id}
-              p={p}
-              totalDays={totalDays}
-              todayNum={todayNum}
-              canEdit={canEdit}
-              onTogglePaid={(id, paid) => onTogglePaid(id, paid)}
-              onDelete={(id) => onDelete(id)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Leyenda */}
-      <div className="flex flex-wrap items-center gap-4 mt-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm bg-emerald-100 border border-emerald-400" /> Pagado
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm bg-amber-100 border border-amber-400" /> Pendiente
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm bg-sky-100 border border-sky-400" /> Gasto aprobado
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm bg-amber-50 border border-amber-300" /> E. fijo APEX
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm bg-violet-100 border border-violet-400" /> Manual
-        </span>
-        {todayNum && (
-          <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-full bg-primary" /> Hoy
-          </span>
         )}
-        <span className="ml-auto">Clic en la barra para marcar pagado/pendiente</span>
-      </div>
+
+        <DialogFooter className="shrink-0 gap-2 sm:gap-0">
+          {p && canEdit && (
+            <Button
+              variant={p.paid ? "outline" : "default"}
+              onClick={() => onTogglePaid(p.id, !p.paid)}
+            >
+              {p.paid ? "Marcar pendiente" : "Marcar pagado"}
+            </Button>
+          )}
+          <Button variant="outline" onClick={onClose}>
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailField({
+  label,
+  value,
+  emphasize,
+  valueClassName,
+  className,
+}: {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+  valueClassName?: string;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={[
+        emphasize ? "font-semibold text-base" : "font-medium",
+        valueClassName,
+      ].filter(Boolean).join(" ")}>
+        {value}
+      </p>
     </div>
   );
 }
 
-function CronogramRow({
-  p, totalDays, todayNum, canEdit, onTogglePaid, onDelete,
+function DayPaymentsDialog({
+  day,
+  onClose,
+  canEdit,
+  onViewDetail,
+  onTogglePaid,
+  onDelete,
 }: {
-  p: PagoDto & { day: number };
-  totalDays: number;
-  todayNum: number | null;
+  day: CalendarDay | null;
+  onClose: () => void;
   canEdit: boolean;
+  onViewDetail: (p: PagoDto) => void;
   onTogglePaid: (id: string, paid: boolean) => void;
   onDelete: (id: string) => void;
 }) {
-  const cellBg = p.paid ? "bg-emerald-50" : "bg-amber-50";
+  const pending = day ? day.total - day.totalPaid : 0;
 
   return (
-    <>
-      {/* Etiqueta del pago */}
-      <div className={["p-2 flex items-center gap-1.5 sticky left-0", cellBg].join(" ")}>
-        <Badge className={["h-4 px-1 text-[9px] shrink-0", FUENTE_BADGE[p.source]].join(" ")}>
-          {FUENTE_LABEL[p.source]}
-        </Badge>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[11px] font-medium">{p.description}</div>
-          <div className="text-[10px] text-muted-foreground">
-            {formatCurrency(p.amount)}
-            {p.company ? ` · ${p.company}` : ""}
-          </div>
-        </div>
-        {canEdit && p.source === "MANUAL" && (
-          <button
-            className="text-destructive hover:opacity-70 shrink-0"
-            onClick={() => onDelete(p.id)}
-            aria-label="Eliminar"
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
-        )}
-      </div>
+    <Dialog open={!!day} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-xl max-h-[min(90vh,800px)] flex flex-col gap-0 overflow-hidden">
+        <DialogHeader className="shrink-0">
+          <DialogTitle>
+            Pagos del {day ? formatDate(day.date) : ""}
+          </DialogTitle>
+        </DialogHeader>
 
-      {/* Barra de tiempo (celdas por día) */}
-      {Array.from({ length: totalDays }, (_, i) => {
-        const dayNum = i + 1;
-        const isPayday = dayNum === p.day;
-        const isToday = dayNum === todayNum;
-        const bg = isPayday
-          ? p.paid
-            ? "bg-emerald-400/70 ring-1 ring-emerald-500"
-            : "bg-amber-400/70 ring-1 ring-amber-500"
-          : isToday
-            ? "bg-primary/15"
-            : "bg-transparent";
-        return (
-          <button
-            key={dayNum}
-            onClick={() => canEdit && isPayday && onTogglePaid(p.id, !p.paid)}
-            title={isPayday ? `${p.description} — ${formatCurrency(p.amount)} (${p.paid ? "pagado" : "pendiente"})` : undefined}
-            disabled={!canEdit || !isPayday}
-            className={["min-h-[34px] transition-colors", bg, canEdit && isPayday && "cursor-pointer hover:opacity-80"].join(" ")}
-          />
-        );
-      })}
-    </>
+        {day && (
+          <>
+            <div className="flex flex-wrap gap-4 text-sm py-2 shrink-0 border-b">
+              <span>
+                <span className="text-muted-foreground">Total: </span>
+                <span className="font-semibold">{formatCurrency(day.total)}</span>
+              </span>
+              <span>
+                <span className="text-muted-foreground">Pagado: </span>
+                <span className="font-semibold text-emerald-600">{formatCurrency(day.totalPaid)}</span>
+              </span>
+              <span>
+                <span className="text-muted-foreground">Pendiente: </span>
+                <span className="font-semibold text-amber-600">{formatCurrency(pending)}</span>
+              </span>
+              <span className="text-muted-foreground">
+                {day.payments.length} pago{day.payments.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto py-3 space-y-2">
+              {day.payments.map((p) => (
+                <PaymentRow
+                  key={p.id}
+                  p={p}
+                  canEdit={canEdit}
+                  onTogglePaid={onTogglePaid}
+                  onDelete={onDelete}
+                  onViewDetail={onViewDetail}
+                  compact
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        <DialogFooter className="shrink-0">
+          <Button variant="outline" onClick={onClose}>
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
