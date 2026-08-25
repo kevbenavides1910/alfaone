@@ -129,14 +129,16 @@ async function syncExpensesForMonth(from: Date, to: Date) {
   const approved = await prisma.expense.findMany({
     where: {
       approvalStatus: "APPROVED",
-      periodMonth: { gte: from, lt: to },
       deletedAt: null,
+      paymentDate: { gte: from, lt: to },
     },
     select: {
       id: true,
       description: true,
       amount: true,
+      paymentDate: true,
       periodMonth: true,
+      createdAt: true,
       company: true,
       type: true,
       referenceNumber: true,
@@ -144,24 +146,41 @@ async function syncExpensesForMonth(from: Date, to: Date) {
   });
 
   for (const exp of approved) {
+    const paymentDate = resolveExpensePaymentDate(exp);
     const exists = await prisma.payment.findFirst({
       where: { source: "EXPENSE", expenseId: exp.id },
       select: { id: true },
     });
-    if (exists) continue;
+    const payload = {
+      description: exp.description,
+      amount: exp.amount,
+      paymentDate,
+      company: exp.company,
+      refType: exp.type,
+      referenceNumber: exp.referenceNumber,
+    };
+    if (exists) {
+      await prisma.payment.update({ where: { id: exists.id }, data: payload });
+      continue;
+    }
     await prisma.payment.create({
       data: {
         source: "EXPENSE",
         expenseId: exp.id,
-        description: exp.description,
-        amount: exp.amount,
-        paymentDate: exp.periodMonth,
-        company: exp.company,
-        refType: exp.type,
-        referenceNumber: exp.referenceNumber,
+        ...payload,
       },
     });
   }
+}
+
+function resolveExpensePaymentDate(exp: {
+  paymentDate: Date | null;
+  periodMonth: Date;
+  createdAt: Date;
+}): Date {
+  if (exp.paymentDate) return exp.paymentDate;
+  const c = exp.createdAt;
+  return new Date(Date.UTC(c.getUTCFullYear(), c.getUTCMonth(), c.getUTCDate()));
 }
 
 /** Materializa los gastos fijos APEX del mes como Payments (APEX). */

@@ -45,7 +45,7 @@ export type ExpenseDistributionFilter = "all" | "single_contract" | "multi_month
 export interface Expense {
   id: string; sequentialNo?: number | null; type: ExpenseType; budgetLine?: ExpenseBudgetLine | null;
   description: string; amount: number;
-  periodMonth: string; isDeferred: boolean; isDistributed: boolean;
+  periodMonth: string; paymentDate?: string | null; isDeferred: boolean; isDistributed: boolean;
   deferredManualDistribution?: boolean;
   deferredIncludeContractIds?: string[];
   contractId?: string; positionId?: string; originId?: string; referenceNumber?: string;

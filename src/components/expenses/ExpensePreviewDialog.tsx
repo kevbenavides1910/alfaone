@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toaster";
-import { formatCurrency, formatMonthYear } from "@/lib/utils/format";
+import { formatCurrency, formatMonthYear, formatDate } from "@/lib/utils/format";
 import { companyDisplayName } from "@/lib/utils/constants";
 import { DeferredContractSelector, type DeferredContractDraft, type DeferredSelectorContract } from "@/components/expenses/DeferredContractSelector";
 import type { UseMutationResult } from "@tanstack/react-query";
@@ -76,6 +76,7 @@ export function ExpensePreviewDialog({
                 <div><span className="text-slate-500">Monto:</span> <span className="font-semibold ml-1">{formatCurrency(previewExpense.amount)}</span></div>
                 <div><span className="text-slate-500">Empresa:</span> <span className="font-medium ml-1">{previewExpense.company ? companyDisplayName(previewExpense.company, companyRows) : "—"}</span></div>
                 <div><span className="text-slate-500">Período:</span> <span className="font-medium ml-1">{formatMonthYear(previewExpense.periodMonth)}</span></div>
+                <div><span className="text-slate-500">Fecha de pago:</span> <span className="font-medium ml-1">{formatDate(previewExpense.paymentDate ?? previewExpense.createdAt)}</span></div>
                 <div className="col-span-2">{approvalBadge(previewExpense)}</div>
               </div>
 

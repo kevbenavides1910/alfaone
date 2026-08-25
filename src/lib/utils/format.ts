@@ -40,6 +40,19 @@ export function formatDate(date: Date | string | null | undefined): string {
   return format(local, "dd/MM/yyyy", { locale: es });
 }
 
+/** Hoy como YYYY-MM-DD (día local del servidor/cliente). */
+export function todayCalendarDateString(date: Date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** Parsea YYYY-MM-DD a Date UTC (medianoche). */
+export function parseCalendarDateInput(value: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 /** Valor para `<input type="date">` alineado con formatDate (día calendario UTC en BD). */
 export function calendarDateInputValue(date: Date | string | null | undefined): string {
   if (!date) return "";

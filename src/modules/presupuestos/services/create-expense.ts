@@ -15,6 +15,7 @@ import {
 import { assignableContractStatusWhereInput } from "@/modules/presupuestos/services/assignable-contract-where";
 import { splitAmountAcrossMonths, generateProrationMonths } from "@/modules/presupuestos/business/expense-proration";
 import type { ExpenseCreateInput } from "@/modules/presupuestos/validations/expense.schema";
+import { parseCalendarDateInput, todayCalendarDateString } from "@/lib/utils/format";
 
 type CreateResult = {
   expenses: ExpenseWithIncludes[];
@@ -93,6 +94,7 @@ async function createExpenseCore(
 ): Promise<CreateResult> {
   const {
     periodMonth,
+    paymentDate: rawPaymentDate,
     amount,
     spreadMonths: rawSpread,
     description,
@@ -152,6 +154,10 @@ async function createExpenseCore(
 
   const spreadMonths = isDeferred ? 1 : rawSpread;
   const months = generateProrationMonths(periodMonth, spreadMonths);
+  const paymentDate =
+    parseCalendarDateInput(rawPaymentDate) ??
+    parseCalendarDateInput(todayCalendarDateString()) ??
+    new Date();
 
   const stepCount = await getApprovalStepCountForType(type);
   const approval = initialApprovalFields(stepCount);
@@ -191,6 +197,7 @@ async function createExpenseCore(
         description: spreadMonths <= 1 ? desc : `${desc} (mes ${i + 1}/${spreadMonths})`,
         amount: amounts[i],
         periodMonth: months[i],
+        paymentDate,
       },
       include,
     });

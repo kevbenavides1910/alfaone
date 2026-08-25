@@ -14,6 +14,7 @@ import {
   validateManualAllocationsAgainstContracts,
 } from "@/modules/presupuestos/services/deferred-expense-distribution";
 import { assignableContractStatusWhereInput } from "@/modules/presupuestos/services/assignable-contract-where";
+import { parseCalendarDateInput } from "@/lib/utils/format";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -32,6 +33,7 @@ const patchExpenseSchema = z
     registroCxp: z.string().nullable().optional(),
     registroTr: z.string().nullable().optional(),
     periodMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Periodo inválido (YYYY-MM)").optional(),
+    paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha de pago inválida (YYYY-MM-DD)").optional(),
     /** Vacío en API = todos los contratos activos en el reparto (solo reparto proporcional). */
     deferredIncludeContractIds: z.array(z.string().min(1)).optional(),
     deferredManualAllocations: z
@@ -51,6 +53,7 @@ const patchExpenseSchema = z
       d.registroCxp !== undefined ||
       d.registroTr !== undefined ||
       d.periodMonth !== undefined ||
+      d.paymentDate !== undefined ||
       d.deferredIncludeContractIds !== undefined ||
       d.deferredManualAllocations !== undefined,
     { message: "Indique al menos un campo a actualizar" }
@@ -102,6 +105,7 @@ function serializeExpense(e: ExpenseDetailRow) {
     ...e,
     amount: parseFloat(e.amount.toString()),
     periodMonth: e.periodMonth.toISOString(),
+    paymentDate: e.paymentDate ? e.paymentDate.toISOString() : null,
     createdAt: e.createdAt.toISOString(),
     updatedAt: e.updatedAt.toISOString(),
     distributions: e.distributions.map((d) => ({
@@ -175,6 +179,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         registroCxp?: string | null;
         registroTr?: string | null;
         periodMonth?: Date;
+        paymentDate?: Date;
         deferredIncludeContractIds?: string[];
         deferredManualDistribution?: boolean;
         deferredManualAllocations?: Prisma.InputJsonValue;
@@ -191,6 +196,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       if (p.periodMonth !== undefined) {
         const [yy, mm] = p.periodMonth.split("-").map(Number);
         data.periodMonth = new Date(yy, mm - 1, 1);
+      }
+      if (p.paymentDate !== undefined) {
+        const d = parseCalendarDateInput(p.paymentDate);
+        if (!d) return badRequest("Fecha de pago inválida");
+        data.paymentDate = d;
       }
 
       if (p.deferredManualAllocations !== undefined) {
