@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare, ScrollText } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,20 @@ type CalendarDay = {
   payments: PagoDto[];
   total: number;
   totalPaid: number;
+};
+
+type PaymentChangeLogDto = {
+  id: string;
+  paymentId: string;
+  paymentDescription: string | null;
+  paymentCompany: string | null;
+  paymentSource: string | null;
+  field: string;
+  fieldLabel: string;
+  previousValue: string | null;
+  newValue: string | null;
+  changedByName: string | null;
+  createdAt: string;
 };
 
 const FUENTE_LABEL: Record<PagoFuente, string> = {
@@ -138,7 +152,7 @@ export function PagosPageClient({ initialCompany }: Props) {
   const [draft, setDraft] = useState<NewPaymentDraft>(EMPTY_DRAFT);
   const [detailPayment, setDetailPayment] = useState<PagoDto | null>(null);
   const [dayDialog, setDayDialog] = useState<CalendarDay | null>(null);
-  const [activeTab, setActiveTab] = useState<"diarios" | "fijos" | "cronograma">("diarios");
+  const [activeTab, setActiveTab] = useState<"diarios" | "fijos" | "cronograma" | "bitacora">("diarios");
 
   const canEdit = useMemo(
     () => hasPermission(session, "pagos.calendario", "edit"),
@@ -155,6 +169,20 @@ export function PagosPageClient({ initialCompany }: Props) {
       const json = await res.json();
       return json.data as CalendarDay[];
     },
+    enabled: activeTab !== "bitacora",
+  });
+
+  const { data: bitacoraGlobal = [], isFetching: bitacoraFetching } = useQuery({
+    queryKey: ["pagos-bitacora-global", company],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: "300" });
+      if (company && company !== "all") params.set("company", company);
+      const res = await fetch(`/api/pagos/bitacora?${params.toString()}`);
+      if (!res.ok) throw new Error("Error al cargar bitácora");
+      const json = await res.json();
+      return (json.data ?? json) as PaymentChangeLogDto[];
+    },
+    enabled: activeTab === "bitacora",
   });
 
   const markMutation = useMutation({
@@ -170,6 +198,7 @@ export function PagosPageClient({ initialCompany }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
       queryClient.invalidateQueries({ queryKey: ["pagos-bitacora"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-bitacora-global"] });
     },
     onError: () => toast.error("No se pudo actualizar el pago"),
   });
@@ -306,19 +335,25 @@ export function PagosPageClient({ initialCompany }: Props) {
           <option value="30">30</option>
         </select>
         <div className="ml-auto flex items-center gap-4 text-sm">
-          <span className="text-muted-foreground">Pendiente:</span>
-          <span className="font-semibold text-amber-600">{formatCurrency(monthPending)}</span>
-          <span className="text-muted-foreground">Pagado:</span>
-          <span className="font-semibold text-emerald-600">{formatCurrency(monthPaid)}</span>
-          <span className="text-muted-foreground">Total:</span>
-          <span className="font-semibold">{formatCurrency(monthTotal)}</span>
-          {isFetching && <span className="text-xs text-muted-foreground animate-pulse">cargando…</span>}
+          {activeTab !== "bitacora" ? (
+            <>
+              <span className="text-muted-foreground">Pendiente:</span>
+              <span className="font-semibold text-amber-600">{formatCurrency(monthPending)}</span>
+              <span className="text-muted-foreground">Pagado:</span>
+              <span className="font-semibold text-emerald-600">{formatCurrency(monthPaid)}</span>
+              <span className="text-muted-foreground">Total:</span>
+              <span className="font-semibold">{formatCurrency(monthTotal)}</span>
+              {isFetching && <span className="text-xs text-muted-foreground animate-pulse">cargando…</span>}
+            </>
+          ) : (
+            bitacoraFetching && <span className="text-xs text-muted-foreground animate-pulse">cargando bitácora…</span>
+          )}
         </div>
       </div>
 
       {/* Vistas */}
       <Card className="flex-1 min-h-0 overflow-auto">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "diarios" | "fijos" | "cronograma")} className="h-full flex flex-col">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "diarios" | "fijos" | "cronograma" | "bitacora")} className="h-full flex flex-col">
           <div className="px-3 pt-3">
             <TabsList>
               <TabsTrigger value="diarios" className="flex items-center gap-1.5">
@@ -329,6 +364,9 @@ export function PagosPageClient({ initialCompany }: Props) {
               </TabsTrigger>
               <TabsTrigger value="cronograma" className="flex items-center gap-1.5">
                 <GanttChartSquare className="h-4 w-4" /> Cronograma
+              </TabsTrigger>
+              <TabsTrigger value="bitacora" className="flex items-center gap-1.5">
+                <ScrollText className="h-4 w-4" /> Bitácora
               </TabsTrigger>
             </TabsList>
           </div>
@@ -370,6 +408,12 @@ export function PagosPageClient({ initialCompany }: Props) {
               onViewDetail={setDetailPayment}
             />
           </TabsContent>
+          <TabsContent value="bitacora" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
+            <PagosBitacoraTable
+              logs={bitacoraGlobal}
+              loading={bitacoraFetching}
+            />
+          </TabsContent>
         </Tabs>
       </Card>
 
@@ -394,6 +438,7 @@ export function PagosPageClient({ initialCompany }: Props) {
         onUpdated={(p) => {
           setDetailPayment(p);
           queryClient.invalidateQueries({ queryKey: ["pagos"] });
+          queryClient.invalidateQueries({ queryKey: ["pagos-bitacora-global"] });
         }}
       />
 
@@ -478,6 +523,87 @@ export function PagosPageClient({ initialCompany }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function formatBitacoraValue(field: string, value: string | null): string {
+  if (value == null || value === "") return "—";
+  if (field === "amount") {
+    const n = Number(value);
+    return Number.isFinite(n) ? formatCurrency(n) : value;
+  }
+  if (field === "paymentDate") return formatDate(value);
+  return value;
+}
+
+function PagosBitacoraTable({
+  logs,
+  loading,
+}: {
+  logs: PaymentChangeLogDto[];
+  loading: boolean;
+}) {
+  if (loading && logs.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground py-10 text-center animate-pulse">
+        Cargando bitácora…
+      </p>
+    );
+  }
+
+  if (logs.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground py-10 text-center">
+        Aún no hay cambios registrados en pagos.
+      </p>
+    );
+  }
+
+  return (
+    <div className="w-full overflow-auto rounded-md border">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs font-semibold text-muted-foreground">
+          <tr>
+            <th className="px-3 py-2.5 whitespace-nowrap">Fecha</th>
+            <th className="px-3 py-2.5">Pago</th>
+            <th className="px-3 py-2.5 whitespace-nowrap">Campo</th>
+            <th className="px-3 py-2.5">Dato anterior</th>
+            <th className="px-3 py-2.5">Dato nuevo</th>
+            <th className="px-3 py-2.5 whitespace-nowrap">Usuario</th>
+          </tr>
+        </thead>
+        <tbody>
+          {logs.map((log) => (
+            <tr key={log.id} className="border-t hover:bg-muted/40">
+              <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground align-top">
+                {formatDateTime(log.createdAt)}
+              </td>
+              <td className="px-3 py-2 align-top">
+                <div className="font-medium leading-snug max-w-[280px] truncate" title={log.paymentDescription ?? undefined}>
+                  {log.paymentDescription ?? "—"}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  {log.paymentSource ? (FUENTE_LABEL[log.paymentSource as PagoFuente] ?? log.paymentSource) : ""}
+                  {log.paymentCompany ? ` · ${log.paymentCompany}` : ""}
+                </div>
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap align-top font-medium">
+                {log.fieldLabel}
+              </td>
+              <td className="px-3 py-2 align-top text-muted-foreground">
+                {formatBitacoraValue(log.field, log.previousValue)}
+              </td>
+              <td className="px-3 py-2 align-top font-medium">
+                {formatBitacoraValue(log.field, log.newValue)}
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap align-top">
+                {log.changedByName ?? "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -670,16 +796,6 @@ type ExpenseSummary = {
   approvalStatus?: string;
 };
 
-type PaymentChangeLogDto = {
-  id: string;
-  field: string;
-  fieldLabel: string;
-  previousValue: string | null;
-  newValue: string | null;
-  changedByName: string | null;
-  createdAt: string;
-};
-
 function PaymentDetailDialog({
   payment,
   onClose,
@@ -769,6 +885,7 @@ function PaymentDetailDialog({
       toast.success("Pago actualizado");
       onUpdated(p);
       queryClient.invalidateQueries({ queryKey: ["pagos-bitacora", p.id] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-bitacora-global"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error al guardar"),
   });

@@ -5,6 +5,10 @@ import { parseCalendarDateInput } from "@/lib/utils/format";
 
 export type PaymentChangeLogDto = {
   id: string;
+  paymentId: string;
+  paymentDescription: string | null;
+  paymentCompany: string | null;
+  paymentSource: string | null;
   field: string;
   fieldLabel: string;
   previousValue: string | null;
@@ -50,11 +54,13 @@ function displayPaid(v: string | null | undefined): string {
 
 export function serializeChangeLog(row: {
   id: string;
+  paymentId: string;
   field: string;
   previousValue: string | null;
   newValue: string | null;
   createdAt: Date;
   changedBy: { name: string } | null;
+  payment?: { description: string; company: string | null; source: string } | null;
 }): PaymentChangeLogDto {
   const field = row.field;
   let previousValue = row.previousValue;
@@ -65,6 +71,10 @@ export function serializeChangeLog(row: {
   }
   return {
     id: row.id,
+    paymentId: row.paymentId,
+    paymentDescription: row.payment?.description ?? null,
+    paymentCompany: row.payment?.company ?? null,
+    paymentSource: row.payment?.source ?? null,
     field,
     fieldLabel: FIELD_LABELS[field] ?? field,
     previousValue,
@@ -78,7 +88,30 @@ export async function listPaymentChangeLogs(paymentId: string): Promise<PaymentC
   const rows = await prisma.paymentChangeLog.findMany({
     where: { paymentId },
     orderBy: { createdAt: "desc" },
-    include: { changedBy: { select: { name: true } } },
+    include: {
+      changedBy: { select: { name: true } },
+      payment: { select: { description: true, company: true, source: true } },
+    },
+  });
+  return rows.map(serializeChangeLog);
+}
+
+/** Bitácora global del módulo de pagos (todos los cambios). */
+export async function listAllPaymentChangeLogs(opts?: {
+  take?: number;
+  company?: string;
+}): Promise<PaymentChangeLogDto[]> {
+  const take = Math.min(Math.max(opts?.take ?? 200, 1), 500);
+  const rows = await prisma.paymentChangeLog.findMany({
+    where: opts?.company
+      ? { payment: { company: opts.company } }
+      : undefined,
+    orderBy: { createdAt: "desc" },
+    take,
+    include: {
+      changedBy: { select: { name: true } },
+      payment: { select: { description: true, company: true, source: true } },
+    },
   });
   return rows.map(serializeChangeLog);
 }
