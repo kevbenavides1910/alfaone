@@ -377,7 +377,20 @@ export function PagosPageClient({ initialCompany }: Props) {
         payment={detailPayment}
         onClose={() => setDetailPayment(null)}
         canEdit={canEdit}
-        onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
+        onTogglePaid={(id, paid) => {
+          markMutation.mutate(
+            { id, paid },
+            {
+              onSuccess: () => {
+                setDetailPayment((prev) =>
+                  prev && prev.id === id
+                    ? { ...prev, paid, paidAt: paid ? new Date().toISOString() : null }
+                    : prev,
+                );
+              },
+            },
+          );
+        }}
         onUpdated={(p) => {
           setDetailPayment(p);
           queryClient.invalidateQueries({ queryKey: ["pagos"] });
