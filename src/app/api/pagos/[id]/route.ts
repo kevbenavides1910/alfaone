@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/modules/core/db/prisma";
 import { withPermission } from "@/lib/permissions/middleware";
 import { ok, notFound, badRequest, noContent, serverError } from "@/lib/api/response";
-import { serializeSinglePayment } from "@/modules/pagos/services/pagos";
+import { prisma } from "@/modules/core/db/prisma";
+import { updatePaymentWithAudit } from "@/modules/pagos/services/payment-update";
 
 /**
  * API de un pago individual.
- *   PATCH /api/pagos/[id]  { paid: boolean, notes?, description?, referenceNumber? }
+ *   PATCH /api/pagos/[id]  { paid?, amount?, paymentDate?, notes?, description?, referenceNumber? }
  *   DELETE /api/pagos/[id] → elimina un pago (solo MANUAL)
  */
 type Ctx = { params: Promise<{ id: string }> };
@@ -16,32 +16,28 @@ export const PATCH = withPermission(
     try {
       const { id } = ctx.params;
       const body = await req.json();
+      const userId = ctx.session.user?.id;
+      if (!userId) return badRequest("Sesión sin usuario");
 
-      const payment = await prisma.payment.findUnique({ where: { id } });
-      if (!payment) return notFound("Pago no encontrado");
-
-      const data: Record<string, unknown> = {};
-      if (typeof body.paid === "boolean") {
-        data.paid = body.paid;
-        data.paidAt = body.paid ? new Date() : null;
-      }
-      if (typeof body.notes === "string") data.notes = body.notes;
-      if (typeof body.description === "string") data.description = body.description;
-      if (typeof body.referenceNumber === "string") {
-        data.referenceNumber = body.referenceNumber;
-      }
-      // Solo permitir cambio de monto/fecha en pagos manuales
-      if (payment.source === "MANUAL") {
-        if (typeof body.amount === "number" && body.amount > 0) data.amount = body.amount;
-        if (typeof body.paymentDate === "string") {
-          const d = new Date(body.paymentDate + "T00:00:00Z");
-          if (!Number.isNaN(d.getTime())) data.paymentDate = d;
-        }
-      }
-
-      const updated = await prisma.payment.update({ where: { id }, data });
-      return ok(serializeSinglePayment(updated));
+      const updated = await updatePaymentWithAudit(
+        id,
+        {
+          paid: typeof body.paid === "boolean" ? body.paid : undefined,
+          notes: typeof body.notes === "string" ? body.notes : undefined,
+          description: typeof body.description === "string" ? body.description : undefined,
+          referenceNumber: typeof body.referenceNumber === "string" ? body.referenceNumber : undefined,
+          amount: typeof body.amount === "number" ? body.amount : undefined,
+          paymentDate: typeof body.paymentDate === "string" ? body.paymentDate : undefined,
+        },
+        userId,
+      );
+      return ok(updated);
     } catch (e) {
+      const code = e instanceof Error ? (e as Error & { code?: string }).code : undefined;
+      if (code === "NOT_FOUND") return notFound("Pago no encontrado");
+      if (code === "BAD_REQUEST") {
+        return badRequest(e instanceof Error ? e.message : "Datos inválidos");
+      }
       return serverError("Error al actualizar el pago", e);
     }
   },

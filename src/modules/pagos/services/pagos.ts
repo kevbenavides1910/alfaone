@@ -160,7 +160,16 @@ async function syncExpensesForMonth(from: Date, to: Date) {
       referenceNumber: exp.referenceNumber,
     };
     if (exists) {
-      await prisma.payment.update({ where: { id: exists.id }, data: payload });
+      // No pisar amount/paymentDate: se editan en el calendario y quedan en bitácora.
+      await prisma.payment.update({
+        where: { id: exists.id },
+        data: {
+          description: exp.description,
+          company: exp.company,
+          refType: exp.type,
+          referenceNumber: exp.referenceNumber,
+        },
+      });
       continue;
     }
     await prisma.payment.create({

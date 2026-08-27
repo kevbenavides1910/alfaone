@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare } from "lucide-react";
 import Link from "next/link";
@@ -16,7 +16,7 @@ import {
   Tabs, TabsList, TabsTrigger, TabsContent,
 } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toaster";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils/format";
+import { formatCurrency, formatDate, formatDateTime, calendarDateInputValue } from "@/lib/utils/format";
 import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 
@@ -167,7 +167,10 @@ export function PagosPageClient({ initialCompany }: Props) {
       if (!res.ok) throw new Error("Error al marcar pago");
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pagos"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-bitacora"] });
+    },
     onError: () => toast.error("No se pudo actualizar el pago"),
   });
 
@@ -375,6 +378,10 @@ export function PagosPageClient({ initialCompany }: Props) {
         onClose={() => setDetailPayment(null)}
         canEdit={canEdit}
         onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
+        onUpdated={(p) => {
+          setDetailPayment(p);
+          queryClient.invalidateQueries({ queryKey: ["pagos"] });
+        }}
       />
 
       <DayPaymentsDialog
@@ -650,17 +657,45 @@ type ExpenseSummary = {
   approvalStatus?: string;
 };
 
+type PaymentChangeLogDto = {
+  id: string;
+  field: string;
+  fieldLabel: string;
+  previousValue: string | null;
+  newValue: string | null;
+  changedByName: string | null;
+  createdAt: string;
+};
+
 function PaymentDetailDialog({
   payment,
   onClose,
   canEdit,
   onTogglePaid,
+  onUpdated,
 }: {
   payment: PagoDto | null;
   onClose: () => void;
   canEdit: boolean;
   onTogglePaid: (id: string, paid: boolean) => void;
+  onUpdated: (p: PagoDto) => void;
 }) {
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState<"detalle" | "bitacora">("detalle");
+  const [amount, setAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    if (!payment) return;
+    setAmount(String(payment.amount));
+    setPaymentDate(calendarDateInputValue(payment.paymentDate));
+    setNotes(payment.notes ?? "");
+    setDescription(payment.description);
+    setTab("detalle");
+  }, [payment?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { data: expenseExtra } = useQuery({
     queryKey: ["pagos-expense-detail", payment?.expenseId],
     enabled: !!payment?.expenseId,
@@ -679,11 +714,63 @@ function PaymentDetailDialog({
     },
   });
 
+  const { data: bitacora = [], isFetching: bitacoraLoading } = useQuery({
+    queryKey: ["pagos-bitacora", payment?.id],
+    enabled: !!payment?.id && tab === "bitacora",
+    queryFn: async () => {
+      const res = await fetch(`/api/pagos/${payment!.id}/bitacora`);
+      if (!res.ok) throw new Error("Error al cargar bitácora");
+      const json = await res.json();
+      return (json.data ?? json) as PaymentChangeLogDto[];
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!payment) throw new Error("Sin pago");
+      const amountNum = Number(amount);
+      if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        throw new Error("Monto inválido");
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) {
+        throw new Error("Fecha de pago inválida");
+      }
+      const res = await fetch(`/api/pagos/${payment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: amountNum,
+          paymentDate,
+          notes,
+          description: description.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.message || "No se pudo guardar");
+      }
+      const json = await res.json();
+      return (json.data ?? json) as PagoDto;
+    },
+    onSuccess: (p) => {
+      toast.success("Pago actualizado");
+      onUpdated(p);
+      queryClient.invalidateQueries({ queryKey: ["pagos-bitacora", p.id] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Error al guardar"),
+  });
+
   const p = payment;
+  const dirty =
+    !!p &&
+    (Number(amount) !== p.amount ||
+      calendarDateInputValue(p.paymentDate) !== paymentDate ||
+      (p.notes ?? "") !== notes ||
+      p.description !== description.trim());
 
   return (
     <Dialog open={!!p} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[min(90vh,720px)] flex flex-col gap-0 overflow-hidden">
+      <DialogContent className="sm:max-w-lg max-h-[min(90vh,780px)] flex flex-col gap-0 overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2 pr-6">
             <span>Detalle del pago</span>
@@ -696,61 +783,175 @@ function PaymentDetailDialog({
         </DialogHeader>
 
         {p && (
-          <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-3 text-sm bg-muted/40 rounded-lg p-4">
-              <DetailField label="Descripción" value={p.description} className="col-span-2" />
-              <DetailField label="Monto" value={formatCurrency(p.amount)} emphasize />
-              <DetailField label="Fecha de pago" value={formatDate(p.paymentDate)} />
-              <DetailField label="Compañía" value={p.company ?? "—"} />
-              <DetailField
-                label="Estado"
-                value={p.paid ? "Pagado" : "Pendiente"}
-                valueClassName={p.paid ? "text-emerald-600" : "text-amber-600"}
-              />
+          <Tabs
+            value={tab}
+            onValueChange={(v) => setTab(v as "detalle" | "bitacora")}
+            className="flex-1 min-h-0 flex flex-col"
+          >
+            <TabsList className="mx-0 mb-2 shrink-0 self-start">
+              <TabsTrigger value="detalle">Detalle</TabsTrigger>
+              <TabsTrigger value="bitacora">Bitácora</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="detalle" className="flex-1 min-h-0 overflow-y-auto space-y-4 mt-0 data-[state=inactive]:hidden">
+              {canEdit ? (
+                <div className="grid gap-3 text-sm rounded-lg border p-4">
+                  <div className="grid gap-1.5">
+                    <Label>Descripción</Label>
+                    <Input
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-1.5">
+                      <Label>Monto (₡)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                      />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label>Fecha de pago</Label>
+                      <Input
+                        type="date"
+                        value={paymentDate}
+                        onChange={(e) => setPaymentDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label>Notas</Label>
+                    <Input
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground pt-1">
+                    <div>
+                      Compañía: <span className="font-medium text-foreground">{p.company ?? "—"}</span>
+                    </div>
+                    <div>
+                      Estado:{" "}
+                      <span className={p.paid ? "font-medium text-emerald-600" : "font-medium text-amber-600"}>
+                        {p.paid ? "Pagado" : "Pendiente"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/40 rounded-lg p-4">
+                  <DetailField label="Descripción" value={p.description} className="col-span-2" />
+                  <DetailField label="Monto" value={formatCurrency(p.amount)} emphasize />
+                  <DetailField label="Fecha de pago" value={formatDate(p.paymentDate)} />
+                  <DetailField label="Compañía" value={p.company ?? "—"} />
+                  <DetailField
+                    label="Estado"
+                    value={p.paid ? "Pagado" : "Pendiente"}
+                    valueClassName={p.paid ? "text-emerald-600" : "text-amber-600"}
+                  />
+                  {p.notes && (
+                    <DetailField label="Notas" value={p.notes} className="col-span-2" />
+                  )}
+                </div>
+              )}
+
               {p.paidAt && (
-                <DetailField label="Pagado el" value={formatDateTime(p.paidAt)} className="col-span-2" />
-              )}
-              {p.refType && <DetailField label="Tipo" value={p.refType} />}
-              {p.referenceNumber && (
-                <DetailField label="Referencia" value={p.referenceNumber} />
-              )}
-              {p.notes && (
-                <DetailField label="Notas" value={p.notes} className="col-span-2" />
+                <p className="text-xs text-muted-foreground px-1">
+                  Marcado pagado el {formatDateTime(p.paidAt)}
+                </p>
               )}
               {p.source === "APEX" && p.apexPagoBaseId != null && (
-                <DetailField label="Pago fijo Oracle" value={`#${p.apexPagoBaseId}`} />
+                <p className="text-xs text-muted-foreground px-1">Pago fijo Oracle #{p.apexPagoBaseId}</p>
               )}
-            </div>
 
-            {p.source === "EXPENSE" && expenseExtra && (
-              <div className="rounded-lg border p-4 space-y-2 text-sm">
-                <p className="font-medium text-muted-foreground">Gasto vinculado</p>
-                {expenseExtra.type && <DetailField label="Tipo de gasto" value={expenseExtra.type} />}
-                {expenseExtra.registroCxp && (
-                  <DetailField label="Registro CxP" value={expenseExtra.registroCxp} />
-                )}
-                {expenseExtra.registroTr && (
-                  <DetailField label="Registro TR" value={expenseExtra.registroTr} />
-                )}
-                {expenseExtra.notes && (
-                  <DetailField label="Notas del gasto" value={expenseExtra.notes} />
-                )}
-                <Button variant="outline" size="sm" asChild className="mt-2">
-                  <Link href="/expenses">Ver en Gastos</Link>
-                </Button>
-              </div>
-            )}
-          </div>
+              {p.source === "EXPENSE" && expenseExtra && (
+                <div className="rounded-lg border p-4 space-y-2 text-sm">
+                  <p className="font-medium text-muted-foreground">Gasto vinculado</p>
+                  {expenseExtra.type && <DetailField label="Tipo de gasto" value={expenseExtra.type} />}
+                  {expenseExtra.registroCxp && (
+                    <DetailField label="Registro CxP" value={expenseExtra.registroCxp} />
+                  )}
+                  {expenseExtra.registroTr && (
+                    <DetailField label="Registro TR" value={expenseExtra.registroTr} />
+                  )}
+                  <Button variant="outline" size="sm" asChild className="mt-2">
+                    <Link href="/expenses">Ver en Gastos</Link>
+                  </Button>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="bitacora" className="flex-1 min-h-0 overflow-y-auto mt-0 data-[state=inactive]:hidden">
+              {bitacoraLoading ? (
+                <p className="text-sm text-muted-foreground py-6 text-center animate-pulse">Cargando bitácora…</p>
+              ) : bitacora.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  Sin cambios registrados todavía.
+                </p>
+              ) : (
+                <div className="space-y-2 py-1">
+                  {bitacora.map((log) => (
+                    <div key={log.id} className="rounded-md border p-3 text-sm">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <span className="font-medium">{log.fieldLabel}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDateTime(log.createdAt)}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 grid gap-0.5 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Anterior: </span>
+                          <span className="font-medium">
+                            {log.field === "amount" && log.previousValue
+                              ? formatCurrency(Number(log.previousValue))
+                              : log.field === "paymentDate" && log.previousValue
+                                ? formatDate(log.previousValue)
+                                : (log.previousValue ?? "—")}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Nuevo: </span>
+                          <span className="font-medium">
+                            {log.field === "amount" && log.newValue
+                              ? formatCurrency(Number(log.newValue))
+                              : log.field === "paymentDate" && log.newValue
+                                ? formatDate(log.newValue)
+                                : (log.newValue ?? "—")}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        Por {log.changedByName ?? "usuario desconocido"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         )}
 
-        <DialogFooter className="shrink-0 gap-2 sm:gap-0">
-          {p && canEdit && (
-            <Button
-              variant={p.paid ? "outline" : "default"}
-              onClick={() => onTogglePaid(p.id, !p.paid)}
-            >
-              {p.paid ? "Marcar pendiente" : "Marcar pagado"}
-            </Button>
+        <DialogFooter className="shrink-0 gap-2 sm:gap-0 pt-3">
+          {p && canEdit && tab === "detalle" && (
+            <>
+              <Button
+                variant={p.paid ? "outline" : "default"}
+                onClick={() => onTogglePaid(p.id, !p.paid)}
+              >
+                {p.paid ? "Marcar pendiente" : "Marcar pagado"}
+              </Button>
+              <Button
+                onClick={() => saveMutation.mutate()}
+                disabled={!dirty || saveMutation.isPending}
+              >
+                Guardar cambios
+              </Button>
+            </>
           )}
           <Button variant="outline" onClick={onClose}>
             Cerrar

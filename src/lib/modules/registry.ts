@@ -114,7 +114,7 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
       "src/app/api/pagos",
       "src/components/pagos",
     ],
-    prismaModels: ["Payment"],
+    prismaModels: ["Payment", "PaymentChangeLog"],
   },
 
   reportes: {

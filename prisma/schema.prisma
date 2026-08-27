@@ -274,6 +274,7 @@ model User {
   expenses        Expense[]  @relation("ExpenseCreatedBy")
   paymentsCreated Payment[]  @relation("PaymentCreatedBy")
   paymentsUpdated Payment[]  @relation("PaymentUpdatedBy")
+  paymentChangeLogs PaymentChangeLog[] @relation("PaymentChangeLogActor")
 
   expenseTypeApprovalSteps               ExpenseTypeApprovalStep[]     @relation("ExpenseTypeApprovalApprover")
   expenseApprovals                       ExpenseApproval[]             @relation("ExpenseApprovalApprover")
@@ -6056,10 +6057,29 @@ model Payment {
   updatedBy       User?         @relation("PaymentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+  changeLogs      PaymentChangeLog[]
 
   @@unique([apexPagoId, source])
   @@index([paymentDate])
   @@index([company])
   @@index([paid])
   @@map("payments")
+}
+
+/// Bitácora de cambios de un pago (fecha, monto, estado, etc.).
+model PaymentChangeLog {
+  id            String   @id @default(cuid())
+  paymentId     String
+  payment       Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  /// Campo modificado: amount | paymentDate | paid | description | notes | referenceNumber
+  field         String
+  previousValue String?  @db.Text
+  newValue      String?  @db.Text
+  changedById   String?
+  changedBy     User?    @relation("PaymentChangeLogActor", fields: [changedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+
+  @@index([paymentId, createdAt])
+  @@index([changedById])
+  @@map("payment_change_logs")
 }
