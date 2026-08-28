@@ -19,6 +19,12 @@ import { toast } from "@/components/ui/toaster";
 import { formatCurrency, formatDate, formatDateTime, calendarDateInputValue } from "@/lib/utils/format";
 import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
+import {
+  PAYMENT_CATEGORIES,
+  paymentCategoryLabel,
+  paymentSubcategoryLabel,
+  subcategoriesFor,
+} from "@/modules/pagos/catalog/payment-categories";
 
 type PagoFuente = "EXPENSE" | "APEX" | "MANUAL";
 
@@ -34,6 +40,8 @@ type PagoDto = {
   company: string | null;
   refType: string | null;
   referenceNumber: string | null;
+  category: string | null;
+  subcategory: string | null;
   paid: boolean;
   paidAt: string | null;
   notes: string | null;
@@ -773,6 +781,9 @@ function PaymentRow({
         {formatCurrency(p.amount)}
         <span className="text-muted-foreground font-normal">
           {p.company ? ` · ${p.company}` : ""}
+          {p.subcategory
+            ? ` · ${paymentSubcategoryLabel(p.category, p.subcategory) ?? p.subcategory}`
+            : ""}
         </span>
       </button>
       {canEdit && p.source === "MANUAL" && (
@@ -815,6 +826,8 @@ function PaymentDetailDialog({
   const [paymentDate, setPaymentDate] = useState("");
   const [notes, setNotes] = useState("");
   const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("");
+  const [subcategory, setSubcategory] = useState("");
 
   useEffect(() => {
     if (!payment) return;
@@ -822,8 +835,12 @@ function PaymentDetailDialog({
     setPaymentDate(calendarDateInputValue(payment.paymentDate));
     setNotes(payment.notes ?? "");
     setDescription(payment.description);
+    setCategory(payment.category ?? "");
+    setSubcategory(payment.subcategory ?? "");
     setTab("detalle");
   }, [payment?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const subcategoryOptions = useMemo(() => subcategoriesFor(category || null), [category]);
 
   const { data: expenseExtra } = useQuery({
     queryKey: ["pagos-expense-detail", payment?.expenseId],
@@ -872,6 +889,8 @@ function PaymentDetailDialog({
           paymentDate,
           notes,
           description: description.trim(),
+          category: category || null,
+          subcategory: subcategory || null,
         }),
       });
       if (!res.ok) {
@@ -896,7 +915,9 @@ function PaymentDetailDialog({
     (Number(amount) !== p.amount ||
       calendarDateInputValue(p.paymentDate) !== paymentDate ||
       (p.notes ?? "") !== notes ||
-      p.description !== description.trim());
+      p.description !== description.trim() ||
+      (p.category ?? "") !== category ||
+      (p.subcategory ?? "") !== subcategory);
 
   return (
     <Dialog open={!!p} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -953,6 +974,38 @@ function PaymentDetailDialog({
                       />
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-1.5">
+                      <Label>Categoría</Label>
+                      <select
+                        className="h-9 border rounded-md px-2 text-sm bg-background"
+                        value={category}
+                        onChange={(e) => {
+                          setCategory(e.target.value);
+                          setSubcategory("");
+                        }}
+                      >
+                        <option value="">Sin clasificar</option>
+                        {PAYMENT_CATEGORIES.map((c) => (
+                          <option key={c.key} value={c.key}>{c.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label>Subcategoría</Label>
+                      <select
+                        className="h-9 border rounded-md px-2 text-sm bg-background"
+                        value={subcategory}
+                        onChange={(e) => setSubcategory(e.target.value)}
+                        disabled={!category}
+                      >
+                        <option value="">{category ? "Elegí…" : "Primero la categoría"}</option>
+                        {subcategoryOptions.map((s) => (
+                          <option key={s.key} value={s.key}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                   <div className="grid gap-1.5">
                     <Label>Notas</Label>
                     <Input
@@ -978,6 +1031,14 @@ function PaymentDetailDialog({
                   <DetailField label="Descripción" value={p.description} className="col-span-2" />
                   <DetailField label="Monto" value={formatCurrency(p.amount)} emphasize />
                   <DetailField label="Fecha de pago" value={formatDate(p.paymentDate)} />
+                  <DetailField
+                    label="Categoría"
+                    value={paymentCategoryLabel(p.category) ?? "Sin clasificar"}
+                  />
+                  <DetailField
+                    label="Subcategoría"
+                    value={paymentSubcategoryLabel(p.category, p.subcategory) ?? "—"}
+                  />
                   <DetailField label="Compañía" value={p.company ?? "—"} />
                   <DetailField
                     label="Estado"

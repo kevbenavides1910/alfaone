@@ -37,6 +37,8 @@ export type PagoDto = {
   company: string | null;
   refType: string | null;
   referenceNumber: string | null;
+  category: string | null;
+  subcategory: string | null;
   paid: boolean;
   paidAt: string | null;
   notes: string | null;
@@ -61,6 +63,8 @@ export function serializeSinglePayment(p: {
   company: string | null;
   refType: string | null;
   referenceNumber: string | null;
+  category: string | null;
+  subcategory: string | null;
   paid: boolean;
   paidAt: Date | null;
   notes: string | null;
@@ -77,6 +81,8 @@ export function serializeSinglePayment(p: {
     company: p.company,
     refType: p.refType,
     referenceNumber: p.referenceNumber,
+    category: p.category,
+    subcategory: p.subcategory,
     paid: p.paid,
     paidAt: p.paidAt ? p.paidAt.toISOString() : null,
     notes: p.notes,

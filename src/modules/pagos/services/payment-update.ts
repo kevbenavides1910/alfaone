@@ -2,6 +2,11 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
 import { serializeSinglePayment, type PagoDto } from "./pagos";
 import { parseCalendarDateInput } from "@/lib/utils/format";
+import {
+  paymentCategoryLabel,
+  paymentSubcategoryLabel,
+  validatePaymentClassification,
+} from "@/modules/pagos/catalog/payment-categories";
 
 export type PaymentChangeLogDto = {
   id: string;
@@ -24,6 +29,8 @@ export type UpdatePaymentInput = {
   referenceNumber?: string;
   amount?: number;
   paymentDate?: string; // YYYY-MM-DD
+  category?: string | null;
+  subcategory?: string | null;
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -33,6 +40,8 @@ const FIELD_LABELS: Record<string, string> = {
   description: "Descripción",
   notes: "Notas",
   referenceNumber: "Referencia",
+  category: "Categoría",
+  subcategory: "Subcategoría",
 };
 
 function formatStoredAmount(n: Prisma.Decimal | number): string {
@@ -60,7 +69,7 @@ export function serializeChangeLog(row: {
   newValue: string | null;
   createdAt: Date;
   changedBy: { name: string } | null;
-  payment?: { description: string; company: string | null; source: string } | null;
+  payment?: { description: string; company: string | null; source: string; category?: string | null; subcategory?: string | null } | null;
 }): PaymentChangeLogDto {
   const field = row.field;
   let previousValue = row.previousValue;
@@ -90,7 +99,7 @@ export async function listPaymentChangeLogs(paymentId: string): Promise<PaymentC
     orderBy: { createdAt: "desc" },
     include: {
       changedBy: { select: { name: true } },
-      payment: { select: { description: true, company: true, source: true } },
+      payment: { select: { description: true, company: true, source: true, category: true, subcategory: true } },
     },
   });
   return rows.map(serializeChangeLog);
@@ -110,7 +119,7 @@ export async function listAllPaymentChangeLogs(opts?: {
     take,
     include: {
       changedBy: { select: { name: true } },
-      payment: { select: { description: true, company: true, source: true } },
+      payment: { select: { description: true, company: true, source: true, category: true, subcategory: true } },
     },
   });
   return rows.map(serializeChangeLog);
@@ -197,6 +206,35 @@ export async function updatePaymentWithAudit(
     if (prev !== next) {
       data.paymentDate = d;
       logs.push({ field: "paymentDate", previousValue: prev, newValue: next });
+    }
+  }
+
+  if (input.category !== undefined || input.subcategory !== undefined) {
+    const nextCat = input.category !== undefined ? input.category : payment.category;
+    const nextSub = input.subcategory !== undefined ? input.subcategory : payment.subcategory;
+    const validated = validatePaymentClassification(nextCat, nextSub);
+    if (!validated.ok) {
+      const err = new Error(validated.message);
+      (err as Error & { code: string }).code = "BAD_REQUEST";
+      throw err;
+    }
+    if (validated.category !== payment.category) {
+      data.category = validated.category;
+      logs.push({
+        field: "category",
+        previousValue: paymentCategoryLabel(payment.category) ?? payment.category,
+        newValue: paymentCategoryLabel(validated.category) ?? validated.category,
+      });
+    }
+    if (validated.subcategory !== payment.subcategory) {
+      data.subcategory = validated.subcategory;
+      logs.push({
+        field: "subcategory",
+        previousValue:
+          paymentSubcategoryLabel(payment.category, payment.subcategory) ?? payment.subcategory,
+        newValue:
+          paymentSubcategoryLabel(validated.category, validated.subcategory) ?? validated.subcategory,
+      });
     }
   }
 

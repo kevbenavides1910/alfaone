@@ -6047,6 +6047,10 @@ model Payment {
   refType         String?
   /// Referencia/observación de origen (ej. cuenta, proveedor).
   referenceNumber String?
+  /// Clasificación de gasto real (PERSONAL | OPERATIVOS | ADMINISTRATIVOS | FINANCIEROS).
+  category        String?
+  /// Subcategoría dentro de `category` (clave del catálogo).
+  subcategory     String?
   /// Estado de pago, persistido aquí.
   paid            Boolean       @default(false)
   paidAt          DateTime?
@@ -6063,6 +6067,7 @@ model Payment {
   @@index([paymentDate])
   @@index([company])
   @@index([paid])
+  @@index([category, subcategory])
   @@map("payments")
 }
 

@@ -28,6 +28,11 @@ export const PATCH = withPermission(
           referenceNumber: typeof body.referenceNumber === "string" ? body.referenceNumber : undefined,
           amount: typeof body.amount === "number" ? body.amount : undefined,
           paymentDate: typeof body.paymentDate === "string" ? body.paymentDate : undefined,
+          category: body.category === null || typeof body.category === "string" ? body.category : undefined,
+          subcategory:
+            body.subcategory === null || typeof body.subcategory === "string"
+              ? body.subcategory
+              : undefined,
         },
         userId,
       );
