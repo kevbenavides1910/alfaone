@@ -211,9 +211,21 @@ async function syncApexForMonth(from: Date, to: Date) {
   const baseMap = new Map<number, (typeof base)[number]>();
   for (const b of base) baseMap.set(b.pagoBaseId, b);
 
+  // Deduplicar ocurrencias de Oracle: un gasto fijo puede venir repetido (mismo
+  // pagoBaseId + misma fecha) con distinto pagoId. Agrupamos y creamos UN solo
+  // Payment por (apexPagoBaseId, fechaPago) para evitar copias duplicadas.
+  const seen = new Set<string>();
   for (const p of inMonth) {
-    const exists = await prisma.payment.findUnique({
-      where: { apexPagoId_source: { apexPagoId: p.pagoId, source: "APEX" } },
+    const key = `${p.pagoBaseId ?? 0}|${p.fechaPago}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const exists = await prisma.payment.findFirst({
+      where: {
+        source: "APEX",
+        apexPagoBaseId: p.pagoBaseId ?? null,
+        paymentDate: new Date(p.fechaPago + "T00:00:00Z"),
+      },
       select: { id: true },
     });
     if (exists) continue;
