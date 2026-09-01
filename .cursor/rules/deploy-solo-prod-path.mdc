@@ -32,11 +32,12 @@ Este VPS corre **Alfa One en producción**. Un deploy desde un worktree, `/tmp`,
 
 ```bash
 cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
-npm run ops:deploy:ghcr     # OBLIGATORIO para agentes: espera imagen del SHA + pull (sin build local)
+npm run ops:deploy:cursor   # OBLIGATORIO agentes: build local inmediato + recreate
+npm run ops:deploy:ghcr     # fallback: espera Publish GHCR
 npm run ops:deploy:pull     # pull imagen (si APP_IMAGE ya está definida)
 npm run ops:deploy          # build local SOLO si el usuario lo pide explícitamente
 ```
 
-**Agentes:** `git push` → `ops:deploy:ghcr` (el script espera Publish GHCR; no poll manual). Nunca `ops:deploy` / nunca fallback de `ops:deploy:auto` a build local. Ver `deploy-ghcr-obligatorio.mdc`.
+**Agentes:** `git push` → `ops:deploy:cursor`. Ver skill `.cursor/skills/deploy-alfa-one/` y `deploy-ghcr-obligatorio.mdc`.
 
 Detalle: `docs/DEPLOYMENT.md` (sección “Path canónico y blindaje”) y regla `deploy-anti-drop-rutas.mdc` (inventario total de rutas).
