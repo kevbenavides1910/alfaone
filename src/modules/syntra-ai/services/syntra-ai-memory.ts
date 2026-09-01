@@ -77,7 +77,9 @@ export async function rememberFact(params: {
       where: { id: existing.id },
       data: { content, category: params.category || existing.category },
     });
-    return `Actualicé la memoria «${title}».`;
+    return scope === "team"
+      ? `Actualicé la memoria de equipo «${title}» (visible para todos).`
+      : `Actualicé la memoria «${title}».`;
   }
 
   await prisma.syntraAiMemory.create({
@@ -89,7 +91,9 @@ export async function rememberFact(params: {
       userId: scope === "personal" ? params.userId : null,
     },
   });
-  return `Guardé en memoria: «${title}».`;
+  return scope === "team"
+    ? `Guardé en memoria de equipo: «${title}» (visible para todos los usuarios).`
+    : `Guardé en memoria personal: «${title}».`;
 }
 
 export async function forgetMemory(params: {
@@ -180,7 +184,11 @@ export async function tryHandleMemoryCommands(
     const rest = msg.replace(REMEMBER_RE, "").replace(/^[:\-\s]+/, "").trim();
     const [title, ...contentParts] = rest.split(/[:\n]/);
     const content = contentParts.join(":").trim() || title;
-    const scope = /\b(para todos|equipo|team)\b/i.test(msg) ? "team" : "personal";
+    const scope = /\b(solo para mí|personal)\b/i.test(msg)
+      ? "personal"
+      : /\b(para todos|equipo|team|para el equipo)\b/i.test(msg)
+        ? "team"
+        : "personal";
     return rememberFact({
       userId,
       title: (title || "Hecho").trim(),
@@ -200,4 +208,92 @@ export async function tryHandleMemoryCommands(
   }
 
   return null;
+}
+
+export type SyntraAiSkillRow = {
+  id: string;
+  name: string;
+  description: string;
+  scope: string;
+  authorName: string | null;
+  updatedAt: string;
+};
+
+export type SyntraAiMemoryRow = {
+  id: string;
+  title: string;
+  content: string;
+  scope: string;
+  category: string;
+  authorName: string | null;
+  updatedAt: string;
+};
+
+export async function listSkillsBoard(userId: string) {
+  const skills = await prisma.syntraAiSkill.findMany({
+    where: {
+      active: true,
+      OR: [{ scope: "team" }, { scope: "personal", userId }],
+    },
+    orderBy: { name: "asc" },
+    take: 80,
+    include: { user: { select: { name: true } } },
+  });
+
+  const personal: SyntraAiSkillRow[] = [];
+  const team: SyntraAiSkillRow[] = [];
+  for (const s of skills) {
+    const row: SyntraAiSkillRow = {
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      scope: s.scope,
+      authorName: s.user?.name ?? null,
+      updatedAt: s.updatedAt.toISOString(),
+    };
+    if (s.scope === "team") team.push(row);
+    else personal.push(row);
+  }
+  return { personal, team, counts: { personal: personal.length, team: team.length } };
+}
+
+/** Memoria visible al usuario: personal propia + equipo (compartida entre todos). */
+export async function listMemoriesBoard(userId: string) {
+  const memories = await prisma.syntraAiMemory.findMany({
+    where: {
+      active: true,
+      OR: [{ scope: "team" }, { scope: "personal", userId }],
+    },
+    orderBy: [{ scope: "asc" }, { title: "asc" }],
+    take: 80,
+    include: { user: { select: { name: true } } },
+  });
+
+  const personal: SyntraAiMemoryRow[] = [];
+  const team: SyntraAiMemoryRow[] = [];
+  for (const m of memories) {
+    const row: SyntraAiMemoryRow = {
+      id: m.id,
+      title: m.title,
+      content: m.content,
+      scope: m.scope,
+      category: m.category,
+      authorName: m.user?.name ?? null,
+      updatedAt: m.updatedAt.toISOString(),
+    };
+    if (m.scope === "team") team.push(row);
+    else personal.push(row);
+  }
+  return { personal, team, counts: { personal: personal.length, team: team.length } };
+}
+
+export async function getSkillById(userId: string, skillId: string) {
+  return prisma.syntraAiSkill.findFirst({
+    where: {
+      id: skillId,
+      active: true,
+      OR: [{ scope: "team" }, { scope: "personal", userId }],
+    },
+    select: { id: true, name: true, description: true, body: true, scope: true },
+  });
 }
