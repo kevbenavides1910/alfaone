@@ -13,6 +13,7 @@ import { BrandingAppearanceTab } from "@/components/admin/BrandingAppearanceTab"
 import { AssetTypesTab } from "@/components/admin/AssetTypesTab";
 import { ZonesTab } from "@/components/admin/ZonesTab";
 import { LocationsTab } from "@/components/admin/LocationsTab";
+import { PositionsCatalogTab } from "@/components/admin/PositionsCatalogTab";
 import { PlatformNotificationsTab } from "@/components/admin/PlatformNotificationsTab";
 import { ExpenseTypesTab } from "./ExpenseTypesTab";
 import { OriginsTab } from "./OriginsTab";
@@ -25,6 +26,7 @@ type TabKey =
   | "companies"
   | "asset-types"
   | "zones"
+  | "positions"
   | "locations"
   | "branding"
   | "notifications";
@@ -36,6 +38,7 @@ const VALID_TABS: TabKey[] = [
   "companies",
   "asset-types",
   "zones",
+  "positions",
   "locations",
   "branding",
   "notifications",
@@ -84,6 +87,7 @@ function CatalogsPageContent() {
             { key: "companies", label: "Empresas" },
             { key: "asset-types", label: "Tipos de Activos" },
             { key: "zones", label: "Zonas" },
+            { key: "positions", label: "Puestos" },
             { key: "locations", label: "Ubicaciones" },
             { key: "branding",       label: "Marca y colores" },
             { key: "notifications",   label: "Notificaciones" },
@@ -119,6 +123,8 @@ function CatalogsPageContent() {
                         ? "Tipos de Activos (inventario)"
                         : tab === "zones"
                           ? "Zonas"
+                          : tab === "positions"
+                            ? "Puestos"
                           : tab === "locations"
                             ? "Ubicaciones"
                             : tab === "notifications"
@@ -139,6 +145,8 @@ function CatalogsPageContent() {
               <AssetTypesTab readOnly={readOnly} />
             ) : tab === "zones" ? (
               <ZonesTab readOnly={readOnly} />
+            ) : tab === "positions" ? (
+              <PositionsCatalogTab readOnly={readOnly} />
             ) : tab === "locations" ? (
               <LocationsTab readOnly={readOnly} />
             ) : tab === "notifications" ? (

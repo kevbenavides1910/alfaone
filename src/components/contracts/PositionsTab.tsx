@@ -29,6 +29,7 @@ interface PositionRow {
   id: string;
   name: string;
   description?: string | null;
+  zone?: { id: string; name: string } | null;
   shifts: ShiftRow[];
   totalExpenses: number;
   expenses: PositionExpense[];
@@ -352,7 +353,7 @@ export function PositionsTab({
             <Building2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
             <p>No hay ubicaciones definidas.</p>
             <p className="text-sm mt-1">
-              Cree una ubicación y luego agregue puestos y turnos (horas) en cada una.
+              Cree ubicaciones lógicas (edificio, sede, etc.) y asigne puestos desde la pestaña «Puestos».
             </p>
           </CardContent>
         </Card>
@@ -428,6 +429,11 @@ export function PositionsTab({
                           )}
                           <div className="flex-1 min-w-0">
                             <span className="font-medium text-slate-800">{pos.name}</span>
+                            {pos.zone?.name && (
+                              <span className="ml-2 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                                {pos.zone.name}
+                              </span>
+                            )}
                             {pos.description && (
                               <p className="text-xs text-slate-400 mt-0.5">{pos.description}</p>
                             )}

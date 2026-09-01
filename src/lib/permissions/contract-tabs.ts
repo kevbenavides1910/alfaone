@@ -13,6 +13,7 @@ import {
 export const CONTRACT_TAB_IDS = [
   "overview",
   "locations",
+  "positions",
   "assets",
   "billing",
   "demand_billing",
@@ -44,6 +45,12 @@ export const CONTRACT_TABS: ContractTabDef[] = [
     id: "locations",
     uiValue: "locations",
     label: "Ubicaciones",
+    permissionKey: "presupuestos.contracts_locations",
+  },
+  {
+    id: "positions",
+    uiValue: "positions",
+    label: "Puestos",
     permissionKey: "presupuestos.contracts_locations",
   },
   {

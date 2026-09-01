@@ -141,7 +141,7 @@ export function ZonesTab({ readOnly }: { readOnly?: boolean }) {
     { key: "description", label: "Descripción", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600", getValue: (z) => z.description ?? "" },
     { key: "admin", label: "Adm. disciplinario", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600 min-w-[9rem]", getValue: (z) => z.disciplinaryAdministrator ?? "" },
     { key: "email", label: "Correo adm.", headerClassName: "text-left px-4 py-3 font-semibold text-slate-600 min-w-[9rem]", getValue: (z) => z.disciplinaryAdministratorEmail ?? "" },
-    { key: "ubicaciones", label: "Ubicaciones", headerClassName: "text-center px-4 py-3 font-semibold text-slate-600 w-32", align: "center", getValue: (z) => String(z.locationsCount) },
+    { key: "ubicaciones", label: "Puestos", headerClassName: "text-center px-4 py-3 font-semibold text-slate-600 w-32", align: "center", getValue: (z) => String(z.locationsCount) },
     { key: "estado", label: "Estado", headerClassName: "text-center px-4 py-3 font-semibold text-slate-600 w-24", align: "center", getValue: (z) => (z.isActive ? "Activa" : "Inactiva") },
     { key: "orden", label: "Orden", headerClassName: "text-center px-4 py-3 font-semibold text-slate-600 w-20", align: "center", getValue: (z) => String(z.sortOrder) },
     { key: "actions", label: "", headerClassName: "px-4 py-3 w-24", filterable: false, getValue: () => "" },
@@ -152,11 +152,11 @@ export function ZonesTab({ readOnly }: { readOnly?: boolean }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <p className="text-sm text-slate-500 max-w-2xl">
-          Cree zonas geográficas u operativas (ej. <em>GAM</em>, <em>Pacífico</em>, <em>Caribe</em>) para agrupar
-          ubicaciones de los contratos. Use la pestaña <strong className="text-slate-700">Ubicaciones</strong> para
-          asignar la zona a cada ubicación. El <strong>administrador disciplinario</strong> y su correo se usan al
-          importar apercibimientos cuando la columna «Zona» coincide con el <strong>nombre</strong> de la zona (y en
-          copia de correo al enviar marcas por SMTP).
+          Zonas operativas de Operaciones (.6). Cada <strong className="text-slate-700">puesto</strong> tiene zona;
+          use la pestaña <strong className="text-slate-700">Puestos</strong> para verlos y{" "}
+          <strong className="text-slate-700">Ubicaciones</strong> para agruparlos manualmente. El administrador
+          disciplinario y su correo se usan al importar apercibimientos cuando la columna «Zona» coincide con el{" "}
+          <strong>nombre</strong> de la zona.
         </p>
         <div className="flex items-center gap-2 shrink-0">
           <Button

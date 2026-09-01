@@ -12,6 +12,8 @@ const createLocationSchema = z.object({
   sortOrder: z.coerce.number().int().optional(),
 });
 
+import { listManualContractLocations } from "@/modules/presupuestos/services/contract-positions-catalog";
+
 function serializeShift(s: { id: string; label: string | null; hours: unknown; sortOrder: number }) {
   return {
     ...s,
@@ -24,6 +26,7 @@ function serializePosition(
     id: string;
     name: string;
     description: string | null;
+    zone?: { id: string; name: string } | null;
     shifts: { id: string; label: string | null; hours: unknown; sortOrder: number }[];
     expenses: {
       id: string;
@@ -46,6 +49,7 @@ function serializePosition(
     id: p.id,
     name: p.name,
     description: p.description,
+    zone: p.zone ?? null,
     shifts: p.shifts.map(serializeShift),
     totalExpenses,
     expenses,
@@ -64,29 +68,14 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     });
     if (!contract) return notFound();
 
-    const locations = await prisma.contractLocation.findMany({
-      where: { contractId },
-      include: {
-        positions: {
-          orderBy: { name: "asc" },
-          include: {
-            shifts: { orderBy: { sortOrder: "asc" } },
-            expenses: {
-              select: { id: true, amount: true, type: true, description: true, periodMonth: true },
-              orderBy: { createdAt: "desc" },
-            },
-          },
-        },
-      },
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    });
+    const locations = await listManualContractLocations(contractId);
 
     const data = locations.map((loc) => ({
       id: loc.id,
       name: loc.name,
       description: loc.description,
       sortOrder: loc.sortOrder,
-      positions: loc.positions.map(serializePosition),
+      positions: loc.positions.map((p) => serializePosition(p)),
     }));
 
     return ok(data);

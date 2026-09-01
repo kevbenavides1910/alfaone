@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest) {
   try {
     const zones = await prisma.zone.findMany({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      include: { _count: { select: { locations: true } } },
+      include: { _count: { select: { positions: true } } },
     });
     const data = zones.map((z) => ({
       id: z.id,
@@ -30,7 +30,7 @@ export async function GET(_req: NextRequest) {
       sortOrder: z.sortOrder,
       disciplinaryAdministrator: z.disciplinaryAdministrator,
       disciplinaryAdministratorEmail: z.disciplinaryAdministratorEmail,
-      locationsCount: z._count.locations,
+      locationsCount: z._count.positions,
     }));
     return ok(data);
   } catch (e) {

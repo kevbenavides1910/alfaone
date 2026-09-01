@@ -442,6 +442,7 @@ model Contract {
   expenses                   Expense[]
   expenseDistributions       ExpenseDistribution[]        @relation("ExpenseDistributions")
   locations                  ContractLocation[]
+  positions                  Position[]
   employeePlacements         EmployeePlacement[]
   employeeContractLinks      EmployeeContractLink[]
   nafNominaManualAllocations NafNominaManualAllocation[]
@@ -1148,6 +1149,7 @@ model Zone {
   updatedAt                      DateTime                 @updatedAt
   locations                      ContractLocation[]
   administrations                ContractAdministration[]
+  positions                      Position[]
 
   @@index([nafZonaCode])
   @@map("zones")
@@ -1180,11 +1182,16 @@ model ContractLocation {
   @@map("contract_locations")
 }
 
-/// Puesto de vigilancia / guardia dentro de una ubicación.
+/// Puesto de vigilancia / guardia; puede estar sin ubicación hasta asignación manual.
 model Position {
   id                 String             @id @default(cuid())
-  locationId         String
-  location           ContractLocation   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  contractId         String
+  contract           Contract           @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  locationId         String?
+  location           ContractLocation?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  /// Zona operativa NAF (ARCOUB.NO_ZONA_OPERACIONES) — atributo del puesto, no de la ubicación.
+  zoneId             String?
+  zone               Zone?              @relation(fields: [zoneId], references: [id], onDelete: SetNull)
   name               String
   description        String?
   /// Código NAF (ARCOUB.NO_UBICACION) — puesto en Operaciones (.6).
@@ -1205,8 +1212,10 @@ model Position {
   patrolRoutePoints  PatrolRoutePoint[]
   patrolRoutes       PatrolRoute[]
 
-  @@unique([locationId, nafUbicacionCode])
+  @@unique([contractId, nafUbicacionCode])
+  @@index([contractId])
   @@index([locationId])
+  @@index([zoneId])
   @@index([nafUbicacionCode])
   @@map("positions")
 }

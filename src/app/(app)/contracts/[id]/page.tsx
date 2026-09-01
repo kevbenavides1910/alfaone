@@ -25,6 +25,7 @@ import { useCompanies } from "@/lib/hooks/use-companies";
 // calcTrafficLight used in BudgetBar lifetime section
 import { PeriodsTab } from "@/components/contracts/PeriodsTab";
 import { PositionsTab } from "@/components/contracts/PositionsTab";
+import { ContractPositionsByZoneTab } from "@/components/contracts/ContractPositionsByZoneTab";
 import { BillingHistoryTab } from "@/components/contracts/BillingHistoryTab";
 import { OnDemandBillingTab } from "@/components/contracts/OnDemandBillingTab";
 import { BillingRequirementsTab } from "@/components/contracts/BillingRequirementsTab";
@@ -150,6 +151,7 @@ export default function ContractDetailPage() {
 
   const visibleTabs = [
     { value: "overview", label: "Resumen", show: canViewOverview },
+    { value: "positions", label: "Puestos", show: canViewLocations },
     { value: "locations", label: "Ubicaciones", show: canViewLocations },
     { value: "assets", label: "Activos", show: canViewAssets },
     { value: contract.hiringType === "ON_DEMAND" ? "demand-billing" : "billing", label: contract.hiringType === "ON_DEMAND" ? "Facturación por demanda" : "Registro de venta", show: contract.hiringType === "ON_DEMAND" ? canViewDemandBilling : canViewBilling },
@@ -551,6 +553,12 @@ export default function ContractDetailPage() {
                 )}
               </div>
             </div>
+          </TabsContent>
+          )}
+
+          {canViewLocations && (
+          <TabsContent value="positions" className="mt-0 p-4 md:p-6">
+            <ContractPositionsByZoneTab contractId={id} readOnly={!canEditContract} />
           </TabsContent>
           )}
 

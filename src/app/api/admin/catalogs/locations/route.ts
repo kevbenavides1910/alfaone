@@ -19,14 +19,21 @@ export async function GET(req: NextRequest) {
     const url = req.nextUrl;
     const zoneId = url.searchParams.get("zoneId");
     const unassigned = url.searchParams.get("unassigned") === "1";
+    const contractId = url.searchParams.get("contractId");
     const q = url.searchParams.get("q")?.trim().toLowerCase();
 
     const where: {
       zoneId?: string | null;
+      contractId?: string;
       contract?: { deletedAt: null };
+      nafSyncGroupKey: null;
+      nafUbicacionCode: null;
     } = {
       contract: { deletedAt: null },
+      nafSyncGroupKey: null,
+      nafUbicacionCode: null,
     };
+    if (contractId) where.contractId = contractId;
     if (unassigned) {
       where.zoneId = null;
     } else if (zoneId) {

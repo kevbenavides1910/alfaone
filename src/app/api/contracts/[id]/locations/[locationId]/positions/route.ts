@@ -39,6 +39,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const position = await prisma.$transaction(async (tx) => {
       const pos = await tx.position.create({
         data: {
+          contractId,
           locationId,
           name: parsed.data.name.trim(),
           description: parsed.data.description?.trim() || null,
