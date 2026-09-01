@@ -18,6 +18,7 @@ import { PlatformNotificationsTab } from "@/components/admin/PlatformNotificatio
 import { ExpenseTypesTab } from "./ExpenseTypesTab";
 import { OriginsTab } from "./OriginsTab";
 import { CompaniesTab } from "./CompaniesTab";
+import { SyntraAiSettingsTab } from "@/components/admin/SyntraAiSettingsTab";
 
 type TabKey =
   | "types"
@@ -29,7 +30,8 @@ type TabKey =
   | "positions"
   | "locations"
   | "branding"
-  | "notifications";
+  | "notifications"
+  | "syntra-ai";
 
 const VALID_TABS: TabKey[] = [
   "types",
@@ -42,6 +44,7 @@ const VALID_TABS: TabKey[] = [
   "locations",
   "branding",
   "notifications",
+  "syntra-ai",
 ];
 
 function parseTabParam(value: string | null): TabKey {
@@ -91,6 +94,7 @@ function CatalogsPageContent() {
             { key: "locations", label: "Ubicaciones" },
             { key: "branding",       label: "Marca y colores" },
             { key: "notifications",   label: "Notificaciones" },
+            { key: "syntra-ai",       label: "Syntra IA" },
           ].map((t) => (
             <button
               key={t.key}
@@ -129,7 +133,9 @@ function CatalogsPageContent() {
                             ? "Ubicaciones"
                             : tab === "notifications"
                               ? "Notificaciones"
-                              : "Marca y colores"}
+                              : tab === "syntra-ai"
+                                ? "Asistente Syntra IA"
+                                : "Marca y colores"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -151,6 +157,8 @@ function CatalogsPageContent() {
               <LocationsTab readOnly={readOnly} />
             ) : tab === "notifications" ? (
               <PlatformNotificationsTab readOnly={readOnly} />
+            ) : tab === "syntra-ai" ? (
+              <SyntraAiSettingsTab readOnly={readOnly} />
             ) : (
               <BrandingAppearanceTab readOnly={readOnly} />
             )}

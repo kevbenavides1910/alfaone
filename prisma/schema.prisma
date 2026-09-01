@@ -6119,13 +6119,18 @@ model PaymentChangeLog {
 
 /// Ajustes globales del asistente (fila única id = default).
 model SyntraAiSettings {
-  id        String   @id @default("default")
-  enabled   Boolean  @default(false)
-  provider  String   @default("opencode_go")
-  baseUrl   String?
-  apiKey    String?
-  model     String   @default("kimi-k2.7-code")
-  updatedAt DateTime @updatedAt
+  id              String   @id @default("default")
+  enabled         Boolean  @default(false)
+  provider        String   @default("opencode_go")
+  baseUrl         String?
+  apiKey          String?
+  model           String   @default("kimi-k2.7-code")
+  modelVision     String   @default("mimo-v2.5")
+  routeVisionAuto Boolean  @default(true)
+  modelDocuments  String?
+  agentEnabled    Boolean  @default(true)
+  agentMaxRounds  Int      @default(6)
+  updatedAt       DateTime @updatedAt
 
   @@map("syntra_ai_settings")
 }

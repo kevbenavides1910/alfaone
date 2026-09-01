@@ -1,18 +1,34 @@
 import { prisma } from "@/modules/core/db/prisma";
-import { getSyntraAiConfig } from "./syntra-ai-config";
-import { callSyntraAiLlm } from "./syntra-ai-llm";
+import type { Session } from "next-auth";
+import {
+  applyTaskModelRoute,
+  getSyntraAiConfig,
+} from "./syntra-ai-config";
+import { callSyntraAiLlm, type LlmMessage } from "./syntra-ai-llm";
+import { runSyntraAgent } from "./syntra-ai-agent";
+import { AGENT_TOOLS_PROMPT } from "./syntra-ai-tools";
 import { loadSyntraAiKnowledge } from "./syntra-ai-knowledge";
 import {
   buildMemoryAndSkillsPrompt,
   tryHandleMemoryCommands,
 } from "./syntra-ai-memory";
+import {
+  buildPageContextPrompt,
+  type SyntraAiPageContext,
+} from "../business/page-context";
+import {
+  buildUserMessageWithUploads,
+  prepareChatUploads,
+  type ChatUploadInput,
+} from "./syntra-ai-uploads";
 
 const MAX_MESSAGE_LEN = 4000;
 const MAX_HISTORY_TURNS = 10;
 
 const SYSTEM_PROMPT = `Eres Syntra, asistente de Alfa One (plataforma de contratos, gastos, facturación, nómina NAF y operaciones de Grupo Alfa).
 Ayudas con procedimientos, pantallas y buenas prácticas. Responde en español, claro y útil.
-No inventes datos de negocio; si no tienes contexto, dilo y sugiere dónde consultar en la app.
+Cuando tengas herramientas de consulta, úsalas para responder con datos reales antes de dar solo instrucciones manuales.
+No inventes cifras; si no hay datos sincronizados, dilo claramente.
 Comandos del usuario:
 - «recuerda para el equipo: …» → memoria compartida (todos los usuarios)
 - «recuerda …» → memoria personal del usuario
@@ -24,16 +40,21 @@ export type ChatTurn = { role: "user" | "assistant"; content: string };
 
 export type SyntraAiChatInput = {
   userId: string;
+  session: Session;
   message: string;
   history?: ChatTurn[];
   sessionId?: string | null;
-  pagePath?: string | null;
+  pageContext?: SyntraAiPageContext | null;
+  uploads?: ChatUploadInput[];
 };
 
 export type SyntraAiChatResult = {
   reply: string;
   sessionId: string;
   sessionName: string;
+  pageLabel?: string;
+  modelUsed?: string;
+  uploadErrors?: string[];
 };
 
 async function appendTurn(
@@ -86,28 +107,41 @@ async function appendTurn(
 }
 
 export async function syntraAiChat(input: SyntraAiChatInput): Promise<SyntraAiChatResult> {
-  const cfg = await getSyntraAiConfig();
+  let cfg = await getSyntraAiConfig();
   if (!cfg.enabled) {
-    throw new Error("El asistente IA está deshabilitado. Configure SYNTra_AI_ENABLED=true.");
+    throw new Error("El asistente IA está deshabilitado. Actívelo en Mantenimiento → Syntra IA.");
   }
   if (!cfg.apiKey) {
-    throw new Error("Falta configurar SYNTra_AI_API_KEY.");
+    throw new Error("Falta configurar la API Key en Mantenimiento → Syntra IA.");
   }
 
+  const uploadCtx = prepareChatUploads(input.uploads);
   const msg = (input.message || "").trim();
-  if (!msg) throw new Error("Escriba una pregunta.");
+  if (!msg && !uploadCtx.accepted) {
+    if (uploadCtx.errors.length) throw new Error(uploadCtx.errors.join("\n"));
+    throw new Error("Escriba una pregunta o adjunte un archivo.");
+  }
   if (msg.length > MAX_MESSAGE_LEN) throw new Error("El mensaje es demasiado largo.");
 
-  const memoryReply = await tryHandleMemoryCommands(input.userId, msg);
+  cfg = applyTaskModelRoute(cfg, uploadCtx);
+  if (uploadCtx.imageCount > 0 && cfg.routeVisionAuto && !cfg.modelVision && !cfg.model.includes("mimo")) {
+    throw new Error(
+      "Hay imágenes adjuntas pero no hay modelo de visión configurado. Configúrelo en Mantenimiento → Syntra IA.",
+    );
+  }
+
+  const historyLabel = msg || `[Adjuntos: ${uploadCtx.labels.join(", ")}]`;
+
+  const memoryReply = msg ? await tryHandleMemoryCommands(input.userId, msg) : null;
   if (memoryReply) {
     const saved = await appendTurn(
       input.userId,
       input.sessionId,
-      msg,
+      historyLabel,
       memoryReply,
-      input.pagePath,
+      input.pageContext?.path,
     );
-    return { reply: memoryReply, ...saved };
+    return { reply: memoryReply, ...saved, uploadErrors: uploadCtx.errors };
   }
 
   const [knowledge, memoryPrompt] = await Promise.all([
@@ -118,11 +152,12 @@ export async function syntraAiChat(input: SyntraAiChatInput): Promise<SyntraAiCh
   const systemParts = [SYSTEM_PROMPT];
   if (knowledge) systemParts.push(`## Conocimiento interno\n${knowledge}`);
   if (memoryPrompt) systemParts.push(memoryPrompt);
-  if (input.pagePath) systemParts.push(`Pantalla actual del usuario: ${input.pagePath}`);
+  const pagePrompt = buildPageContextPrompt(input.pageContext);
+  if (pagePrompt) systemParts.push(pagePrompt);
+  if (uploadCtx.prompt) systemParts.push(uploadCtx.prompt);
+  if (cfg.agentEnabled && uploadCtx.imageCount === 0) systemParts.push(AGENT_TOOLS_PROMPT);
 
-  const messages: Array<{ role: string; content: string }> = [
-    { role: "system", content: systemParts.join("\n\n") },
-  ];
+  const messages: LlmMessage[] = [{ role: "system", content: systemParts.join("\n\n") }];
 
   const history = (input.history || []).slice(-MAX_HISTORY_TURNS * 2);
   for (const turn of history) {
@@ -130,11 +165,32 @@ export async function syntraAiChat(input: SyntraAiChatInput): Promise<SyntraAiCh
       messages.push({ role: turn.role, content: turn.content });
     }
   }
-  messages.push({ role: "user", content: msg });
+  messages.push(buildUserMessageWithUploads(msg, uploadCtx) as LlmMessage);
 
-  const reply = await callSyntraAiLlm(cfg, messages);
-  const saved = await appendTurn(input.userId, input.sessionId, msg, reply, input.pagePath);
-  return { reply, ...saved };
+  let reply: string;
+  let modelUsed = cfg.model;
+
+  if (cfg.agentEnabled && uploadCtx.imageCount === 0) {
+    const agentResult = await runSyntraAgent({
+      cfg,
+      session: input.session,
+      messages,
+      maxRounds: cfg.agentMaxRounds,
+    });
+    reply = agentResult.reply;
+    modelUsed = agentResult.modelUsed;
+  } else {
+    reply = await callSyntraAiLlm(cfg, messages);
+  }
+
+  const saved = await appendTurn(input.userId, input.sessionId, historyLabel, reply, input.pageContext?.path);
+  return {
+    reply,
+    ...saved,
+    pageLabel: input.pageContext?.path,
+    modelUsed,
+    uploadErrors: uploadCtx.errors.length ? uploadCtx.errors : undefined,
+  };
 }
 
 export async function listSyntraAiSessions(userId: string, limit = 40) {

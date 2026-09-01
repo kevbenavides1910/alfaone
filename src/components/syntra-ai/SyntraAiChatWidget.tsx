@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   Bot,
   Brain,
+  GripVertical,
   History,
+  MapPin,
   Minimize2,
+  Paperclip,
   Plus,
   Send,
   Sparkles,
@@ -14,6 +17,11 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import {
+  formatPageContextLabel,
+  resolvePageModuleLabel,
+} from "@/modules/syntra-ai/business/page-context";
+import { useSyntraFloatPosition } from "./use-syntra-float-position";
 
 type ChatTurn = { role: "user" | "assistant"; content: string };
 
@@ -42,7 +50,19 @@ type MemoryRow = {
   authorName: string | null;
 };
 
+type PendingUpload = {
+  id: string;
+  name: string;
+  mimetype: string;
+  data: string;
+  previewUrl?: string;
+};
+
 type ViewMode = "chat" | "skills" | "memory";
+
+const FAB_SIZE = 48;
+const MAX_UPLOADS = 4;
+const MAX_UPLOAD_BYTES = 900 * 1024;
 
 function formatWhen(iso: string) {
   try {
@@ -55,6 +75,26 @@ function formatWhen(iso: string) {
   }
 }
 
+async function fileToUpload(file: File): Promise<PendingUpload> {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(`«${file.name}» supera ${Math.round(MAX_UPLOAD_BYTES / 1024)} KB.`);
+  }
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+  const b64 = btoa(binary);
+  const mime = file.type || "application/octet-stream";
+  const data = `data:${mime};base64,${b64}`;
+  return {
+    id: crypto.randomUUID(),
+    name: file.name,
+    mimetype: mime,
+    data,
+    previewUrl: mime.startsWith("image/") ? data : undefined,
+  };
+}
+
 export function SyntraAiChatWidget() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -62,6 +102,7 @@ export function SyntraAiChatWidget() {
   const [historyOpen, setHistoryOpen] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [input, setInput] = useState("");
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [history, setHistory] = useState<ChatTurn[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionName, setSessionName] = useState("");
@@ -76,7 +117,35 @@ export function SyntraAiChatWidget() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [available, setAvailable] = useState<boolean | null>(null);
+  const [pageTitle, setPageTitle] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const pageContext = useMemo(
+    () => ({
+      path: pathname,
+      pageTitle,
+      moduleLabel: resolvePageModuleLabel(pathname),
+    }),
+    [pathname, pageTitle],
+  );
+  const pageLabel = formatPageContextLabel(pageContext);
+
+  const panelWidthPx =
+    typeof window !== "undefined"
+      ? historyOpen && !minimized
+        ? Math.min(832, window.innerWidth - 24)
+        : Math.min(416, window.innerWidth - 24)
+      : 416;
+  const panelHeightPx =
+    typeof window !== "undefined" ? (minimized ? 48 : Math.min(544, window.innerHeight - 24)) : 544;
+
+  const fabPos = useSyntraFloatPosition("fab", FAB_SIZE, FAB_SIZE);
+  const panelPos = useSyntraFloatPosition("panel", panelWidthPx, panelHeightPx);
+
+  useEffect(() => {
+    setPageTitle(typeof document !== "undefined" ? document.title : null);
+  }, [pathname]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -145,6 +214,48 @@ export function SyntraAiChatWidget() {
     void refreshMemories();
   }, [open, refreshSessions, refreshSkills, refreshMemories]);
 
+  const addFiles = useCallback(async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    if (!list.length) return;
+    setError(null);
+    const next: PendingUpload[] = [];
+    for (const file of list) {
+      if (pendingUploads.length + next.length >= MAX_UPLOADS) {
+        setError(`Máximo ${MAX_UPLOADS} archivos por mensaje.`);
+        break;
+      }
+      try {
+        next.push(await fileToUpload(file));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Archivo no válido");
+      }
+    }
+    if (next.length) setPendingUploads((u) => [...u, ...next].slice(0, MAX_UPLOADS));
+  }, [pendingUploads.length]);
+
+  const removeUpload = useCallback((id: string) => {
+    setPendingUploads((u) => u.filter((x) => x.id !== id));
+  }, []);
+
+  const handlePaste = useCallback(
+    (ev: React.ClipboardEvent) => {
+      const items = ev.clipboardData?.items;
+      if (!items?.length) return;
+      const imageFiles: File[] = [];
+      for (const item of items) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const f = item.getAsFile();
+          if (f) imageFiles.push(f);
+        }
+      }
+      if (imageFiles.length) {
+        ev.preventDefault();
+        void addFiles(imageFiles);
+      }
+    },
+    [addFiles],
+  );
+
   const loadSession = useCallback(async (id: string) => {
     setLoading(true);
     setError(null);
@@ -177,6 +288,7 @@ export function SyntraAiChatWidget() {
     setSessionId(null);
     setSessionName("");
     setHistory([]);
+    setPendingUploads([]);
     setError(null);
     setViewMode("chat");
   }, []);
@@ -204,22 +316,32 @@ export function SyntraAiChatWidget() {
 
   const send = useCallback(async () => {
     const message = input.trim();
-    if (!message || loading) return;
+    const uploads = pendingUploads;
+    if ((!message && uploads.length === 0) || loading) return;
 
+    const displayMessage =
+      message ||
+      (uploads.length ? `[${uploads.map((u) => u.name).join(", ")}]` : "");
     setInput("");
+    setPendingUploads([]);
     setError(null);
     setLoading(true);
-    setHistory((h) => [...h, { role: "user", content: message }]);
+    setHistory((h) => [...h, { role: "user", content: displayMessage }]);
 
     try {
       const res = await fetch("/api/syntra-ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message,
+          message: message || "",
           history,
           sessionId,
-          pagePath: pathname,
+          pageContext,
+          uploads: uploads.map((u) => ({
+            name: u.name,
+            mimetype: u.mimetype,
+            data: u.data,
+          })),
         }),
       });
       const json = (await res.json()) as {
@@ -242,42 +364,84 @@ export function SyntraAiChatWidget() {
       const msg = e instanceof Error ? e.message : "Error de red";
       setError(msg);
       setHistory((h) => h.slice(0, -1));
+      setPendingUploads(uploads);
     } finally {
       setLoading(false);
     }
-  }, [history, input, loading, pathname, refreshMemories, refreshSessions, refreshSkills, sessionId]);
+  }, [history, input, loading, pageContext, pendingUploads, refreshMemories, refreshSessions, refreshSkills, sessionId]);
 
   if (available === false) return null;
 
-  const panelWidth = historyOpen && !minimized ? "w-[min(52rem,calc(100vw-1.5rem))]" : "w-[min(26rem,calc(100vw-1.5rem))]";
+  const panelWidthClass =
+    historyOpen && !minimized ? "w-[min(52rem,calc(100vw-1.5rem))]" : "w-[min(26rem,calc(100vw-1.5rem))]";
+
+  const fabStyle =
+    fabPos.ready
+      ? { left: fabPos.pos.left, top: fabPos.pos.top, right: "auto", bottom: "auto" as const }
+      : { right: 20, bottom: 20, left: "auto" as const, top: "auto" as const };
+
+  const panelStyle =
+    panelPos.ready
+      ? { left: panelPos.pos.left, top: panelPos.pos.top, right: "auto", bottom: "auto" as const }
+      : { right: 20, bottom: 20, left: "auto" as const, top: "auto" as const };
 
   return (
     <>
       {!open ? (
         <button
           type="button"
-          onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700"
-          title="Asistente Syntra IA"
+          style={fabStyle}
+          onPointerDown={fabPos.onPointerDown}
+          onPointerMove={fabPos.onPointerMove}
+          onPointerUp={(ev) => {
+            const moved = fabPos.onPointerUp(ev);
+            if (moved !== undefined && moved < 6) setOpen(true);
+          }}
+          className={cn(
+            "fixed z-50 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 touch-none select-none",
+            fabPos.dragging && "cursor-grabbing ring-2 ring-indigo-300",
+          )}
+          title="Asistente Syntra IA (arrastre para mover)"
           aria-label="Abrir asistente Syntra IA"
         >
-          <Bot className="h-6 w-6" />
+          <Bot className="h-6 w-6 pointer-events-none" />
         </button>
       ) : (
         <div
+          style={panelStyle}
           className={cn(
-            "fixed z-50 flex flex-col rounded-xl border border-slate-200 bg-white shadow-2xl bottom-5 right-5",
-            minimized ? "h-12 w-72" : cn("h-[34rem]", panelWidth),
+            "fixed z-50 flex flex-col rounded-xl border border-slate-200 bg-white shadow-2xl",
+            minimized ? "h-12 w-72" : cn("h-[34rem]", panelWidthClass),
+            panelPos.dragging && "ring-2 ring-indigo-300",
           )}
         >
-          <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 bg-indigo-600 text-white rounded-t-xl shrink-0">
-            <div className="flex items-center gap-2 text-sm font-medium min-w-0">
-              <Bot className="h-4 w-4 shrink-0" />
-              <span className="truncate">{sessionName || "Syntra IA"}</span>
+          <div className="flex items-center justify-between border-b border-slate-100 px-2 py-2 bg-indigo-600 text-white rounded-t-xl shrink-0">
+            <div
+              className="flex flex-1 items-center min-w-0 cursor-grab active:cursor-grabbing touch-none select-none"
+              onPointerDown={panelPos.onPointerDown}
+              onPointerMove={panelPos.onPointerMove}
+              onPointerUp={panelPos.onPointerUp}
+            >
+              <GripVertical className="h-4 w-4 shrink-0 opacity-70 mr-1" aria-hidden />
+              <div className="flex flex-col min-w-0 flex-1">
+                <div className="flex items-center gap-2 text-sm font-medium min-w-0">
+                  <Bot className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{sessionName || "Syntra IA"}</span>
+                </div>
+                {!minimized && pageLabel ? (
+                  <div className="flex items-center gap-1 text-[10px] text-indigo-100 truncate mt-0.5">
+                    <MapPin className="h-3 w-3 shrink-0" />
+                    <span className="truncate" title={pageLabel}>
+                      {pageLabel}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => setMinimized((m) => !m)}
                 className="rounded p-1 hover:bg-indigo-500"
                 aria-label={minimized ? "Expandir" : "Minimizar"}
@@ -286,6 +450,7 @@ export function SyntraAiChatWidget() {
               </button>
               <button
                 type="button"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => setOpen(false)}
                 className="rounded p-1 hover:bg-indigo-500"
                 aria-label="Cerrar"
@@ -409,8 +574,8 @@ export function SyntraAiChatWidget() {
                     <div className="flex-1 overflow-y-auto p-3 space-y-3 text-sm">
                       {history.length === 0 ? (
                         <p className="text-slate-500 text-xs leading-relaxed">
-                          Pregúntame sobre Alfa One. Comandos: «recuerda para el equipo: …» (compartido),
-                          «recuerda …» (solo usted), «aprende …» (skill de equipo), «olvida …».
+                          Pregúntame sobre Alfa One. Pegue imágenes o adjunte PDF/texto. Comandos: «recuerda para el
+                          equipo: …», «recuerda …», «aprende …», «olvida …».
                         </p>
                       ) : null}
                       {history.map((turn, i) => (
@@ -430,10 +595,56 @@ export function SyntraAiChatWidget() {
                       {error ? <p className="text-red-600 text-xs">{error}</p> : null}
                       <div ref={bottomRef} />
                     </div>
+                    {pendingUploads.length ? (
+                      <div className="border-t border-slate-100 px-2 py-1.5 flex flex-wrap gap-1 shrink-0">
+                        {pendingUploads.map((u) => (
+                          <span
+                            key={u.id}
+                            className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700"
+                          >
+                            {u.previewUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={u.previewUrl} alt="" className="h-4 w-4 rounded object-cover" />
+                            ) : null}
+                            <span className="max-w-[8rem] truncate">{u.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeUpload(u.id)}
+                              className="text-slate-400 hover:text-red-600"
+                              aria-label={`Quitar ${u.name}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="border-t border-slate-100 p-2 flex gap-2 shrink-0">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        accept="image/*,.pdf,.txt,.json,.xml,text/*,application/pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files?.length) void addFiles(e.target.files);
+                          e.target.value = "";
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={loading || pendingUploads.length >= MAX_UPLOADS}
+                        className="self-end rounded-lg border border-slate-200 px-2 py-2 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        aria-label="Adjuntar archivo"
+                        title="Imagen, PDF o texto (máx. 4)"
+                      >
+                        <Paperclip className="h-4 w-4" />
+                      </button>
                       <textarea
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
+                        onPaste={handlePaste}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) {
                             e.preventDefault();
@@ -441,13 +652,13 @@ export function SyntraAiChatWidget() {
                           }
                         }}
                         rows={2}
-                        placeholder="Escribe tu pregunta…"
+                        placeholder="Escribe o pegue una imagen…"
                         className="flex-1 resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                       />
                       <button
                         type="button"
                         onClick={() => void send()}
-                        disabled={loading || !input.trim()}
+                        disabled={loading || (!input.trim() && pendingUploads.length === 0)}
                         className="self-end rounded-lg bg-indigo-600 px-3 py-2 text-white disabled:opacity-50 hover:bg-indigo-700"
                         aria-label="Enviar"
                       >
