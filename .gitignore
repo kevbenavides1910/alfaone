@@ -5,6 +5,7 @@ node_modules/
 .next/
 out/
 dist/
+.build-cache/
 *.log
 .DS_Store
 tsconfig.tsbuildinfo

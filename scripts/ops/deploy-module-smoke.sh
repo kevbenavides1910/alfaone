@@ -31,11 +31,7 @@ if [ ! -f "$INVENTORY" ]; then
 fi
 chmod +x "$INVENTORY" 2>/dev/null || true
 
-# Listado de auditoría
-echo "-- módulos .next/server/app/(app) --"
-docker exec "$APP_CONTAINER" sh -c 'ls -1 .next/server/app/\(app\) 2>/dev/null | sort' || true
-
-# Deps firma FE (siempre)
+# Deps firma FE + anclas mínimas — un solo docker exec (evita ~12 round-trips).
 REQUIRED_DEPS=(
   "node_modules/xpath"
   "node_modules/tslib"
@@ -44,17 +40,6 @@ REQUIRED_DEPS=(
   "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
   "node_modules/@napi-rs/canvas"
 )
-missing=0
-for rel in "${REQUIRED_DEPS[@]}"; do
-  if docker exec "$APP_CONTAINER" sh -c "test -e \"$rel\""; then
-    echo "OK: $rel"
-  else
-    echo "MISSING: $rel" >&2
-    missing=1
-  fi
-done
-
-# Anclas mínimas (defensa en profundidad además del inventario)
 REQUIRED_ANCHORS=(
   ".next/server/app/(app)/naf-operaciones"
   ".next/server/app/(app)/audits"
@@ -63,16 +48,31 @@ REQUIRED_ANCHORS=(
   ".next/server/app/(app)/empleados-naf/cargas-sociales"
   ".next/server/app/(app)/tickets-ti/visualizador"
 )
-for rel in "${REQUIRED_ANCHORS[@]}"; do
-  if docker exec "$APP_CONTAINER" sh -c "test -e \"$rel\""; then
-    echo "OK: $rel"
-  else
-    echo "MISSING: $rel" >&2
-    missing=1
-  fi
+check_paths=("${REQUIRED_DEPS[@]}" "${REQUIRED_ANCHORS[@]}")
+check_script=""
+for rel in "${check_paths[@]}"; do
+  check_script+="if test -e \"$rel\"; then echo OK:$rel; else echo MISSING:$rel; fi;"
 done
+missing=0
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  case "$line" in
+    OK:*)
+      echo "OK: ${line#OK:}"
+      ;;
+    MISSING:*)
+      echo "MISSING: ${line#MISSING:}" >&2
+      missing=1
+      ;;
+  esac
+done < <(docker exec "$APP_CONTAINER" sh -c "$check_script" 2>/dev/null || true)
 
 # --- Inventario total vs baseline (imagen anterior) ---
+FAST_SMOKE="${DEPLOY_FAST_SMOKE:-0}"
+if [ "$FAST_SMOKE" = "1" ] || [ "$FAST_SMOKE" = "true" ]; then
+  echo "SKIP inventario anti-drop (DEPLOY_FAST_SMOKE=1) — solo anclas/deps"
+  BASELINE_IMAGE=""
+fi
 if [ -n "$BASELINE_IMAGE" ]; then
   section "Smoke: anti-drop total vs baseline ($BASELINE_IMAGE)"
   if ! docker image inspect "$BASELINE_IMAGE" >/dev/null 2>&1; then

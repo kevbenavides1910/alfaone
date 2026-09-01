@@ -266,6 +266,18 @@ if [ -z "$RESOLVED" ]; then
     finish_if_already_deployed "$img"
   done
 
+  # Agente Cursor (self-hosted): build local de inmediato, sin esperar Actions.
+  if [ "${DEPLOY_CURSOR_FAST:-0}" = "1" ] || [ "${DEPLOY_CURSOR_FAST:-0}" = "true" ]; then
+    if ! image_present_local "${DEFAULT_IMAGE_REPO}:${SHA}"; then
+      section "Cursor fast: build local (sin esperar Publish GHCR)"
+      bash "$ROOT/scripts/ops/build-ghcr-image-local.sh"
+    else
+      echo "OK: imagen local ya presente para $SHORT_SHA"
+    fi
+    RESOLVED="${DEFAULT_IMAGE_REPO}:${SHA}"
+  fi
+
+  if [ -z "${RESOLVED:-}" ]; then
   # Disparar Publish si push no lo hizo (o el run previo fue cancelado/zombie).
   if ! image_present_local "${DEFAULT_IMAGE_REPO}:${SHA}" \
     && ! image_present_local "${DEFAULT_IMAGE_REPO}:${SHORT_SHA}" \
@@ -320,6 +332,7 @@ if [ -z "$RESOLVED" ]; then
     echo "... imagen aun no lista (${ELAPSED}s). $(publish_status_line "$SHA") - reintento en ${POLL_SECS}s (queda ~${REMAIN}s)"
     sleep "$POLL_SECS"
   done
+  fi
 fi
 
 if [ -z "${RESOLVED:-}" ]; then
@@ -331,4 +344,6 @@ finish_if_already_deployed "$RESOLVED"
 
 section "Pull + recreate: $RESOLVED"
 export APP_IMAGE="$RESOLVED"
+export DEPLOY_SKIP_DB_BACKUP="${DEPLOY_SKIP_DB_BACKUP:-0}"
+export DEPLOY_FAST_SMOKE="${DEPLOY_FAST_SMOKE:-0}"
 exec bash "$ROOT/scripts/deploy-from-image.sh"

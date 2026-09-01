@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Libera caché de build Docker antigua y recorta tags de rollback viejos.
+# NO toca ALFAONE_BUILD_CACHE_ROOT (cache Next.js/webpack en host).
 set -euo pipefail
 
 KEEP_ROLLBACK="${KEEP_ROLLBACK_TAGS:-5}"
+HOST_CACHE="${ALFAONE_BUILD_CACHE_ROOT:-/mnt/data/projects/alfa-one/build-cache}"
 
 echo "=== Antes ==="
 docker system df 2>/dev/null || true
+if [ -d "$HOST_CACHE" ]; then
+  echo "Host build cache (preservado): $(du -sh "$HOST_CACHE" 2>/dev/null | awk '{print $1}') at $HOST_CACHE"
+fi
 
-echo "=== Prune builder cache (>7d) ==="
+echo "=== Prune builder cache (>7d) — NO afecta $HOST_CACHE ==="
 docker builder prune -af --filter 'until=168h' 2>/dev/null || docker builder prune -af
 
 echo "=== Recortar alfa-one-app-rollback:* (mantener últimas ${KEEP_ROLLBACK}) ==="

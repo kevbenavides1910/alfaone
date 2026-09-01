@@ -6,8 +6,6 @@ RUN apk add --no-cache libc6-compat openssl
 
 FROM base AS deps
 COPY package.json package-lock.json* ./
-# Redes lentas o inestables (p. ej. VPS): más reintentos antes de fallar el build.
-# Cache mount de npm (registry) evita redescargar tarballs cuando el lockfile cambia poco.
 RUN --mount=type=cache,target=/root/.npm \
     npm config set fetch-retries 15 \
     && npm config set fetch-retry-mintimeout 20000 \
@@ -16,18 +14,26 @@ RUN --mount=type=cache,target=/root/.npm \
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
+# Cache webpack persistido en disco del VPS (sync pre/post build vía scripts/ops/sync-build-cache.sh).
+COPY .build-cache/next-cache /tmp/next-cache-seed/
 COPY . .
 RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXTAUTH_URL=http://localhost:3000
 ENV NEXTAUTH_SECRET=ci-build-placeholder-secret-min-32-characters!!
-# Self-hosted alfaia tiene mucha RAM/CPU; evita OOM y acelera el compile.
 ENV NODE_OPTIONS=--max-old-space-size=8192
-# Omite typecheck en next build (ver next.config.ts); cache webpack/SWC entre publishes.
 ENV DOCKER_BUILD=1
-# Solo cache de compilación (.next/cache). NO montar .next completo: corrompía chunks.
-RUN --mount=type=cache,target=/app/.next/cache \
-    npm run build
+RUN mkdir -p /app/.next/cache \
+    && if [ -n "$(ls -A /tmp/next-cache-seed 2>/dev/null)" ]; then \
+         cp -a /tmp/next-cache-seed/. /app/.next/cache/; \
+       fi \
+    && npm run build \
+    && mkdir -p /cache-out \
+    && cp -a /app/.next/cache/. /cache-out/
+
+# Exporta cache webpack al host tras el build (target liviano, reutiliza capas del builder).
+FROM scratch AS export-next-cache
+COPY --from=builder /cache-out /
 
 # Stage aislado: oracledb thick (glibc). Cache estable — no se reinstala en cada rebuild de Next.
 FROM node:20-bookworm-slim AS ora

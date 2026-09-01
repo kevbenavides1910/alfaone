@@ -78,7 +78,8 @@ npm run dev
 ```bash
 cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
 npm run ops:ghcr-login   # una vez
-npm run ops:deploy:ghcr  # espera la imagen del SHA (local o GHCR) y recrea la app
+npm run ops:deploy:cursor  # agente Cursor — build local inmediato (~3 min + 16s recreate)
+npm run ops:deploy:ghcr    # fallback: espera Publish GHCR (más lento)
 ```
 
 Si el push no crea el workflow (flakiness de Actions), `ops:deploy:ghcr` carga `/etc/alfa-one/ghcr.env` y hace `workflow_dispatch` automáticamente.
@@ -87,7 +88,7 @@ Tiempos típicos tras estas optimizaciones:
 
 | Fase | Antes (ago-2026) | Objetivo |
 |------|------------------|----------|
-| Publish GHCR (`next build`) | ~3.5–4.2 min (Build+push juntos) | ~2–3.5 min (cache `.next/cache` + push aparte) |
+| Publish GHCR (`next build`) | ~3.5–4.2 min | **~3 min** con cache prod caliente (compile ~66s vs ~145s); **~0s** si imagen del SHA ya existe |
 | Wait imagen (ops:deploy:ghcr) | ~igual al Publish completo | Termina al **load local** (antes del push GHCR) |
 | Backup Postgres en deploy | ~15 s (`gzip -9` siempre) | ~0–3 s (skip si hay backup &lt;30 min; `gzip -1`) |
 | Recreate app + smoke | ~15–20 s | igual |
@@ -123,7 +124,7 @@ Pasos comunes (ambos caminos):
 | Imagen GHCR vía Publish workflow | Deploy VPS sin `next build` (~1–2 min) |
 | `ops:deploy:auto` | Elige pull vs build según SHA / dirty tree |
 | Paralelismo Next + skip lint-in-build | Build local residual más corto |
-| Cache mount npm + capas runner estables | Rebuilds Docker más baratos |
+| Cache webpack en disco (`/mnt/data/projects/alfa-one/build-cache`) | Seed pre-build + export post-build; sobrevive `docker builder prune`; compile incremental ~2× más rápido |
 | Migraciones pequeñas y nombradas | `migrate deploy` predecible |
 | No editar migraciones ya aplicadas en prod | Evita drift |
 | Path filters en CI | Ver [`docs/CI.md`](./CI.md) — resumen por módulo en cada PR |

@@ -89,14 +89,16 @@ http_check() {
 
 wait_for_container_health() {
   local status
-  for _ in $(seq 1 30); do
+  local poll="${DEPLOY_HEALTH_POLL_SECS:-2}"
+  local max="${DEPLOY_HEALTH_MAX_POLLS:-20}"
+  for _ in $(seq 1 "$max"); do
     status="$(docker inspect "$APP_CONTAINER" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}')"
     echo "health:$status"
     case "$status" in
       healthy|no-healthcheck) return 0 ;;
       unhealthy) return 1 ;;
     esac
-    sleep 5
+    sleep "$poll"
   done
   return 1
 }
@@ -190,8 +192,12 @@ docker inspect "$APP_CONTAINER" --format '{{range .Config.Env}}{{println .}}{{en
 echo "DATABASE_URL:present"
 http_check "session" "/api/auth/session"
 http_check "login" "/login"
+export DEPLOY_FAST_SMOKE="${DEPLOY_FAST_SMOKE:-0}"
 # Baseline = imagen previa etiquetada como rollback; exige 0 drops de rutas.
-if [ -n "$ROLLBACK_TAG" ] && docker image inspect "$ROLLBACK_TAG" >/dev/null 2>&1; then
+# DEPLOY_FAST_SMOKE=1 (auto-deploy CI): solo anclas/deps (~5s vs ~30–60s inventario).
+if [ "$DEPLOY_FAST_SMOKE" = "1" ] || [ "$DEPLOY_FAST_SMOKE" = "true" ]; then
+  bash "$ROOT/scripts/ops/deploy-module-smoke.sh" "$APP_CONTAINER"
+elif [ -n "$ROLLBACK_TAG" ] && docker image inspect "$ROLLBACK_TAG" >/dev/null 2>&1; then
   export DEPLOY_BASELINE_IMAGE="$ROLLBACK_TAG"
   bash "$ROOT/scripts/ops/deploy-module-smoke.sh" "$APP_CONTAINER" "$ROLLBACK_TAG"
 else

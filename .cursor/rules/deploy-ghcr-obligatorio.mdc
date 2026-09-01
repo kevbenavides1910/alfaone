@@ -1,35 +1,48 @@
 ---
-description: Al pedir deploy, Cursor debe usar solo GHCR (nunca build local)
+description: Al pedir deploy, Cursor debe usar build local rápido en alfaia (sin esperar Actions)
 alwaysApply: true
 ---
 
-# Deploy — solo GHCR (obligatorio para agentes)
+# Deploy — Cursor fast path (obligatorio para agentes)
 
 Cuando el usuario pida **desplegar / deploy / subir a prod** Alfa One:
 
-## Comando permitido
+## Comando obligatorio (agente Cursor en self-hosted alfaia)
 
 ```bash
 cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
-npm run ops:deploy:ghcr
+npm run ops:deploy:cursor
 ```
 
-Equivale a pull estricto (`scripts/deploy-ghcr-only.sh`): **nunca** ejecuta `ops:deploy` (build local).
+**Qué hace (rápido):**
+1. Si la app ya corre el SHA y está healthy → **salida ~0 s**.
+2. Si no hay imagen local → **build Docker inmediato** con cache webpack en disco (~3 min caliente, compile ~66 s).
+3. Recreate app + smoke rápido → **~16 s**.
+4. Push a GHCR en **background** (no bloquea).
+
+**No espera** GitHub Actions / Publish GHCR (evita cola, latencia de arranque y doble polling).
 
 ## Flujo obligatorio del agente
 
 1. Path canónico únicamente (ver `deploy-solo-prod-path.mdc`).
 2. Si hay cambios sin commit/push: **commitear solo si el usuario lo pidió**; luego `git push origin HEAD` a `main`/`master`.
 3. Si no hay login GHCR: `npm run ops:ghcr-login` (requiere `GHCR_TOKEN` / `/etc/alfa-one/ghcr.env`) — **no** inventar tokens; pedir al usuario.
-4. Correr **de inmediato** `npm run ops:deploy:ghcr` (block ~hasta 6 min; aborta si Publish GHCR falla). El script **espera solo** la imagen del SHA (local Docker del runner o GHCR); **no** hacer un bucle manual de `sleep` + `docker manifest inspect` / `gh run list` antes.
-5. Si falla (dirty tree, timeout sin imagen, denied): **abortar y explicar**. No hacer fallback a `ops:deploy`.
+4. Correr **de inmediato** `npm run ops:deploy:cursor` (no `sleep` manual ni poll de `gh run list`).
+5. Si falla (dirty tree, build roto, denied): **abortar y explicar**. No hacer fallback a `ops:deploy`.
+
+## Alternativa (solo si cursor falla)
+
+```bash
+npm run ops:deploy:ghcr
+```
+
+Espera Publish GHCR hasta 6 min — **más lento** para el agente; usar solo como fallback.
 
 ## Prohibido
 
-- `npm run ops:deploy` (build local en el VPS)
-- `ops:deploy:auto` si puede caer a build local
-- Desplegar WIP sin push
-- Polling manual lento “hasta que Publish termine” antes de lanzar `ops:deploy:ghcr`
+- `npm run ops:deploy` (build local legacy / compose up --build)
+- `ops:deploy:auto` (puede caer a build local)
+- Polling manual lento antes de lanzar el deploy
 - Afirmar “deploy OK” sin smoke/health del script
 
 ## Excepción

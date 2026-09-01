@@ -14,11 +14,14 @@ npx prisma migrate deploy   # migraciones en prod (nunca db:reset)
 Despliegue prod (VPS 10.1.1.229 / alfaia):
 
 ```bash
-# Obligatorio para agentes Cursor (solo GHCR, sin build local) — ~1–2 min
+# Obligatorio para agentes Cursor — build local inmediato + recreate (~3 min + 16s)
+npm run ops:deploy:cursor
+
+# Fallback: espera Publish GHCR (más lento para el agente)
 npm run ops:deploy:ghcr
 
 # Tag explícito
-APP_IMAGE=ghcr.io/kevbenavides1910/alfaone:<sha> npm run ops:deploy:ghcr
+APP_IMAGE=ghcr.io/kevbenavides1910/alfaone:<sha> npm run ops:deploy:cursor
 
 # Login una vez (PAT con read:packages)
 export GHCR_TOKEN=ghp_...
@@ -28,7 +31,7 @@ npm run ops:ghcr-login
 npm run ops:deploy
 ```
 
-Flujo: commit → push `main` → **de inmediato** `npm run ops:deploy:ghcr` (el script espera solo la imagen del SHA; no poll manual).
+Flujo: commit → push `main` → **de inmediato** `npm run ops:deploy:cursor` (sin esperar Actions).
 
 Detalle: `docs/DEPLOYMENT.md`. Regla: `.cursor/rules/deploy-ghcr-obligatorio.mdc`.
 

@@ -20,6 +20,7 @@
     "ops:deploy:pull": "bash scripts/deploy-from-image.sh",
     "ops:deploy:auto": "bash scripts/deploy-auto.sh",
     "ops:deploy:ghcr": "bash scripts/deploy-ghcr-only.sh",
+    "ops:deploy:cursor": "bash scripts/deploy-cursor-ghcr.sh",
     "ops:ghcr-login": "bash scripts/ghcr-login.sh",
     "ci:modules": "node scripts/ci/affected-modules.mjs",
     "ci:local": "npm run ci:modules && npm run lint && npm run deploy:check && npm run build",

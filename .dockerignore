@@ -23,6 +23,9 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 .deploy-logs
+.build-cache/*
+!.build-cache/next-cache
+!.build-cache/next-cache/**
 deploy
 
 # tests / cobertura / residuos

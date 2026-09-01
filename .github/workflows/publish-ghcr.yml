@@ -2,6 +2,9 @@
 # Corre en self-hosted alfaia (48 cores). Usa driver docker para reutilizar
 # capas locales entre builds (mucho más rápido que ubuntu-latest + cache registry).
 #
+# Cache webpack/npm en /mnt/data/projects/alfa-one/build-cache (bind mount en
+# Dockerfile) — sobrevive `docker builder prune` semanal.
+#
 # Build y push van en pasos separados: la imagen queda etiquetada en el daemon
 # local al terminar el build → ops:deploy:ghcr puede recrear la app sin esperar
 # a que termine el push a ghcr.io (~20–40s ahorrados en el wait típico).
@@ -18,9 +21,6 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # false: evita pelear con cancel API (502) que dejaba jobs zombie "in_progress"
-  # bloqueando el runner (busy) mientras nuevos runs quedaban queued eternamente.
-  # Un solo self-hosted → los publishes se encolan en serie de forma natural.
   group: publish-ghcr-${{ github.ref }}
   cancel-in-progress: false
 
@@ -31,7 +31,6 @@ jobs:
   publish:
     name: Build y push imagen
     runs-on: [self-hosted, linux, x64, alfaia]
-    # Evita jobs colgados tras restart del runner / BadGateway de Actions.
     timeout-minutes: 25
     permissions:
       contents: read
@@ -39,7 +38,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # driver: docker → capas quedan en el daemon local del VPS (cache real entre runs)
+      - name: Restaurar cache webpack (disco → contexto Docker)
+        run: bash scripts/ops/sync-build-cache.sh pull
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -62,29 +63,45 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=${{ github.sha }}
 
-      # 1) Build + load local (deploy wait encuentra la imagen aquí, antes del push).
-      - name: Build imagen (local)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          load: true
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: false
-          # Sin cache-to registry (mode=max): en el 1er run subía GB y sumaba ~10+ min.
-          # Con driver docker: capas deps/ora/apt + cache mount /.next/cache entre runs.
-          # DOCKER_BUILD=1 omite typecheck en next build (~60s); CI sigue tipando.
+      - name: ¿Imagen ya construida para este SHA?
+        id: image_exists
+        run: |
+          if docker image inspect "${{ env.IMAGE_NAME }}:${{ github.sha }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "SKIP build: imagen local ya existe para ${{ github.sha }}"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      # 2) Deploy automático + Push a GHCR en paralelo.
-      # El deploy usa la imagen YA local (load:true) sobre el checkout de producción
-      # y NO espera el push a ghcr.io. El push corre en background; si falla el
-      # deploy, el push igual continúa (la imagen es el artefacto canónico).
+      - name: Build imagen (local)
+        id: build
+        if: steps.image_exists.outputs.exists != 'true'
+        run: |
+          START=$(date +%s)
+          DEPLOY_GHCR_PUSH=0 bash scripts/ops/build-ghcr-image-local.sh
+          echo "duration=$(( $(date +%s) - START ))" >> "$GITHUB_OUTPUT"
+
+      - name: Re-etiquetar imagen existente
+        if: steps.image_exists.outputs.exists == 'true'
+        run: |
+          SRC="${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            docker tag "$SRC" "$tag"
+            echo "tagged $tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
+
+      - name: Tiempos de build
+        run: |
+          if [ "${{ steps.image_exists.outputs.exists }}" = "true" ]; then
+            echo "docker_build=skipped (imagen ya local)"
+          else
+            echo "docker_build_seconds=${{ steps.build.outputs.duration }}"
+          fi
+
       - name: Deploy automático + push GHCR en paralelo
         run: |
           set -uo pipefail
-          # Lanzar push a GHCR en background
           (
             while IFS= read -r tag; do
               [ -n "$tag" ] || continue
@@ -94,9 +111,6 @@ jobs:
           ) > /tmp/ghcr-push.log 2>&1 &
           PUSH_PID=$!
 
-          # Deploy en el checkout de producción (tiene .env.production y compose).
-          # Best-effort: si otro deploy manual/agente tiene el lock, no tumbar el job
-          # (build + push son el artefacto canónico; prod puede ya estar en ese SHA).
           cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
           CURRENT_SHA="$(git rev-parse HEAD)"
           if [ "$CURRENT_SHA" != "${{ github.sha }}" ]; then
@@ -107,10 +121,10 @@ jobs:
           deploy_rc=0
           APP_IMAGE="${{ env.IMAGE_NAME }}:${{ github.sha }}" \
             DEPLOY_SKIP_DB_BACKUP=1 \
+            DEPLOY_FAST_SMOKE=1 \
             bash scripts/deploy-from-image.sh || deploy_rc=$?
           if [ "$deploy_rc" -ne 0 ]; then
             echo "::warning::Deploy automático no completó (rc=$deploy_rc). Suele ser lock concurrente; build/push siguen."
           fi
 
-          # Fallar el job solo si el push a GHCR falla
           wait "$PUSH_PID" || { echo "ERROR: push GHCR falló"; tail -20 /tmp/ghcr-push.log; exit 1; }
