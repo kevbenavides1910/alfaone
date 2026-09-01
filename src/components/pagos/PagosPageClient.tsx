@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare, ScrollText } from "lucide-react";
 import Link from "next/link";
@@ -145,6 +145,100 @@ function calendarTotals(calendar: CalendarDay[]) {
   const total = calendar.reduce((s, d) => s + d.total, 0);
   const paid = calendar.reduce((s, d) => s + d.totalPaid, 0);
   return { total, paid, pending: total - paid };
+}
+
+type AmountTotals = {
+  total: number;
+  paid: number;
+  pending: number;
+};
+
+function aggregateCells(
+  cells: { date: string; inMonth: boolean }[],
+  byDate: Map<string, CalendarDay>,
+  inMonthOnly = true,
+): AmountTotals {
+  return cells.reduce<AmountTotals>(
+    (acc, cell) => {
+      if (inMonthOnly && !cell.inMonth) return acc;
+      return {
+        total: acc.total + (byDate.get(cell.date)?.total ?? 0),
+        paid: acc.paid + (byDate.get(cell.date)?.totalPaid ?? 0),
+        pending:
+          acc.pending +
+          ((byDate.get(cell.date)?.total ?? 0) - (byDate.get(cell.date)?.totalPaid ?? 0)),
+      };
+    },
+    { total: 0, paid: 0, pending: 0 },
+  );
+}
+
+function chunkWeeks(cells: { date: string; dayOfMonth: number; inMonth: boolean }[]) {
+  const weeks: typeof cells[] = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7));
+  }
+  return weeks;
+}
+
+/** Pendiente (ámbar) y pagado (verde) en columnas separadas. */
+function AmountPair({
+  pending,
+  paid,
+  size = "sm",
+  showLabels = true,
+}: {
+  pending: number;
+  paid: number;
+  size?: "sm" | "md";
+  showLabels?: boolean;
+}) {
+  const text = size === "sm" ? "text-[9px]" : "text-xs";
+  return (
+    <div className={`grid grid-cols-2 gap-x-2 gap-y-0.5 ${text} leading-tight`}>
+      {showLabels && (
+        <>
+          <span className="text-muted-foreground text-right">Pend.</span>
+          <span className="text-muted-foreground text-right">Pag.</span>
+        </>
+      )}
+      <span className={`font-semibold text-amber-600 text-right ${showLabels ? "" : "col-start-1"}`}>
+        {formatCurrency(pending)}
+      </span>
+      <span className="font-semibold text-emerald-600 text-right">
+        {formatCurrency(paid)}
+      </span>
+    </div>
+  );
+}
+
+function CalendarTotalsBar({
+  label,
+  totals,
+  variant,
+}: {
+  label: string;
+  totals: AmountTotals;
+  variant: "week" | "month";
+}) {
+  const base =
+    variant === "month"
+      ? "mt-2 rounded-md border-2 border-primary/20 bg-primary/5 px-3 py-2"
+      : "rounded-md border bg-muted/40 px-2 py-1.5";
+  return (
+    <div className={`${base} flex flex-wrap items-center justify-between gap-2`}>
+      <span
+        className={`font-semibold text-muted-foreground shrink-0 ${
+          variant === "month" ? "text-sm" : "text-[11px]"
+        }`}
+      >
+        {label}
+      </span>
+      <div className={variant === "month" ? "min-w-[200px]" : "min-w-[160px]"}>
+        <AmountPair pending={totals.pending} paid={totals.paid} size={variant === "month" ? "md" : "sm"} />
+      </div>
+    </div>
+  );
 }
 
 type Props = {
@@ -700,10 +794,16 @@ function CalendarGrid({
   onViewDay: (day: CalendarDay) => void;
 }) {
   const cells = daysInGrid(month);
+  const weeks = chunkWeeks(cells);
   const weekdayLabels = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
+  const monthTotals = useMemo(
+    () => aggregateCells(cells, byDate, true),
+    [cells, byDate],
+  );
+
   return (
-    <div className="w-full">
+    <div className="w-full space-y-1">
       <div className="grid grid-cols-7 gap-1 mb-1">
         {weekdayLabels.map((w) => (
           <div key={w} className="text-center text-xs font-semibold text-muted-foreground py-1">
@@ -711,67 +811,90 @@ function CalendarGrid({
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
-        {cells.map((cell) => {
-          const dayData = byDate.get(cell.date);
-          const payments = dayData?.payments ?? [];
-          const total = dayData?.total ?? 0;
-          const totalPaid = dayData?.totalPaid ?? 0;
-          const isToday = cell.date === today;
 
-          return (
-            <div
-              key={cell.date}
-              className={[
-                "min-h-[96px] rounded-md border p-1.5 flex flex-col gap-1",
-                cell.inMonth ? "bg-card" : "bg-muted/30 opacity-60",
-                isToday ? "ring-2 ring-primary/60" : "",
-              ].join(" ")}
-            >
-              <div className="flex items-center justify-between">
-                <span className={[
-                  "text-xs font-semibold h-6 w-6 flex items-center justify-center rounded-full",
-                  isToday ? "bg-primary text-primary-foreground" : "text-foreground",
-                ].join(" ")}>
-                  {cell.dayOfMonth}
-                </span>
-                {total > 0 && (
-                  <span className={[
-                    "text-[11px] font-semibold",
-                    totalPaid >= total ? "text-emerald-600" : "text-amber-600",
-                  ].join(" ")}>
-                    {formatCurrency(totalPaid >= total ? totalPaid : total)}
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-col gap-1 flex-1 overflow-hidden">
-                {payments.slice(0, 3).map((p) => (
-                  <PaymentRow
-                    key={p.id}
-                    p={p}
-                    canEdit={canEdit}
-                    onTogglePaid={onTogglePaid}
-                    onDelete={onDelete}
-                    onViewDetail={onViewDetail}
-                  />
-                ))}
-                {payments.length > 3 && (
-                  <button
-                    type="button"
-                    className="text-[10px] text-primary font-medium px-1 py-0.5 rounded hover:bg-primary/10 text-left w-full"
-                    onClick={() => dayData && onViewDay(dayData)}
+      {weeks.map((week, weekIndex) => {
+        const weekTotals = aggregateCells(week, byDate, true);
+        const inMonthDays = week.filter((c) => c.inMonth);
+        const rangeLabel =
+          inMonthDays.length > 0
+            ? `${inMonthDays[0].dayOfMonth}–${inMonthDays[inMonthDays.length - 1].dayOfMonth}`
+            : "";
+
+        return (
+          <Fragment key={`week-${weekIndex}`}>
+            <div className="grid grid-cols-7 gap-1">
+              {week.map((cell) => {
+                const dayData = byDate.get(cell.date);
+                const payments = dayData?.payments ?? [];
+                const total = dayData?.total ?? 0;
+                const totalPaid = dayData?.totalPaid ?? 0;
+                const pending = total - totalPaid;
+                const isToday = cell.date === today;
+
+                return (
+                  <div
+                    key={cell.date}
+                    className={[
+                      "min-h-[108px] rounded-md border p-1.5 flex flex-col gap-1",
+                      cell.inMonth ? "bg-card" : "bg-muted/30 opacity-60",
+                      isToday ? "ring-2 ring-primary/60" : "",
+                    ].join(" ")}
                   >
-                    +{payments.length - 3} más…
-                  </button>
-                )}
-                {payments.length === 0 && (
-                  <div className="text-[11px] text-muted-foreground/60 px-1 py-0.5">—</div>
-                )}
-              </div>
+                    <div className="flex items-start justify-between gap-1">
+                      <span
+                        className={[
+                          "text-xs font-semibold h-6 w-6 flex items-center justify-center rounded-full shrink-0",
+                          isToday ? "bg-primary text-primary-foreground" : "text-foreground",
+                        ].join(" ")}
+                      >
+                        {cell.dayOfMonth}
+                      </span>
+                      {total > 0 && (
+                        <div className="min-w-0 flex-1">
+                          <AmountPair pending={pending} paid={totalPaid} size="sm" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1 flex-1 overflow-hidden">
+                      {payments.slice(0, 3).map((p) => (
+                        <PaymentRow
+                          key={p.id}
+                          p={p}
+                          canEdit={canEdit}
+                          onTogglePaid={onTogglePaid}
+                          onDelete={onDelete}
+                          onViewDetail={onViewDetail}
+                        />
+                      ))}
+                      {payments.length > 3 && (
+                        <button
+                          type="button"
+                          className="text-[10px] text-primary font-medium px-1 py-0.5 rounded hover:bg-primary/10 text-left w-full"
+                          onClick={() => dayData && onViewDay(dayData)}
+                        >
+                          +{payments.length - 3} más…
+                        </button>
+                      )}
+                      {payments.length === 0 && (
+                        <div className="text-[11px] text-muted-foreground/60 px-1 py-0.5">—</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
+            {(weekTotals.total > 0 || inMonthDays.length > 0) && (
+              <CalendarTotalsBar
+                label={`Semana ${weekIndex + 1}${rangeLabel ? ` (${rangeLabel})` : ""}`}
+                totals={weekTotals}
+                variant="week"
+              />
+            )}
+          </Fragment>
+        );
+      })}
+
+      <CalendarTotalsBar label="Total del mes" totals={monthTotals} variant="month" />
     </div>
   );
 }
