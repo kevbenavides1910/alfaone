@@ -342,6 +342,9 @@ model User {
   fingerSyncLogsTriggered      FingerSyncLog[]          @relation("FingerSyncTriggeredBy")
   fingerOperationLogs          FingerOperationLog[]     @relation("FingerOperationUser")
   fingerImportBatchesTriggered FingerImportBatch[]      @relation("FingerImportTriggeredBy")
+  syntraAiMemories             SyntraAiMemory[]         @relation("SyntraAiMemoryUser")
+  syntraAiSkills               SyntraAiSkill[]          @relation("SyntraAiSkillUser")
+  syntraAiChatSessions         SyntraAiChatSession[]    @relation("SyntraAiChatSessionUser")
 
   @@map("users")
 }
@@ -6110,4 +6113,83 @@ model PaymentChangeLog {
   @@index([paymentId, createdAt])
   @@index([changedById])
   @@map("payment_change_logs")
+}
+
+// ─── Asistente Syntra IA (port desde Odoo syntra_ai_assistant) ───────────────
+
+/// Ajustes globales del asistente (fila única id = default).
+model SyntraAiSettings {
+  id        String   @id @default("default")
+  enabled   Boolean  @default(false)
+  provider  String   @default("opencode_go")
+  baseUrl   String?
+  apiKey    String?
+  model     String   @default("kimi-k2.7-code")
+  updatedAt DateTime @updatedAt
+
+  @@map("syntra_ai_settings")
+}
+
+/// Hechos persistentes («recuerda…»).
+model SyntraAiMemory {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   @db.Text
+  scope     String   @default("personal")
+  category  String   @default("other")
+  userId    String?
+  user      User?    @relation("SyntraAiMemoryUser", fields: [userId], references: [id], onDelete: Cascade)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scope, active])
+  @@index([userId])
+  @@map("syntra_ai_memories")
+}
+
+/// Skills / procedimientos («aprende…» / /learn).
+model SyntraAiSkill {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  body        String   @db.Text
+  scope       String   @default("team")
+  userId      String?
+  user        User?    @relation("SyntraAiSkillUser", fields: [userId], references: [id], onDelete: SetNull)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([name, scope, userId])
+  @@index([scope, active])
+  @@map("syntra_ai_skills")
+}
+
+model SyntraAiChatSession {
+  id          String               @id @default(cuid())
+  name        String               @default("Nueva conversación")
+  userId      String
+  user        User                 @relation("SyntraAiChatSessionUser", fields: [userId], references: [id], onDelete: Cascade)
+  pagePath    String?
+  active      Boolean              @default(true)
+  messages    SyntraAiChatMessage[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([userId, updatedAt])
+  @@map("syntra_ai_chat_sessions")
+}
+
+model SyntraAiChatMessage {
+  id        String              @id @default(cuid())
+  sessionId String
+  session   SyntraAiChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String
+  content   String              @db.Text
+  sequence  Int
+  createdAt DateTime            @default(now())
+
+  @@index([sessionId, sequence])
+  @@map("syntra_ai_chat_messages")
 }

@@ -434,6 +434,25 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     prismaModels: ["HrDocumentRequestSettings", "HrDocumentRequestSession"],
   },
 
+  syntraAi: {
+    id: "syntraAi",
+    label: "Asistente Syntra IA",
+    description: "Chat IA con memoria, skills y conocimiento de Alfa One (port desde Odoo).",
+    uiRoutePrefixes: [],
+    apiRoutePrefixes: ["/api/syntra-ai"],
+    codePaths: [
+      "src/modules/syntra-ai",
+      "src/components/syntra-ai",
+    ],
+    prismaModels: [
+      "SyntraAiSettings",
+      "SyntraAiMemory",
+      "SyntraAiSkill",
+      "SyntraAiChatSession",
+      "SyntraAiChatMessage",
+    ],
+  },
+
   plataforma: {
     id: "plataforma",
     label: "Plataforma",

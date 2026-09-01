@@ -28,6 +28,7 @@ Carpetas para **lógica de dominio** (servicios, reglas, validaciones). Las ruta
 | `syntra` | [`syntra/`](./syntra/) | API móvil de patrulla Syntra (JWT device auth) | Migrado |
 | `naf-documentos` | [`naf-documentos/`](./naf-documentos/) | Documentos y archivos NAF | Migrado |
 | `solicitudesRrhh` | [`solicitudes-rrhh/`](./solicitudes-rrhh/) | Constancias públicas FCL / carta de servicio (OTP) | Migrado |
+| `syntraAi` | [`syntra-ai/`](./syntra-ai/) | Asistente IA (chat, memoria, skills) — port desde Odoo | Migrado |
 
 > El módulo `syntra` y `naf-documentos` no están en el registry principal pero sí en `src/modules/`. Ver `src/lib/modules/registry.ts` para el registry oficial.
 

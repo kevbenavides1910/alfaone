@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { PermissionGuard } from "@/components/permissions/PermissionGuard";
 import { SidebarPane } from "@/components/layout/SidebarPane";
 import { EnableTableColumnResize } from "@/components/ui/enable-table-column-resize";
+import { SyntraAiChatWidget } from "@/components/syntra-ai/SyntraAiChatWidget";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
@@ -20,6 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <PermissionGuard>
           <EnableTableColumnResize />
           {children}
+          <SyntraAiChatWidget />
         </PermissionGuard>
       </div>
     </div>

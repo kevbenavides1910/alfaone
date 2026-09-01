@@ -21,7 +21,8 @@ export type AppModuleId =
   | "expedienteDigital"
   | "solicitudesRrhh"
   | "fingerSystem"
-  | "plataforma";
+  | "plataforma"
+  | "syntraAi";
 
 export type AppModuleMeta = {
   id: AppModuleId;

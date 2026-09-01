@@ -69,6 +69,11 @@ services:
       FRAPPE_API_KEY: ${FRAPPE_API_KEY:-}
       FRAPPE_API_SECRET: ${FRAPPE_API_SECRET:-}
       FRAPPE_COMPANY: ${FRAPPE_COMPANY:-Grupo Alfa}
+      SYNTRA_AI_ENABLED: ${SYNTRA_AI_ENABLED:-true}
+      SYNTRA_AI_PROVIDER: ${SYNTRA_AI_PROVIDER:-}
+      SYNTRA_AI_API_KEY: ${SYNTRA_AI_API_KEY:-}
+      SYNTRA_AI_BASE_URL: ${SYNTRA_AI_BASE_URL:-}
+      SYNTRA_AI_MODEL: ${SYNTRA_AI_MODEL:-}
     volumes:
       - ${APP_DATA_HOST:-/mnt/storage/apps/presupuestos-alfa}:/data
       - /opt/oracle/instantclient_19_23:/opt/oracle/instantclient_19_23:ro
