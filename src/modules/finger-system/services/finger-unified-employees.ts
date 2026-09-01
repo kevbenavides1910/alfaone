@@ -8,7 +8,7 @@ export type UnifiedEmployeeRow = {
   id: string;
   attUserId: number;
   badgeNumber: string;
-  name: string;
+  name: string | null;
   cedula: string | null;
   gender: string | null;
   title: string | null;
@@ -36,7 +36,7 @@ function matchesQuery(row: UnifiedEmployeeRow, q: string): boolean {
   if (!needle) return true;
   return (
     row.badgeNumber.toLowerCase().includes(needle) ||
-    row.name.toLowerCase().includes(needle) ||
+    (row.name?.toLowerCase().includes(needle) ?? false) ||
     (row.cedula?.toLowerCase().includes(needle) ?? false)
   );
 }

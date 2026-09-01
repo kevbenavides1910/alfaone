@@ -21,7 +21,7 @@ export type FingerEmployeeLinkRow = {
   updatedAt: string;
   employee: {
     codigoEmpleado: string;
-    nombre: string;
+    nombre: string | null;
     cedula: string | null;
     estado: string | null;
     company: string | null;

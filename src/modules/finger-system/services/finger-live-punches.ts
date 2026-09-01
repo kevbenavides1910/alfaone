@@ -19,7 +19,7 @@ function mapPunch(row: {
   checkType: string | null;
   verifyCode: number | null;
   deviceSn: string | null;
-  employee: { nombre: string; codigoEmpleado: string } | null;
+  employee: { nombre: string | null; codigoEmpleado: string } | null;
 }): FingerLivePunchRow {
   return {
     id: row.id,

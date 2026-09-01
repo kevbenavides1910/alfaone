@@ -244,7 +244,7 @@ export type FingerAttendanceDayRow = {
   id: string;
   workDate: string;
   employeeId: string;
-  employeeName: string;
+  employeeName: string | null;
   employeeCodigo: string;
   status: FingerAttendanceStatus;
   firstIn: string | null;

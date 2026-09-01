@@ -165,7 +165,7 @@ export function FingerAttendancePanel() {
                     <tr key={row.id} className="border-t">
                       <td className="px-3 py-2 font-mono text-xs">{row.workDate}</td>
                       <td className="px-3 py-2">
-                        <div>{row.employeeName}</div>
+                        <div>{row.employeeName ?? "—"}</div>
                         <div className="text-xs text-slate-500">{row.employeeCodigo}</div>
                       </td>
                       <td className="px-3 py-2 text-xs">

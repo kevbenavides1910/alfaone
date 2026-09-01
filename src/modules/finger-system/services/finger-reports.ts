@@ -104,7 +104,7 @@ export async function buildFingerAttendanceReport(
 export type FingerAttendanceExportRow = {
   workDate: string;
   employeeCodigo: string;
-  employeeName: string;
+  employeeName: string | null;
   status: string;
   firstIn: string;
   lastOut: string;
@@ -185,7 +185,7 @@ export function fingerAttendanceReportToCsv(rows: FingerAttendanceExportRow[]): 
       [
         csvEscape(r.workDate),
         csvEscape(r.employeeCodigo),
-        csvEscape(r.employeeName),
+        csvEscape(r.employeeName ?? ""),
         csvEscape(r.status),
         csvEscape(r.firstIn),
         csvEscape(r.lastOut),
