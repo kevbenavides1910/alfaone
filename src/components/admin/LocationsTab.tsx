@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { TableColumnFilterHead, type TableColumnFilterDef } from "@/components/ui/table-column-filters";
 import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, FileSpreadsheet } from "lucide-react";
+import { Search, FileSpreadsheet, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +86,34 @@ export function LocationsTab({ readOnly }: { readOnly?: boolean }) {
   ];
   const displayed = filterRowsByColumnFilters(filtered, columnFilters, locationColumnDefs);
 
+  const syncNafMutation = useMutation({
+    mutationFn: async (dryRun: boolean) => {
+      const qs = dryRun ? "?dryRun=1" : "";
+      const r = await fetch(`/api/admin/catalogs/locations/sync-naf${qs}`, { method: "POST" });
+      const json = (await r.json()) as {
+        data?: {
+          locationsCreated: number;
+          locationsUpdated: number;
+          contractsMatched: number;
+          contractsUnmatched: number;
+          dryRun: boolean;
+        };
+        error?: { message?: string };
+      };
+      if (!r.ok || json.error) throw new Error(json.error?.message ?? `Error ${r.status}`);
+      return json.data!;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["admin-locations"] });
+      qc.invalidateQueries({ queryKey: ["admin-zones"] });
+      const mode = data.dryRun ? "Simulación" : "Sync";
+      toast.success(
+        `${mode}: ${data.locationsCreated} nuevas, ${data.locationsUpdated} actualizadas · ${data.contractsMatched} contratos`,
+      );
+    },
+    onError: (e: Error) => toast.error(e.message || "Error al sincronizar"),
+  });
+
   const setZoneMutation = useMutation({
     mutationFn: async ({ id, zoneId }: { id: string; zoneId: string | null }) => {
       const r = await fetch(`/api/admin/catalogs/locations/${id}`, {
@@ -125,6 +153,13 @@ export function LocationsTab({ readOnly }: { readOnly?: boolean }) {
           Listado global de ubicaciones de todos los contratos. Asigne o cambie la zona usando el selector
           de la columna <strong className="text-slate-700">Zona</strong>. Las zonas se administran en la pestaña{" "}
           <strong className="text-slate-700">Zonas</strong>.
+          {!readOnly && (
+            <>
+              {" "}
+              Use <strong className="text-slate-700">Traer de Operaciones (.6)</strong> para cargar las ubicaciones
+              activas de cada contrato desde Oracle (mismo catálogo que la pantalla «Asignación de Ubicaciones a Zonas»).
+            </>
+          )}
         </p>
         {totalUnassigned > 0 && (
           <p className="text-xs text-amber-700">
@@ -181,6 +216,40 @@ export function LocationsTab({ readOnly }: { readOnly?: boolean }) {
           >
             Limpiar
           </Button>
+        )}
+        {!readOnly && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={syncNafMutation.isPending}
+              onClick={() => syncNafMutation.mutate(true)}
+            >
+              <RefreshCw className={`h-4 w-4 ${syncNafMutation.isPending ? "animate-spin" : ""}`} />
+              Simular sync NAF
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="gap-2"
+              disabled={syncNafMutation.isPending}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "¿Importar ubicaciones desde Operaciones (.6)? Se crearán o actualizarán ubicaciones en los contratos que coincidan por licitación.",
+                  )
+                ) {
+                  return;
+                }
+                syncNafMutation.mutate(false);
+              }}
+            >
+              <RefreshCw className={`h-4 w-4 ${syncNafMutation.isPending ? "animate-spin" : ""}`} />
+              Traer de Operaciones (.6)
+            </Button>
+          </>
         )}
         <Button
           type="button"

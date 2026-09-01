@@ -1136,6 +1136,8 @@ model AuditLog {
 model Zone {
   id                             String                   @id @default(cuid())
   name                           String                   @unique
+  /// Código NAF operativo (AROPZO.NO_ZONA, pantalla 89-Zonas).
+  nafZonaCode                    String?                  @unique
   description                    String?
   isActive                       Boolean                  @default(true)
   sortOrder                      Int                      @default(0)
@@ -1147,26 +1149,31 @@ model Zone {
   locations                      ContractLocation[]
   administrations                ContractAdministration[]
 
+  @@index([nafZonaCode])
   @@map("zones")
 }
 
 /// Ubicación física u operativa del contrato (contiene uno o más puestos).
 model ContractLocation {
-  id           String        @id @default(cuid())
-  contractId   String
-  contract     Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  zoneId       String?
-  zone         Zone?         @relation(fields: [zoneId], references: [id], onDelete: SetNull)
-  name         String
-  description  String?
-  sortOrder    Int           @default(0)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  positions    Position[]
-  patrolRoutes PatrolRoute[]
+  id                String        @id @default(cuid())
+  contractId        String
+  contract          Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  zoneId            String?
+  zone              Zone?         @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  /// Código NAF (ARCOUB.NO_UBICACION) para sincronizar con Operaciones (.6).
+  nafUbicacionCode  String?
+  name              String
+  description       String?
+  sortOrder         Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  positions         Position[]
+  patrolRoutes      PatrolRoute[]
 
+  @@unique([contractId, nafUbicacionCode])
   @@index([contractId])
   @@index([zoneId])
+  @@index([nafUbicacionCode])
   @@map("contract_locations")
 }
 
