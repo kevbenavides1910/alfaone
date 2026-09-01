@@ -1,5 +1,5 @@
 import { prisma } from "@/modules/core/db/prisma";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { FINGER_ENV } from "@/modules/finger-system/config/finger.config";
 import {
   buildWindowsPathFromParts,
@@ -136,7 +136,9 @@ export async function updateFingerSettings(patch: FingerSettingsPatch) {
   if (patch.attBlankPassword !== undefined) data.attBlankPassword = patch.attBlankPassword;
   if (patch.attDriveMappings !== undefined) {
     data.attDriveMappings =
-      patch.attDriveMappings === null ? null : normalizeAttDriveMappings(patch.attDriveMappings);
+      patch.attDriveMappings === null
+        ? Prisma.JsonNull
+        : (normalizeAttDriveMappings(patch.attDriveMappings) as Prisma.InputJsonValue);
   }
 
   if (patch.attSmbUser !== undefined) {
