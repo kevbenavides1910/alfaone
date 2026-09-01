@@ -91,4 +91,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_19_23
-CMD ["sh", "-c", "npx prisma migrate deploy && exec node server.js"]
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && exec node server.js"]
