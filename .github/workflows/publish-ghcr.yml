@@ -92,17 +92,21 @@ jobs:
           ) > /tmp/ghcr-push.log 2>&1 &
           PUSH_PID=$!
 
-          # Deploy en el checkout de producción (tiene .env.production y compose)
+          # Deploy en el checkout de producción (tiene .env.production y compose).
+          # Best-effort: si otro deploy manual/agente tiene el lock, no tumbar el job
+          # (build + push son el artefacto canónico; prod puede ya estar en ese SHA).
           cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
-          # El checkout de producción debe estar en el SHA del build. Si no, traer
-          # solo los scripts de deploy actualizados (sin tocar cambios locales ajenos).
           CURRENT_SHA="$(git rev-parse HEAD)"
           if [ "$CURRENT_SHA" != "${{ github.sha }}" ]; then
             echo "checkout producción en $CURRENT_SHA, trayendo scripts del SHA ${{ github.sha }}"
             git fetch origin main --quiet 2>/dev/null || true
             git checkout --quiet "${{ github.sha }}" -- scripts/ prisma/ 2>/dev/null || true
           fi
-          APP_IMAGE="${{ env.IMAGE_NAME }}:${{ github.sha }}" bash scripts/deploy-from-image.sh
+          deploy_rc=0
+          APP_IMAGE="${{ env.IMAGE_NAME }}:${{ github.sha }}" bash scripts/deploy-from-image.sh || deploy_rc=$?
+          if [ "$deploy_rc" -ne 0 ]; then
+            echo "::warning::Deploy automático no completó (rc=$deploy_rc). Suele ser lock concurrente; build/push siguen."
+          fi
 
-          # Esperar el push a GHCR y fallar el job solo si el push falla
+          # Fallar el job solo si el push a GHCR falla
           wait "$PUSH_PID" || { echo "ERROR: push GHCR falló"; tail -20 /tmp/ghcr-push.log; exit 1; }
