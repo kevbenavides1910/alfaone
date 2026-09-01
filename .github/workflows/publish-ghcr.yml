@@ -10,9 +10,11 @@ name: Publish GHCR
 on:
   push:
     branches: [main, master]
-    # Sin paths filter: pushes a main siempre publican.
-    # Antes, paths + flakiness de Actions/webhooks + cancel-in-progress dejaban
-    # commits sin imagen (agentes tenían que hacer workflow_dispatch a mano).
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".cursor/**"
+      - ".deploy-logs/**"
   workflow_dispatch:
 
 concurrency:
@@ -103,7 +105,9 @@ jobs:
             git checkout --quiet "${{ github.sha }}" -- scripts/ prisma/ 2>/dev/null || true
           fi
           deploy_rc=0
-          APP_IMAGE="${{ env.IMAGE_NAME }}:${{ github.sha }}" bash scripts/deploy-from-image.sh || deploy_rc=$?
+          APP_IMAGE="${{ env.IMAGE_NAME }}:${{ github.sha }}" \
+            DEPLOY_SKIP_DB_BACKUP=1 \
+            bash scripts/deploy-from-image.sh || deploy_rc=$?
           if [ "$deploy_rc" -ne 0 ]; then
             echo "::warning::Deploy automático no completó (rc=$deploy_rc). Suele ser lock concurrente; build/push siguen."
           fi

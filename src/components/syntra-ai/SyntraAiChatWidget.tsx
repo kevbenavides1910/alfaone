@@ -22,6 +22,7 @@ import {
   resolvePageModuleLabel,
 } from "@/modules/syntra-ai/business/page-context";
 import { useSyntraFloatPosition } from "./use-syntra-float-position";
+import { consumeSyntraChatStream } from "./syntra-chat-stream";
 
 type ChatTurn = { role: "user" | "assistant"; content: string };
 
@@ -115,6 +116,7 @@ export function SyntraAiChatWidget() {
   const [memoriesTeam, setMemoriesTeam] = useState<MemoryRow[]>([]);
   const [memoriesLoading, setMemoriesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [thinkingText, setThinkingText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
@@ -149,7 +151,7 @@ export function SyntraAiChatWidget() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [history, loading, viewMode]);
+  }, [history, loading, viewMode, thinkingText]);
 
   useEffect(() => {
     fetch("/api/syntra-ai/status")
@@ -326,13 +328,12 @@ export function SyntraAiChatWidget() {
     setPendingUploads([]);
     setError(null);
     setLoading(true);
+    setThinkingText("Iniciando…");
     setHistory((h) => [...h, { role: "user", content: displayMessage }]);
 
     try {
-      const res = await fetch("/api/syntra-ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await consumeSyntraChatStream(
+        {
           message: message || "",
           history,
           sessionId,
@@ -342,18 +343,12 @@ export function SyntraAiChatWidget() {
             mimetype: u.mimetype,
             data: u.data,
           })),
-        }),
-      });
-      const json = (await res.json()) as {
-        data?: { reply: string; sessionId: string; sessionName?: string };
-        error?: { message?: string };
-      };
-      if (!res.ok) {
-        throw new Error(json.error?.message || "Error al consultar al asistente");
-      }
-      const reply = json.data?.reply || "";
-      if (json.data?.sessionId) setSessionId(json.data.sessionId);
-      if (json.data?.sessionName) setSessionName(json.data.sessionName);
+        },
+        (text) => setThinkingText(text),
+      );
+      const reply = data.reply || "";
+      if (data.sessionId) setSessionId(data.sessionId);
+      if (data.sessionName) setSessionName(data.sessionName);
       setHistory((h) => [...h, { role: "assistant", content: reply }]);
       void refreshSessions();
       if (/recuerda|aprende|olvida|remember|learn/i.test(message)) {
@@ -367,6 +362,7 @@ export function SyntraAiChatWidget() {
       setPendingUploads(uploads);
     } finally {
       setLoading(false);
+      setThinkingText(null);
     }
   }, [history, input, loading, pageContext, pendingUploads, refreshMemories, refreshSessions, refreshSkills, sessionId]);
 
@@ -591,7 +587,12 @@ export function SyntraAiChatWidget() {
                           {turn.content}
                         </div>
                       ))}
-                      {loading ? <p className="text-slate-400 text-xs">Pensando…</p> : null}
+                      {loading && thinkingText ? (
+                        <p className="text-indigo-600 text-xs flex items-center gap-2 animate-pulse">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0" aria-hidden />
+                          {thinkingText}
+                        </p>
+                      ) : null}
                       {error ? <p className="text-red-600 text-xs">{error}</p> : null}
                       <div ref={bottomRef} />
                     </div>

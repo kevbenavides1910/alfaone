@@ -36,9 +36,10 @@ ALLOW_LATEST="${DEPLOY_GHCR_ALLOW_LATEST:-0}"
 # 0 = no esperar (comportamiento antiguo).
 WAIT_SECS="${DEPLOY_GHCR_WAIT_SECONDS:-360}"
 # Poll local rápido (docker image inspect ~0.1s). Manifest remoto es caro (~1.5s).
-POLL_SECS="${DEPLOY_GHCR_POLL_SECONDS:-2}"
-MANIFEST_EVERY="${DEPLOY_GHCR_MANIFEST_EVERY:-15}"
+POLL_SECS="${DEPLOY_GHCR_POLL_SECONDS:-1}"
+MANIFEST_EVERY="${DEPLOY_GHCR_MANIFEST_EVERY:-10}"
 AUTO_DISPATCH="${DEPLOY_GHCR_AUTO_DISPATCH:-1}"
+APP_CONTAINER="${APP_CONTAINER:-security_contracts_app}"
 
 section() {
   echo ""
@@ -189,6 +190,32 @@ resolve_candidate() {
   return 1
 }
 
+# Si la app ya corre esta imagen y está healthy, no redeploy ni espera.
+app_already_on_image() {
+  local img="$1"
+  [ -n "$img" ] || return 1
+  docker inspect "$APP_CONTAINER" >/dev/null 2>&1 || return 1
+  local current
+  current="$(docker inspect "$APP_CONTAINER" --format '{{.Config.Image}}' 2>/dev/null || true)"
+  [ "$current" = "$img" ] || return 1
+  local health
+  health="$(docker inspect "$APP_CONTAINER" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' 2>/dev/null || true)"
+  case "$health" in
+    healthy|no-healthcheck) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+finish_if_already_deployed() {
+  local img="$1"
+  if app_already_on_image "$img"; then
+    section "Ya desplegado"
+    echo "OK: $APP_CONTAINER ya usa $img (healthy) — omito pull/recreate."
+    echo "Tip: Publish GHCR en push ya despliega automático; no hace falta ops:deploy:ghcr manual."
+    exit 0
+  fi
+}
+
 section "Deploy GHCR-only (sin build local)"
 
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -221,6 +248,9 @@ fi
 
 RESOLVED="${APP_IMAGE:-}"
 CANDIDATES=()
+if [ -n "$RESOLVED" ]; then
+  finish_if_already_deployed "$RESOLVED"
+fi
 if [ -z "$RESOLVED" ]; then
   CANDIDATES=(
     "${DEFAULT_IMAGE_REPO}:${SHA}"
@@ -230,6 +260,11 @@ if [ -z "$RESOLVED" ]; then
   if [ "$ALLOW_LATEST" = "1" ] || [ "$ALLOW_LATEST" = "true" ]; then
     CANDIDATES+=("${DEFAULT_IMAGE_REPO}:latest")
   fi
+
+  # Publish GHCR suele haber desplegado ya en push — salida instantánea si coincide SHA.
+  for img in "${CANDIDATES[@]}"; do
+    finish_if_already_deployed "$img"
+  done
 
   # Disparar Publish si push no lo hizo (o el run previo fue cancelado/zombie).
   if ! image_present_local "${DEFAULT_IMAGE_REPO}:${SHA}" \
@@ -291,6 +326,8 @@ if [ -z "${RESOLVED:-}" ]; then
   status_extra="$(publish_status_line "$SHA")"
   die "no hay imagen GHCR/local para $SHORT_SHA ni APP_IMAGE. Revise workflow Publish GHCR. ${status_extra}"
 fi
+
+finish_if_already_deployed "$RESOLVED"
 
 section "Pull + recreate: $RESOLVED"
 export APP_IMAGE="$RESOLVED"

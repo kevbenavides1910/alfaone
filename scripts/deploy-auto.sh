@@ -39,6 +39,10 @@ RESOLVED=""
 section "Deploy auto: buscando imagen GHCR para ${SHORT_SHA}"
 for img in "${CANDIDATES[@]}"; do
   echo "probe: $img"
+  if docker image inspect "$img" >/dev/null 2>&1; then
+    RESOLVED="$img"
+    break
+  fi
   if docker manifest inspect "$img" >/dev/null 2>&1; then
     RESOLVED="$img"
     break

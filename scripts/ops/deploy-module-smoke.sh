@@ -81,7 +81,17 @@ if [ -n "$BASELINE_IMAGE" ]; then
   fi
   tmpdir=$(mktemp -d)
   trap 'rm -rf "$tmpdir"' RETURN
-  bash "$INVENTORY" image "$BASELINE_IMAGE" all >"$tmpdir/before.txt"
+  cache_dir="${DEPLOY_INVENTORY_CACHE_DIR:-$ROOT/.deploy-logs/inventory-cache}"
+  mkdir -p "$cache_dir"
+  cache_key="$(echo "$BASELINE_IMAGE" | tr '/:' '__')"
+  cache_file="$cache_dir/${cache_key}.txt"
+
+  if [ -f "$cache_file" ]; then
+    cp "$cache_file" "$tmpdir/before.txt"
+    echo "baseline inventario desde cache ($cache_file)"
+  else
+    bash "$INVENTORY" image "$BASELINE_IMAGE" all | tee "$cache_file" >"$tmpdir/before.txt"
+  fi
   bash "$INVENTORY" container "$APP_CONTAINER" all >"$tmpdir/after.txt"
   before_n=$(wc -l <"$tmpdir/before.txt")
   after_n=$(wc -l <"$tmpdir/after.txt")

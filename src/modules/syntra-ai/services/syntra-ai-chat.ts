@@ -6,7 +6,7 @@ import {
 } from "./syntra-ai-config";
 import { callSyntraAiLlm, type LlmMessage } from "./syntra-ai-llm";
 import { runSyntraAgent } from "./syntra-ai-agent";
-import { AGENT_TOOLS_PROMPT } from "./syntra-ai-tools";
+import { AGENT_TOOLS_PROMPT, describeAgentProgress } from "./syntra-ai-tools";
 import { loadSyntraAiKnowledge } from "./syntra-ai-knowledge";
 import {
   buildMemoryAndSkillsPrompt,
@@ -46,6 +46,7 @@ export type SyntraAiChatInput = {
   sessionId?: string | null;
   pageContext?: SyntraAiPageContext | null;
   uploads?: ChatUploadInput[];
+  onProgress?: (text: string) => void;
 };
 
 export type SyntraAiChatResult = {
@@ -176,10 +177,12 @@ export async function syntraAiChat(input: SyntraAiChatInput): Promise<SyntraAiCh
       session: input.session,
       messages,
       maxRounds: cfg.agentMaxRounds,
+      onProgress: input.onProgress,
     });
     reply = agentResult.reply;
     modelUsed = agentResult.modelUsed;
   } else {
+    input.onProgress?.(describeAgentProgress("model"));
     reply = await callSyntraAiLlm(cfg, messages);
   }
 

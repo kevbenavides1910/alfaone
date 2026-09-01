@@ -325,6 +325,50 @@ async function toolSearchContracts(session: Session, args: Record<string, unknow
   };
 }
 
+function describeToolCall(toolName: string, args?: Record<string, unknown>): string {
+  switch (toolName) {
+    case "list_payroll_companies":
+      return "Listando empresas con nómina NAF…";
+    case "list_payroll_periods":
+      return "Buscando quincenas de planilla disponibles…";
+    case "query_payroll_totals": {
+      const desde = typeof args?.fDesde === "string" ? args.fDesde.slice(0, 10) : "";
+      const hasta = typeof args?.fHasta === "string" ? args.fHasta.slice(0, 10) : "";
+      if (desde && hasta) return `Calculando totales de planilla (${desde} – ${hasta})…`;
+      return "Calculando totales de nómina NAF…";
+    }
+    case "query_expenses_totals":
+      return "Sumando gastos registrados en Alfa One…";
+    case "search_contracts": {
+      const q = typeof args?.q === "string" ? args.q.trim() : "";
+      if (q) return `Buscando contratos «${q.slice(0, 48)}»…`;
+      return "Buscando contratos…";
+    }
+    default:
+      return `Consultando ${toolName.replace(/_/g, " ")}…`;
+  }
+}
+
+export function describeAgentProgress(
+  kind: "start" | "llm" | "tool" | "compose" | "model",
+  detail?: { round?: number; toolName?: string; args?: Record<string, unknown> },
+): string {
+  switch (kind) {
+    case "start":
+      return "Recibiendo su pregunta…";
+    case "llm":
+      return detail?.round === 0 ? "Analizando su pregunta…" : "Interpretando los datos obtenidos…";
+    case "tool":
+      return describeToolCall(detail?.toolName || "", detail?.args);
+    case "compose":
+      return "Redactando respuesta…";
+    case "model":
+      return "Generando respuesta con el modelo…";
+    default:
+      return "Procesando…";
+  }
+}
+
 export const AGENT_TOOLS_PROMPT = `## Consulta de datos reales
 Tienes herramientas para consultar nómina NAF, gastos y contratos con los permisos del usuario.
 - Para «cuánto se gastó de planilla / nómina / quincena»: use list_payroll_periods (última quincena) y luego query_payroll_totals.

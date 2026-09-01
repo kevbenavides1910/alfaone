@@ -6,13 +6,14 @@ import {
   type LlmMessage,
   type LlmToolCall,
 } from "./syntra-ai-llm";
-import { executeSyntraTool, getSyntraToolDefinitions, type ToolDefinition } from "./syntra-ai-tools";
+import { executeSyntraTool, describeAgentProgress, getSyntraToolDefinitions, type ToolDefinition } from "./syntra-ai-tools";
 
 export type RunSyntraAgentInput = {
   cfg: SyntraAiConfig;
   session: Session;
   messages: LlmMessage[];
   maxRounds?: number;
+  onProgress?: (text: string) => void;
 };
 
 export type RunSyntraAgentResult = {
@@ -34,20 +35,25 @@ function messageText(content: LlmMessage["content"]): string {
 }
 
 export async function runSyntraAgent(input: RunSyntraAgentInput): Promise<RunSyntraAgentResult> {
+  const emit = (text: string) => input.onProgress?.(text);
   const tools = getSyntraToolDefinitions(input.session);
   if (!tools.length) {
+    emit(describeAgentProgress("model"));
     const reply = await callSyntraAiLlm(input.cfg, input.messages);
     return { reply, modelUsed: input.cfg.model, toolRounds: 0 };
   }
 
+  emit(describeAgentProgress("start"));
   const maxRounds = Math.min(Math.max(input.maxRounds ?? input.cfg.agentMaxRounds ?? 6, 1), 10);
   const working: LlmMessage[] = [...input.messages];
 
   for (let round = 0; round < maxRounds; round += 1) {
+    emit(describeAgentProgress("llm", { round }));
     const msg = await callSyntraAiLlmMessage(input.cfg, working, tools);
     const toolCalls: LlmToolCall[] = msg.tool_calls ?? [];
 
     if (!toolCalls.length) {
+      emit(describeAgentProgress("compose"));
       const text = messageText(msg.content);
       if (!text) throw new Error("Respuesta vacía del proveedor IA.");
       return { reply: text, modelUsed: input.cfg.model, toolRounds: round };
@@ -66,6 +72,7 @@ export async function runSyntraAgent(input: RunSyntraAgentInput): Promise<RunSyn
       } catch {
         args = {};
       }
+      emit(describeAgentProgress("tool", { toolName: call.function.name, args }));
       const result = await executeSyntraTool(input.session, call.function.name, args);
       working.push({
         role: "tool",

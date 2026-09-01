@@ -5,8 +5,7 @@ name: CI
 on:
   pull_request:
     branches: [main, master]
-  push:
-    branches: [main, master]
+  # main/master: solo Publish GHCR (build+deploy self-hosted). Sin CI duplicado en push.
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
