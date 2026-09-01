@@ -72,7 +72,7 @@ export async function createFingerEmployeeLink(params: {
     if (attBadge.ok) {
       const att = await insertAtt2016UserInfo({
         badgeNumber,
-        name: employee.nombre,
+        name: employee.nombre ?? badgeNumber,
         userId: params.userId,
         ipAddress: clientIp(params.headers),
       });
@@ -139,7 +139,7 @@ export async function updateFingerEmployeeLink(
       await updateAtt2016UserInfo({
         attUserId,
         badgeNumber,
-        name: existing.employee.nombre,
+        name: existing.employee.nombre ?? badgeNumber,
         userId: params.userId,
         ipAddress: clientIp(params.headers),
       });
@@ -148,7 +148,7 @@ export async function updateFingerEmployeeLink(
       if (attBadge.ok) {
         const att = await insertAtt2016UserInfo({
           badgeNumber,
-          name: existing.employee.nombre,
+          name: existing.employee.nombre ?? badgeNumber,
           userId: params.userId,
           ipAddress: clientIp(params.headers),
         });
