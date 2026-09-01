@@ -1,4 +1,5 @@
 import { prisma } from "@/modules/core/db/prisma";
+import type { Prisma } from "@prisma/client";
 import { ensureFingerSettingsRow } from "@/modules/finger-system/services/finger-settings";
 import { probeAllFingerDevices } from "@/modules/finger-system/services/finger-devices";
 import { applyAtt2016PunchImport } from "@/modules/finger-system/services/att2016-punches-import";
@@ -83,7 +84,7 @@ export async function runFingerAutoSync(params: {
         status: "SUCCESS",
         message: `Sync OK: ${probe.online}/${probe.total} dispositivos en línea.`,
         finishedAt: new Date(),
-        detailJson: steps,
+        detailJson: steps as Prisma.InputJsonValue,
       },
     });
 

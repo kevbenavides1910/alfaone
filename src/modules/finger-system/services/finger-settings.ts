@@ -1,4 +1,5 @@
 import { prisma } from "@/modules/core/db/prisma";
+import type { Prisma } from "@prisma/client";
 import { FINGER_ENV } from "@/modules/finger-system/config/finger.config";
 import {
   buildWindowsPathFromParts,
@@ -96,7 +97,7 @@ function normalizeDatabaseFile(input: string | null | undefined): string | null 
 }
 
 export async function updateFingerSettings(patch: FingerSettingsPatch) {
-  const data: Record<string, unknown> = {};
+  const data: Prisma.AppFingerSettingsUpdateInput = {};
 
   if (patch.attReadOnly !== undefined) data.attReadOnly = patch.attReadOnly;
   if (patch.linkRrhhEmployees !== undefined) data.linkRrhhEmployees = patch.linkRrhhEmployees;
