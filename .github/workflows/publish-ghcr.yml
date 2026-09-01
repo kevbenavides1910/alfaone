@@ -75,12 +75,34 @@ jobs:
           # Con driver docker: capas deps/ora/apt + cache mount /.next/cache entre runs.
           # DOCKER_BUILD=1 omite typecheck en next build (~60s); CI sigue tipando.
 
-      # 2) Push a GHCR en paralelo conceptual con el deploy (imagen ya local).
-      - name: Push a GHCR
+      # 2) Deploy automático + Push a GHCR en paralelo.
+      # El deploy usa la imagen YA local (load:true) sobre el checkout de producción
+      # y NO espera el push a ghcr.io. El push corre en background; si falla el
+      # deploy, el push igual continúa (la imagen es el artefacto canónico).
+      - name: Deploy automático + push GHCR en paralelo
         run: |
-          set -euo pipefail
-          while IFS= read -r tag; do
-            [ -n "$tag" ] || continue
-            echo "→ docker push $tag"
-            docker push "$tag"
-          done <<< "${{ steps.meta.outputs.tags }}"
+          set -uo pipefail
+          # Lanzar push a GHCR en background
+          (
+            while IFS= read -r tag; do
+              [ -n "$tag" ] || continue
+              echo "→ docker push $tag"
+              docker push "$tag"
+            done <<< "${{ steps.meta.outputs.tags }}"
+          ) > /tmp/ghcr-push.log 2>&1 &
+          PUSH_PID=$!
+
+          # Deploy en el checkout de producción (tiene .env.production y compose)
+          cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
+          # El checkout de producción debe estar en el SHA del build. Si no, traer
+          # solo los scripts de deploy actualizados (sin tocar cambios locales ajenos).
+          CURRENT_SHA="$(git rev-parse HEAD)"
+          if [ "$CURRENT_SHA" != "${{ github.sha }}" ]; then
+            echo "checkout producción en $CURRENT_SHA, trayendo scripts del SHA ${{ github.sha }}"
+            git fetch origin main --quiet 2>/dev/null || true
+            git checkout --quiet "${{ github.sha }}" -- scripts/ prisma/ 2>/dev/null || true
+          fi
+          APP_IMAGE="${{ env.IMAGE_NAME }}:${{ github.sha }}" bash scripts/deploy-from-image.sh
+
+          # Esperar el push a GHCR y fallar el job solo si el push falla
+          wait "$PUSH_PID" || { echo "ERROR: push GHCR falló"; tail -20 /tmp/ghcr-push.log; exit 1; }
