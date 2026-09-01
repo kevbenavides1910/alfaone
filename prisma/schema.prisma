@@ -1160,8 +1160,10 @@ model ContractLocation {
   contract          Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
   zoneId            String?
   zone              Zone?         @relation(fields: [zoneId], references: [id], onDelete: SetNull)
-  /// Código NAF (ARCOUB.NO_UBICACION) para sincronizar con Operaciones (.6).
+  /// Legacy: import erróneo como ubicación; migrar a Position y dejar null.
   nafUbicacionCode  String?
+  /// Agrupación auto NAF por zona operativa, ej. zona:00005.
+  nafSyncGroupKey   String?
   name              String
   description       String?
   sortOrder         Int           @default(0)
@@ -1171,6 +1173,7 @@ model ContractLocation {
   patrolRoutes      PatrolRoute[]
 
   @@unique([contractId, nafUbicacionCode])
+  @@unique([contractId, nafSyncGroupKey])
   @@index([contractId])
   @@index([zoneId])
   @@index([nafUbicacionCode])
@@ -1184,6 +1187,8 @@ model Position {
   location           ContractLocation   @relation(fields: [locationId], references: [id], onDelete: Cascade)
   name               String
   description        String?
+  /// Código NAF (ARCOUB.NO_UBICACION) — puesto en Operaciones (.6).
+  nafUbicacionCode   String?
   /// Línea telefónica fija del puesto (independiente del celular físico asignado)
   phoneLine          String?
   /// Código NFC del punto de marca (legacy COD_PUNTO / TAG).
@@ -1200,7 +1205,9 @@ model Position {
   patrolRoutePoints  PatrolRoutePoint[]
   patrolRoutes       PatrolRoute[]
 
+  @@unique([locationId, nafUbicacionCode])
   @@index([locationId])
+  @@index([nafUbicacionCode])
   @@map("positions")
 }
 

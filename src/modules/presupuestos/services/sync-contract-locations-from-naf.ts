@@ -25,6 +25,9 @@ const ALFA_ZONE_DISPLAY_NAMES: Record<string, string> = {
   "00016": "Bandeco",
 };
 
+const NAF_SIN_ZONA_KEY = "zona:sin";
+const NAF_SIN_ZONA_NAME = "Sin zona operativa";
+
 async function buildZoneIdByNafCodeFallback(): Promise<Map<string, string>> {
   const byCode = await loadZoneIdByNafCode();
   if (byCode.size >= 7) return byCode;
@@ -39,7 +42,7 @@ async function buildZoneIdByNafCodeFallback(): Promise<Map<string, string>> {
   return out;
 }
 
-const NAF_CONTRACT_LOCATIONS_QUERY = `
+const NAF_CONTRACT_POSITIONS_QUERY = `
 SELECT DISTINCT
   TRIM(m.NO_CONTRATO) AS NO_CONTRATO,
   TRIM(m.NO_UBICACION) AS NO_UBICACION,
@@ -54,9 +57,7 @@ WHERE m.NO_CONTRATO IS NOT NULL
   AND m.NO_UBICACION IS NOT NULL
   AND TRIM(m.NO_UBICACION) IS NOT NULL
   AND m.ESTADO = 'A'
-  AND ub.NO_ZONA_OPERACIONES IS NOT NULL
-  AND TRIM(ub.NO_ZONA_OPERACIONES) IS NOT NULL
-  AND ub.NO_ZONA_OPERACIONES NOT IN ('00014', '00000')
+  AND (ub.NO_ZONA_OPERACIONES IS NULL OR ub.NO_ZONA_OPERACIONES NOT IN ('00014', '00000'))
 GROUP BY TRIM(m.NO_CONTRATO), TRIM(m.NO_UBICACION)
 ORDER BY TRIM(m.NO_CONTRATO), TRIM(m.NO_UBICACION)
 `;
@@ -84,14 +85,23 @@ export function normalizeNafUbicacionCode(raw: string | null | undefined): strin
   return digits.padStart(5, "0");
 }
 
-type NafContractLocationRow = {
+export function nafSyncGroupKey(noZona: string | null): string {
+  return noZona ? `zona:${noZona}` : NAF_SIN_ZONA_KEY;
+}
+
+export function nafGroupLocationName(noZona: string | null): string {
+  if (!noZona) return NAF_SIN_ZONA_NAME;
+  return nafOperacionesZoneName(noZona) ?? ALFA_ZONE_DISPLAY_NAMES[noZona] ?? noZona;
+}
+
+type NafContractPositionRow = {
   noContrato: string;
   noUbicacion: string;
   descripcion: string | null;
   noZona: string | null;
 };
 
-function mapOracleRow(row: OracleRow): NafContractLocationRow | null {
+function mapOracleRow(row: OracleRow): NafContractPositionRow | null {
   const noContrato = normalizeRrhhContrato(asString(row.NO_CONTRATO));
   const noUbicacion = normalizeNafUbicacionCode(asString(row.NO_UBICACION));
   if (!noContrato || !noUbicacion) return null;
@@ -104,14 +114,128 @@ function mapOracleRow(row: OracleRow): NafContractLocationRow | null {
   };
 }
 
+export type MigrateLegacyNafLocationsResult = {
+  legacyLocations: number;
+  positionsCreated: number;
+  parentLocationsCreated: number;
+  legacyDeleted: number;
+  skippedWithChildren: number;
+};
+
+/** Convierte contract_locations con nafUbicacionCode (import erróneo) → Position bajo ubicación agrupada por zona. */
+export async function migrateLegacyNafLocationsToPositions(options?: {
+  dryRun?: boolean;
+}): Promise<MigrateLegacyNafLocationsResult> {
+  const dryRun = options?.dryRun ?? false;
+
+  const legacy = await prisma.contractLocation.findMany({
+    where: { nafUbicacionCode: { not: null } },
+    include: { positions: { select: { id: true } }, zone: { select: { id: true, nafZonaCode: true, name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const parentCache = new Map<string, string>();
+  let positionsCreated = 0;
+  let parentLocationsCreated = 0;
+  let legacyDeleted = 0;
+  let skippedWithChildren = 0;
+
+  const resolveParentId = async (
+    contractId: string,
+    noZona: string | null,
+    zoneId: string | null,
+  ): Promise<string> => {
+    const groupKey = nafSyncGroupKey(noZona);
+    const cacheKey = `${contractId}|${groupKey}`;
+    const cached = parentCache.get(cacheKey);
+    if (cached) return cached;
+
+    const existing = await prisma.contractLocation.findFirst({
+      where: { contractId, nafSyncGroupKey: groupKey },
+      select: { id: true },
+    });
+    if (existing) {
+      parentCache.set(cacheKey, existing.id);
+      return existing.id;
+    }
+
+    if (dryRun) {
+      const fakeId = `dry-${cacheKey}`;
+      parentCache.set(cacheKey, fakeId);
+      parentLocationsCreated++;
+      return fakeId;
+    }
+
+    const maxSort = await prisma.contractLocation.aggregate({
+      where: { contractId },
+      _max: { sortOrder: true },
+    });
+
+    const created = await prisma.contractLocation.create({
+      data: {
+        contractId,
+        nafSyncGroupKey: groupKey,
+        name: nafGroupLocationName(noZona),
+        zoneId,
+        sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
+      },
+      select: { id: true },
+    });
+    parentLocationsCreated++;
+    parentCache.set(cacheKey, created.id);
+    return created.id;
+  };
+
+  for (const loc of legacy) {
+    if (loc.positions.length > 0) {
+      skippedWithChildren++;
+      continue;
+    }
+
+    const noZona = loc.zone?.nafZonaCode ?? null;
+    const parentId = await resolveParentId(loc.contractId, noZona, loc.zoneId);
+
+    if (!dryRun) {
+      await prisma.position.create({
+        data: {
+          locationId: parentId,
+          nafUbicacionCode: loc.nafUbicacionCode!,
+          name: loc.name,
+          description: loc.description,
+        },
+      });
+      await prisma.contractLocation.delete({ where: { id: loc.id } });
+    }
+
+    positionsCreated++;
+    legacyDeleted++;
+  }
+
+  return {
+    legacyLocations: legacy.length,
+    positionsCreated,
+    parentLocationsCreated,
+    legacyDeleted,
+    skippedWithChildren,
+  };
+}
+
 export type SyncContractLocationsResult = {
   dryRun: boolean;
+  migration: MigrateLegacyNafLocationsResult;
   zonesSync: { created: number; updated: number; linked: number };
   oracleRows: number;
   contractsMatched: number;
   contractsUnmatched: number;
+  parentLocationsCreated: number;
+  positionsCreated: number;
+  positionsUpdated: number;
+  positionsSkipped: number;
+  /** @deprecated usar positionsCreated */
   locationsCreated: number;
+  /** @deprecated usar positionsUpdated */
   locationsUpdated: number;
+  /** @deprecated usar positionsSkipped */
   locationsSkipped: number;
   zonesAssigned: number;
   unmatchedContracts: string[];
@@ -123,23 +247,36 @@ export async function syncContractLocationsFromNaf(options?: {
 }): Promise<SyncContractLocationsResult> {
   const dryRun = options?.dryRun ?? false;
 
+  const migration = dryRun
+    ? await migrateLegacyNafLocationsToPositions({ dryRun: true })
+    : await migrateLegacyNafLocationsToPositions();
+
   const zonesSync = dryRun ? { created: 0, updated: 0, linked: 0 } : await syncNafOperacionesZones();
 
   const oracleRows = await withNafOracleConnection(async (conn) => {
-    const result = await conn.execute<OracleRow>(NAF_CONTRACT_LOCATIONS_QUERY);
-    return (result.rows ?? []).map(mapOracleRow).filter((r): r is NafContractLocationRow => r != null);
+    const result = await conn.execute<OracleRow>(NAF_CONTRACT_POSITIONS_QUERY);
+    return (result.rows ?? []).map(mapOracleRow).filter((r): r is NafContractPositionRow => r != null);
   });
 
-  const [contracts, existingLocations, zoneIdByNafCode] = await Promise.all([
+  const [contracts, existingPositions, zoneIdByNafCode, existingGroupLocations] = await Promise.all([
     prisma.contract.findMany({
       where: { deletedAt: null, status: "ACTIVE" },
       select: { id: true, licitacionNo: true },
     }),
-    prisma.contractLocation.findMany({
+    prisma.position.findMany({
       where: { nafUbicacionCode: { not: null } },
-      select: { id: true, contractId: true, nafUbicacionCode: true, name: true, zoneId: true },
+      select: {
+        id: true,
+        nafUbicacionCode: true,
+        name: true,
+        location: { select: { contractId: true } },
+      },
     }),
     dryRun ? buildZoneIdByNafCodeFallback() : loadZoneIdByNafCode(),
+    prisma.contractLocation.findMany({
+      where: { nafSyncGroupKey: { not: null } },
+      select: { id: true, contractId: true, nafSyncGroupKey: true, zoneId: true },
+    }),
   ]);
 
   const contractByLicitacion = new Map<string, { id: string; licitacionNo: string }>();
@@ -148,30 +285,84 @@ export async function syncContractLocationsFromNaf(options?: {
     if (key) contractByLicitacion.set(key.toUpperCase(), c);
   }
 
-  const existingByKey = new Map<string, (typeof existingLocations)[number]>();
-  for (const loc of existingLocations) {
-    if (!loc.nafUbicacionCode) continue;
-    existingByKey.set(`${loc.contractId}|${loc.nafUbicacionCode}`, loc);
+  const positionByContractNaf = new Map<string, (typeof existingPositions)[number]>();
+  for (const pos of existingPositions) {
+    if (!pos.nafUbicacionCode) continue;
+    positionByContractNaf.set(`${pos.location.contractId}|${pos.nafUbicacionCode}`, pos);
+  }
+
+  const groupLocationByKey = new Map<string, (typeof existingGroupLocations)[number]>();
+  for (const loc of existingGroupLocations) {
+    if (!loc.nafSyncGroupKey) continue;
+    groupLocationByKey.set(`${loc.contractId}|${loc.nafSyncGroupKey}`, loc);
+  }
+
+  const parentCache = new Map<string, string>();
+  for (const [key, loc] of groupLocationByKey) {
+    parentCache.set(key, loc.id);
   }
 
   const unmatchedSet = new Set<string>();
   const matchedContracts = new Set<string>();
 
-  let locationsCreated = 0;
-  let locationsUpdated = 0;
-  let locationsSkipped = 0;
+  let parentLocationsCreated = 0;
+  let positionsCreated = 0;
+  let positionsUpdated = 0;
+  let positionsSkipped = 0;
   let zonesAssigned = 0;
   const sampleCreates: SyncContractLocationsResult["sampleCreates"] = [];
-  const creates: Array<{
-    contractId: string;
-    nafUbicacionCode: string;
-    name: string;
-    zoneId: string | null;
-    sortOrder: number;
-  }> = [];
-  const updates: Array<{ id: string; name: string; zoneId: string | null }> = [];
 
-  const sortCounters = new Map<string, number>();
+  const resolveParentLocation = async (
+    contractId: string,
+    noZona: string | null,
+    zoneId: string | null,
+  ): Promise<string> => {
+    const groupKey = nafSyncGroupKey(noZona);
+    const cacheKey = `${contractId}|${groupKey}`;
+    const cached = parentCache.get(cacheKey);
+    if (cached) return cached;
+
+    const existing = groupLocationByKey.get(cacheKey);
+    if (existing) {
+      if (!dryRun && zoneId != null && existing.zoneId !== zoneId) {
+        await prisma.contractLocation.update({
+          where: { id: existing.id },
+          data: { zoneId },
+        });
+        zonesAssigned++;
+      }
+      parentCache.set(cacheKey, existing.id);
+      return existing.id;
+    }
+
+    if (dryRun) {
+      const fakeId = `dry-${cacheKey}`;
+      parentCache.set(cacheKey, fakeId);
+      parentLocationsCreated++;
+      return fakeId;
+    }
+
+    const maxSort = await prisma.contractLocation.aggregate({
+      where: { contractId },
+      _max: { sortOrder: true },
+    });
+
+    const created = await prisma.contractLocation.create({
+      data: {
+        contractId,
+        nafSyncGroupKey: groupKey,
+        name: nafGroupLocationName(noZona),
+        zoneId,
+        sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
+      },
+      select: { id: true },
+    });
+    parentLocationsCreated++;
+    if (zoneId) zonesAssigned++;
+    parentCache.set(cacheKey, created.id);
+    groupLocationByKey.set(cacheKey, { id: created.id, contractId, nafSyncGroupKey: groupKey, zoneId });
+    return created.id;
+  };
 
   for (const row of oracleRows) {
     const contract = contractByLicitacion.get(row.noContrato.toUpperCase());
@@ -185,34 +376,37 @@ export async function syncContractLocationsFromNaf(options?: {
     const zoneId = row.noZona ? zoneIdByNafCode.get(row.noZona) ?? null : null;
     const zonaLabel = row.noZona ? nafOperacionesZoneName(row.noZona) : null;
 
-    const key = `${contract.id}|${row.noUbicacion}`;
-    const existing = existingByKey.get(key);
+    const posKey = `${contract.id}|${row.noUbicacion}`;
+    const existing = positionByContractNaf.get(posKey);
 
     if (existing) {
       const needsName = existing.name !== name;
-      const needsZone = zoneId != null && existing.zoneId !== zoneId;
-      if (!needsName && !needsZone) {
-        locationsSkipped++;
+      if (!needsName) {
+        positionsSkipped++;
         continue;
       }
-      updates.push({ id: existing.id, name, zoneId: needsZone ? zoneId : existing.zoneId });
-      locationsUpdated++;
-      if (needsZone && zoneId) zonesAssigned++;
+      if (!dryRun) {
+        await prisma.position.update({
+          where: { id: existing.id },
+          data: { name },
+        });
+      }
+      positionsUpdated++;
       continue;
     }
 
-    const sortOrder = sortCounters.get(contract.id) ?? 0;
-    sortCounters.set(contract.id, sortOrder + 1);
+    const locationId = await resolveParentLocation(contract.id, row.noZona, zoneId);
 
-    creates.push({
-      contractId: contract.id,
-      nafUbicacionCode: row.noUbicacion,
-      name,
-      zoneId,
-      sortOrder,
-    });
-    locationsCreated++;
-    if (zoneId) zonesAssigned++;
+    if (!dryRun) {
+      await prisma.position.create({
+        data: {
+          locationId,
+          nafUbicacionCode: row.noUbicacion,
+          name,
+        },
+      });
+    }
+    positionsCreated++;
 
     if (sampleCreates.length < 8) {
       sampleCreates.push({
@@ -224,47 +418,20 @@ export async function syncContractLocationsFromNaf(options?: {
     }
   }
 
-  if (!dryRun) {
-    const batchSize = 100;
-    for (let i = 0; i < creates.length; i += batchSize) {
-      const batch = creates.slice(i, i + batchSize);
-      await prisma.$transaction(
-        batch.map((data) =>
-          prisma.contractLocation.create({
-            data: {
-              contractId: data.contractId,
-              nafUbicacionCode: data.nafUbicacionCode,
-              name: data.name,
-              zoneId: data.zoneId,
-              sortOrder: data.sortOrder,
-            },
-          }),
-        ),
-      );
-    }
-
-    for (let i = 0; i < updates.length; i += batchSize) {
-      const batch = updates.slice(i, i + batchSize);
-      await prisma.$transaction(
-        batch.map((data) =>
-          prisma.contractLocation.update({
-            where: { id: data.id },
-            data: { name: data.name, zoneId: data.zoneId },
-          }),
-        ),
-      );
-    }
-  }
-
   return {
     dryRun,
+    migration,
     zonesSync,
     oracleRows: oracleRows.length,
     contractsMatched: matchedContracts.size,
     contractsUnmatched: unmatchedSet.size,
-    locationsCreated,
-    locationsUpdated,
-    locationsSkipped,
+    parentLocationsCreated,
+    positionsCreated,
+    positionsUpdated,
+    positionsSkipped,
+    locationsCreated: positionsCreated,
+    locationsUpdated: positionsUpdated,
+    locationsSkipped: positionsSkipped,
     zonesAssigned,
     unmatchedContracts: Array.from(unmatchedSet).sort().slice(0, 30),
     sampleCreates,

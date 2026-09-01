@@ -92,8 +92,10 @@ export function LocationsTab({ readOnly }: { readOnly?: boolean }) {
       const r = await fetch(`/api/admin/catalogs/locations/sync-naf${qs}`, { method: "POST" });
       const json = (await r.json()) as {
         data?: {
-          locationsCreated: number;
-          locationsUpdated: number;
+          parentLocationsCreated: number;
+          positionsCreated: number;
+          positionsUpdated: number;
+          migration?: { legacyLocations: number; positionsCreated: number; legacyDeleted: number };
           contractsMatched: number;
           contractsUnmatched: number;
           dryRun: boolean;
@@ -107,8 +109,11 @@ export function LocationsTab({ readOnly }: { readOnly?: boolean }) {
       qc.invalidateQueries({ queryKey: ["admin-locations"] });
       qc.invalidateQueries({ queryKey: ["admin-zones"] });
       const mode = data.dryRun ? "Simulación" : "Sync";
+      const migrated = data.migration?.legacyDeleted ?? 0;
       toast.success(
-        `${mode}: ${data.locationsCreated} nuevas, ${data.locationsUpdated} actualizadas · ${data.contractsMatched} contratos`,
+        `${mode}: ${data.positionsCreated} puestos nuevos, ${data.positionsUpdated} actualizados` +
+          (migrated ? ` · ${migrated} migrados` : "") +
+          ` · ${data.parentLocationsCreated} ubicaciones (grupos) · ${data.contractsMatched} contratos`,
       );
     },
     onError: (e: Error) => toast.error(e.message || "Error al sincronizar"),

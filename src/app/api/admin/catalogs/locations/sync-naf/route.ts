@@ -5,7 +5,7 @@ import { syncContractLocationsFromNaf } from "@/modules/presupuestos/services/sy
 
 /**
  * Sincroniza ubicaciones de contratos desde Oracle Operaciones (.6).
- * Fuente: AROPMR (roles activos) + ARCOUB (descripción y NO_ZONA_OPERACIONES).
+ * Fuente: AROPMR (roles activos) → Position; ARCOUB (descripción, NO_ZONA_OPERACIONES) → ubicación padre por zona.
  */
 export async function POST(req: NextRequest) {
   const session = await getSession();
