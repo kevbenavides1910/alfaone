@@ -121,20 +121,27 @@ export class ZkProtocolClient {
           const cmd = buf.readUInt16LE(0);
           if (cmd === CMD_PREPARE_DATA) {
             const dataSize = buf.readUInt32LE(8);
-            if (buf.length >= 16 + dataSize) cleanup(resolve, buf);
+            if (buf.length >= 16 + dataSize) finish(buf);
             return;
           }
           if (cmd === CMD_DATA || cmd === CMD_ACK_OK || cmd >= 2000) {
-            cleanup(resolve, buf);
+            finish(buf);
           }
         }
       };
-      const onError = (err: Error) => cleanup(reject, err);
-      const cleanup = (fn: (v: Buffer | Error) => void, value: Buffer | Error) => {
+      const onError = (err: Error) => fail(err);
+      const cleanup = () => {
         clearTimeout(timer);
         this.socket?.off("data", onData);
         this.socket?.off("error", onError);
-        fn(value);
+      };
+      const finish = (buf: Buffer) => {
+        cleanup();
+        resolve(buf);
+      };
+      const fail = (err: Error) => {
+        cleanup();
+        reject(err);
       };
       this.socket!.on("data", onData);
       this.socket!.on("error", onError);
