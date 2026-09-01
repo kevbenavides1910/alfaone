@@ -84,6 +84,13 @@ export type RevisionPlanillaTotales = {
   otro: number;
   sumaFormasPago: number;
   diferencia: number;
+  /** Empleados con neto > 0 por canal de pago (misma lógica que la pantalla Revisión de planilla). */
+  empleadosPorCanal: {
+    CK: number;
+    DAV: number;
+    BN: number;
+    OTRO: number;
+  };
 };
 
 export type RevisionPlanillaResult = {
@@ -233,6 +240,7 @@ function emptyTotales(): RevisionPlanillaTotales {
     otro: 0,
     sumaFormasPago: 0,
     diferencia: 0,
+    empleadosPorCanal: { CK: 0, DAV: 0, BN: 0, OTRO: 0 },
   };
 }
 
@@ -436,6 +444,12 @@ export async function getRevisionPlanillaByDateRange(
   };
 
   const agg = new Map<string, Agg>();
+  const empleadosPorCanalSets: Record<FormaPagoCanal, Set<string>> = {
+    CK: new Set(),
+    DAV: new Set(),
+    BN: new Set(),
+    OTRO: new Set(),
+  };
 
   for (const summary of filteredSummaries) {
     const sourceKey = nafEmployeeSourceKey(summary.noCia, summary.noEmple);
@@ -496,6 +510,7 @@ export async function getRevisionPlanillaByDateRange(
     current.deducciones += deducciones;
     current.liquido += liquido;
     addCanal(current, canal, liquido);
+    if (liquido > 0) empleadosPorCanalSets[canal].add(sourceKey);
   }
 
   const desdeKey = calendarDateKey(parseDateInput(fDesde)) ?? fDesde;
@@ -606,8 +621,17 @@ export async function getRevisionPlanillaByDateRange(
       otro: roundMoney(acc.otro + row.otro),
       sumaFormasPago: roundMoney(acc.sumaFormasPago + row.sumaFormasPago),
       diferencia: roundMoney(acc.diferencia + row.diferencia),
+      empleadosPorCanal: acc.empleadosPorCanal,
     }),
-    emptyTotales(),
+    {
+      ...emptyTotales(),
+      empleadosPorCanal: {
+        CK: empleadosPorCanalSets.CK.size,
+        DAV: empleadosPorCanalSets.DAV.size,
+        BN: empleadosPorCanalSets.BN.size,
+        OTRO: empleadosPorCanalSets.OTRO.size,
+      },
+    },
   );
 
   return {

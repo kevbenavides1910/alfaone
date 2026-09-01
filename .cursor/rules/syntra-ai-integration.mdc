@@ -1,0 +1,36 @@
+---
+description: Todo módulo nuevo o pantalla con datos consultables debe exponer herramientas Syntra IA
+alwaysApply: true
+---
+
+# Integración obligatoria con Syntra IA
+
+Cuando agregues o modifiques un **módulo, pantalla o API de consulta** en Alfa One, incluye integración con el agente Syntra IA.
+
+## Checklist por feature
+
+1. **Capa de servicio reutilizable** — La lógica de listado/agregación vive en `src/modules/<modulo>/services/`, no solo inline en la ruta API. Las rutas y las tools llaman al mismo servicio.
+
+2. **Herramienta del agente** — Registrar en `src/modules/syntra-ai/tools/<modulo>.tools.ts`:
+   - `permission`: clave de `PERMISSION_REGISTRY` con nivel `view` mínimo.
+   - `definition`: nombre snake_case, descripción clara para el LLM, parámetros JSON Schema.
+   - `handler`: llama al servicio, devuelve resumen + lista acotada (`MAX_LIST`), campo `fuente`.
+   - `describeCall`: texto de progreso en español para el chat.
+
+3. **Registro central** — Añadir el export en `src/modules/syntra-ai/services/syntra-tool-registry.ts` (`ALL_TOOL_REGISTRARS`).
+
+4. **Contexto de pantalla** — Si hay ruta UI nueva, añadir entrada en `src/modules/syntra-ai/business/page-context.ts` con `toolHint`.
+
+5. **Permisos** — Si el módulo es nuevo, registrar pantalla en `src/lib/permissions/registry.ts` antes de referenciarla en la tool.
+
+## Convenciones
+
+- Nombres de tools: `search_*`, `list_*`, `query_*` según el caso.
+- Gate doble: ocultar tool si no hay permiso + validar en handler.
+- Respuestas: `{ error: "..." }` para fallos; nunca datos inventados.
+- Tenant: pasar `session` a servicios que usen `dbForSession` / `resolveTenantCompany`.
+- No duplicar Prisma/Oracle en el handler; reutilizar servicios existentes.
+
+## Referencia
+
+Ver tools existentes en `src/modules/syntra-ai/tools/empleados-naf.tools.ts` y `presupuestos.tools.ts`.
