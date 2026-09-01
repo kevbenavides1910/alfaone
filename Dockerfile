@@ -7,12 +7,12 @@ RUN apk add --no-cache libc6-compat openssl
 FROM base AS deps
 COPY package.json package-lock.json* ./
 # Redes lentas o inestables (p. ej. VPS): más reintentos antes de fallar el build.
-# Cache mount de npm evita redescargar el registry cuando el lockfile cambia poco.
+# Cache mount de npm (registry) evita redescargar tarballs cuando el lockfile cambia poco.
 RUN --mount=type=cache,target=/root/.npm \
     npm config set fetch-retries 15 \
     && npm config set fetch-retry-mintimeout 20000 \
     && npm config set fetch-retry-maxtimeout 300000 \
-    && npm ci
+    && npm ci --prefer-offline
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
@@ -43,7 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN groupadd --system --gid 1001 nodejs && useradd --system --uid 1001 --gid nodejs nextjs
 
 # Capas estables ANTES del COPY del standalone (no se invalidan en cada rebuild de Next).
-RUN npm install -g prisma@5.22.0
+# NO instalar prisma global (253MB). El cliente y motores ya se copian de builder
+# (node_modules/@prisma y node_modules/.prisma); el CMD usa npx con esos binarios locales.
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -52,6 +53,9 @@ COPY --from=builder /app/prisma ./prisma
 # Prisma no siempre queda trazado en standalone; aseguramos cliente y motores
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+# CLI prisma (para migrate deploy): copiamos el paquete local (42MB) en vez de
+# instalarlo global (~253MB). El binario está en node_modules/prisma/build/index.js.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
 # Para prisma/reset-admin-password.js (no siempre incluido en el trace de standalone)
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/bcryptjs ./node_modules/bcryptjs
 # Firma XAdES (aceptar facturas FE): createRequire desde server.js, no quedan en el trace de standalone
@@ -87,4 +91,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_19_23
-CMD ["sh", "-c", "prisma migrate deploy && exec node server.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && exec node server.js"]
