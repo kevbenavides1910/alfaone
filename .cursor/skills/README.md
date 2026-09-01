@@ -12,6 +12,6 @@ Skills en `.cursor/skills/` — Cursor los carga cuando el contexto coincide con
 | [produccion-bd](./produccion-bd/) | Migraciones, SQL, proteger PostgreSQL |
 | [diagnostico-prod](./diagnostico-prod/) | Incidencias en producción |
 
-**Memoria** (hechos cortos): `.cursor/memory/MEMORY.md`  
+**Memoria** (hechos cortos): `/mnt/data/projects/alfa-one/.cursor/memory/MEMORY.md`  
 **Aprender flujo nuevo**: `/learn` o skill `learn`  
 **Recordar hecho**: `/remember` o skill `remember`

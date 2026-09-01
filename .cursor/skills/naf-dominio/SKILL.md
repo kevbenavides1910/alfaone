@@ -35,4 +35,4 @@ Oracle NAF (NAF5) es **fuente de verdad** para planilla y muchos catálogos oper
 
 En `/empleados-naf/revision-planilla` el agente debe usar tools de revisión de planilla antes de decir que no puede desglosar por forma de pago.
 
-Más hechos: `.cursor/memory/MEMORY.md` (secciones Nómina, Contratos, Pagos).
+Más hechos: memoria del equipo en `/mnt/data/projects/alfa-one/.cursor/memory/MEMORY.md` (monorepo) o `~/.cursor/memory/MEMORY.md`.
