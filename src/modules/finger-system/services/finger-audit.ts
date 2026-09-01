@@ -1,4 +1,5 @@
 import { prisma } from "@/modules/core/db/prisma";
+import type { Prisma } from "@prisma/client";
 
 export type FingerAuditInput = {
   userId?: string | null;
@@ -21,7 +22,7 @@ export async function logFingerOperation(input: FingerAuditInput) {
       result: input.result ?? "success",
       message: input.message ?? null,
       ipAddress: input.ipAddress ?? null,
-      metadata: input.metadata ?? undefined,
+      metadata: input.metadata != null ? (input.metadata as Prisma.InputJsonValue) : undefined,
     },
   });
 }
