@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "@/lib/auth/client-session";
@@ -12,7 +12,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 interface TopbarProps {
-  title?: string;
+  title?: ReactNode;
   /** @deprecated */
   showCollapseToggle?: boolean;
   /** @deprecated */
