@@ -74,6 +74,9 @@ WHERE ANO_PROCE = :ano
  * COD_PLA se empareja en forma exacta con ARPLCP.CODPLA (TRIM), igual que Codisa.
  * No usar LPAD sobre PPI/PPD: filas basura con COD_PLA='4' se mezclaban con '04'
  * e inflaban embargos / deducciones vs el reporte para firmar.
+ *
+ * ESTATUS='A' en ARPLPPD: RPL3071 ignora deducciones anuladas (ESTATUS='X'),
+ * p.ej. daños/multas suspendidos que inflaban el total vs el reporte para firmar.
  */
 const NAF_NOMINA_OPEN_SUMMARY_QUERY = `
 SELECT
@@ -103,7 +106,13 @@ LEFT JOIN (
     d.NO_CIA,
     LPAD(TRIM(c.CODPLA), 2, '0') AS COD_PLA,
     d.NO_EMPLE,
-    SUM(CASE WHEN NVL(d.SOLO_CIA, 'N') = 'N' THEN NVL(d.MONTO, 0) ELSE 0 END) AS DEDUC
+    SUM(
+      CASE
+        WHEN NVL(d.SOLO_CIA, 'N') = 'N' AND NVL(d.ESTATUS, 'A') = 'A'
+        THEN NVL(d.MONTO, 0)
+        ELSE 0
+      END
+    ) AS DEDUC
   FROM NAF5.ARPLPPD d
   INNER JOIN NAF5.ARPLCP c
     ON c.NO_CIA = d.NO_CIA

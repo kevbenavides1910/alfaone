@@ -3,6 +3,8 @@ import { prisma } from "@/modules/core/db/prisma";
 import {
   listApexCalendarioPagos,
   listApexCalendarioPagosBase,
+  type ApexCalendarioPagoBaseRow,
+  type ApexCalendarioPagoRow,
 } from "./apex-calendario";
 
 /**
@@ -19,9 +21,14 @@ import {
  *
  * Unicidad:
  *   - EXPENSE: un Payment por expenseId (los gastos aprobados son "a pagar").
- *   - APEX:    un Payment por apexPagoId.
+ *   - APEX:    un Payment por (apexPagoBaseId, fechaPago).
  *   - MANUAL:  siempre crea uno nuevo.
  */
+
+type ApexPrefetch = {
+  base: ApexCalendarioPagoBaseRow[];
+  pagos: ApexCalendarioPagoRow[];
+};
 
 export type PagoFuente = "EXPENSE" | "APEX" | "MANUAL";
 
@@ -118,7 +125,11 @@ export async function syncAndListPayments(
   const to = endOfMonth(month);
 
   await syncExpensesForMonth(from, to);
-  await syncApexForMonth(from, to);
+  try {
+    await syncApexForMonth(from, to);
+  } catch (error) {
+    console.warn("[pagos] sync APEX falló; se listan pagos locales del mes:", error);
+  }
 
   const payments = await prisma.payment.findMany({
     where: {
@@ -130,8 +141,84 @@ export async function syncAndListPayments(
   return payments.map(serializeSinglePayment);
 }
 
+export type SyncPaymentsYearResult = {
+  year: number;
+  fromMonth: string;
+  toMonth: string;
+  monthsSynced: string[];
+  expensesCreated: number;
+  apexCreated: number;
+};
+
+/**
+ * Trae (materializa) gastos aprobados + pagos fijos APEX para un rango de meses
+ * del año. Por defecto: enero → mes anterior al actual (meses ya cerrados).
+ */
+export async function syncPaymentsForYear(options?: {
+  year?: number;
+  /** Inclusive, 1–12. Default 1. */
+  fromMonth?: number;
+  /** Inclusive, 1–12. Default: mes calendario anterior (o 12 si year < actual). */
+  toMonth?: number;
+}): Promise<SyncPaymentsYearResult> {
+  const now = new Date();
+  const year = options?.year ?? now.getFullYear();
+  const fromMonth = Math.min(12, Math.max(1, options?.fromMonth ?? 1));
+  let toMonth = options?.toMonth;
+  if (toMonth == null) {
+    if (year < now.getFullYear()) toMonth = 12;
+    else if (year > now.getFullYear()) toMonth = 0;
+    else toMonth = Math.max(0, now.getMonth()); // getMonth() = mes actual 0-based → anterior
+  }
+  toMonth = Math.min(12, Math.max(0, toMonth));
+  if (toMonth < fromMonth) {
+    return {
+      year,
+      fromMonth: `${year}-${String(fromMonth).padStart(2, "0")}`,
+      toMonth: `${year}-${String(fromMonth).padStart(2, "0")}`,
+      monthsSynced: [],
+      expensesCreated: 0,
+      apexCreated: 0,
+    };
+  }
+
+  let apex: ApexPrefetch | undefined;
+  try {
+    apex = {
+      base: await listApexCalendarioPagosBase(),
+      pagos: await listApexCalendarioPagos(),
+    };
+  } catch (error) {
+    console.warn("[pagos] no se pudo leer calendario APEX para sync anual:", error);
+  }
+
+  const monthsSynced: string[] = [];
+  let expensesCreated = 0;
+  let apexCreated = 0;
+
+  for (let m = fromMonth; m <= toMonth; m++) {
+    const month = `${year}-${String(m).padStart(2, "0")}`;
+    const from = startOfMonth(month);
+    const to = endOfMonth(month);
+    expensesCreated += await syncExpensesForMonth(from, to);
+    if (apex) {
+      apexCreated += await syncApexForMonth(from, to, apex);
+    }
+    monthsSynced.push(month);
+  }
+
+  return {
+    year,
+    fromMonth: `${year}-${String(fromMonth).padStart(2, "0")}`,
+    toMonth: `${year}-${String(toMonth).padStart(2, "0")}`,
+    monthsSynced,
+    expensesCreated,
+    apexCreated,
+  };
+}
+
 /** Materializa los gastos APROBADOS del mes como Payments (EXPENSE). */
-async function syncExpensesForMonth(from: Date, to: Date) {
+async function syncExpensesForMonth(from: Date, to: Date): Promise<number> {
   const approved = await prisma.expense.findMany({
     where: {
       approvalStatus: "APPROVED",
@@ -151,6 +238,7 @@ async function syncExpensesForMonth(from: Date, to: Date) {
     },
   });
 
+  let created = 0;
   for (const exp of approved) {
     const paymentDate = resolveExpensePaymentDate(exp);
     const exists = await prisma.payment.findFirst({
@@ -185,7 +273,9 @@ async function syncExpensesForMonth(from: Date, to: Date) {
         ...payload,
       },
     });
+    created += 1;
   }
+  return created;
 }
 
 function resolveExpensePaymentDate(exp: {
@@ -199,11 +289,16 @@ function resolveExpensePaymentDate(exp: {
 }
 
 /** Materializa los gastos fijos APEX del mes como Payments (APEX). */
-async function syncApexForMonth(from: Date, to: Date) {
-  const base = await listApexCalendarioPagosBase();
-  const pagos = await listApexCalendarioPagos();
+async function syncApexForMonth(
+  from: Date,
+  to: Date,
+  prefetch?: ApexPrefetch,
+): Promise<number> {
+  const base = prefetch?.base ?? (await listApexCalendarioPagosBase());
+  const pagos = prefetch?.pagos ?? (await listApexCalendarioPagos());
 
   const inMonth = pagos.filter((p) => {
+    if (!p.fechaPago) return false;
     const d = new Date(p.fechaPago + "T00:00:00Z");
     return d >= from && d < to;
   });
@@ -215,21 +310,29 @@ async function syncApexForMonth(from: Date, to: Date) {
   // pagoBaseId + misma fecha) con distinto pagoId. Agrupamos y creamos UN solo
   // Payment por (apexPagoBaseId, fechaPago) para evitar copias duplicadas.
   const seen = new Set<string>();
+  let created = 0;
   for (const p of inMonth) {
     const key = `${p.pagoBaseId ?? 0}|${p.fechaPago}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
+    const paymentDate = new Date(p.fechaPago + "T00:00:00Z");
     const exists = await prisma.payment.findFirst({
       where: {
         source: "APEX",
-        apexPagoBaseId: p.pagoBaseId ?? null,
-        paymentDate: new Date(p.fechaPago + "T00:00:00Z"),
+        OR: [
+          { apexPagoId: p.pagoId },
+          {
+            apexPagoBaseId: p.pagoBaseId ?? null,
+            paymentDate,
+          },
+        ],
       },
       select: { id: true },
     });
     if (exists) continue;
     const b = p.pagoBaseId != null ? baseMap.get(p.pagoBaseId) : undefined;
+    const atendido = (p.atendido ?? "N").trim().toUpperCase() === "S";
     await prisma.payment.create({
       data: {
         source: "APEX",
@@ -237,12 +340,16 @@ async function syncApexForMonth(from: Date, to: Date) {
         apexPagoBaseId: p.pagoBaseId,
         description: b?.descripcion ?? `Pago fijo #${p.pagoBaseId}`,
         amount: b?.monto ?? p.montoPagado,
-        paymentDate: new Date(p.fechaPago + "T00:00:00Z"),
+        paymentDate,
         company: b?.ciaPaga,
         refType: b?.tipo,
+        paid: atendido,
+        paidAt: atendido ? paymentDate : null,
       },
     });
+    created += 1;
   }
+  return created;
 }
 
 /** Devuelve el calendario del mes como días { fecha, pagos, totales }. */

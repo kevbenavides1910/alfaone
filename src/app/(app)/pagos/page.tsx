@@ -7,5 +7,8 @@ export default async function PagosPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
-  return <PagosPageClient initialCompany={session.user.company ?? null} />;
+  // El calendario agrupa pagos de todo el grupo (APEX/gastos/manuales).
+  // No filtrar por compañía de sesión: si no, desaparecen pagos ya marcados
+  // de otras compañías (p.ej. 06, AA, BENA).
+  return <PagosPageClient />;
 }

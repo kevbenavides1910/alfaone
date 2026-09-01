@@ -167,17 +167,21 @@ export function PagosPageClient({ initialCompany }: Props) {
     [session],
   );
 
-  const { data: calendar = [], isFetching } = useQuery({
+  const { data: calendar = [], isFetching, isError: calendarError, error: calendarErr, refetch } = useQuery({
     queryKey: ["pagos", month, company],
     queryFn: async () => {
       const params = new URLSearchParams({ month });
       if (company && company !== "all") params.set("company", company);
       const res = await fetch(`/api/pagos?${params.toString()}`);
-      if (!res.ok) throw new Error("Error al cargar pagos");
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.message || "Error al cargar pagos");
+      }
       const json = await res.json();
       return json.data as CalendarDay[];
     },
     enabled: activeTab !== "bitacora",
+    retry: 1,
   });
 
   const { data: bitacoraGlobal = [], isFetching: bitacoraFetching } = useQuery({
@@ -245,6 +249,30 @@ export function PagosPageClient({ initialCompany }: Props) {
     onError: () => toast.error("No se pudo eliminar el pago"),
   });
 
+  const syncYearMutation = useMutation({
+    mutationFn: async () => {
+      const year = Number.parseInt(month.slice(0, 4), 10);
+      const res = await fetch(`/api/pagos/sync?year=${year}`, { method: "POST" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.message || "Error al sincronizar meses anteriores");
+      }
+      return res.json();
+    },
+    onSuccess: (json) => {
+      queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      const d = json?.data ?? json;
+      const months = Array.isArray(d?.monthsSynced) ? d.monthsSynced.length : 0;
+      const apex = Number(d?.apexCreated ?? 0);
+      const exp = Number(d?.expensesCreated ?? 0);
+      toast.success(
+        `Meses sincronizados: ${months}. Nuevos APEX: ${apex}, gastos: ${exp}.`,
+      );
+    },
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : "Error al sincronizar meses anteriores"),
+  });
+
   const shiftMonth = useCallback((dir: number) => {
     const [y, m] = month.split("-").map(Number);
     const d = new Date(y, m - 1 + dir, 1);
@@ -303,9 +331,19 @@ export function PagosPageClient({ initialCompany }: Props) {
           </p>
         </div>
         {canEdit && (
-          <Button onClick={() => setShowNew(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Agregar pago manual
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={syncYearMutation.isPending}
+              onClick={() => syncYearMutation.mutate()}
+              title="Trae de Oracle/gastos los meses anteriores del año del mes seleccionado"
+            >
+              {syncYearMutation.isPending ? "Sincronizando…" : "Traer meses anteriores"}
+            </Button>
+            <Button onClick={() => setShowNew(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Agregar pago manual
+            </Button>
+          </div>
         )}
       </div>
 
@@ -341,6 +379,14 @@ export function PagosPageClient({ initialCompany }: Props) {
           <option value="05">05</option>
           <option value="06">06</option>
           <option value="30">30</option>
+          <option value="AA">AA</option>
+          <option value="BENA">BENA</option>
+          <option value="GRUPO">GRUPO</option>
+          <option value="TANGO">TANGO</option>
+          <option value="MONITOREO">MONITOREO</option>
+          <option value="CONSORCIO">CONSORCIO</option>
+          <option value="JOBEN">JOBEN</option>
+          <option value="ACE">ACE</option>
         </select>
         <div className="ml-auto flex items-center gap-4 text-sm">
           {activeTab !== "bitacora" ? (
@@ -358,6 +404,18 @@ export function PagosPageClient({ initialCompany }: Props) {
           )}
         </div>
       </div>
+
+      {calendarError && activeTab !== "bitacora" && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive flex flex-wrap items-center gap-3">
+          <span>
+            No se pudieron cargar los pagos
+            {calendarErr instanceof Error ? `: ${calendarErr.message}` : "."}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            Reintentar
+          </Button>
+        </div>
+      )}
 
       {/* Vistas */}
       <Card className="flex-1 min-h-0 overflow-auto">
