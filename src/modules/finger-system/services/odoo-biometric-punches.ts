@@ -2,6 +2,7 @@ import {
   getOdooBiometricClient,
   isOdooBiometricConfigured,
 } from "@/modules/finger-system/integrations/odoo-biometric/odoo-pg";
+import { odooWallTimeToClient } from "@/modules/finger-system/integrations/odoo-biometric/odoo-wall-time";
 import type { FingerPunchListInput, FingerPunchListRow } from "@/modules/finger-system/services/finger-punches-list";
 
 type OdooPunchRow = {
@@ -68,7 +69,7 @@ export async function listOdooBiometricPunches(input: FingerPunchListInput = {})
   const total = Number(rows[0]?.total ?? 0);
   const mapped: FingerPunchListRow[] = rows.map((r) => ({
     id: `odoo:${r.id}`,
-    checkTime: r.check_time instanceof Date ? r.check_time.toISOString() : String(r.check_time),
+    checkTime: odooWallTimeToClient(r.check_time) ?? String(r.check_time),
     attUserId: r.att_user_id,
     badgeNumber: r.badge,
     checkType: r.check_type,

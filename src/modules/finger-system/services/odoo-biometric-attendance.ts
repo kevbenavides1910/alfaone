@@ -2,6 +2,7 @@ import {
   getOdooBiometricClient,
   isOdooBiometricConfigured,
 } from "@/modules/finger-system/integrations/odoo-biometric/odoo-pg";
+import { odooWallTimeToClient } from "@/modules/finger-system/integrations/odoo-biometric/odoo-wall-time";
 import type { FingerAttendanceStatus } from "@prisma/client";
 import type { FingerAttendanceDayRow } from "@/modules/finger-system/services/finger-attendance-calc";
 import { prisma } from "@/modules/core/db/prisma";
@@ -89,17 +90,17 @@ export async function listOdooBiometricAttendanceDays(filters: {
         : null;
 
     return {
-      id: `odoo-att:${r.badge}:${r.work_date instanceof Date ? r.work_date.toISOString().slice(0, 10) : String(r.work_date).slice(0, 10)}:${idx}`,
+      id: `odoo-att:${r.badge}:${r.work_date instanceof Date ? odooWallTimeToClient(r.work_date)?.slice(0, 10) : String(r.work_date).slice(0, 10)}:${idx}`,
       workDate:
         r.work_date instanceof Date
-          ? r.work_date.toISOString().slice(0, 10)
+          ? (odooWallTimeToClient(r.work_date)?.slice(0, 10) ?? String(r.work_date).slice(0, 10))
           : String(r.work_date).slice(0, 10),
       employeeId: `badge:${r.badge}`,
       employeeName: r.person_name,
       employeeCodigo: r.badge ?? "",
       status,
-      firstIn: firstIn?.toISOString() ?? null,
-      lastOut: lastOut?.toISOString() ?? null,
+      firstIn: odooWallTimeToClient(firstIn),
+      lastOut: odooWallTimeToClient(lastOut),
       workedMinutes,
       lateMinutes: 0,
       earlyLeaveMinutes: 0,

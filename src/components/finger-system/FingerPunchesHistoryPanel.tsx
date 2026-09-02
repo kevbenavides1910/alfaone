@@ -54,7 +54,7 @@ export function FingerPunchesHistoryPanel() {
   const queryParams = useMemo(() => {
     const sp = new URLSearchParams();
     sp.set("page", String(page));
-    sp.set("pageSize", "50");
+    sp.set("pageSize", "100");
     if (q.trim()) sp.set("q", q.trim());
     if (from) sp.set("from", from);
     if (to) sp.set("to", to);

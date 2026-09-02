@@ -9,7 +9,7 @@ DEVICES = [
     ("10.1.1.81", "Piso 02"),
     ("10.2.2.10", "Alajuela"),
 ]
-cutoff = datetime.now() - timedelta(days=2)
+cutoff = datetime.now() - timedelta(days=7)
 conn = psycopg2.connect(DSN)
 conn.autocommit = False
 cur = conn.cursor()
