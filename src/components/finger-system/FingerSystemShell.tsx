@@ -40,9 +40,11 @@ const TABS: Tab[] = [
   { href: "/finger-system/biometria", label: "Biometría", permission: "fingerSystem.biometria" },
   { href: "/finger-system/dispositivos", label: "Dispositivos", permission: "fingerSystem.dispositivos" },
   {
-    href: "/finger-system/marcas-en-vivo",
-    label: "Marcas en vivo",
+    href: "/finger-system/marcas",
+    label: "Marcas",
     permission: "fingerSystem.marcasEnVivo",
+    isActive: (p) =>
+      p.startsWith("/finger-system/marcas") || p.startsWith("/finger-system/marcas-en-vivo"),
   },
   { href: "/finger-system/asistencia", label: "Asistencia", permission: "fingerSystem.asistencia" },
   { href: "/finger-system/turnos", label: "Turnos", permission: "fingerSystem.turnos" },

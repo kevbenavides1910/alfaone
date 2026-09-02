@@ -122,6 +122,47 @@ export function FingerDevicesPanel() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["finger-devices"] }),
   });
 
+  const deviceActionMutation = useMutation({
+    mutationFn: async (input: { id: string; action: "pull-users" | "pull-attendance" }) => {
+      setConnectingId(input.id);
+      const res = await fetch(`/api/finger-system/devices/${input.id}`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: input.action }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message ?? "Error en la acción");
+      return { action: input.action, data: json.data };
+    },
+    onSettled: () => setConnectingId(null),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["finger-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["finger-punches"] });
+    },
+  });
+
+  const pullAllAttendanceMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/finger-system/devices/pull-all-attendance", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message ?? "Error al traer marcas");
+      return json.data as {
+        insertedTotal: number;
+        results: Array<{ ok: boolean; inserted?: number; name: string; error?: string }>;
+      };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["finger-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["finger-punches"] });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/finger-system/devices/${id}`, {
@@ -175,6 +216,16 @@ export function FingerDevicesPanel() {
             >
               {probeAllMutation.isPending ? "Conectando…" : "Conectar todos"}
             </Button>
+            {canEditDevices ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => pullAllAttendanceMutation.mutate()}
+                disabled={pullAllAttendanceMutation.isPending}
+              >
+                {pullAllAttendanceMutation.isPending ? "Trayendo…" : "Traer marcas (todos)"}
+              </Button>
+            ) : null}
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -195,6 +246,27 @@ export function FingerDevicesPanel() {
             <p className="text-sm text-emerald-700">
               {probeAllMutation.data.online}/{probeAllMutation.data.total} dispositivos en línea.
             </p>
+          ) : null}
+
+          {pullAllAttendanceMutation.isSuccess ? (
+            <p className="text-sm text-emerald-700">
+              Marcas importadas: {pullAllAttendanceMutation.data.insertedTotal} (
+              {pullAllAttendanceMutation.data.results.filter((r) => r.ok).length}/
+              {pullAllAttendanceMutation.data.results.length} relojes OK).
+            </p>
+          ) : null}
+          {pullAllAttendanceMutation.isError ? (
+            <p className="text-sm text-red-600">{(pullAllAttendanceMutation.error as Error).message}</p>
+          ) : null}
+          {deviceActionMutation.isSuccess ? (
+            <p className="text-sm text-emerald-700">
+              {deviceActionMutation.data.action === "pull-users"
+                ? "Usuarios traídos del reloj."
+                : "Marcas traídas del reloj."}
+            </p>
+          ) : null}
+          {deviceActionMutation.isError ? (
+            <p className="text-sm text-red-600">{(deviceActionMutation.error as Error).message}</p>
           ) : null}
 
           {listQuery.isError ? (
@@ -285,20 +357,42 @@ export function FingerDevicesPanel() {
                                 disabled={connectMutation.isPending && connectingId === row.id}
                                 onClick={() => connectMutation.mutate(row.id)}
                               >
-                                {connectingId === row.id ? "…" : "Conectar"}
+                                {connectingId === row.id && connectMutation.isPending ? "…" : "Conectar"}
                               </Button>
                               {canEditDevices ? (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-600"
-                                  disabled={deleteMutation.isPending}
-                                  onClick={() => {
-                                    if (confirm(`¿Eliminar ${row.name}?`)) deleteMutation.mutate(row.id);
-                                  }}
-                                >
-                                  Eliminar
-                                </Button>
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={deviceActionMutation.isPending && connectingId === row.id}
+                                    onClick={() =>
+                                      deviceActionMutation.mutate({ id: row.id, action: "pull-users" })
+                                    }
+                                  >
+                                    Traer usuarios
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={deviceActionMutation.isPending && connectingId === row.id}
+                                    onClick={() =>
+                                      deviceActionMutation.mutate({ id: row.id, action: "pull-attendance" })
+                                    }
+                                  >
+                                    Traer marcas
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-600"
+                                    disabled={deleteMutation.isPending}
+                                    onClick={() => {
+                                      if (confirm(`¿Eliminar ${row.name}?`)) deleteMutation.mutate(row.id);
+                                    }}
+                                  >
+                                    Eliminar
+                                  </Button>
+                                </>
                               ) : null}
                             </div>
                           </td>

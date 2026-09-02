@@ -234,24 +234,54 @@ export function FingerUnifiedEmployeesWorkspace() {
   const enrollMutation = useMutation({
     mutationFn: async () => {
       if (enrollSource !== "device") {
-        throw new Error("Solo enrolamiento vía dispositivo biométrico está disponible por ahora.");
+        throw new Error("Solo enrolamiento en reloj ZK está disponible. Sensor USB y archivo no están soportados.");
       }
       if (!selectedEmployee?.attUserId) throw new Error("Seleccione un empleado.");
       if (!enrollDeviceId) throw new Error("Seleccione un dispositivo biométrico.");
+      const body: Record<string, unknown> = {
+        deviceId: enrollDeviceId,
+        fingerId: Number.parseInt(enrollFingerId, 10),
+        distribute: true,
+      };
+      if (selectedEmployee.employeeId) {
+        body.employeeId = selectedEmployee.employeeId;
+      } else {
+        body.attUserId = selectedEmployee.attUserId;
+        body.badgeNumber = formBadge.trim() || selectedEmployee.badgeNumber;
+      }
       const res = await fetch("/api/finger-system/biometrics/enroll", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceId: enrollDeviceId,
-          attUserId: selectedEmployee.attUserId,
-          badgeNumber: formBadge.trim() || selectedEmployee.badgeNumber,
-          fingerId: Number.parseInt(enrollFingerId, 10),
-        }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error?.message ?? "Error al enrolar");
-      return json.data;
+      return json.data as { message?: string; templatesDistributed?: number };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["finger-unified-employees"] });
+      const dist = data?.templatesDistributed ?? 0;
+      if (dist > 0) {
+        // toast via mutation status message below
+      }
+    },
+  });
+
+  const pushDevicesMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedEmployee?.employeeId) {
+        throw new Error("Se requiere vínculo RRHH (empleado vinculado) para enviar a relojes.");
+      }
+      const res = await fetch(`/api/finger-system/employees/${selectedEmployee.employeeId}/push-devices`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message ?? "Error al enviar a relojes");
+      return json.data as { okCount: number; results: Array<{ ok: boolean; deviceName: string; message: string }> };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["finger-unified-employees"] }),
   });
@@ -393,7 +423,7 @@ export function FingerUnifiedEmployeesWorkspace() {
                   </div>
 
                   <fieldset className={`${WIN.group} min-w-0`}>
-                    <legend className="px-1 text-[11px]">Adm. FP (Requiere sensor U.are.U.)</legend>
+                    <legend className="px-1 text-[11px]">Relojes ZKTeco</legend>
                     <div className="space-y-2">
                       <div>
                         <Label className="text-[10px]">Dispositivo</Label>
@@ -404,7 +434,7 @@ export function FingerUnifiedEmployeesWorkspace() {
                           <SelectContent>
                             {devices.map((d) => (
                               <SelectItem key={d.id} value={d.id} className="text-xs">
-                                {d.name}
+                                {d.name} · {d.status}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -418,15 +448,21 @@ export function FingerUnifiedEmployeesWorkspace() {
                         disabled={!enrollDeviceId || connectDeviceMutation.isPending}
                         onClick={() => enrollDeviceId && connectDeviceMutation.mutate(enrollDeviceId)}
                       >
-                        {deviceConnected === true ? "Disp. Conectado" : deviceConnected === false ? "Disp. Desconectado" : "Disp. Conectado"}
+                        {deviceConnected === true ? "Disp. Conectado" : deviceConnected === false ? "Disp. Desconectado" : "Probar conexión"}
                       </Button>
                       <div className="space-y-1 text-[10px]">
-                        {(["device", "sensor", "file"] as const).map((src) => (
-                          <label key={src} className="flex items-center gap-1">
-                            <input type="radio" name="fpSource" checked={enrollSource === src} onChange={() => setEnrollSource(src)} />
-                            {src === "device" ? "Disp. FP" : src === "sensor" ? "sensor" : "Arch Imag"}
-                          </label>
-                        ))}
+                        <label className="flex items-center gap-1">
+                          <input type="radio" name="fpSource" checked={enrollSource === "device"} onChange={() => setEnrollSource("device")} />
+                          Reloj ZK (enrolar)
+                        </label>
+                        <label className="flex items-center gap-1 text-slate-400">
+                          <input type="radio" name="fpSource" disabled checked={false} readOnly />
+                          Sensor USB (no soportado)
+                        </label>
+                        <label className="flex items-center gap-1 text-slate-400">
+                          <input type="radio" name="fpSource" disabled checked={false} readOnly />
+                          Archivo (no soportado)
+                        </label>
                       </div>
                       <div>
                         <Label className="text-[10px]">Dedo</Label>
@@ -446,17 +482,45 @@ export function FingerUnifiedEmployeesWorkspace() {
                         size="sm"
                         className="h-8 w-full bg-[#ece9d8] text-[11px] text-black hover:bg-[#d4d0c8]"
                         variant="outline"
+                        disabled={
+                          !canEditBiometrics ||
+                          !selectedEmployee?.employeeId ||
+                          isNew ||
+                          pushDevicesMutation.isPending
+                        }
+                        onClick={() => pushDevicesMutation.mutate()}
+                      >
+                        {pushDevicesMutation.isPending ? "Enviando…" : "Enviar a relojes"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 w-full bg-[#ece9d8] text-[11px] text-black hover:bg-[#d4d0c8]"
+                        variant="outline"
                         disabled={!canEditBiometrics || !selectedEmployee?.attUserId || isNew || enrollMutation.isPending}
                         onClick={() => enrollMutation.mutate()}
                       >
-                        {enrollMutation.isPending ? "Enrolando…" : "Enrola"}
+                        {enrollMutation.isPending ? "Enrolando…" : "Enrolar huella"}
                       </Button>
                       {selectedEmployee?.fingerIds.length ? (
                         <p className="text-[10px] text-slate-600">
                           Registrados: {selectedEmployee.fingerIds.map((f) => fingerLabel(f)).join(", ")}
                         </p>
                       ) : null}
+                      {enrollMutation.isSuccess ? (
+                        <p className="text-[10px] text-emerald-700">
+                          {(enrollMutation.data as { message?: string })?.message ?? "Enrolamiento enviado al reloj."}
+                        </p>
+                      ) : null}
+                      {pushDevicesMutation.isSuccess ? (
+                        <p className="text-[10px] text-emerald-700">
+                          Enviado a {pushDevicesMutation.data.okCount}/{pushDevicesMutation.data.results.length} reloj(es).
+                        </p>
+                      ) : null}
                       {enrollMutation.isError ? <p className="text-[10px] text-red-700">{(enrollMutation.error as Error).message}</p> : null}
+                      {pushDevicesMutation.isError ? (
+                        <p className="text-[10px] text-red-700">{(pushDevicesMutation.error as Error).message}</p>
+                      ) : null}
                       {saveMutation.isError ? <p className="text-[10px] text-red-700">{(saveMutation.error as Error).message}</p> : null}
                     </div>
                   </fieldset>

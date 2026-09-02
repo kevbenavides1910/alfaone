@@ -67,11 +67,21 @@ export {
   resolveFingerBackupRoot,
 } from "./services/finger-backups";
 export { listFingerCompanySummaries } from "./services/finger-companies";
-export { runFingerAutoSync } from "./services/finger-sync-orchestrator";
+export { startFingerprintEnrollment } from "./services/finger-biometric-enroll";
+export { enrollFingerprintOnDevice } from "./services/finger-device-enroll";
+export {
+  pushEmployeeToDevices,
+  setEmployeeDeviceAssignments,
+  listEmployeeDeviceAssignments,
+} from "./services/finger-device-push";
+export { listFingerPunches } from "./services/finger-punches-list";
 export {
   pullFingerDeviceAttendance,
   pullFingerDeviceUsers,
+  pullAllDevicesAttendance,
 } from "./services/finger-device-pull";
+export { ensureSeedFingerDevices } from "./services/finger-devices-seed";
+export { runFingerAutoSync } from "./services/finger-sync-orchestrator";
 export { createZkProtocolClient } from "./integrations/biometric/zk-protocol";
 export { createZKTecoAdapter } from "./integrations/biometric/zkteco-adapter";
 export { probeTcpPort } from "./integrations/biometric/tcp-probe";

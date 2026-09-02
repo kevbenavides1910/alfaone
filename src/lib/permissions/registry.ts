@@ -853,9 +853,9 @@ export const PERMISSION_REGISTRY = {
       },
       marcasEnVivo: {
         label: "Marcas en vivo",
-        uiRoutes: ["/finger-system/marcas-en-vivo"],
+        uiRoutes: ["/finger-system/marcas", "/finger-system/marcas-en-vivo"],
         apiPrefixes: ["/api/finger-system"],
-        actions: { view: "Ver marcas en tiempo real" },
+        actions: { view: "Ver historial de marcas y marcas en tiempo real" },
       },
       asistencia: {
         label: "Asistencia",

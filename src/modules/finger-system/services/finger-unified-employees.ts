@@ -6,6 +6,8 @@ import { getFingerSettingsPublic } from "@/modules/finger-system/services/finger
 
 export type UnifiedEmployeeRow = {
   id: string;
+  /** Employee.id cuando hay vínculo RRHH; null en modo solo ATT2016. */
+  employeeId: string | null;
   attUserId: number;
   badgeNumber: string;
   name: string | null;
@@ -70,6 +72,7 @@ export async function listUnifiedEmployees(filters: UnifiedEmployeeFilters) {
       const fingerIds = r.attUserId != null ? (fingerMap.get(r.attUserId) ?? []) : [];
       return {
         id: r.id,
+        employeeId: r.employeeId,
         attUserId: r.attUserId ?? 0,
         badgeNumber: r.badgeNumber ?? r.employee.codigoEmpleado,
         name: r.employee.nombre,
@@ -115,6 +118,7 @@ export async function listUnifiedEmployees(filters: UnifiedEmployeeFilters) {
     const fingerIds = fingerMap.get(u.attUserId) ?? [];
     return {
       id: `att:${u.attUserId}`,
+      employeeId: null,
       attUserId: u.attUserId,
       badgeNumber: u.badgeNumber,
       name: u.name ?? u.badgeNumber,

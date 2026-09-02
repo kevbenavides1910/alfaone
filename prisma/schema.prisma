@@ -1724,9 +1724,10 @@ model Employee {
   updatedAt          DateTime             @updatedAt
 
   placements           EmployeePlacement[]
-  fingerEmployeeLink   FingerEmployeeLink?
-  fingerPunches        FingerPunch[]
-  fingerAttendanceDays FingerAttendanceDay[]
+  fingerEmployeeLink    FingerEmployeeLink?
+  fingerEmployeeDevices FingerEmployeeDevice[]
+  fingerPunches         FingerPunch[]
+  fingerAttendanceDays  FingerAttendanceDay[]
 
   @@index([nombre])
   @@index([cedula])
@@ -5822,6 +5823,11 @@ enum FingerDeviceStatus {
   UNKNOWN
 }
 
+enum FingerPunchSource {
+  DEVICE
+  ATT2016
+}
+
 enum FingerSyncDirection {
   PULL
   PUSH
@@ -5890,7 +5896,9 @@ model FingerDevice {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
-  syncLogs FingerSyncLog[]
+  syncLogs        FingerSyncLog[]
+  punches         FingerPunch[]
+  employeeDevices FingerEmployeeDevice[]
 
   @@index([company])
   @@index([ipAddress])
@@ -5906,8 +5914,13 @@ model FingerEmployeeLink {
   badgeNumber      String?
   company          String?
   companyEntity    Company?  @relation(fields: [company], references: [code])
+  privilege        Int       @default(0)
+  pin              String?
+  card             String?
   fingerprintCount Int       @default(0)
   lastSyncAt       DateTime?
+  lastPushAt       DateTime?
+  lastPushError    String?   @db.Text
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -5915,6 +5928,20 @@ model FingerEmployeeLink {
   @@index([attUserId])
   @@index([company])
   @@map("finger_employee_links")
+}
+
+/// Asignación selectiva empleado ↔ reloj (para “Enviar a relojes”).
+model FingerEmployeeDevice {
+  id         String       @id @default(cuid())
+  employeeId String
+  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  deviceId   String
+  device     FingerDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  createdAt  DateTime     @default(now())
+
+  @@unique([employeeId, deviceId])
+  @@index([deviceId])
+  @@map("finger_employee_devices")
 }
 
 model FingerSyncLog {
@@ -5984,6 +6011,9 @@ model FingerPunch {
   sensorId      String?
   workCode      Int?
   deviceSn      String?
+  deviceId      String?
+  device        FingerDevice?      @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  source        FingerPunchSource  @default(ATT2016)
   employeeId    String?
   employee      Employee?          @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   importBatchId String?
@@ -5995,6 +6025,8 @@ model FingerPunch {
   @@index([employeeId])
   @@index([badgeNumber])
   @@index([importBatchId])
+  @@index([deviceId])
+  @@index([source])
   @@map("finger_punches")
 }
 

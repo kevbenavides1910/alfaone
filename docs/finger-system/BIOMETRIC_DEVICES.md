@@ -4,32 +4,46 @@
 
 ```
 BiometricDeviceInterface (types.ts)
-  └── ZKTecoAdapter (futuro, TCP 4370)
-  └── OtherBiometricAdapter (futuro)
+  └── ZKTecoAdapter (TCP 4370) — fuente principal
+  └── ATT2016Adapter — respaldo / legado
 
-BiometricService (orquestación, futuro)
-FingerSyncService (worker, futuro)
+Finger device services:
+  finger-device-push / enroll / pull
+  finger-sync-orchestrator (probe + pull ZK + ATT)
 ```
 
-## Modelo Finger System (`finger_devices`)
+## Fuente operativa
 
-Campos principales: nombre, IP, puerto, marca, modelo, empresa, ubicación, estado, última sync.
+- **Principal:** relojes ZKTeco en red (`finger_devices`, puerto 4370).
+- **Respaldo:** ATT2016 (SMB/MDB) para import histórico y sync de respaldo.
+- **UI diaria:** Finger System en Alfa One (`/finger-system`). No hay puente a tablas Odoo `alfa.biometric.*`.
 
-## Descubrimiento de red
+## Capacidades ZK
 
-- Rango IP configurable desde `app_finger_settings.discoveryDefaultPort` (default 4370)
-- UI en `/finger-system/dispositivos` (Fase 4)
+| Acción | Servicio / API |
+|--------|----------------|
+| Push usuario (`set_user` + templates) | `POST /api/finger-system/employees/[id]/push-devices` |
+| Enrolar huella + distribuir | `POST /api/finger-system/biometrics/enroll` (`employeeId`) |
+| Traer usuarios | `POST .../devices/[id]` `{ action: "pull-users" }` |
+| Traer marcas | `POST .../devices/[id]` `{ action: "pull-attendance" }` o `pull-all-attendance` |
+| Historial | `GET /api/finger-system/punches` · UI `/finger-system/marcas` |
 
-## Estado en tiempo real
+## Modelo (`finger_devices` / punches)
 
-| Estado | Significado |
-|--------|-------------|
-| ONLINE | Responde al ping/protocolo |
-| OFFLINE | Sin respuesta |
-| ERROR | Respuesta con error |
-| UNKNOWN | Sin verificar aún |
+- Dispositivos: nombre, IP, puerto, marca, modelo, empresa, ubicación, estado, contadores.
+- Marcas: `FingerPunch.source` = `DEVICE` \| `ATT2016`; `deviceId` opcional.
+- Asignación selectiva: `FingerEmployeeDevice` (empleado ↔ relojes).
+
+## Seed de relojes Odoo
+
+IPs típicas (idempotente, no pisa config existente): Piso 01/02, Alajuela, Centro Comercial — ver `finger-devices-seed.ts`.
+
+## Descubrimiento / estado
+
+- Puerto default 4370; estados ONLINE / OFFLINE / ERROR / UNKNOWN.
+- Cron: tras probe, pull de asistencia ZK (últimos 2–3 días) + ATT2016.
 
 ## Seguridad
 
-- Credenciales de dispositivos **nunca** en código fuente
-- Usar variables de entorno o secretos del servidor
+- Credenciales de dispositivos **nunca** en código fuente.
+- Usar variables de entorno o secretos del servidor.

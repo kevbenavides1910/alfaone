@@ -3,6 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { ensureFingerSettingsRow } from "@/modules/finger-system/services/finger-settings";
 import { probeAllFingerDevices } from "@/modules/finger-system/services/finger-devices";
 import { applyAtt2016PunchImport } from "@/modules/finger-system/services/att2016-punches-import";
+import { pullAllDevicesAttendance } from "@/modules/finger-system/services/finger-device-pull";
+import { ensureSeedFingerDevices } from "@/modules/finger-system/services/finger-devices-seed";
 import { logFingerOperation } from "@/modules/finger-system/services/finger-audit";
 
 export type FingerAutoSyncResult = {
@@ -64,6 +66,7 @@ export async function runFingerAutoSync(params: {
   const steps: Record<string, unknown> = {};
 
   try {
+    steps.seed = await ensureSeedFingerDevices();
     const probe = await probeAllFingerDevices();
     steps.devices = { total: probe.total, online: probe.online };
 
@@ -71,18 +74,35 @@ export async function runFingerAutoSync(params: {
     const from = startOfDay(new Date());
     from.setDate(from.getDate() - 3);
 
-    steps.punches = await applyAtt2016PunchImport({
+    steps.zkPunches = await pullAllDevicesAttendance({
       userId: params.userId ?? null,
-      from,
-      to,
+      daysBack: 3,
       ipAddress: params.ipAddress ?? null,
     });
+
+    try {
+      steps.att2016Punches = await applyAtt2016PunchImport({
+        userId: params.userId ?? null,
+        from,
+        to,
+        ipAddress: params.ipAddress ?? null,
+      });
+    } catch (e) {
+      steps.att2016Punches = {
+        error: e instanceof Error ? e.message : "ATT2016 no disponible",
+      };
+    }
+
+    const zkInserted =
+      typeof (steps.zkPunches as { insertedTotal?: number })?.insertedTotal === "number"
+        ? (steps.zkPunches as { insertedTotal: number }).insertedTotal
+        : 0;
 
     await prisma.fingerSyncLog.update({
       where: { id: syncLog.id },
       data: {
         status: "SUCCESS",
-        message: `Sync OK: ${probe.online}/${probe.total} dispositivos en línea.`,
+        message: `Sync OK: ${probe.online}/${probe.total} dispositivos; +${zkInserted} marcas ZK.`,
         finishedAt: new Date(),
         detailJson: steps as Prisma.InputJsonValue,
       },

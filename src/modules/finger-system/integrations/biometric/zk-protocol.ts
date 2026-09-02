@@ -5,9 +5,16 @@ const CMD_EXIT = 1001;
 const CMD_ACK_OK = 2000;
 const CMD_PREPARE_DATA = 1500;
 const CMD_DATA = 1501;
+const CMD_FREE_DATA = 1502;
 const CMD_ATTLOG_RRQ = 13;
 const CMD_USERTEMP_RRQ = 9;
+const CMD_USER_WRQ = 8;
+const CMD_DELETE_USER = 18;
 const CMD_STARTENROLL = 61;
+const CMD_CANCELCAPTURE = 62;
+const CMD_REFRESHDATA = 1013;
+const CMD_GET_USER_TEMPLATE = 88;
+const CMD_SAVE_USER_TEMPS = 110;
 
 export type ZkAttendanceRecord = {
   userId: number;
@@ -20,6 +27,23 @@ export type ZkUserRecord = {
   uid: number;
   userId: string;
   name: string;
+  privilege?: number;
+};
+
+export type ZkFingerTemplate = {
+  uid: number;
+  fid: number;
+  valid: number;
+  template: Buffer;
+};
+
+export type ZkSetUserInput = {
+  uid?: number;
+  userId: string;
+  name: string;
+  privilege?: number;
+  password?: string;
+  card?: number;
 };
 
 export type ZkClientOptions = {
@@ -81,11 +105,24 @@ function parseUserChunk(data: Buffer): ZkUserRecord[] {
   for (let i = 0; i + size <= data.length; i += size) {
     const slice = data.subarray(i, i + size);
     const uid = slice.readUInt16LE(0);
+    const privilege = slice.readUInt8(2);
     const name = slice.subarray(11, 35).toString("utf8").replace(/\0/g, "").trim();
     const userId = slice.subarray(48, 57).toString("utf8").replace(/\0/g, "").trim();
-    if (uid > 0) records.push({ uid, name, userId });
+    if (uid > 0) records.push({ uid, name, userId, privilege });
   }
   return records;
+}
+
+function packSetUser72(input: ZkSetUserInput & { uid: number }): Buffer {
+  const buf = Buffer.alloc(72);
+  buf.writeUInt16LE(input.uid & 0xffff, 0);
+  buf.writeUInt8((input.privilege ?? 0) & 0xff, 2);
+  Buffer.from((input.password ?? "").slice(0, 8), "utf8").copy(buf, 3);
+  Buffer.from((input.name ?? "").slice(0, 24), "utf8").copy(buf, 11);
+  buf.writeUInt32LE((input.card ?? 0) >>> 0, 35);
+  // group_id placeholder (7 bytes) at 40
+  Buffer.from(String(input.userId).slice(0, 24), "utf8").copy(buf, 48);
+  return buf;
 }
 
 export class ZkProtocolClient {
@@ -108,11 +145,12 @@ export class ZkProtocolClient {
     return this.replyId;
   }
 
-  private async sendReceive(command: number, data?: Buffer): Promise<Buffer> {
+  private async sendReceive(command: number, data?: Buffer, timeoutMs?: number): Promise<Buffer> {
     if (!this.socket) throw new Error("Dispositivo no conectado.");
     const packet = createHeader(command, this.sessionId, this.nextReplyId(), data);
+    const wait = timeoutMs ?? this.timeoutMs;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("Timeout en protocolo ZK.")), this.timeoutMs);
+      const timer = setTimeout(() => reject(new Error("Timeout en protocolo ZK.")), wait);
       const chunks: Buffer[] = [];
       const onData = (chunk: Buffer) => {
         chunks.push(chunk);
@@ -201,6 +239,14 @@ export class ZkProtocolClient {
     return Buffer.concat(chunks);
   }
 
+  private async refreshData(): Promise<void> {
+    try {
+      await this.sendReceive(CMD_REFRESHDATA);
+    } catch {
+      // algunos firmwares no soportan refresh
+    }
+  }
+
   async getAttendance(from: Date, to: Date): Promise<ZkAttendanceRecord[]> {
     await this.connect();
     const payload = await this.readDataPayload(CMD_ATTLOG_RRQ);
@@ -214,28 +260,196 @@ export class ZkProtocolClient {
     return parseUserChunk(payload);
   }
 
-  /** Coloca el dispositivo en modo enrolamiento para un usuario/dedo. */
-  async startEnrollment(userPin: string, fingerId: number): Promise<{ ok: boolean; message: string }> {
+  /** Crea o actualiza un usuario en el reloj (CMD_USER_WRQ, paquete ZK8 72 bytes). */
+  async setUser(input: ZkSetUserInput): Promise<{ ok: boolean; uid: number; message: string }> {
     await this.connect();
-    const pin = userPin.trim().slice(0, 9);
-    if (!pin) throw new Error("Número de empleado (badge) requerido para enrolar.");
+    const users = await this.getUsers();
+    const badge = String(input.userId).trim();
+    const existing = users.find((u) => u.userId === badge);
+    const uid =
+      input.uid ??
+      existing?.uid ??
+      (users.reduce((max, u) => Math.max(max, u.uid), 0) + 1 || 1);
 
-    const data = Buffer.alloc(3);
-    data.writeUInt8(fingerId & 0xff, 0);
-    data.write(pin, 1, 1, "ascii");
+    const packet = packSetUser72({
+      uid,
+      userId: badge,
+      name: (input.name || badge).slice(0, 24),
+      privilege: input.privilege ?? 0,
+      password: input.password ?? "",
+      card: input.card ?? 0,
+    });
+
+    const reply = await this.sendReceive(CMD_USER_WRQ, packet);
+    const cmd = reply.readUInt16LE(0);
+    if (cmd !== CMD_ACK_OK) {
+      return { ok: false, uid, message: `El reloj rechazó set_user (cmd ${cmd}).` };
+    }
+    await this.refreshData();
+    return { ok: true, uid, message: `Usuario ${badge} guardado en el reloj (uid ${uid}).` };
+  }
+
+  async deleteUser(userId: string): Promise<boolean> {
+    await this.connect();
+    const users = await this.getUsers();
+    const existing = users.find((u) => u.userId === String(userId).trim());
+    if (!existing) return false;
+    const data = Buffer.alloc(2);
+    data.writeUInt16LE(existing.uid & 0xffff, 0);
+    const reply = await this.sendReceive(CMD_DELETE_USER, data);
+    await this.refreshData();
+    return reply.readUInt16LE(0) === CMD_ACK_OK;
+  }
+
+  /** Lee plantillas de huella de un usuario (dedos 0–9). */
+  async getUserTemplates(userId: string): Promise<ZkFingerTemplate[]> {
+    await this.connect();
+    const users = await this.getUsers();
+    const existing = users.find((u) => u.userId === String(userId).trim());
+    if (!existing) return [];
+
+    const out: ZkFingerTemplate[] = [];
+    for (let fid = 0; fid < 10; fid += 1) {
+      const req = Buffer.alloc(3);
+      req.writeUInt16LE(existing.uid & 0xffff, 0);
+      req.writeUInt8(fid & 0xff, 2);
+      try {
+        const reply = await this.sendReceive(CMD_GET_USER_TEMPLATE, req, 5000);
+        const cmd = reply.readUInt16LE(0);
+        if (cmd === CMD_PREPARE_DATA) {
+          const size = reply.readUInt32LE(8);
+          const payload = reply.subarray(16, 16 + size);
+          if (payload.length > 32) {
+            out.push({ uid: existing.uid, fid, valid: 1, template: Buffer.from(payload) });
+          }
+        } else if (cmd === CMD_DATA || (cmd === CMD_ACK_OK && reply.length > 16)) {
+          const payload = reply.subarray(8);
+          if (payload.length > 32) {
+            out.push({ uid: existing.uid, fid, valid: 1, template: Buffer.from(payload) });
+          }
+        }
+      } catch {
+        // dedo vacío
+      }
+    }
+    return out;
+  }
+
+  /** Guarda plantillas en el reloj (buffer + CMD 110, semántica pyzk). */
+  async saveUserTemplates(userId: string, fingers: ZkFingerTemplate[]): Promise<{ ok: boolean; message: string }> {
+    await this.connect();
+    const users = await this.getUsers();
+    const existing = users.find((u) => u.userId === String(userId).trim());
+    if (!existing) {
+      return { ok: false, message: `Usuario ${userId} no está en el reloj.` };
+    }
+    if (!fingers.length) {
+      return { ok: true, message: "Sin plantillas que copiar." };
+    }
+
+    const upack = packSetUser72({
+      uid: existing.uid,
+      userId: existing.userId,
+      name: existing.name || existing.userId,
+      privilege: existing.privilege ?? 0,
+    });
+    // Prefijo 0x02 estilo pyzk repack73
+    const upackWithFlag = Buffer.alloc(73);
+    upackWithFlag.writeUInt8(2, 0);
+    upack.copy(upackWithFlag, 1);
+
+    let table = Buffer.alloc(0);
+    let fpack = Buffer.alloc(0);
+    let tstart = 0;
+    const fnum = 0x10;
+    for (const finger of fingers) {
+      if (!finger.template?.length) continue;
+      const tfp = Buffer.alloc(2 + finger.template.length);
+      tfp.writeUInt16LE(finger.template.length & 0xffff, 0);
+      finger.template.copy(tfp, 2);
+      const row = Buffer.alloc(8);
+      row.writeUInt8(2, 0);
+      row.writeUInt16LE(existing.uid & 0xffff, 1);
+      row.writeUInt8((fnum + finger.fid) & 0xff, 3);
+      row.writeUInt32LE(tstart >>> 0, 4);
+      table = Buffer.concat([table, row]);
+      fpack = Buffer.concat([fpack, tfp]);
+      tstart += tfp.length;
+    }
+
+    const head = Buffer.alloc(12);
+    head.writeUInt32LE(upackWithFlag.length, 0);
+    head.writeUInt32LE(table.length, 4);
+    head.writeUInt32LE(fpack.length, 8);
+    const packet = Buffer.concat([head, upackWithFlag, table, fpack]);
 
     try {
-      const reply = await this.sendReceive(CMD_STARTENROLL, data);
+      await this.sendReceive(CMD_FREE_DATA).catch(() => undefined);
+      const prep = Buffer.alloc(4);
+      prep.writeUInt32LE(packet.length, 0);
+      const prepReply = await this.sendReceive(CMD_PREPARE_DATA, prep);
+      if (prepReply.readUInt16LE(0) !== CMD_ACK_OK) {
+        return { ok: false, message: "No se pudo preparar buffer de plantillas." };
+      }
+      const CHUNK = 1024;
+      for (let i = 0; i < packet.length; i += CHUNK) {
+        const chunk = packet.subarray(i, Math.min(i + CHUNK, packet.length));
+        const r = await this.sendReceive(CMD_DATA, chunk);
+        if (r.readUInt16LE(0) !== CMD_ACK_OK) {
+          return { ok: false, message: "Error enviando chunk de plantillas." };
+        }
+      }
+      const saveCmd = Buffer.alloc(8);
+      saveCmd.writeUInt32LE(12, 0);
+      saveCmd.writeUInt16LE(0, 4);
+      saveCmd.writeUInt16LE(8, 6);
+      const saveReply = await this.sendReceive(CMD_SAVE_USER_TEMPS, saveCmd);
+      if (saveReply.readUInt16LE(0) !== CMD_ACK_OK) {
+        return { ok: false, message: "El reloj no guardó las plantillas." };
+      }
+      await this.refreshData();
+      return { ok: true, message: `${fingers.length} plantilla(s) copiada(s) para ${userId}.` };
+    } catch (e) {
+      return {
+        ok: false,
+        message: e instanceof Error ? e.message : "Error al guardar plantillas.",
+      };
+    }
+  }
+
+  /**
+   * Inicia enrolamiento (CMD_STARTENROLL).
+   * Paquete TCP pyzk: user_id(24) + finger + flag.
+   * No bloquea esperando el dedo; el operador coloca la huella en el reloj.
+   */
+  async startEnrollment(userPin: string, fingerId: number): Promise<{ ok: boolean; message: string }> {
+    await this.connect();
+    const pin = userPin.trim().slice(0, 24);
+    if (!pin) throw new Error("Número de empleado (badge) requerido para enrolar.");
+
+    try {
+      await this.sendReceive(CMD_CANCELCAPTURE).catch(() => undefined);
+    } catch {
+      // ignore
+    }
+
+    const data = Buffer.alloc(26);
+    Buffer.from(pin, "utf8").copy(data, 0);
+    data.writeUInt8(fingerId & 0xff, 24);
+    data.writeUInt8(1, 25);
+
+    try {
+      const reply = await this.sendReceive(CMD_STARTENROLL, data, 15000);
       const cmd = reply.readUInt16LE(0);
       if (cmd === CMD_ACK_OK) {
         return {
           ok: true,
-          message: `Dispositivo listo. Coloque el dedo indicado (${fingerId}) para ${pin}.`,
+          message: `Dispositivo listo. Coloque el dedo ${fingerId} frente al reloj para el código ${pin}.`,
         };
       }
       return {
         ok: false,
-        message: "El dispositivo no aceptó el modo enrolamiento. Verifique modelo y firmware ZK.",
+        message: "El dispositivo no aceptó el modo enrolamiento. Verifique que el usuario exista en el reloj.",
       };
     } catch (e) {
       return {

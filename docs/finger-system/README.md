@@ -12,11 +12,12 @@ Sistema integral de administración de asistencia biométrica dentro de **Alfa O
 ## Arquitectura
 
 ```
-ATT2016 (legacy, lectura) → Att2016Adapter → Finger Services → PostgreSQL
-Dispositivos ZKTeco (futuro) → BiometricDeviceAdapter → FingerSyncService
+Relojes ZKTeco (TCP 4370) → ZKTecoAdapter → Finger Services → PostgreSQL
+ATT2016 (legado SMB) → Att2016Adapter → Finger Services → PostgreSQL
 Next.js UI + API (/api/finger-system/*)
 ```
 
+Finger System es la UI diaria biométrica. ATT2016 queda como respaldo; no hay sync desde Odoo `alfa_biometric`.
 ## Requisitos
 
 - Node.js 20+, PostgreSQL (Alfa One)
