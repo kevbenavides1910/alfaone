@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
-import type { OrdenCompraNafRow } from "@/modules/presupuestos/services/list-ordenes-compra-naf";
+import type {
+  OrdenCompraLinea,
+  OrdenCompraNafRow,
+} from "@/modules/presupuestos/services/list-ordenes-compra-naf";
 
 type ExpenseOcPickerProps = {
   value: string;
@@ -20,19 +23,19 @@ const ESTADO_LABEL: Record<string, string> = {
   P: "Pendiente",
 };
 
-function formatMonto(monto: number | null): string | null {
-  if (monto == null || !Number.isFinite(monto)) return null;
+function formatMonto(monto: number | null | undefined): string {
+  if (monto == null || !Number.isFinite(monto)) return "—";
   return monto.toLocaleString("es-CR", { maximumFractionDigits: 2 });
 }
 
 function formatOcLabel(row: OrdenCompraNafRow): string {
   const estado = ESTADO_LABEL[row.estado] ?? row.estado;
-  const monto = formatMonto(row.monto);
+  const monto = row.monto != null ? `₡${formatMonto(row.monto)}` : null;
   const parts = [
     `OC ${row.noOrden}`,
     row.companyCode || `cía ${row.noCia}`,
     row.proveedor || null,
-    monto ? `₡${monto}` : null,
+    monto,
     row.fecha || null,
     estado || null,
   ].filter(Boolean);
@@ -53,11 +56,19 @@ export function ExpenseOcPicker({
   const [rows, setRows] = useState<OrdenCompraNafRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<OrdenCompraNafRow | null>(null);
+  const [loadingDetalle, setLoadingDetalle] = useState(false);
   const debounced = useDebouncedValue(query, 300);
 
   useEffect(() => {
     if (!open) setQuery(value);
   }, [value, open]);
+
+  useEffect(() => {
+    if (!value.trim()) {
+      setSelected(null);
+    }
+  }, [value]);
 
   useEffect(() => {
     if (!open || disabled) return;
@@ -99,8 +110,35 @@ export function ExpenseOcPicker({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  async function selectOc(row: OrdenCompraNafRow) {
+    setQuery(row.noOrden);
+    setOpen(false);
+    setSelected(row);
+    setLoadingDetalle(true);
+    onChange(row.noOrden, row);
+
+    try {
+      const params = new URLSearchParams({ noOrden: row.noOrden, noCia: row.noCia });
+      if (row.companyCode) params.set("company", row.companyCode);
+      const res = await fetch(`/api/expenses/ordenes-compra/detalle?${params}`);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.error?.message || "No se pudo cargar el detalle de la OC");
+      }
+      const detalle = body?.data as OrdenCompraNafRow;
+      setSelected(detalle);
+      onChange(detalle.noOrden, detalle);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al cargar líneas de la OC");
+    } finally {
+      setLoadingDetalle(false);
+    }
+  }
+
+  const lineas: OrdenCompraLinea[] = selected?.lineas ?? [];
+
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative space-y-2">
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <Input
@@ -119,6 +157,7 @@ export function ExpenseOcPicker({
             const v = e.target.value;
             setQuery(v);
             setOpen(true);
+            setSelected(null);
             onChange(v, null);
           }}
           onKeyDown={(e) => {
@@ -141,6 +180,7 @@ export function ExpenseOcPicker({
               e.preventDefault();
               onChange("", null);
               setQuery("");
+              setSelected(null);
               setOpen(false);
             }}
           >
@@ -165,9 +205,7 @@ export function ExpenseOcPicker({
                 className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  onChange(row.noOrden, row);
-                  setQuery(row.noOrden);
-                  setOpen(false);
+                  void selectOc(row);
                 }}
               >
                 <div className="font-medium font-mono">{formatOcLabel(row)}</div>
@@ -180,9 +218,65 @@ export function ExpenseOcPicker({
             ))}
         </ul>
       )}
-      <p className="text-xs text-slate-400 mt-1">
-        Números reales de orden de compra Codisa (NAF). También podés escribir otra referencia.
-      </p>
+
+      {loadingDetalle && (
+        <p className="text-xs text-slate-500">Cargando líneas de la OC…</p>
+      )}
+
+      {selected && lineas.length > 0 && (
+        <div className="rounded-md border border-slate-200 overflow-hidden">
+          <div className="bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 flex justify-between gap-2">
+            <span>
+              Detalle OC {selected.noOrden}
+              {selected.proveedor ? ` · ${selected.proveedor}` : ""}
+            </span>
+            <span className="font-mono">Total ₡{formatMonto(selected.monto)}</span>
+          </div>
+          <div className="max-h-44 overflow-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-card text-slate-500">
+                <tr className="border-b">
+                  <th className="px-2 py-1 text-left font-medium">#</th>
+                  <th className="px-2 py-1 text-left font-medium">Artículo</th>
+                  <th className="px-2 py-1 text-right font-medium">Cant.</th>
+                  <th className="px-2 py-1 text-right font-medium">P. unit.</th>
+                  <th className="px-2 py-1 text-right font-medium">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lineas.map((l) => (
+                  <tr key={l.noLinea} className="border-b last:border-0">
+                    <td className="px-2 py-1 text-slate-400">{l.noLinea}</td>
+                    <td className="px-2 py-1">
+                      <div className="text-slate-800">{l.descripcion || l.noArti}</div>
+                      {l.descripcion && (
+                        <div className="font-mono text-[10px] text-slate-400">{l.noArti}</div>
+                      )}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono whitespace-nowrap">
+                      {formatMonto(l.cantidad)}
+                      {l.unidad ? ` ${l.unidad}` : ""}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono">₡{formatMonto(l.precioUni)}</td>
+                    <td className="px-2 py-1 text-right font-mono">₡{formatMonto(l.subtotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {selected.aplicaImpuesto && (
+            <p className="px-3 py-1.5 text-[10px] text-slate-400 bg-slate-50 border-t">
+              Monto = suma de líneas (sin IVA desglosado de Codisa).
+            </p>
+          )}
+        </div>
+      )}
+
+      {!selected?.lineas?.length && !loadingDetalle && (
+        <p className="text-xs text-slate-400">
+          Números reales de orden de compra Codisa (NAF). También podés escribir otra referencia.
+        </p>
+      )}
     </div>
   );
 }

@@ -1,19 +1,35 @@
 import { prisma } from "@/modules/core/db/prisma";
 import { withNafOracleConnection } from "@/modules/empleados-naf/services/oracle-client";
-import type { OrdenesCompraListInput } from "../validations/ordenes-compra.schema";
+import type {
+  OrdenesCompraDetalleInput,
+  OrdenesCompraListInput,
+} from "../validations/ordenes-compra.schema";
+
+export type OrdenCompraLinea = {
+  noLinea: number;
+  noArti: string;
+  descripcion: string | null;
+  cantidad: number;
+  precioUni: number;
+  subtotal: number;
+  unidad: string | null;
+};
 
 export type OrdenCompraNafRow = {
   noCia: string;
   companyCode: string | null;
   noOrden: string;
+  noDocu: string | null;
   noProve: string;
   proveedor: string | null;
   fecha: string | null;
   estado: string;
   observaciones: string | null;
-  /** Total OC en moneda de la orden (líneas + IVA). */
+  /** Total de líneas (sin IVA; ARIMIMPORDEN dispara error ORA-20026 en lectura). */
   monto: number | null;
   moneda: string | null;
+  aplicaImpuesto: boolean;
+  lineas?: OrdenCompraLinea[];
 };
 
 export type OrdenesCompraListResult = {
@@ -73,9 +89,27 @@ async function loadCompanyMap(): Promise<Map<string, string>> {
   return map;
 }
 
+function mapHeader(row: OracleRow, companyMap: Map<string, string>): OrdenCompraNafRow {
+  const cia = asString(row.NO_CIA) ?? "";
+  return {
+    noCia: cia,
+    companyCode: companyMap.get(cia) ?? companyMap.get(cia.replace(/^0+/, "") || cia) ?? null,
+    noOrden: asString(row.NO_ORDEN) ?? "",
+    noDocu: asString(row.NO_DOCU),
+    noProve: asString(row.NO_PROVE) ?? "",
+    proveedor: asString(row.PROVEEDOR),
+    fecha: asDateIso(row.FECHA),
+    estado: asString(row.ESTADO) ?? "",
+    observaciones: asString(row.OBSERVACIONES),
+    monto: asNumber(row.MONTO_TOTAL),
+    moneda: asString(row.MONEDA),
+    aplicaImpuesto: (asString(row.APLICA_IMPUESTO) ?? "").toUpperCase() === "S",
+  };
+}
+
 /**
  * Órdenes de compra Codisa/NAF (ARIMENCORDEN).
- * Solo lectura. Filtra por empresa Alfa (`company.code` → `sapCode` = NO_CIA).
+ * Solo lectura. No tocar ARIMIMPORDEN (trigger NAF5.IMPUESTO → ORA-20026).
  */
 export async function listOrdenesCompraNaf(
   input: OrdenesCompraListInput,
@@ -112,21 +146,18 @@ export async function listOrdenesCompraNaf(
         SELECT
           e.NO_CIA,
           e.NO_ORDEN,
+          e.NO_DOCU,
           e.NO_PROVE,
           e.FECHA,
           e.ESTADO,
           e.OBSERVACIONES,
           e.MONEDA,
+          e.APLICA_IMPUESTO,
           NVL(p.NOMBRE_LARGO, p.NOMBRE) AS PROVEEDOR,
           NVL((
             SELECT SUM(NVL(d.CANTIDAD_PEDIDA, 0) * NVL(d.PRECIO_UNI, 0))
             FROM NAF5.ARIMDETORDEN d
             WHERE d.NO_CIA = e.NO_CIA AND d.NO_DOCU = e.NO_DOCU
-          ), 0)
-          + NVL((
-            SELECT SUM(NVL(i.MONTO_BASE_ORIGINAL, 0) * NVL(i.PORCENTAJE, 0) / 100)
-            FROM NAF5.ARIMIMPORDEN i
-            WHERE i.NO_CIA = e.NO_CIA AND i.NO_DOCU = e.NO_DOCU
           ), 0) AS MONTO_TOTAL
         FROM NAF5.ARIMENCORDEN e
         LEFT JOIN NAF5.ARCPMP p
@@ -139,23 +170,102 @@ export async function listOrdenesCompraNaf(
       binds,
     );
 
-    const rows = (result.rows ?? []).map((raw) => {
+    const rows = (result.rows ?? []).map((raw) => mapHeader(raw as OracleRow, companyMap));
+    return { rows, fetchedAt: new Date().toISOString() };
+  });
+}
+
+/** Detalle de una OC + líneas (ARIMDETORDEN + descripción ARINDA). */
+export async function getOrdenCompraDetalleNaf(
+  input: OrdenesCompraDetalleInput,
+): Promise<OrdenCompraNafRow | null> {
+  const noOrden = input.noOrden.trim();
+  if (!noOrden) return null;
+
+  const noCia =
+    (input.noCia?.trim() ? input.noCia.trim().padStart(2, "0") : null) ??
+    (await resolveNoCia(input.company));
+  const companyMap = await loadCompanyMap();
+
+  return withNafOracleConnection(async (conn) => {
+    const binds: Record<string, unknown> = { noOrden };
+    let ciaFilter = "";
+    if (noCia) {
+      binds.noCia = noCia;
+      ciaFilter = "AND e.NO_CIA = :noCia";
+    }
+
+    const headerResult = await conn.execute(
+      `
+      SELECT * FROM (
+        SELECT
+          e.NO_CIA,
+          e.NO_ORDEN,
+          e.NO_DOCU,
+          e.NO_PROVE,
+          e.FECHA,
+          e.ESTADO,
+          e.OBSERVACIONES,
+          e.MONEDA,
+          e.APLICA_IMPUESTO,
+          NVL(p.NOMBRE_LARGO, p.NOMBRE) AS PROVEEDOR,
+          NVL((
+            SELECT SUM(NVL(d.CANTIDAD_PEDIDA, 0) * NVL(d.PRECIO_UNI, 0))
+            FROM NAF5.ARIMDETORDEN d
+            WHERE d.NO_CIA = e.NO_CIA AND d.NO_DOCU = e.NO_DOCU
+          ), 0) AS MONTO_TOTAL
+        FROM NAF5.ARIMENCORDEN e
+        LEFT JOIN NAF5.ARCPMP p
+          ON p.NO_CIA = e.NO_CIA AND p.NO_PROVE = e.NO_PROVE
+        WHERE e.NO_ORDEN = :noOrden
+          ${ciaFilter}
+        ORDER BY e.FECHA DESC NULLS LAST
+      ) WHERE ROWNUM <= 1
+      `,
+      binds,
+    );
+
+    const headerRaw = (headerResult.rows?.[0] ?? null) as OracleRow | null;
+    if (!headerRaw) return null;
+
+    const header = mapHeader(headerRaw, companyMap);
+    if (!header.noDocu) {
+      return { ...header, lineas: [] };
+    }
+
+    const linesResult = await conn.execute(
+      `
+      SELECT
+        d.NO_LINEA,
+        d.NO_ARTI,
+        a.DESCRIPCION,
+        d.CANTIDAD_PEDIDA,
+        d.PRECIO_UNI,
+        NVL(d.CANTIDAD_PEDIDA, 0) * NVL(d.PRECIO_UNI, 0) AS SUBTOTAL,
+        d.UNIDAD_MEDIDA,
+        d.OBSERVACIONES_LIN
+      FROM NAF5.ARIMDETORDEN d
+      LEFT JOIN NAF5.ARINDA a
+        ON a.NO_CIA = d.NO_CIA AND a.NO_ARTI = d.NO_ARTI
+      WHERE d.NO_CIA = :noCia AND d.NO_DOCU = :noDocu
+      ORDER BY d.NO_LINEA
+      `,
+      { noCia: header.noCia, noDocu: header.noDocu },
+    );
+
+    const lineas: OrdenCompraLinea[] = (linesResult.rows ?? []).map((raw) => {
       const row = raw as OracleRow;
-      const cia = asString(row.NO_CIA) ?? "";
       return {
-        noCia: cia,
-        companyCode: companyMap.get(cia) ?? companyMap.get(cia.replace(/^0+/, "") || cia) ?? null,
-        noOrden: asString(row.NO_ORDEN) ?? "",
-        noProve: asString(row.NO_PROVE) ?? "",
-        proveedor: asString(row.PROVEEDOR),
-        fecha: asDateIso(row.FECHA),
-        estado: asString(row.ESTADO) ?? "",
-        observaciones: asString(row.OBSERVACIONES),
-        monto: asNumber(row.MONTO_TOTAL),
-        moneda: asString(row.MONEDA),
-      } satisfies OrdenCompraNafRow;
+        noLinea: asNumber(row.NO_LINEA) ?? 0,
+        noArti: asString(row.NO_ARTI) ?? "",
+        descripcion: asString(row.DESCRIPCION) ?? asString(row.OBSERVACIONES_LIN),
+        cantidad: asNumber(row.CANTIDAD_PEDIDA) ?? 0,
+        precioUni: asNumber(row.PRECIO_UNI) ?? 0,
+        subtotal: asNumber(row.SUBTOTAL) ?? 0,
+        unidad: asString(row.UNIDAD_MEDIDA),
+      };
     });
 
-    return { rows, fetchedAt: new Date().toISOString() };
+    return { ...header, lineas };
   });
 }
