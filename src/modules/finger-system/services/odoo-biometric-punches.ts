@@ -25,8 +25,9 @@ export async function listOdooBiometricPunches(input: FingerPunchListInput = {})
   const q = input.q?.trim() || null;
   const like = q ? `%${q}%` : null;
   const badge = input.badgeNumber?.trim() || null;
-  const from = input.from ? new Date(`${input.from}T00:00:00`) : null;
-  const to = input.to ? new Date(`${input.to}T23:59:59.999`) : null;
+  // Odoo guarda check_time como hora local naive; filtrar por fecha civil, no Instant UTC.
+  const fromDate = input.from?.trim() || null;
+  const toDate = input.to?.trim() || null;
   const source =
     input.source === "DEVICE" ? "device" : input.source === "ATT2016" ? "att2016" : null;
   const deviceIdNum = input.deviceId && /^\d+$/.test(input.deviceId) ? Number(input.deviceId) : null;
@@ -57,8 +58,8 @@ export async function listOdooBiometricPunches(input: FingerPunchListInput = {})
         OR CAST(p.att_user_id AS text) = ${q})
       AND (${badge}::text IS NULL OR p.badge ILIKE ${badge ? `%${badge}%` : null})
       AND (${source}::text IS NULL OR p.source = ${source})
-      AND (${from}::timestamp IS NULL OR p.check_time >= ${from})
-      AND (${to}::timestamp IS NULL OR p.check_time <= ${to})
+      AND (${fromDate}::date IS NULL OR p.check_time::date >= ${fromDate}::date)
+      AND (${toDate}::date IS NULL OR p.check_time::date <= ${toDate}::date)
       AND (${deviceIdNum}::int IS NULL OR p.device_id = ${deviceIdNum})
     ORDER BY p.check_time DESC
     LIMIT ${pageSize} OFFSET ${offset}

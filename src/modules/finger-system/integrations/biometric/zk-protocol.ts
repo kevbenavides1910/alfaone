@@ -53,25 +53,65 @@ export type ZkClientOptions = {
   commKey?: number;
 };
 
-function checksum(buf: Buffer): number {
-  let sum = 0;
-  for (let i = 0; i < buf.length; i += 2) {
-    if (i === 2) continue;
-    sum += buf.readUInt16LE(i);
+/** Framing TCP de pyzk: MACHINE_PREPARE_DATA_1/2 + length + payload. */
+const USHRT_MAX = 65535;
+const TCP_PREPARE_1 = 0x5050;
+const TCP_PREPARE_2 = 0x7d82;
+
+/** Checksum ZK (zkemsdk / pyzk), no el sumatorio simple. */
+function createChecksum(p: Buffer): number {
+  let checksum = 0;
+  let offset = 0;
+  let remaining = p.length;
+  while (remaining > 1) {
+    checksum += p.readUInt16LE(offset);
+    offset += 2;
+    remaining -= 2;
+    while (checksum > USHRT_MAX) checksum -= USHRT_MAX;
   }
-  return sum % 65535;
+  if (remaining) checksum += p[p.length - 1]!;
+  while (checksum > USHRT_MAX) checksum -= USHRT_MAX;
+  checksum = ~checksum;
+  while (checksum < 0) checksum += USHRT_MAX;
+  return checksum & 0xffff;
 }
 
 function createHeader(command: number, sessionId: number, replyId: number, data?: Buffer): Buffer {
-  const size = 8 + (data?.length ?? 0);
-  const buf = Buffer.alloc(size);
+  const body = data ?? Buffer.alloc(0);
+  const forChecksum = Buffer.alloc(8 + body.length);
+  forChecksum.writeUInt16LE(command, 0);
+  forChecksum.writeUInt16LE(0, 2);
+  forChecksum.writeUInt16LE(sessionId, 4);
+  forChecksum.writeUInt16LE(replyId, 6);
+  body.copy(forChecksum, 8);
+  const checksum = createChecksum(forChecksum);
+  let nextReply = replyId + 1;
+  if (nextReply >= USHRT_MAX) nextReply -= USHRT_MAX;
+  const buf = Buffer.alloc(8 + body.length);
   buf.writeUInt16LE(command, 0);
-  buf.writeUInt16LE(0, 2);
+  buf.writeUInt16LE(checksum, 2);
   buf.writeUInt16LE(sessionId, 4);
-  buf.writeUInt16LE(replyId, 6);
-  if (data) data.copy(buf, 8);
-  buf.writeUInt16LE(checksum(buf), 2);
+  buf.writeUInt16LE(nextReply, 6);
+  body.copy(buf, 8);
   return buf;
+}
+
+function wrapTcpTop(packet: Buffer): Buffer {
+  const top = Buffer.alloc(8);
+  top.writeUInt16LE(TCP_PREPARE_1, 0);
+  top.writeUInt16LE(TCP_PREPARE_2, 2);
+  top.writeUInt32LE(packet.length, 4);
+  return Buffer.concat([top, packet]);
+}
+
+function unwrapTcpTop(buf: Buffer): { length: number; payload: Buffer } | null {
+  if (buf.length < 8) return null;
+  const p1 = buf.readUInt16LE(0);
+  const p2 = buf.readUInt16LE(2);
+  const length = buf.readUInt32LE(4);
+  if (p1 !== TCP_PREPARE_1 || p2 !== TCP_PREPARE_2) return null;
+  if (buf.length < 8 + length) return null;
+  return { length, payload: buf.subarray(8, 8 + length) };
 }
 
 function decodeTime(data: Buffer, offset: number): Date {
@@ -84,7 +124,19 @@ function decodeTime(data: Buffer, offset: number): Date {
   return new Date(year, month - 1, day, hour, minute, second);
 }
 
-function parseAttendanceChunk(data: Buffer): ZkAttendanceRecord[] {
+/** Tiempo empaquetado ZK (4 bytes) como en pyzk __decode_time. */
+function decodeTimePacked(raw: Buffer): Date {
+  const t = raw.readUInt32LE(0);
+  const second = t % 60;
+  const minute = Math.floor(t / 60) % 60;
+  const hour = Math.floor(t / 3600) % 24;
+  const day = Math.floor(t / 86400) % 31 + 1;
+  const month = Math.floor(t / 2678400) % 12 + 1;
+  const year = Math.floor(t / 32140800) + 2000;
+  return new Date(year, month - 1, day, hour, minute, second);
+}
+
+function parseAttendanceChunk40(data: Buffer): ZkAttendanceRecord[] {
   const records: ZkAttendanceRecord[] = [];
   const size = 40;
   for (let i = 0; i + size <= data.length; i += size) {
@@ -94,6 +146,55 @@ function parseAttendanceChunk(data: Buffer): ZkAttendanceRecord[] {
       status: slice.readUInt8(4),
       punch: slice.readUInt8(5),
       timestamp: decodeTime(slice, 8),
+    });
+  }
+  return records;
+}
+
+/** Parseo flexible estilo pyzk/Odoo (8 / 16 / 40 bytes). */
+function parseAttendanceFlexible(payload: Buffer): ZkAttendanceRecord[] {
+  if (payload.length < 4) return [];
+  // Buffered: [totalSize:u32][records...]
+  let data = payload;
+  let recordSize = 40;
+  if (payload.length >= 8) {
+    const declared = payload.readUInt32LE(0);
+    if (declared > 0 && declared < payload.length) {
+      data = payload.subarray(4);
+      // estimar tamaño de registro
+      const nGuess = Math.floor(data.length / 16);
+      if (nGuess > 0 && data.length % 16 === 0) recordSize = 16;
+      else if (data.length % 8 === 0 && data.length % 40 !== 0) recordSize = 8;
+      else if (data.length % 40 === 0) recordSize = 40;
+      else if (declared % 16 === 0) recordSize = 16;
+      else if (declared % 8 === 0) recordSize = 8;
+    }
+  }
+
+  if (recordSize === 40) return parseAttendanceChunk40(data);
+
+  const records: ZkAttendanceRecord[] = [];
+  if (recordSize === 8) {
+    for (let i = 0; i + 8 <= data.length; i += 8) {
+      const slice = data.subarray(i, i + 8);
+      records.push({
+        userId: slice.readUInt16LE(0),
+        status: slice.readUInt8(2),
+        punch: slice.readUInt8(7),
+        timestamp: decodeTimePacked(slice.subarray(3, 7)),
+      });
+    }
+    return records;
+  }
+
+  // 16-byte ZK8
+  for (let i = 0; i + 16 <= data.length; i += 16) {
+    const slice = data.subarray(i, i + 16);
+    records.push({
+      userId: slice.readUInt32LE(0),
+      timestamp: decodeTimePacked(slice.subarray(4, 8)),
+      status: slice.readUInt8(8),
+      punch: slice.readUInt8(9),
     });
   }
   return records;
@@ -128,7 +229,7 @@ function packSetUser72(input: ZkSetUserInput & { uid: number }): Buffer {
 export class ZkProtocolClient {
   private socket: net.Socket | null = null;
   private sessionId = 0;
-  private replyId = 0;
+  private replyId = USHRT_MAX - 1;
   private readonly ipAddress: string;
   private readonly port: number;
   private readonly timeoutMs: number;
@@ -140,32 +241,21 @@ export class ZkProtocolClient {
     void options.commKey;
   }
 
-  private nextReplyId(): number {
-    this.replyId = (this.replyId + 1) % 65535;
-    return this.replyId;
-  }
-
   private async sendReceive(command: number, data?: Buffer, timeoutMs?: number): Promise<Buffer> {
     if (!this.socket) throw new Error("Dispositivo no conectado.");
-    const packet = createHeader(command, this.sessionId, this.nextReplyId(), data);
+    const packet = createHeader(command, this.sessionId, this.replyId, data);
+    const framed = wrapTcpTop(packet);
     const wait = timeoutMs ?? this.timeoutMs;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("Timeout en protocolo ZK.")), wait);
-      const chunks: Buffer[] = [];
+      const timer = setTimeout(() => fail(new Error("Timeout en protocolo ZK.")), wait);
+      let buf = Buffer.alloc(0);
       const onData = (chunk: Buffer) => {
-        chunks.push(chunk);
-        const buf = Buffer.concat(chunks);
-        if (buf.length >= 8) {
-          const cmd = buf.readUInt16LE(0);
-          if (cmd === CMD_PREPARE_DATA) {
-            const dataSize = buf.readUInt32LE(8);
-            if (buf.length >= 16 + dataSize) finish(buf);
-            return;
-          }
-          if (cmd === CMD_DATA || cmd === CMD_ACK_OK || cmd >= 2000) {
-            finish(buf);
-          }
-        }
+        buf = Buffer.concat([buf, chunk]);
+        const unwrapped = unwrapTcpTop(buf);
+        if (!unwrapped) return;
+        if (unwrapped.payload.length < 8) return;
+        this.replyId = unwrapped.payload.readUInt16LE(6);
+        finish(unwrapped.payload);
       };
       const onError = (err: Error) => fail(err);
       const cleanup = () => {
@@ -173,9 +263,9 @@ export class ZkProtocolClient {
         this.socket?.off("data", onData);
         this.socket?.off("error", onError);
       };
-      const finish = (buf: Buffer) => {
+      const finish = (payload: Buffer) => {
         cleanup();
-        resolve(buf);
+        resolve(payload);
       };
       const fail = (err: Error) => {
         cleanup();
@@ -183,14 +273,17 @@ export class ZkProtocolClient {
       };
       this.socket!.on("data", onData);
       this.socket!.on("error", onError);
-      this.socket!.write(packet);
+      this.socket!.write(framed);
     });
   }
 
   async connect(): Promise<void> {
     if (this.socket) return;
+    this.sessionId = 0;
+    this.replyId = USHRT_MAX - 1;
     await new Promise<void>((resolve, reject) => {
       const socket = net.createConnection({ host: this.ipAddress, port: this.port }, () => {
+        socket.setTimeout(0);
         this.socket = socket;
         resolve();
       });
@@ -218,9 +311,54 @@ export class ZkProtocolClient {
     this.sessionId = 0;
   }
 
+  /** Lee el siguiente frame TCP completo (sin enviar comando). */
+  private async receiveTcpFrame(timeoutMs?: number): Promise<Buffer> {
+    if (!this.socket) throw new Error("Dispositivo no conectado.");
+    const wait = timeoutMs ?? this.timeoutMs;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => fail(new Error("Timeout en protocolo ZK.")), wait);
+      let buf = Buffer.alloc(0);
+      const onData = (chunk: Buffer) => {
+        buf = Buffer.concat([buf, chunk]);
+        const unwrapped = unwrapTcpTop(buf);
+        if (!unwrapped) return;
+        if (unwrapped.payload.length < 8) return;
+        this.replyId = unwrapped.payload.readUInt16LE(6);
+        finish(unwrapped.payload);
+      };
+      const onError = (err: Error) => fail(err);
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.socket?.off("data", onData);
+        this.socket?.off("error", onError);
+      };
+      const finish = (payload: Buffer) => {
+        cleanup();
+        resolve(payload);
+      };
+      const fail = (err: Error) => {
+        cleanup();
+        reject(err);
+      };
+      this.socket!.on("data", onData);
+      this.socket!.on("error", onError);
+    });
+  }
+
   private async readDataPayload(requestCommand: number): Promise<Buffer> {
-    const reply = await this.sendReceive(requestCommand);
+    // Preferir lectura buffered (CMD 1503) como pyzk; fallback ATTLOG clásico.
+    try {
+      const buffered = await this.readWithBuffer(requestCommand);
+      if (buffered.length) return buffered;
+    } catch {
+      // firmware viejo
+    }
+
+    const reply = await this.sendReceive(requestCommand, undefined, Math.max(this.timeoutMs, 30000));
     const cmd = reply.readUInt16LE(0);
+    if (cmd === CMD_DATA) {
+      return reply.subarray(8);
+    }
     if (cmd !== CMD_PREPARE_DATA) {
       if (cmd === CMD_ACK_OK && reply.length <= 16) return Buffer.alloc(0);
       throw new Error(`Respuesta inesperada del dispositivo (cmd ${cmd}).`);
@@ -229,7 +367,7 @@ export class ZkProtocolClient {
     const chunks: Buffer[] = [];
     let received = 0;
     while (received < totalSize) {
-      const dataReply = await this.sendReceive(CMD_ACK_OK);
+      const dataReply = await this.receiveTcpFrame(Math.max(this.timeoutMs, 30000));
       const dataCmd = dataReply.readUInt16LE(0);
       if (dataCmd !== CMD_DATA) break;
       const payload = dataReply.subarray(8);
@@ -237,6 +375,75 @@ export class ZkProtocolClient {
       received += payload.length;
     }
     return Buffer.concat(chunks);
+  }
+
+  /**
+   * Lectura buffered pyzk (CMD 1503 / CMD_DATA_WRRQ).
+   * Devuelve el payload completo (incluye prefijo size de 4 bytes en attendance).
+   */
+  private async readWithBuffer(command: number): Promise<Buffer> {
+    const CMD_DATA_WRRQ = 1503;
+    const MAX_CHUNK = 1024;
+    const cs = Buffer.alloc(11);
+    cs.writeUInt8(1, 0);
+    cs.writeInt16LE(command & 0xffff, 1);
+    cs.writeInt32LE(0, 3);
+    cs.writeInt32LE(0, 7);
+
+    const first = await this.sendReceive(CMD_DATA_WRRQ, cs, Math.max(this.timeoutMs, 30000));
+    const code = first.readUInt16LE(0);
+    if (code === CMD_DATA) {
+      return first.subarray(8);
+    }
+    if (code !== CMD_ACK_OK && code !== CMD_PREPARE_DATA) {
+      throw new Error(`RWB no soportado (cmd ${code}).`);
+    }
+    const data = first.subarray(8);
+    let size = 0;
+    if (data.length >= 5) {
+      size = data.readUInt32LE(1);
+    } else if (first.length >= 12) {
+      size = first.readUInt32LE(8);
+    }
+    if (!size) return Buffer.alloc(0);
+
+    const remain = size % MAX_CHUNK;
+    const packets = Math.floor((size - remain) / MAX_CHUNK);
+    const parts: Buffer[] = [];
+    let start = 0;
+    for (let i = 0; i < packets; i += 1) {
+      parts.push(await this.readChunk(start, MAX_CHUNK));
+      start += MAX_CHUNK;
+    }
+    if (remain) {
+      parts.push(await this.readChunk(start, remain));
+    }
+    await this.sendReceive(CMD_FREE_DATA).catch(() => undefined);
+    return Buffer.concat(parts);
+  }
+
+  private async readChunk(start: number, size: number): Promise<Buffer> {
+    const CMD_DATA_RDQ = 1504;
+    const req = Buffer.alloc(8);
+    req.writeUInt32LE(start >>> 0, 0);
+    req.writeUInt32LE(size >>> 0, 4);
+    const reply = await this.sendReceive(CMD_DATA_RDQ, req, Math.max(this.timeoutMs, 60000));
+    const code = reply.readUInt16LE(0);
+    if (code === CMD_DATA) return reply.subarray(8);
+    if (code === CMD_PREPARE_DATA) {
+      const total = reply.readUInt32LE(8);
+      const chunks: Buffer[] = [];
+      let got = 0;
+      while (got < total) {
+        const frame = await this.receiveTcpFrame(Math.max(this.timeoutMs, 60000));
+        if (frame.readUInt16LE(0) !== CMD_DATA) break;
+        const part = frame.subarray(8);
+        chunks.push(part);
+        got += part.length;
+      }
+      return Buffer.concat(chunks);
+    }
+    throw new Error(`Chunk RWB falló (cmd ${code}).`);
   }
 
   private async refreshData(): Promise<void> {
@@ -250,7 +457,7 @@ export class ZkProtocolClient {
   async getAttendance(from: Date, to: Date): Promise<ZkAttendanceRecord[]> {
     await this.connect();
     const payload = await this.readDataPayload(CMD_ATTLOG_RRQ);
-    const all = parseAttendanceChunk(payload);
+    const all = parseAttendanceFlexible(payload);
     return all.filter((r) => r.timestamp >= from && r.timestamp <= to);
   }
 

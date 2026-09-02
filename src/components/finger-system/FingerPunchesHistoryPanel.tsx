@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,6 +15,7 @@ import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import { formatDateTime } from "@/lib/utils/format";
 import { fingerApiUrl, useFingerCompany } from "@/components/finger-system/finger-company-context";
 import type { FingerPunchListRow } from "@/modules/finger-system/services/finger-punches-list";
+import { useFingerPermissions } from "@/components/finger-system/use-finger-permissions";
 
 type ListResponse = {
   data: {
@@ -23,16 +24,29 @@ type ListResponse = {
     pageSize: number;
     totalPages: number;
     rows: FingerPunchListRow[];
+    source?: string;
   };
 };
 
 const TABLE_ID = "finger-punches-history";
 
+function todayIsoCostaRica(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Costa_Rica",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 export function FingerPunchesHistoryPanel() {
+  const queryClient = useQueryClient();
   const { companyCode } = useFingerCompany();
+  const { canEditDevices } = useFingerPermissions();
+  const today = todayIsoCostaRica();
   const [q, setQ] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
   const [source, setSource] = useState("");
   const [page, setPage] = useState(1);
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
@@ -48,7 +62,7 @@ export function FingerPunchesHistoryPanel() {
     return sp.toString();
   }, [q, from, to, source, page]);
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["finger-punches", queryParams, companyCode],
     queryFn: async () => {
       const res = await fetch(fingerApiUrl(`/api/finger-system/punches?${queryParams}`, companyCode), {
@@ -59,6 +73,28 @@ export function FingerPunchesHistoryPanel() {
       return json as ListResponse;
     },
     placeholderData: keepPreviousData,
+  });
+
+  const pullMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/finger-system/devices/pull-all-attendance", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message ?? "Error al traer marcas");
+      return json.data as {
+        insertedTotal: number;
+        results: Array<{ ok: boolean; name: string; error?: string }>;
+      };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["finger-punches"] });
+      queryClient.invalidateQueries({ queryKey: ["finger-punches-recent"] });
+      queryClient.invalidateQueries({ queryKey: ["finger-system-dashboard"] });
+    },
   });
 
   const rows = data?.data.rows ?? [];
@@ -144,6 +180,22 @@ export function FingerPunchesHistoryPanel() {
         <Button
           variant="outline"
           size="sm"
+          onClick={() => {
+            setFrom(today);
+            setTo(today);
+            setPage(1);
+          }}
+        >
+          Hoy
+        </Button>
+        {canEditDevices ? (
+          <Button size="sm" disabled={pullMutation.isPending} onClick={() => pullMutation.mutate()}>
+            {pullMutation.isPending ? "Trayendo…" : "Traer marcas"}
+          </Button>
+        ) : null}
+        <Button
+          variant="outline"
+          size="sm"
           disabled={!displayedRows.length}
           onClick={() =>
             exportRowsToExcel({
@@ -163,9 +215,9 @@ export function FingerPunchesHistoryPanel() {
         >
           Excel ({displayedRows.length})
         </Button>
-        {data?.data && "source" in (data.data as object) ? (
+        {payload?.source ? (
           <span className="text-xs text-muted-foreground self-center">
-            Fuente: {(data.data as { source?: string }).source === "odoo" ? "Odoo" : "Finger local"}
+            Fuente: {payload.source === "odoo" ? "Odoo" : "Finger local"}
           </span>
         ) : null}
         {isFetching && !isLoading ? (
@@ -173,10 +225,21 @@ export function FingerPunchesHistoryPanel() {
         ) : null}
       </div>
 
+      {pullMutation.isSuccess ? (
+        <p className="text-sm text-emerald-700">
+          Traídas {pullMutation.data.insertedTotal} marcas nuevas (
+          {pullMutation.data.results.filter((r) => r.ok).length}/{pullMutation.data.results.length} relojes
+          OK).
+        </p>
+      ) : null}
+      {pullMutation.isError ? (
+        <p className="text-sm text-red-600">{(pullMutation.error as Error).message}</p>
+      ) : null}
+
       <div className="rounded-xl border bg-card overflow-hidden">
         <div className="max-h-[calc(100vh-16rem)] overflow-auto">
           {hasActiveColumnFilters(columnFilters) ? (
-            <div className="flex justify-end px-3 py-1.5 border-b bg-slate-50">
+            <div className="flex justify-end px-3 py-1.5 border-b bg-muted/40">
               <Button
                 size="sm"
                 variant="ghost"
@@ -203,7 +266,7 @@ export function FingerPunchesHistoryPanel() {
                 rows={rows}
                 filters={columnFilters}
                 onFilterChange={(k, v) => setColumnFilters((p) => ({ ...p, [k]: v }))}
-                filterRowClassName="bg-slate-50"
+                filterRowClassName="bg-muted/40"
               />
             </thead>
             <tbody>
@@ -217,7 +280,10 @@ export function FingerPunchesHistoryPanel() {
               {!isLoading && displayedRows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                    No hay marcas con los filtros actuales. Use «Traer marcas» en Dispositivos o espere el sync.
+                    Sin marcas en este rango. Pulse «Traer marcas» o amplíe Desde/Hasta.{" "}
+                    <button type="button" className="underline" onClick={() => refetch()}>
+                      Actualizar
+                    </button>
                   </td>
                 </tr>
               ) : null}
