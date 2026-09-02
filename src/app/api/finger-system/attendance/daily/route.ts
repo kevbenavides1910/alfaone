@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { withPermission } from "@/lib/permissions/middleware";
 import { ok, badRequest, serverError } from "@/lib/api/response";
-import { listFingerAttendanceDays } from "@/modules/finger-system/services/finger-attendance-calc";
+import { listFingerAttendancePreferOdoo } from "@/modules/finger-system/services/odoo-biometric-attendance";
 import type { FingerAttendanceStatus } from "@prisma/client";
 
 export const GET = withPermission(
@@ -23,7 +23,7 @@ export const GET = withPermission(
       const status = sp.get("status") as FingerAttendanceStatus | null;
 
       return ok(
-        await listFingerAttendanceDays({
+        await listFingerAttendancePreferOdoo({
           from,
           to,
           q: sp.get("q") ?? undefined,

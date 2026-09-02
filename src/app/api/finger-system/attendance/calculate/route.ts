@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { withPermission } from "@/lib/permissions/middleware";
 import { ok, badRequest, serverError } from "@/lib/api/response";
 import { calculateFingerAttendance } from "@/modules/finger-system/services/finger-attendance-calc";
+import { syncOdooPunchesIntoFingerCache } from "@/modules/finger-system/services/odoo-biometric-attendance";
 
 export const POST = withPermission(
   async (req: NextRequest, { session }) => {
@@ -16,6 +17,12 @@ export const POST = withPermission(
         return badRequest("Fechas inválidas.");
       }
 
+      const odooSync = await syncOdooPunchesIntoFingerCache({ from, to }).catch((e) => ({
+        inserted: 0,
+        skipped: 0,
+        error: e instanceof Error ? e.message : "sync error",
+      }));
+
       const result = await calculateFingerAttendance({
         from,
         to,
@@ -27,7 +34,7 @@ export const POST = withPermission(
           null,
       });
 
-      return ok(result);
+      return ok({ ...result, odooSync });
     } catch (e) {
       if (e instanceof Error) return badRequest(e.message);
       return serverError("No fue posible calcular la asistencia.", e);

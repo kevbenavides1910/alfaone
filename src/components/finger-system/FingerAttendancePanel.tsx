@@ -35,14 +35,12 @@ export function FingerAttendancePanel() {
   const [to, setTo] = useState(todayIso());
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     setPage(1);
-    setLoaded(false);
   }, [companyCode]);
 
-  const listQuery = useQuery<{ data: ListResponse }>({
+  const listQuery = useQuery<{ data: ListResponse & { source?: string } }>({
     queryKey: ["finger-attendance-daily", from, to, q, page, companyCode],
     queryFn: async () => {
       const qs = new URLSearchParams({ from, to, page: String(page), pageSize: "25" });
@@ -54,7 +52,6 @@ export function FingerAttendancePanel() {
       if (!res.ok) throw new Error(json.error?.message ?? "Error al listar");
       return json;
     },
-    enabled: loaded,
   });
 
   const calcMutation = useMutation({
@@ -74,7 +71,6 @@ export function FingerAttendancePanel() {
       return json.data;
     },
     onSuccess: () => {
-      setLoaded(true);
       queryClient.invalidateQueries({ queryKey: ["finger-attendance-daily"] });
       queryClient.invalidateQueries({ queryKey: ["finger-system-dashboard"] });
     },
@@ -87,8 +83,8 @@ export function FingerAttendancePanel() {
       <CardHeader>
         <CardTitle className="text-base">Cálculo de asistencia</CardTitle>
         <p className="text-sm text-slate-500">
-          Agrupa marcas importadas por día (primera entrada / última salida) y compara con el turno
-          default.
+          Marcas de Odoo agrupadas por día (entrada/salida). «Calcular» sincroniza a cache Alfa y
+          aplica turnos a empleados vinculados RRHH.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -105,19 +101,15 @@ export function FingerAttendancePanel() {
 
         <div className="flex flex-wrap gap-2 items-center">
           <Button onClick={() => calcMutation.mutate()} disabled={calcMutation.isPending}>
-            {calcMutation.isPending ? "Calculando…" : "Calcular asistencia"}
+            {calcMutation.isPending ? "Calculando…" : "Calcular (turnos RRHH)"}
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setLoaded(true);
-              listQuery.refetch();
-            }}
-            disabled={listQuery.isFetching}
-          >
-            {listQuery.isFetching ? "Cargando…" : "Ver resultados"}
+          <Button variant="outline" onClick={() => listQuery.refetch()} disabled={listQuery.isFetching}>
+            {listQuery.isFetching ? "Cargando…" : "Actualizar"}
           </Button>
           <FingerCompanyFilterHint />
+          {data?.source === "odoo" ? (
+            <span className="text-xs text-muted-foreground">Fuente: Odoo</span>
+          ) : null}
         </div>
 
         {calcMutation.isSuccess ? (
@@ -131,12 +123,11 @@ export function FingerAttendancePanel() {
         ) : null}
 
         <Input
-          placeholder="Buscar empleado…"
+          placeholder="Buscar empleado / badge…"
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
             setPage(1);
-            setLoaded(true);
           }}
           className="max-w-sm"
         />

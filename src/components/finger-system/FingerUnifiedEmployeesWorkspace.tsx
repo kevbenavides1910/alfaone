@@ -180,13 +180,18 @@ export function FingerUnifiedEmployeesWorkspace() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (isNew) {
+        if (!formName.trim()) throw new Error("Indique el nombre.");
         const res = await fetch("/api/finger-system/employees/unified", {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            badgeNumber: formBadge.trim(),
+            badgeNumber: formBadge.trim() || undefined,
             name: formName.trim(),
+            cedula: formCedula.trim() || undefined,
+            card: formCard.trim() || undefined,
+            privilege: formPrivilege === "Administrador" ? "14" : "0",
+            pushToDevices: true,
             deptId: selectedNode.deptId ?? 1,
           }),
         });
@@ -194,15 +199,19 @@ export function FingerUnifiedEmployeesWorkspace() {
         if (!res.ok) throw new Error(json.error?.message ?? "Error al crear");
         return json.data;
       }
-      if (!selectedEmployee?.attUserId) throw new Error("Seleccione un empleado.");
+      if (!selectedEmployee?.attUserId && !selectedEmployee?.badgeNumber) {
+        throw new Error("Seleccione un empleado.");
+      }
       const res = await fetch("/api/finger-system/employees/unified", {
         method: "PATCH",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           attUserId: selectedEmployee.attUserId,
-          badgeNumber: formBadge.trim(),
+          badgeNumber: formBadge.trim() || selectedEmployee.badgeNumber,
           name: formName.trim(),
+          cedula: formCedula.trim() || undefined,
+          pushToDevices: false,
         }),
       });
       const json = await res.json();

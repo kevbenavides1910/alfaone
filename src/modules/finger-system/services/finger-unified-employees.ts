@@ -21,7 +21,7 @@ export type UnifiedEmployeeRow = {
   fingerprintCount: number;
   fingerIds: number[];
   linkId: string | null;
-  source: "att2016" | "link";
+  source: "att2016" | "link" | "odoo";
 };
 
 export type UnifiedEmployeeFilters = {
