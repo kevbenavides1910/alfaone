@@ -5,6 +5,7 @@ import {
   createFingerDevice,
   listFingerDevices,
 } from "@/modules/finger-system/services/finger-devices";
+import { listFingerDevicesPreferOdoo } from "@/modules/finger-system/services/odoo-biometric-devices";
 import type { FingerDeviceStatus } from "@prisma/client";
 
 export const GET = withPermission(
@@ -15,6 +16,17 @@ export const GET = withPermission(
       const pageSize = Number.parseInt(sp.get("pageSize") ?? "25", 10);
       const status = sp.get("status") as FingerDeviceStatus | null;
 
+      // Listado preferente desde Odoo (espejo local por IP para acciones ZK).
+      if (!status) {
+        const result = await listFingerDevicesPreferOdoo({
+          q: sp.get("q") ?? undefined,
+          isActive: sp.get("isActive") === "false" ? false : sp.get("isActive") === "true" ? true : undefined,
+          page: Number.isNaN(page) ? 1 : page,
+          pageSize: Number.isNaN(pageSize) ? 25 : pageSize,
+        });
+        return ok(result);
+      }
+
       const result = await listFingerDevices({
         q: sp.get("q") ?? undefined,
         company: sp.get("company") ?? undefined,
@@ -24,7 +36,7 @@ export const GET = withPermission(
         pageSize: Number.isNaN(pageSize) ? 25 : pageSize,
       });
 
-      return ok(result);
+      return ok({ ...result, source: "finger" });
     } catch (e) {
       return serverError("Error al listar dispositivos biométricos.", e);
     }

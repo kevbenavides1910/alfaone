@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { withPermission } from "@/lib/permissions/middleware";
 import { ok, badRequest, serverError } from "@/lib/api/response";
-import { listFingerPunches } from "@/modules/finger-system/services/finger-punches-list";
+import { listFingerPunchesPreferOdoo } from "@/modules/finger-system/services/odoo-biometric-punches";
 
 export const GET = withPermission(
   async (req: NextRequest) => {
@@ -10,7 +10,7 @@ export const GET = withPermission(
       const sourceRaw = sp.get("source");
       const source =
         sourceRaw === "DEVICE" || sourceRaw === "ATT2016" ? sourceRaw : undefined;
-      const data = await listFingerPunches({
+      const data = await listFingerPunchesPreferOdoo({
         page: Number(sp.get("page") || 1),
         pageSize: Number(sp.get("pageSize") || 25),
         q: sp.get("q") || undefined,

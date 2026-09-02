@@ -1,6 +1,7 @@
 import { getFingerDashboardStats } from "@/modules/finger-system/services/finger-dashboard";
-import { listFingerDevices } from "@/modules/finger-system/services/finger-devices";
-import { listFingerPunches } from "@/modules/finger-system/services/finger-punches-list";
+import { listFingerDevicesPreferOdoo } from "@/modules/finger-system/services/odoo-biometric-devices";
+import { listFingerPunchesPreferOdoo } from "@/modules/finger-system/services/odoo-biometric-punches";
+import { countOdooBiometricSummary } from "@/modules/finger-system/services/odoo-biometric-write";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
 import { MAX_LIST, intArg, strArg } from "./shared";
@@ -11,24 +12,28 @@ export function fingerTools(): SyntraTool[] {
       permission: { key: "fingerSystem.dashboard", level: "view" },
       definition: toolDef(
         "query_finger_dashboard",
-        "Resumen de asistencia biométrica: empleados activos/vinculados, presentes hoy, ausentes, marcas y dispositivos.",
+        "Resumen de asistencia biométrica: empleados, marcas, dispositivos. Incluye conteos Odoo si está configurado.",
         { type: "object", properties: {}, additionalProperties: false },
       ),
       describeCall: () => "Consultando asistencia biométrica…",
       handler: async () => {
-        const stats = await getFingerDashboardStats();
+        const [stats, odoo] = await Promise.all([
+          getFingerDashboardStats(),
+          countOdooBiometricSummary(),
+        ]);
         return {
           empleadosActivos: stats.employeesActive,
           empleadosVinculados: stats.employeesLinked,
           presentesHoy: stats.employeesPresentToday,
           ausentesHoy: stats.employeesAbsentToday,
-          llegadasTarde: stats.lateArrivalsToday,
-          horasExtra: stats.overtimeToday,
           dispositivosOnline: stats.devicesOnline,
           dispositivosOffline: stats.devicesOffline,
           marcasHoy: stats.punchesToday,
           ultimaSync: stats.lastSyncAt,
-          fuente: "Finger System Alfa One",
+          odoo: odoo
+            ? { relojes: odoo.devices, usuarios: odoo.users, marcas: odoo.punches }
+            : null,
+          fuente: odoo ? "Finger System + Odoo alfa_biometric" : "Finger System Alfa One",
         };
       },
     },
@@ -36,7 +41,7 @@ export function fingerTools(): SyntraTool[] {
       permission: { key: "fingerSystem.marcasEnVivo", level: "view" },
       definition: toolDef(
         "list_finger_punches",
-        "Lista marcas biométricas recientes (relojes ZK y/o ATT2016) con filtros por fecha, búsqueda y origen.",
+        "Lista marcas biométricas (prioriza Odoo alfa_biometric_punch si hay ODOO_BIOMETRIC_DATABASE_URL).",
         {
           type: "object",
           properties: {
@@ -62,7 +67,7 @@ export function fingerTools(): SyntraTool[] {
         const source =
           sourceRaw === "DEVICE" || sourceRaw === "ATT2016" ? sourceRaw : undefined;
         const limit = intArg(args, "limit", 20, MAX_LIST);
-        const data = await listFingerPunches({
+        const data = await listFingerPunchesPreferOdoo({
           page: 1,
           pageSize: limit,
           q: strArg(args, "q") || undefined,
@@ -72,6 +77,7 @@ export function fingerTools(): SyntraTool[] {
         });
         return {
           total: data.total,
+          origenDatos: data.source,
           marcas: data.rows.slice(0, MAX_LIST).map((r) => ({
             fecha: r.checkTime,
             badge: r.badgeNumber ?? r.attUserId,
@@ -81,7 +87,7 @@ export function fingerTools(): SyntraTool[] {
             origen: r.source,
             tipo: r.checkType,
           })),
-          fuente: "Finger System / relojes ZK + ATT2016",
+          fuente: data.source === "odoo" ? "Odoo alfa_biometric_punch" : "Finger finger_punches",
         };
       },
     },
@@ -89,7 +95,7 @@ export function fingerTools(): SyntraTool[] {
       permission: { key: "fingerSystem.dispositivos", level: "view" },
       definition: toolDef(
         "list_finger_devices",
-        "Lista relojes biométricos Finger System (ZKTeco): nombre, IP, estado, contadores.",
+        "Lista relojes biométricos (prioriza Odoo alfa_biometric_device).",
         {
           type: "object",
           properties: {
@@ -102,13 +108,14 @@ export function fingerTools(): SyntraTool[] {
       describeCall: () => "Consultando relojes biométricos…",
       handler: async (_session, args) => {
         const limit = intArg(args, "limit", 25, MAX_LIST);
-        const data = await listFingerDevices({
+        const data = await listFingerDevicesPreferOdoo({
           page: 1,
           pageSize: limit,
           q: strArg(args, "q") || undefined,
         });
         return {
           total: data.total,
+          origenDatos: data.source,
           dispositivos: data.items.slice(0, MAX_LIST).map((d) => ({
             nombre: d.name,
             ip: d.ipAddress,
@@ -120,7 +127,7 @@ export function fingerTools(): SyntraTool[] {
             marcas: d.punchCount,
             ultimaSync: d.lastSyncAt,
           })),
-          fuente: "Finger System / finger_devices",
+          fuente: data.source === "odoo" ? "Odoo alfa_biometric_device" : "Finger finger_devices",
         };
       },
     },

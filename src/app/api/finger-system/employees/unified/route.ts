@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { withPermission } from "@/lib/permissions/middleware";
 import { ok, badRequest, serverError, created } from "@/lib/api/response";
-import { listUnifiedEmployees } from "@/modules/finger-system/services/finger-unified-employees";
+import { listUnifiedEmployeesPreferOdoo } from "@/modules/finger-system/services/odoo-biometric-users";
 import { insertAtt2016UserInfo, updateAtt2016UserInfo } from "@/modules/finger-system/services/att2016-employees-write";
 
 export const GET = withPermission(
@@ -13,7 +13,7 @@ export const GET = withPermission(
       const pageSize = Number.parseInt(sp.get("pageSize") ?? "100", 10);
 
       return ok(
-        await listUnifiedEmployees({
+        await listUnifiedEmployeesPreferOdoo({
           q: sp.get("q") ?? undefined,
           company: sp.get("company") ?? undefined,
           deptId: deptIdRaw ? Number.parseInt(deptIdRaw, 10) : undefined,

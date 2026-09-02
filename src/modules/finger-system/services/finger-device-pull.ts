@@ -156,6 +156,18 @@ export async function pullFingerDeviceAttendance(params: {
 
   let inserted = 0;
   let skipped = 0;
+  const odooBatch: Array<{
+    attUserId: number;
+    badge?: string | null;
+    checkTime: Date;
+    checkType?: string | null;
+    odooDeviceId?: number | null;
+  }> = [];
+
+  const { resolveOdooDeviceIdForFingerIp, upsertOdooBiometricPunches } = await import(
+    "@/modules/finger-system/services/odoo-biometric-write"
+  );
+  const odooDeviceId = await resolveOdooDeviceIdForFingerIp(device.ipAddress);
 
   for (const r of records) {
     const link =
@@ -180,6 +192,23 @@ export async function pullFingerDeviceAttendance(params: {
     } catch {
       skipped++;
     }
+    odooBatch.push({
+      attUserId: r.userId,
+      badge: link?.badgeNumber ?? String(r.userId),
+      checkTime: r.timestamp,
+      checkType: String(r.punch),
+      odooDeviceId,
+    });
+  }
+
+  let odooInserted = 0;
+  let odooSkipped = 0;
+  try {
+    const odooResult = await upsertOdooBiometricPunches(odooBatch);
+    odooInserted = odooResult.inserted;
+    odooSkipped = odooResult.skipped;
+  } catch (e) {
+    console.error("[finger] odoo punch upsert failed", e);
   }
 
   const now = new Date();
@@ -202,7 +231,14 @@ export async function pullFingerDeviceAttendance(params: {
       message: `${inserted} marcas nuevas (${skipped} duplicadas) desde ${device.name}.`,
       triggeredById: params.userId,
       finishedAt: now,
-      detailJson: { inserted, skipped, from: params.from, to: params.to },
+      detailJson: {
+        inserted,
+        skipped,
+        odooInserted,
+        odooSkipped,
+        from: params.from,
+        to: params.to,
+      },
     },
   });
 
@@ -212,10 +248,17 @@ export async function pullFingerDeviceAttendance(params: {
     entityType: "FingerDevice",
     entityId: device.id,
     ipAddress: params.ipAddress ?? null,
-    metadata: { inserted, skipped },
+    metadata: { inserted, skipped, odooInserted, odooSkipped },
   });
 
-  return { deviceId: device.id, inserted, skipped, totalRead: records.length };
+  return {
+    deviceId: device.id,
+    inserted,
+    skipped,
+    totalRead: records.length,
+    odooInserted,
+    odooSkipped,
+  };
 }
 
 /** Pull de marcas desde todos los dispositivos activos (cron / manual). */

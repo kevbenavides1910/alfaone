@@ -163,6 +163,11 @@ export function FingerPunchesHistoryPanel() {
         >
           Excel ({displayedRows.length})
         </Button>
+        {data?.data && "source" in (data.data as object) ? (
+          <span className="text-xs text-muted-foreground self-center">
+            Fuente: {(data.data as { source?: string }).source === "odoo" ? "Odoo" : "Finger local"}
+          </span>
+        ) : null}
         {isFetching && !isLoading ? (
           <span className="text-xs text-muted-foreground self-center">Actualizando…</span>
         ) : null}

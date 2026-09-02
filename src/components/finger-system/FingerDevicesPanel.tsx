@@ -11,7 +11,6 @@ import { FingerCompanyFilterHint } from "@/components/finger-system/FingerCompan
 import { fingerApiUrl, useFingerCompany } from "@/components/finger-system/finger-company-context";
 import { useFingerPermissions } from "@/components/finger-system/use-finger-permissions";
 import type { FingerDeviceRow } from "@/modules/finger-system/services/finger-devices";
-import type { AttMachineImportPreview } from "@/modules/finger-system/services/att2016-machines-import";
 
 type ListResponse = {
   items: FingerDeviceRow[];
@@ -48,7 +47,7 @@ export function FingerDevicesPanel() {
     setPage(1);
   }, [companyCode]);
 
-  const listQuery = useQuery<{ data: ListResponse }>({
+  const listQuery = useQuery<{ data: ListResponse & { source?: string } }>({
     queryKey: ["finger-devices", q, page, companyCode],
     queryFn: async () => {
       const qs = new URLSearchParams({ page: String(page), pageSize: "25" });
@@ -58,17 +57,6 @@ export function FingerDevicesPanel() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error?.message ?? "Error al listar");
-      return json;
-    },
-  });
-
-  const importPreviewQuery = useQuery<{ data: AttMachineImportPreview }>({
-    queryKey: ["finger-att2016-machines-preview"],
-    enabled: canEditDevices,
-    queryFn: async () => {
-      const res = await fetch("/api/finger-system/devices/att2016/preview", { credentials: "same-origin" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error?.message ?? "Error al analizar ATT2016");
       return json;
     },
   });
@@ -86,22 +74,6 @@ export function FingerDevicesPanel() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["finger-devices"] });
       queryClient.invalidateQueries({ queryKey: ["finger-system-dashboard"] });
-    },
-  });
-
-  const importMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/finger-system/devices/att2016/import", {
-        method: "POST",
-        credentials: "same-origin",
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error?.message ?? "Error al importar");
-      return json.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["finger-devices"] });
-      queryClient.invalidateQueries({ queryKey: ["finger-att2016-machines-preview"] });
     },
   });
 
@@ -178,7 +150,7 @@ export function FingerDevicesPanel() {
   });
 
   const data = listQuery.data?.data;
-  const importPreview = importPreviewQuery.data?.data;
+  const listSource = data?.source;
 
   return (
     <div className="space-y-4">
@@ -204,7 +176,8 @@ export function FingerDevicesPanel() {
           <div>
             <CardTitle className="text-base">Lista / Máquinas</CardTitle>
             <p className="mt-1 text-sm text-slate-500">
-              Relojes biométricos en red (TCP/IP). Conecte cada equipo para actualizar estado y contadores.
+              Relojes biométricos ZK (TCP/IP). Fuente de padrón:{" "}
+              {listSource === "odoo" ? "Odoo alfa_biometric" : "Finger local"}.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -402,7 +375,7 @@ export function FingerDevicesPanel() {
                     {data.items.length === 0 ? (
                       <tr>
                         <td colSpan={11} className="px-3 py-6 text-center text-slate-500">
-                          Sin dispositivos. Importe desde ATT2016 o agregue manualmente por IP.
+                          Sin dispositivos. Agregue manualmente por IP o configure ODOO_BIOMETRIC_DATABASE_URL.
                         </td>
                       </tr>
                     ) : null}
@@ -433,58 +406,6 @@ export function FingerDevicesPanel() {
           ) : null}
         </CardContent>
       </Card>
-
-      {canEditDevices ? (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">Importar desde ATT2016</CardTitle>
-              <p className="mt-1 text-sm text-slate-500">
-                Tabla Machines de ATT2016.MDB (Piso 01, Piso 02, Alajuela, WELL, etc.).
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => importPreviewQuery.refetch()}
-              disabled={importPreviewQuery.isFetching}
-            >
-              Actualizar
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {importPreviewQuery.isError ? (
-              <p className="text-sm text-red-600">{(importPreviewQuery.error as Error).message}</p>
-            ) : null}
-            {importPreview ? (
-              <>
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <MiniStat label="En ATT2016" value={importPreview.attTotal} />
-                  <MiniStat label="Importables" value={importPreview.importable} />
-                  <MiniStat label="Sin IP" value={importPreview.missingIp} />
-                  <MiniStat label="Ya registrados" value={importPreview.alreadyRegistered} />
-                </div>
-                <Button
-                  onClick={() => importMutation.mutate()}
-                  disabled={importMutation.isPending || importPreview.importable === 0}
-                >
-                  {importMutation.isPending
-                    ? "Importando…"
-                    : `Confirmar importación (${importPreview.importable})`}
-                </Button>
-                {importMutation.isSuccess ? (
-                  <p className="text-sm text-emerald-700">
-                    Importados {importMutation.data.rowsInserted}, actualizados{" "}
-                    {importMutation.data.rowsUpdated}.
-                  </p>
-                ) : null}
-              </>
-            ) : importPreviewQuery.isLoading ? (
-              <p className="text-sm text-slate-500">Analizando ATT2016…</p>
-            ) : null}
-          </CardContent>
-        </Card>
-      ) : null}
     </div>
   );
 }
@@ -630,15 +551,6 @@ function Field({
     <div className="space-y-2">
       <Label>{label}</Label>
       <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border p-3">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="text-lg font-semibold">{value}</p>
     </div>
   );
 }

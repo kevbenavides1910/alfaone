@@ -37,7 +37,6 @@ const TABS: Tab[] = [
     permission: "fingerSystem.empleados",
     isActive: (p) => p.startsWith("/finger-system/empleados") || p.startsWith("/finger-system/empresas"),
   },
-  { href: "/finger-system/biometria", label: "Biometría", permission: "fingerSystem.biometria" },
   { href: "/finger-system/dispositivos", label: "Dispositivos", permission: "fingerSystem.dispositivos" },
   {
     href: "/finger-system/marcas",
@@ -49,18 +48,16 @@ const TABS: Tab[] = [
   { href: "/finger-system/asistencia", label: "Asistencia", permission: "fingerSystem.asistencia" },
   { href: "/finger-system/turnos", label: "Turnos", permission: "fingerSystem.turnos" },
   { href: "/finger-system/reportes", label: "Reportes", permission: "fingerSystem.reportes" },
-  { href: "/finger-system/backups", label: "Backups", permission: "fingerSystem.backups" },
-  {
-    href: "/finger-system/mantenimiento",
-    label: "Mantenimiento",
-    permission: "fingerSystem.mantenimiento",
-  },
-  { href: "/finger-system/auditoria", label: "Auditoría", permission: "fingerSystem.auditoria" },
   {
     href: "/finger-system/configuracion",
     label: "Configuración",
     permission: "fingerSystem.configuracion",
-    isActive: (p) => p.startsWith("/finger-system/configuracion"),
+    isActive: (p) =>
+      p.startsWith("/finger-system/configuracion") ||
+      p.startsWith("/finger-system/mantenimiento") ||
+      p.startsWith("/finger-system/auditoria") ||
+      p.startsWith("/finger-system/backups") ||
+      p.startsWith("/finger-system/biometria"),
   },
 ];
 

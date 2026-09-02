@@ -82,6 +82,13 @@ export {
 } from "./services/finger-device-pull";
 export { ensureSeedFingerDevices } from "./services/finger-devices-seed";
 export { runFingerAutoSync } from "./services/finger-sync-orchestrator";
+export {
+  isOdooBiometricConfigured,
+  pingOdooBiometric,
+} from "./integrations/odoo-biometric/odoo-pg";
+export { listFingerDevicesPreferOdoo } from "./services/odoo-biometric-devices";
+export { listFingerPunchesPreferOdoo } from "./services/odoo-biometric-punches";
+export { listUnifiedEmployeesPreferOdoo } from "./services/odoo-biometric-users";
 export { createZkProtocolClient } from "./integrations/biometric/zk-protocol";
 export { createZKTecoAdapter } from "./integrations/biometric/zkteco-adapter";
 export { probeTcpPort } from "./integrations/biometric/tcp-probe";

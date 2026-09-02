@@ -51,6 +51,26 @@ export default function FingerConfiguracionPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">Herramientas avanzadas</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2 text-sm">
+          <a className="underline text-blue-700" href="/finger-system/biometria">
+            Biometría
+          </a>
+          <a className="underline text-blue-700" href="/finger-system/mantenimiento">
+            Mantenimiento
+          </a>
+          <a className="underline text-blue-700" href="/finger-system/auditoria">
+            Auditoría
+          </a>
+          <a className="underline text-blue-700" href="/finger-system/backups">
+            Backups ATT2016
+          </a>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">Credenciales de red</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 text-sm text-slate-600">

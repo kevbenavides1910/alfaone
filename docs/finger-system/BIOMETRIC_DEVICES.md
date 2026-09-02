@@ -3,47 +3,40 @@
 ## Capas
 
 ```
-BiometricDeviceInterface (types.ts)
-  └── ZKTecoAdapter (TCP 4370) — fuente principal
-  └── ATT2016Adapter — respaldo / legado
+Odoo Postgres (syntradata)  ← lectura primaria de padrón/marcas
+  alfa_biometric_device / _user / _punch
 
-Finger device services:
-  finger-device-push / enroll / pull
-  finger-sync-orchestrator (probe + pull ZK + ATT)
+ZKTecoAdapter (TCP 4370)    ← push / enroll / pull en vivo
+  → upsert marcas en Odoo + cache finger_*
+
+ATT2016 (SMB)               ← legado (Configuración / Backups)
 ```
 
 ## Fuente operativa
 
-- **Principal:** relojes ZKTeco en red (`finger_devices`, puerto 4370).
-- **Respaldo:** ATT2016 (SMB/MDB) para import histórico y sync de respaldo.
-- **UI diaria:** Finger System en Alfa One (`/finger-system`). No hay puente a tablas Odoo `alfa.biometric.*`.
+- **Ver todo (UI):** tablas Odoo `alfa_biometric_*` vía `ODOO_BIOMETRIC_DATABASE_URL`.
+- **Operar reloj:** TCP 4370 desde Alfa (`set_user`, enroll, pull).
+- **Tras pull ZK:** inserta en `alfa_biometric_punch` (ON CONFLICT DO NOTHING) y en `finger_punches` (cache/asistencia Alfa).
+- ATT2016: solo herramientas avanzadas en Configuración; no es la UI diaria de Dispositivos.
 
-## Capacidades ZK
+## Env
 
-| Acción | Servicio / API |
-|--------|----------------|
-| Push usuario (`set_user` + templates) | `POST /api/finger-system/employees/[id]/push-devices` |
-| Enrolar huella + distribuir | `POST /api/finger-system/biometrics/enroll` (`employeeId`) |
-| Traer usuarios | `POST .../devices/[id]` `{ action: "pull-users" }` |
-| Traer marcas | `POST .../devices/[id]` `{ action: "pull-attendance" }` o `pull-all-attendance` |
-| Historial | `GET /api/finger-system/punches` · UI `/finger-system/marcas` |
+```bash
+ODOO_BIOMETRIC_DATABASE_URL=postgresql://odoo:***@odoo18_db:5432/syntradata
+```
 
-## Modelo (`finger_devices` / punches)
+El contenedor `security_contracts_app` debe alcanzar `odoo18_db` (red Docker compartida `presupuestos-alfa_default`).
 
-- Dispositivos: nombre, IP, puerto, marca, modelo, empresa, ubicación, estado, contadores.
-- Marcas: `FingerPunch.source` = `DEVICE` \| `ATT2016`; `deviceId` opcional.
-- Asignación selectiva: `FingerEmployeeDevice` (empleado ↔ relojes).
+## Capacidades
 
-## Seed de relojes Odoo
+| Acción | Notas |
+|--------|--------|
+| Listar relojes / marcas / usuarios | Preferente Odoo |
+| Push / enroll | ZK; espejo local `finger_devices` por IP |
+| Traer marcas | ZK → Odoo + finger_* |
+| Historial UI | `/finger-system/marcas` |
 
-IPs típicas (idempotente, no pisa config existente): Piso 01/02, Alajuela, Centro Comercial — ver `finger-devices-seed.ts`.
+## Nav Finger (slim)
 
-## Descubrimiento / estado
-
-- Puerto default 4370; estados ONLINE / OFFLINE / ERROR / UNKNOWN.
-- Cron: tras probe, pull de asistencia ZK (últimos 2–3 días) + ATT2016.
-
-## Seguridad
-
-- Credenciales de dispositivos **nunca** en código fuente.
-- Usar variables de entorno o secretos del servidor.
+Dashboard · Empleados · Dispositivos · Marcas · Asistencia · Turnos · Reportes · Configuración  
+(Biometría / Backups / Mantenimiento / Auditoría → enlaces en Configuración)
