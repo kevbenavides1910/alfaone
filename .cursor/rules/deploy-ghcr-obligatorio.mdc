@@ -19,8 +19,9 @@ cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
    → `npm run ops:deploy:patch-static` (~10–30 s). **No** rebuild.
 
 2. **¿Cambios de código/UI/API pendientes?**  
-   → Commit **solo si el usuario lo pidió** → `git push origin HEAD` →  
+   → Commit **solo si el usuario lo pidió** →  
    → `npm run ops:deploy:cursor`  
+   - Si HEAD va adelante del remoto: **`git push` en paralelo al build** (no esperar push antes)  
    - SHA ya en prod healthy → **~0 s**  
    - Imagen local del SHA → recreate **~15–30 s**  
    - Sin imagen → build BuildKit + recreate (~1.5–3 min)

@@ -38,6 +38,6 @@ npm run ops:deploy:pull     # pull imagen (si APP_IMAGE ya está definida)
 npm run ops:deploy          # build local SOLO si el usuario lo pide explícitamente
 ```
 
-**Agentes:** `git push` → `ops:deploy:cursor`. Ver skill `.cursor/skills/deploy-alfa-one/` y `deploy-ghcr-obligatorio.mdc`.
+**Agentes:** commit → `ops:deploy:cursor` (push paralelo interno si hace falta). Ver skill `.cursor/skills/deploy-alfa-one/` y `deploy-ghcr-obligatorio.mdc`.
 
 Detalle: `docs/DEPLOYMENT.md` (sección “Path canónico y blindaje”) y regla `deploy-anti-drop-rutas.mdc` (inventario total de rutas).

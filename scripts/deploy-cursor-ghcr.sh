@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Deploy rápido para agente Cursor en self-hosted alfaia:
-#   push → build local inmediato (cache webpack) → recreate app (~16s)
+#   si HEAD va adelante del remoto → git push en paralelo
+#   build local inmediato (cache webpack) → recreate app (~16s)
 # Sin esperar GitHub Actions / Publish GHCR (ahorra cola API + latencia de arranque).
 #
 # Uso: npm run ops:deploy:cursor
+#      (no hace falta `git push` previo: el script lo lanza en background si aplica)
 set -Eeuo pipefail
 
 export DEPLOY_CURSOR_FAST=1

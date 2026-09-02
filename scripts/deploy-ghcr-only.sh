@@ -209,6 +209,7 @@ app_already_on_image() {
 finish_if_already_deployed() {
   local img="$1"
   if app_already_on_image "$img"; then
+    wait_parallel_push_or_die
     section "Ya desplegado"
     echo "OK: $APP_CONTAINER ya usa $img (healthy) — omito pull/recreate."
     echo "Tip: Publish GHCR en push ya despliega automático; no hace falta ops:deploy:ghcr manual."
@@ -219,6 +220,33 @@ finish_if_already_deployed() {
     echo "elapsed=0s"
     exit 0
   fi
+}
+
+# Cursor fast: si HEAD va adelante del remoto, push en background mientras corre el build.
+_CURSOR_PUSH_PID=""
+_CURSOR_PUSH_LOG=""
+
+wait_parallel_push_or_die() {
+  [ -n "${_CURSOR_PUSH_PID:-}" ] || return 0
+  section "Esperando git push paralelo"
+  local rc=0
+  if ! wait "$_CURSOR_PUSH_PID"; then
+    rc=1
+  fi
+  _CURSOR_PUSH_PID=""
+  if [ "$rc" -ne 0 ]; then
+    echo "ERROR: git push falló:" >&2
+    if [ -n "${_CURSOR_PUSH_LOG:-}" ] && [ -f "$_CURSOR_PUSH_LOG" ]; then
+      cat "$_CURSOR_PUSH_LOG" >&2 || true
+    fi
+    rm -f "${_CURSOR_PUSH_LOG:-}"
+    die "git push en paralelo falló — corregí el remoto y reintentá"
+  fi
+  echo "OK: remoto al día con ${SHORT_SHA:-HEAD}"
+  if [ -n "${_CURSOR_PUSH_LOG:-}" ] && [ -f "$_CURSOR_PUSH_LOG" ]; then
+    tail -n 8 "$_CURSOR_PUSH_LOG" || true
+  fi
+  rm -f "${_CURSOR_PUSH_LOG:-}"
 }
 
 section "Deploy GHCR-only (sin build local)"
@@ -247,7 +275,16 @@ fi
 if git rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
   AHEAD="$(git rev-list --count '@{u}..HEAD' 2>/dev/null || echo 0)"
   if [ "${AHEAD:-0}" -gt 0 ]; then
-    die "HEAD está $AHEAD commit(s) por delante del remoto. Haz git push antes del pull GHCR."
+    if [ "${DEPLOY_CURSOR_FAST:-0}" = "1" ] || [ "${DEPLOY_CURSOR_FAST:-0}" = "true" ]; then
+      section "Push remoto en paralelo (cursor)"
+      _CURSOR_PUSH_LOG="$(mktemp)"
+      # Push en paralelo al build (no bloquea el compile).
+      git push origin HEAD >"$_CURSOR_PUSH_LOG" 2>&1 &
+      _CURSOR_PUSH_PID=$!
+      echo "OK: git push en background (pid=${_CURSOR_PUSH_PID}, ${AHEAD} commit(s)) — el build no espera"
+    else
+      die "HEAD está $AHEAD commit(s) por delante del remoto. Haz git push antes del pull GHCR."
+    fi
   fi
 fi
 
@@ -353,6 +390,8 @@ if [ -z "${RESOLVED:-}" ]; then
 fi
 
 finish_if_already_deployed "$RESOLVED"
+
+wait_parallel_push_or_die
 
 section "Pull + recreate: $RESOLVED"
 export APP_IMAGE="$RESOLVED"
