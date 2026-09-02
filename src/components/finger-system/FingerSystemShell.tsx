@@ -86,41 +86,43 @@ export function FingerSystemShell({ children }: { children: React.ReactNode }) {
     return hasPermission(session, tab.permission, "view");
   });
 
+  const selectCompanyValue =
+    companyCode && companies.some((c) => c.code === companyCode) ? companyCode : undefined;
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Topbar
         title={FINGER_BRAND.name}
         subtitle="Biométrico · relojes ZK y padrón Odoo"
         icon={<Fingerprint className="h-5 w-5" />}
-        actions={
-          isMultiCompany ? (
-            <Select
-              value={companyCode ?? "ALL"}
-              onValueChange={(v) => setCompanyCode(v === "ALL" ? "" : v)}
-            >
-              <SelectTrigger className="h-8 w-[200px] text-xs">
-                <SelectValue placeholder="Compañía" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Todas</SelectItem>
-                {companies.map((c) => (
-                  <SelectItem key={c.code} value={c.code}>
-                    {c.code} — {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null
-        }
       />
-      <ModuleSubnav
-        items={visibleTabs.map((tab) => ({
-          href: tab.href,
-          label: tab.label,
-          active: tabActive(tab, pathname),
-        }))}
-      />
-      <main className="flex-1">{children}</main>
+      {visibleTabs.length > 0 ? (
+        <ModuleSubnav
+          ariaLabel="Secciones Finger System"
+          tabs={visibleTabs.map((tab) => ({
+            href: tab.href,
+            label: tab.label,
+            active: tabActive(tab, pathname),
+          }))}
+          trailing={
+            isMultiCompany && companies.length > 1 ? (
+              <Select value={selectCompanyValue} onValueChange={setCompanyCode}>
+                <SelectTrigger className="h-8 w-[10rem] text-xs">
+                  <SelectValue placeholder="Empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null
+          }
+        />
+      ) : null}
+      <main className="flex-1 min-w-0">{children}</main>
     </div>
   );
 }

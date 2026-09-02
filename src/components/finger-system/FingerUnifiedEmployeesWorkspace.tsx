@@ -387,7 +387,10 @@ export function FingerUnifiedEmployeesWorkspace() {
                   <p className="text-xs font-medium">Enrolar huella</p>
                   <div className="space-y-1">
                     <Label className="text-xs">Reloj</Label>
-                    <Select value={enrollDeviceId} onValueChange={setEnrollDeviceId}>
+                    <Select
+                      value={enrollDeviceId || undefined}
+                      onValueChange={setEnrollDeviceId}
+                    >
                       <SelectTrigger className="h-8">
                         <SelectValue placeholder="Seleccione…" />
                       </SelectTrigger>
