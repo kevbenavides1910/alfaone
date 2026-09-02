@@ -101,7 +101,7 @@ function FeElectronicaShellInner({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Topbar title="Facturación electrónica" />
-      <div className="sticky top-14 lg:top-16 z-10 shrink-0 border-b border-[#2a2a2a] bg-[#111111]">
+      <div className="sticky top-14 lg:top-16 z-10 shrink-0 border-b border-white/10 bg-[color:var(--app-sidebar)]">
         <div className="flex flex-wrap items-center gap-2 px-3 py-2 md:px-5">
           <nav aria-label="Secciones FE" className="flex flex-wrap items-center gap-1 flex-1 min-w-0">
             {visibleTabs.map((tab) => {

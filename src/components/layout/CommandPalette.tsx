@@ -44,7 +44,7 @@ export function CommandPalette() {
     setSelectedIndex(0);
   }, [query]);
 
-  // Keyboard shortcut: Cmd+K or Ctrl+K
+  // Keyboard shortcut: Cmd+K or Ctrl+K + Topbar trigger
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -57,8 +57,16 @@ export function CommandPalette() {
         setQuery("");
       }
     };
+    const openFromUi = () => {
+      setOpen(true);
+      setQuery("");
+    };
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    window.addEventListener("alfa-open-command-palette", openFromUi);
+    return () => {
+      document.removeEventListener("keydown", handler);
+      window.removeEventListener("alfa-open-command-palette", openFromUi);
+    };
   }, [open]);
 
   // Focus input when opened
@@ -104,20 +112,20 @@ export function CommandPalette() {
       />
 
       {/* Palette */}
-      <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-border bg-card shadow-2xl animate-in fade-in zoom-in-95 duration-150">
         {/* Search input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200">
-          <Search className="h-5 w-5 text-slate-400 shrink-0" />
+        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+          <Search className="h-5 w-5 shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Buscar módulos..."
-            className="flex-1 text-sm text-slate-800 placeholder:text-slate-400 bg-transparent border-none outline-none focus:outline-none focus:ring-0"
+            placeholder="Buscar módulos o datos…"
+            className="flex-1 border-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground focus:outline-none focus:ring-0"
           />
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+          <kbd className="hidden items-center gap-0.5 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
             <Command className="h-3 w-3" />
             <span>K</span>
           </kbd>
@@ -126,8 +134,9 @@ export function CommandPalette() {
         {/* Results */}
         <div className="max-h-80 overflow-y-auto p-2">
           {results.length === 0 ? (
-            <div className="px-3 py-8 text-center text-sm text-slate-400">
-              No se encontraron resultados para <span className="font-medium text-slate-600">&ldquo;{query}&rdquo;</span>
+            <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+              No se encontraron resultados para{" "}
+              <span className="font-medium text-foreground">&ldquo;{query}&rdquo;</span>
             </div>
           ) : (
             results.map((item, index) => (
@@ -136,35 +145,39 @@ export function CommandPalette() {
                 onClick={() => navigate(item.href)}
                 onMouseEnter={() => setSelectedIndex(index)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors",
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
                   index === selectedIndex
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-700 hover:bg-slate-100"
+                    ? "bg-[color:var(--app-primary)]/10 text-foreground"
+                    : "text-foreground/80 hover:bg-muted"
                 )}
               >
-                <item.icon className={cn(
-                  "h-4 w-4 shrink-0",
-                  index === selectedIndex ? "text-red-600" : "text-slate-400"
-                )} />
+                <item.icon
+                  className={cn(
+                    "h-4 w-4 shrink-0",
+                    index === selectedIndex
+                      ? "text-[color:var(--app-primary)]"
+                      : "text-muted-foreground"
+                  )}
+                />
                 <span className="flex-1 font-medium">{item.label}</span>
-                <span className="text-xs text-slate-400 truncate max-w-[120px]">{item.href}</span>
+                <span className="max-w-[120px] truncate text-xs text-muted-foreground">{item.href}</span>
               </button>
             ))
           )}
         </div>
 
         {/* Footer tips */}
-        <div className="flex items-center gap-4 px-4 py-2 border-t border-slate-100 bg-slate-50/80">
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-            <kbd className="rounded border border-slate-200 bg-white px-1 py-0.5 font-mono text-[10px]">↑↓</kbd>
+        <div className="flex items-center gap-4 border-t border-border bg-muted/50 px-4 py-2">
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <kbd className="rounded border border-border bg-card px-1 py-0.5 font-mono text-[10px]">↑↓</kbd>
             <span>Navegar</span>
           </div>
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-            <kbd className="rounded border border-slate-200 bg-white px-1 py-0.5 font-mono text-[10px]">↵</kbd>
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <kbd className="rounded border border-border bg-card px-1 py-0.5 font-mono text-[10px]">↵</kbd>
             <span>Ir</span>
           </div>
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-            <kbd className="rounded border border-slate-200 bg-white px-1 py-0.5 font-mono text-[10px]">Esc</kbd>
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <kbd className="rounded border border-border bg-card px-1 py-0.5 font-mono text-[10px]">Esc</kbd>
             <span>Cerrar</span>
           </div>
         </div>

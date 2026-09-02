@@ -187,7 +187,7 @@ export function DisciplinarySidebar({ open, onClose, collapsed, onToggleCollapse
       {/* Mobile sidebar — overlay */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 bg-[#111111] text-white flex flex-col",
+          "fixed inset-y-0 left-0 z-40 w-64 bg-[color:var(--app-sidebar)] text-white flex flex-col",
           "transform transition-transform duration-200 ease-in-out md:hidden",
           open ? "translate-x-0" : "-translate-x-full"
         )}
@@ -199,7 +199,7 @@ export function DisciplinarySidebar({ open, onClose, collapsed, onToggleCollapse
       <aside
         className={cn(
           "hidden md:flex shrink-0 self-stretch transition-all duration-200",
-          "bg-[#111111] text-white flex-col border-r border-white/5",
+          "bg-[color:var(--app-sidebar)] text-white flex-col border-r border-white/5",
           collapsed ? "w-16" : "w-56 lg:w-60"
         )}
       >

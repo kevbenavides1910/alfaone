@@ -70,7 +70,7 @@ export function DisciplinaryTopNav() {
   const inAjustes = pathname.startsWith("/disciplinario/ajustes");
 
   return (
-    <div className="sticky top-14 lg:top-16 z-10 border-b border-[#2a2a2a] bg-[#111111]">
+    <div className="sticky top-14 lg:top-16 z-10 border-b border-white/10 bg-[color:var(--app-sidebar)]">
       <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto scrollbar-none">
         {mainItems.map((item) => {
           const active = isActive(item, pathname);

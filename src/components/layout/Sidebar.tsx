@@ -159,13 +159,13 @@ export function Sidebar({ collapsed, onToggle, onClose, isMobile }: Props) {
         href={item.href}
         onClick={handleNav}
         className={cn(
-          "flex items-center rounded-md text-sm font-medium transition-all duration-150",
+          "flex items-center rounded-lg text-sm font-medium transition-all duration-150",
           collapsed && !isMobile
             ? "justify-center px-0 py-2.5 w-full"
             : cn("gap-2.5 px-2.5 py-2", indent && "ml-2 pl-2.5 border-l border-white/8"),
           active
-            ? "text-white"
-            : "text-white/50 hover:bg-white/8 hover:text-white/90"
+            ? "text-white shadow-sm"
+            : "text-white/55 hover:bg-white/[0.07] hover:text-white/95"
         )}
         style={active ? { backgroundColor: primary } : undefined}
         title={collapsed && !isMobile ? item.label : undefined}

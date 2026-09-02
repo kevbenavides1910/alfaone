@@ -117,6 +117,7 @@ export function SyntraAiChatWidget() {
   const [memoriesLoading, setMemoriesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [thinkingText, setThinkingText] = useState<string | null>(null);
+  const [thinkingSteps, setThinkingSteps] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
@@ -150,8 +151,17 @@ export function SyntraAiChatWidget() {
   }, [pathname]);
 
   useEffect(() => {
+    const openFromUi = () => {
+      setOpen(true);
+      setMinimized(false);
+    };
+    window.addEventListener("alfa-open-syntra", openFromUi);
+    return () => window.removeEventListener("alfa-open-syntra", openFromUi);
+  }, []);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [history, loading, viewMode, thinkingText]);
+  }, [history, loading, viewMode, thinkingText, thinkingSteps]);
 
   useEffect(() => {
     fetch("/api/syntra-ai/status")
@@ -329,6 +339,7 @@ export function SyntraAiChatWidget() {
     setError(null);
     setLoading(true);
     setThinkingText("Iniciando…");
+    setThinkingSteps(["Iniciando…"]);
     setHistory((h) => [...h, { role: "user", content: displayMessage }]);
 
     try {
@@ -344,7 +355,10 @@ export function SyntraAiChatWidget() {
             data: u.data,
           })),
         },
-        (text) => setThinkingText(text),
+        (text) => {
+          setThinkingText(text);
+          setThinkingSteps((prev) => (prev[prev.length - 1] === text ? prev : [...prev, text]));
+        },
       );
       const reply = data.reply || "";
       if (data.sessionId) setSessionId(data.sessionId);
@@ -363,6 +377,7 @@ export function SyntraAiChatWidget() {
     } finally {
       setLoading(false);
       setThinkingText(null);
+      setThinkingSteps([]);
     }
   }, [history, input, loading, pageContext, pendingUploads, refreshMemories, refreshSessions, refreshSkills, sessionId]);
 
@@ -587,11 +602,32 @@ export function SyntraAiChatWidget() {
                           {turn.content}
                         </div>
                       ))}
-                      {loading && thinkingText ? (
-                        <p className="text-indigo-600 text-xs flex items-center gap-2 animate-pulse">
-                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0" aria-hidden />
-                          {thinkingText}
-                        </p>
+                      {loading && thinkingSteps.length ? (
+                        <div className="mr-4 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-xs text-indigo-700 space-y-1">
+                          <p className="font-medium text-indigo-800 flex items-center gap-2">
+                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse shrink-0" aria-hidden />
+                            Pensando…
+                          </p>
+                          <ul className="space-y-0.5 max-h-28 overflow-y-auto">
+                            {thinkingSteps.map((step, idx) => {
+                              const isCurrent = idx === thinkingSteps.length - 1;
+                              return (
+                                <li
+                                  key={`${idx}-${step}`}
+                                  className={cn(
+                                    isCurrent ? "text-indigo-800 font-medium animate-pulse" : "text-indigo-500/80",
+                                  )}
+                                >
+                                  {isCurrent ? "→ " : "✓ "}
+                                  {step}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                          {thinkingText && thinkingText !== thinkingSteps[thinkingSteps.length - 1] ? (
+                            <p className="text-indigo-600 animate-pulse">{thinkingText}</p>
+                          ) : null}
+                        </div>
                       ) : null}
                       {error ? <p className="text-red-600 text-xs">{error}</p> : null}
                       <div ref={bottomRef} />

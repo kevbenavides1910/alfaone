@@ -30,7 +30,7 @@ export function ModuleSubnav({
   ariaLabel,
   trailing,
   variant = "alfa",
-  accentClass = "from-[#1a1a1a] to-[#0a0a0a] border-[#2a2a2a]",
+  accentClass = "from-[#1a1a1a] to-[#0a0a0a] border-white/10",
 }: Props) {
   if (tabs.length === 0) return null;
 
@@ -40,7 +40,7 @@ export function ModuleSubnav({
       className={cn(
         "sticky top-14 lg:top-16 z-10 shrink-0",
         variant === "alfa" &&
-          "border-b border-[#2a2a2a] bg-[#111111] text-white",
+          "border-b border-white/10 bg-[color:var(--app-sidebar)] text-white",
         variant === "light" &&
           "border-b border-border/80 bg-card/90 backdrop-blur-md shadow-sm",
         variant === "accent" && cn("border-b text-white bg-gradient-to-r", accentClass),

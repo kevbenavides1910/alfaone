@@ -32,7 +32,7 @@ export function CuentasPorPagarShell({ children }: { children: React.ReactNode }
       <Topbar title="Cuentas por pagar" />
       <nav
         aria-label="Secciones de cuentas por pagar"
-        className="sticky top-14 lg:top-16 z-10 border-b border-[#2a2a2a] bg-[#111111]"
+        className="sticky top-14 lg:top-16 z-10 border-b border-white/10 bg-[color:var(--app-sidebar)]"
       >
         <div className="flex gap-1 px-3 py-2 overflow-x-auto scrollbar-none">
           {TABS.map((tab) => {

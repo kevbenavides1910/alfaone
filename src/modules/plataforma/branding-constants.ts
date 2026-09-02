@@ -2,7 +2,8 @@ export const APP_NAME = "Alfa One";
 export const APP_TAGLINE = "Plataforma de gestión empresarial";
 
 export const DEFAULT_PRIMARY_HEX = "#dc2626";
-export const DEFAULT_SIDEBAR_HEX = "#111111";
+/** Navy shell alineado al dark mode Stitch (#0B101B). */
+export const DEFAULT_SIDEBAR_HEX = "#0b101b";
 
 export const APP_BRANDING_QUERY_KEY = ["app-branding-public"] as const;
 

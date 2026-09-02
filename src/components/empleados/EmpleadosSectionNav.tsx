@@ -57,7 +57,7 @@ export function EmpleadosSectionNav() {
   if (visibleTabs.length === 0) return null;
 
   return (
-    <div className="border-b border-[#2a2a2a] bg-[#111111] text-white">
+    <div className="border-b border-white/10 bg-[color:var(--app-sidebar)] text-white">
       <div className="flex flex-wrap gap-1 px-2 py-2 overflow-x-auto">
         {visibleTabs.map((tab) => (
           <Link

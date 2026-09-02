@@ -4,12 +4,13 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "@/lib/auth/client-session";
-import { Bell, LayoutGrid, LogOut, Menu } from "lucide-react";
+import { LayoutGrid, LogOut, Menu, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 import { loginCallbackUrl } from "@/lib/auth/logout";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { NotificationCenterBell } from "@/components/notifications/NotificationCenterBell";
 
 interface TopbarProps {
   title?: ReactNode;
@@ -17,6 +18,14 @@ interface TopbarProps {
   showCollapseToggle?: boolean;
   /** @deprecated */
   sidebarCollapsed?: boolean;
+}
+
+function openCommandPalette() {
+  window.dispatchEvent(new Event("alfa-open-command-palette"));
+}
+
+function openSyntraAssistant() {
+  window.dispatchEvent(new Event("alfa-open-syntra"));
 }
 
 export function Topbar({
@@ -52,15 +61,15 @@ export function Topbar({
 
       <header
         className={cn(
-          "h-14 border-b flex items-center justify-between px-4 sticky top-0 z-20",
-          "border-border bg-card/95 backdrop-blur-md shadow-sm",
-          onHome && "bg-white dark:bg-[#0f0f0f]"
+          "sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border px-4",
+          "bg-card/95 shadow-sm backdrop-blur-md",
+          onHome && "bg-[hsl(214_20%_97%)]/90 dark:bg-background/90"
         )}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex min-w-0 shrink-0 items-center gap-2">
           <button
             type="button"
-            className="md:hidden flex items-center justify-center h-8 w-8 rounded-md transition-colors shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
             onClick={() => setMobileOpen(true)}
             aria-label="Abrir menú"
           >
@@ -68,55 +77,78 @@ export function Topbar({
           </button>
 
           {!onHome && (
-            <nav className="flex items-center gap-1.5 min-w-0" aria-label="Breadcrumb">
+            <nav className="flex min-w-0 items-center gap-1.5" aria-label="Breadcrumb">
               <Link
                 href="/home"
-                className="hidden sm:inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                className="hidden shrink-0 items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
               >
                 <LayoutGrid className="h-3.5 w-3.5" />
                 <span>Inicio</span>
               </Link>
               {title && (
                 <>
-                  <span className="hidden sm:inline text-muted-foreground/50 text-sm">/</span>
-                  <span className="font-medium text-foreground truncate text-sm">
-                    {title}
-                  </span>
+                  <span className="hidden text-sm text-muted-foreground/50 sm:inline">/</span>
+                  <span className="truncate text-sm font-medium text-foreground">{title}</span>
                 </>
               )}
             </nav>
           )}
 
           {onHome && title && (
-            <span className="font-semibold text-base text-foreground">{title}</span>
+            <span className="hidden text-base font-semibold text-foreground sm:inline">{title}</span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="hidden md:block text-xs truncate max-w-[160px] px-1 text-muted-foreground">
-            {session?.user?.name}
-          </span>
-          {!onHome && <ThemeToggle />}
+        <div className="mx-auto flex min-w-0 max-w-xl flex-1 justify-center px-1">
           <button
             type="button"
+            onClick={openCommandPalette}
             className={cn(
-              "relative flex items-center justify-center h-8 w-8 rounded-md transition-colors",
-              "text-muted-foreground hover:text-foreground hover:bg-muted",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              "flex h-9 w-full max-w-md items-center gap-2 rounded-xl border border-border/80 bg-muted/50 px-3 text-left text-sm text-muted-foreground",
+              "transition-colors hover:border-border hover:bg-muted hover:text-foreground",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--app-primary)]",
+              "dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:bg-white/[0.07]"
             )}
-            aria-label="Notificaciones"
+            aria-label="Buscar módulos"
           >
-            <Bell className="h-4 w-4" />
-            <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-red-500 ring-1 ring-card" />
+            <Search className="h-4 w-4 shrink-0 opacity-70" />
+            <span className="min-w-0 flex-1 truncate">Buscar módulos o datos…</span>
+            <kbd className="hidden shrink-0 rounded-md border border-border/80 bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
+              ⌘K
+            </kbd>
           </button>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={openSyntraAssistant}
+            className={cn(
+              "hidden h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90 sm:inline-flex",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--app-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-background"
+            )}
+            style={{ backgroundColor: "var(--app-primary)" }}
+            aria-label="Abrir asistente Syntra IA"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Syntra IA
+          </button>
+
+          <ThemeToggle />
+          <NotificationCenterBell />
+
+          <span className="hidden max-w-[120px] truncate px-1 text-xs text-muted-foreground lg:block">
+            {session?.user?.name}
+          </span>
+
           <Button
             variant="ghost"
             size="sm"
             onClick={() => signOut({ callbackUrl: loginCallbackUrl() })}
-            className="gap-1.5 h-8 px-2.5 text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-red-500"
+            className="h-8 gap-1.5 px-2.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-red-500"
           >
             <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline text-xs font-medium">Salir</span>
+            <span className="hidden text-xs font-medium sm:inline">Salir</span>
           </Button>
         </div>
       </header>

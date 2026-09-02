@@ -93,7 +93,7 @@ export function RecorridosShell({ children }: { children: React.ReactNode }) {
       <Topbar title="Recorrido de marcas" />
       {visibleTabs.length > 0 && (
         <nav
-          className="sticky top-14 lg:top-16 z-10 border-b border-[#2a2a2a] bg-[#111111]"
+          className="sticky top-14 lg:top-16 z-10 border-b border-white/10 bg-[color:var(--app-sidebar)]"
           aria-label="Secciones de recorrido de marcas"
         >
           <div className="px-3 md:px-5 flex flex-wrap gap-1 py-2 overflow-x-auto scrollbar-none">

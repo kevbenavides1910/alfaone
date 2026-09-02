@@ -8,33 +8,33 @@
     /* Primario: rojo corporativo */
     --app-primary: #dc2626;
     --app-primary-dark: #b91c1c;
-    /* Sidebar: negro profundo */
-    --app-sidebar: #111111;
+    /* Sidebar: navy profundo (Stitch / dark shell) */
+    --app-sidebar: #0b101b;
 
     /* ─── Tokens semánticos (shadcn) ─── */
-    /* Superficie: gris neutro claro */
-    --background: 210 14% 92%;
-    --foreground: 215 25% 12%;
+    /* Superficie: gris azulado claro */
+    --background: 214 20% 96%;
+    --foreground: 222 30% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 12%;
+    --card-foreground: 222 30% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 12%;
+    --popover-foreground: 222 30% 12%;
     /* Primario: rojo Alfa → hsl(0, 72%, 51%) ≈ #dc2626 */
     --primary: 0 72% 51%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 215 14% 88%;
-    --secondary-foreground: 215 25% 12%;
-    --muted: 215 12% 86%;
+    --secondary: 214 16% 92%;
+    --secondary-foreground: 222 30% 12%;
+    --muted: 214 14% 90%;
     --muted-foreground: 215 14% 42%;
-    --accent: 215 12% 84%;
-    --accent-foreground: 215 25% 12%;
+    --accent: 214 14% 88%;
+    --accent-foreground: 222 30% 12%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 215 10% 80%;
-    --input: 215 12% 90%;
+    --border: 214 12% 86%;
+    --input: 214 14% 94%;
     /* Ring: rojo de marca */
     --ring: 0 72% 51%;
-    --radius: 0.5rem;
+    --radius: 0.75rem;
     --success: 142.1 76.2% 36.3%;
     --success-foreground: 355.7 100% 97.3%;
     --warning: 32.1 94.6% 43.7%;
@@ -45,20 +45,22 @@
 
   .dark {
     color-scheme: dark;
-    --background: 240 6% 10%;
-    --foreground: 0 0% 95%;
-    --card: 240 5% 14%;
-    --card-foreground: 0 0% 95%;
-    --popover: 240 5% 14%;
-    --popover-foreground: 0 0% 95%;
-    --secondary: 240 4% 18%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 240 4% 18%;
-    --muted-foreground: 240 5% 72%;
-    --accent: 240 4% 20%;
-    --accent-foreground: 0 0% 95%;
-    --border: 240 4% 22%;
-    --input: 240 4% 18%;
+    /* Stitch: midnight navy (#101624 / #0B101B / cards #161D2E) */
+    --background: 222 36% 10%;
+    --foreground: 214 32% 94%;
+    --card: 222 32% 14%;
+    --card-foreground: 214 32% 94%;
+    --popover: 222 32% 14%;
+    --popover-foreground: 214 32% 94%;
+    --secondary: 222 28% 18%;
+    --secondary-foreground: 214 32% 94%;
+    --muted: 222 26% 17%;
+    --muted-foreground: 215 16% 68%;
+    --accent: 222 26% 20%;
+    --accent-foreground: 214 32% 94%;
+    --border: 222 22% 22%;
+    --input: 222 26% 17%;
+    --app-sidebar: #0b101b;
   }
 
   * {
@@ -84,9 +86,9 @@
     @apply bg-muted/80;
   }
 
-  /* Fondo del menú principal (/home) */
+  /* Fondo del menú principal (/home) — Stitch layout */
   .home-menu-canvas {
-    @apply relative min-h-[calc(100dvh-4rem)] overflow-hidden bg-white dark:bg-background;
+    @apply relative flex min-h-[calc(100dvh-3.5rem)] flex-col overflow-hidden bg-[hsl(214_20%_97%)] dark:bg-background;
   }
 
   .home-menu-canvas::before {
@@ -95,6 +97,33 @@
 
   .home-menu-canvas::after {
     content: none;
+  }
+
+  .home-tile {
+    @apply rounded-2xl border border-transparent bg-card text-card-foreground;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.05);
+  }
+
+  .dark .home-tile {
+    @apply border-white/[0.04] bg-card;
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 8px 28px rgb(0 0 0 / 0.28);
+  }
+
+  .home-tile:hover {
+    box-shadow: 0 2px 4px rgb(15 23 42 / 0.06), 0 12px 28px rgb(15 23 42 / 0.08);
+  }
+
+  .dark .home-tile:hover {
+    @apply border-white/[0.08];
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 12px 32px rgb(0 0 0 / 0.36);
+  }
+
+  .home-insight {
+    @apply home-tile flex items-center gap-4 px-4 py-4 md:px-5 md:py-5;
+  }
+
+  .home-footer-bar {
+    @apply mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border/70 bg-card/60 px-6 py-3 text-[11px] text-muted-foreground backdrop-blur-sm md:px-10;
   }
 
   /* Módulo Contratos — estilo IBM Carbon */
@@ -439,11 +468,11 @@
 }
 
 .dark .scrollbar-thin {
-  scrollbar-color: hsl(240 5% 35% / 0.5) transparent;
+  scrollbar-color: hsl(222 20% 40% / 0.5) transparent;
 }
 .dark .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: hsl(240 5% 45% / 0.4);
+  background: hsl(222 20% 45% / 0.4);
 }
 .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: hsl(240 5% 45% / 0.6);
+  background: hsl(222 20% 50% / 0.6);
 }
