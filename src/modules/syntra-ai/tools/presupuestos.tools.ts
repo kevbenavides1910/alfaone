@@ -5,6 +5,7 @@ import { autoExpireContracts } from "@/modules/presupuestos/business/autoExpire"
 import { getContractProfitability } from "@/modules/presupuestos/business/profitability";
 import { buildContractListWhere } from "@/modules/presupuestos/services/contracts-list-where";
 import { listExpensesForSession } from "@/modules/presupuestos/services/expenses-list";
+import { listOrdenesCompraNaf } from "@/modules/presupuestos/services/list-ordenes-compra-naf";
 import { fromMonthString } from "@/lib/utils/format";
 import { nowServer } from "@/lib/utils/time";
 import type { SyntraTool } from "./types";
@@ -124,6 +125,50 @@ export function presupuestosTools(): SyntraTool[] {
           })),
           moneda: "CRC",
           fuente: "Gastos Alfa One (no es nómina NAF)",
+        };
+      },
+    },
+    {
+      permission: { key: "gastos.expenses", level: "view" },
+      definition: toolDef(
+        "search_ordenes_compra_codisa",
+        "Busca órdenes de compra reales en Codisa/NAF (ARIMENCORDEN) por número, proveedor u observación. Útil al registrar gastos con N° OC.",
+        {
+          type: "object",
+          properties: {
+            q: { type: "string", description: "Texto: número OC, proveedor u observación." },
+            company: { type: "string", description: "Código de empresa Alfa One (opcional)." },
+            limit: { type: "integer", description: "Máximo resultados (default 15)." },
+          },
+          additionalProperties: false,
+        },
+      ),
+      describeCall: (args) => {
+        const q = strArg(args ?? {}, "q");
+        return q ? `Buscando OC Codisa «${q.slice(0, 40)}»…` : "Listando OC Codisa…";
+      },
+      handler: async (session, args) => {
+        const company =
+          resolveTenantCompany(session, strArg(args, "company") || null) ?? undefined;
+        const limit = intArg(args, "limit", 15, MAX_LIST);
+        const result = await listOrdenesCompraNaf({
+          search: strArg(args, "q") || undefined,
+          company,
+          limit,
+        });
+        return {
+          total: result.rows.length,
+          ordenes: result.rows.map((r) => ({
+            noOrden: r.noOrden,
+            noCia: r.noCia,
+            empresa: r.companyCode,
+            proveedor: r.proveedor,
+            fecha: r.fecha,
+            estado: r.estado,
+            observaciones: r.observaciones,
+          })),
+          fetchedAt: result.fetchedAt,
+          fuente: "Codisa NAF5.ARIMENCORDEN",
         };
       },
     },

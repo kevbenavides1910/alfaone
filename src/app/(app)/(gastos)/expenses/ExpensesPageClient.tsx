@@ -26,6 +26,7 @@ import {
 } from "@/components/expenses/DeferredContractSelector";
 import { AttachmentPreviewDialog } from "@/components/expenses/AttachmentPreviewDialog";
 import { ExpenseEditDialog } from "@/components/expenses/ExpenseEditDialog";
+import { ExpenseOcPicker } from "@/components/expenses/ExpenseOcPicker";
 import { ExpensePreviewDialog } from "@/components/expenses/ExpensePreviewDialog";
 import { canManageExpenses as userCanManageExpenses } from "@/modules/core/permissions";
 import type { ExpenseBudgetLine, ExpenseType } from "@prisma/client";
@@ -1275,11 +1276,20 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">N° Referencia</label>
-                <Input
-                  placeholder="Factura, OC, transferencia..."
+                <label className="text-sm font-medium text-slate-700">N° OC (Codisa)</label>
+                <ExpenseOcPicker
                   value={form.referenceNumber}
-                  onChange={e => setForm(f => ({ ...f, referenceNumber: e.target.value }))}
+                  company={form.company || undefined}
+                  onChange={(noOrden, row) => {
+                    setForm((f) => ({
+                      ...f,
+                      referenceNumber: noOrden,
+                      description:
+                        row?.observaciones && !f.description.trim()
+                          ? row.observaciones.slice(0, 200)
+                          : f.description,
+                    }));
+                  }}
                 />
               </div>
             </div>

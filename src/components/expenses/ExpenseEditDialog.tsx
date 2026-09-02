@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ExpenseOcPicker } from "@/components/expenses/ExpenseOcPicker";
 import { companyDisplayName, EXPENSE_BUDGET_LINES, EXPENSE_BUDGET_LINE_LABELS } from "@/lib/utils/constants";
 import type { UseMutationResult } from "@tanstack/react-query";
 import type { ExpenseBudgetLine, ExpenseType } from "@prisma/client";
@@ -144,11 +145,20 @@ export function ExpenseEditDialog({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">N° Referencia</label>
-                <Input
-                  placeholder="Factura, OC..."
+                <label className="text-sm font-medium text-slate-700">N° OC (Codisa)</label>
+                <ExpenseOcPicker
                   value={editForm.referenceNumber}
-                  onChange={(e) => setEditForm((f) => ({ ...f, referenceNumber: e.target.value }))}
+                  company={editForm.company || undefined}
+                  onChange={(noOrden, row) => {
+                    setEditForm((f) => ({
+                      ...f,
+                      referenceNumber: noOrden,
+                      description:
+                        row?.observaciones && !f.description.trim()
+                          ? row.observaciones.slice(0, 200)
+                          : f.description,
+                    }));
+                  }}
                 />
               </div>
             </div>

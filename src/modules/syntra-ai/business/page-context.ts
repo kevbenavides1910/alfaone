@@ -4,7 +4,7 @@ const PATH_LABELS: Array<{ prefix: string; label: string; toolHint?: string }> =
   { prefix: "/empleados-naf/nomina", label: "Empleados NAF / Nómina", toolHint: "query_payroll_totals, query_revision_planilla_formas_pago" },
   { prefix: "/empleados-naf", label: "Empleados NAF", toolHint: "search_naf_employees" },
   { prefix: "/contracts", label: "Contratos", toolHint: "search_contracts, query_contract_profitability" },
-  { prefix: "/expenses", label: "Gastos", toolHint: "list_expenses, query_expenses_totals" },
+  { prefix: "/expenses", label: "Gastos", toolHint: "list_expenses, query_expenses_totals, search_ordenes_compra_codisa" },
   { prefix: "/dashboard", label: "Dashboard ejecutivo", toolHint: "query_traffic_light_summary" },
   { prefix: "/facturacion/cuentas-por-cobrar", label: "Cuentas por cobrar", toolHint: "search_cxc" },
   { prefix: "/facturacion/dashboard", label: "Dashboard facturación", toolHint: "query_facturacion_dashboard" },
