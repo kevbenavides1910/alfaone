@@ -163,6 +163,8 @@ export function presupuestosTools(): SyntraTool[] {
             noCia: r.noCia,
             empresa: r.companyCode,
             proveedor: r.proveedor,
+            monto: r.monto,
+            moneda: r.moneda,
             fecha: r.fecha,
             estado: r.estado,
             observaciones: r.observaciones,

@@ -150,14 +150,18 @@ export function ExpenseEditDialog({
                   value={editForm.referenceNumber}
                   company={editForm.company || undefined}
                   onChange={(noOrden, row) => {
-                    setEditForm((f) => ({
-                      ...f,
-                      referenceNumber: noOrden,
-                      description:
-                        row?.observaciones && !f.description.trim()
-                          ? row.observaciones.slice(0, 200)
-                          : f.description,
-                    }));
+                    setEditForm((f) => {
+                      if (!row) return { ...f, referenceNumber: noOrden };
+                      return {
+                        ...f,
+                        referenceNumber: noOrden,
+                        company: row.companyCode || f.company,
+                        description:
+                          row.observaciones && !f.description.trim()
+                            ? row.observaciones.slice(0, 200)
+                            : f.description,
+                      };
+                    });
                   }}
                 />
               </div>

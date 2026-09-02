@@ -1281,14 +1281,22 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                   value={form.referenceNumber}
                   company={form.company || undefined}
                   onChange={(noOrden, row) => {
-                    setForm((f) => ({
-                      ...f,
-                      referenceNumber: noOrden,
-                      description:
-                        row?.observaciones && !f.description.trim()
-                          ? row.observaciones.slice(0, 200)
-                          : f.description,
-                    }));
+                    setForm((f) => {
+                      if (!row) return { ...f, referenceNumber: noOrden };
+                      return {
+                        ...f,
+                        referenceNumber: noOrden,
+                        company: row.companyCode || f.company,
+                        amount:
+                          row.monto != null && Number.isFinite(row.monto)
+                            ? String(row.monto)
+                            : f.amount,
+                        description:
+                          row.observaciones && !f.description.trim()
+                            ? row.observaciones.slice(0, 200)
+                            : f.description,
+                      };
+                    });
                   }}
                 />
               </div>

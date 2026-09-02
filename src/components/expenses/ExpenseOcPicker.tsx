@@ -20,11 +20,19 @@ const ESTADO_LABEL: Record<string, string> = {
   P: "Pendiente",
 };
 
+function formatMonto(monto: number | null): string | null {
+  if (monto == null || !Number.isFinite(monto)) return null;
+  return monto.toLocaleString("es-CR", { maximumFractionDigits: 2 });
+}
+
 function formatOcLabel(row: OrdenCompraNafRow): string {
   const estado = ESTADO_LABEL[row.estado] ?? row.estado;
+  const monto = formatMonto(row.monto);
   const parts = [
     `OC ${row.noOrden}`,
+    row.companyCode || `cía ${row.noCia}`,
     row.proveedor || null,
+    monto ? `₡${monto}` : null,
     row.fecha || null,
     estado || null,
   ].filter(Boolean);

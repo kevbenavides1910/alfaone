@@ -11,6 +11,9 @@ export type OrdenCompraNafRow = {
   fecha: string | null;
   estado: string;
   observaciones: string | null;
+  /** Total OC en moneda de la orden (líneas + IVA). */
+  monto: number | null;
+  moneda: string | null;
 };
 
 export type OrdenesCompraListResult = {
@@ -36,6 +39,13 @@ function asDateIso(value: unknown): string | null {
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString().slice(0, 10);
+}
+
+function asNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100) / 100;
 }
 
 async function resolveNoCia(companyCode?: string): Promise<string | null> {
@@ -106,7 +116,18 @@ export async function listOrdenesCompraNaf(
           e.FECHA,
           e.ESTADO,
           e.OBSERVACIONES,
-          NVL(p.NOMBRE_LARGO, p.NOMBRE) AS PROVEEDOR
+          e.MONEDA,
+          NVL(p.NOMBRE_LARGO, p.NOMBRE) AS PROVEEDOR,
+          NVL((
+            SELECT SUM(NVL(d.CANTIDAD_PEDIDA, 0) * NVL(d.PRECIO_UNI, 0))
+            FROM NAF5.ARIMDETORDEN d
+            WHERE d.NO_CIA = e.NO_CIA AND d.NO_DOCU = e.NO_DOCU
+          ), 0)
+          + NVL((
+            SELECT SUM(NVL(i.MONTO_BASE_ORIGINAL, 0) * NVL(i.PORCENTAJE, 0) / 100)
+            FROM NAF5.ARIMIMPORDEN i
+            WHERE i.NO_CIA = e.NO_CIA AND i.NO_DOCU = e.NO_DOCU
+          ), 0) AS MONTO_TOTAL
         FROM NAF5.ARIMENCORDEN e
         LEFT JOIN NAF5.ARCPMP p
           ON p.NO_CIA = e.NO_CIA AND p.NO_PROVE = e.NO_PROVE
@@ -130,6 +151,8 @@ export async function listOrdenesCompraNaf(
         fecha: asDateIso(row.FECHA),
         estado: asString(row.ESTADO) ?? "",
         observaciones: asString(row.OBSERVACIONES),
+        monto: asNumber(row.MONTO_TOTAL),
+        moneda: asString(row.MONEDA),
       } satisfies OrdenCompraNafRow;
     });
 
