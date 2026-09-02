@@ -174,10 +174,9 @@ export function FingerDevicesPanel() {
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base">Lista / Máquinas</CardTitle>
-            <p className="mt-1 text-sm text-slate-500">
-              Relojes biométricos ZK (TCP/IP). Fuente de padrón:{" "}
-              {listSource === "odoo" ? "Odoo alfa_biometric" : "Finger local"}.
+            <CardTitle className="text-base">Relojes ZK</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              TCP/IP · fuente: {listSource === "odoo" ? "Odoo alfa_biometric" : "local"}.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -249,27 +248,23 @@ export function FingerDevicesPanel() {
           {data ? (
             <>
               <div className="overflow-auto rounded-lg border">
-                <table className="min-w-[1200px] w-full text-xs">
-                  <thead className="bg-blue-700 text-white">
+                <table className="min-w-[720px] w-full text-sm">
+                  <thead className="bg-muted/80 text-left text-xs">
                     <tr>
-                      <th className="px-2 py-2 text-left font-medium">NombreDisp</th>
-                      <th className="px-2 py-2 text-left font-medium">Estado</th>
-                      <th className="px-2 py-2 text-left font-medium">TipoComm</th>
-                      <th className="px-2 py-2 text-left font-medium">Dirrec. IP</th>
-                      <th className="px-2 py-2 text-left font-medium">Puerta</th>
-                      <th className="px-2 py-2 text-left font-medium">NombreProd</th>
-                      <th className="px-2 py-2 text-right font-medium">CuentaUsu</th>
-                      <th className="px-2 py-2 text-right font-medium">CuentaFP</th>
-                      <th className="px-2 py-2 text-right font-medium">CuentaReg</th>
-                      <th className="px-2 py-2 text-left font-medium">Número Serial</th>
-                      <th className="px-2 py-2 text-left font-medium">Acciones</th>
+                      <th className="px-3 py-2 font-medium">Nombre</th>
+                      <th className="px-3 py-2 font-medium">Estado</th>
+                      <th className="px-3 py-2 font-medium">IP</th>
+                      <th className="px-3 py-2 font-medium">Puerto</th>
+                      <th className="px-3 py-2 text-right font-medium">Usuarios</th>
+                      <th className="px-3 py-2 text-right font-medium">Marcas</th>
+                      <th className="px-3 py-2 font-medium">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.items.map((row) =>
                       canEditDevices && editingId === row.id ? (
-                        <tr key={row.id} className="border-t bg-slate-50">
-                          <td colSpan={11} className="px-3 py-3">
+                        <tr key={row.id} className="border-t bg-muted/30">
+                          <td colSpan={7} className="px-3 py-3">
                             <EditDeviceForm
                               device={row}
                               companyCode={companyCode}
@@ -282,8 +277,8 @@ export function FingerDevicesPanel() {
                           </td>
                         </tr>
                       ) : (
-                        <tr key={row.id} className="border-t hover:bg-slate-50/80">
-                          <td className="px-2 py-2">
+                        <tr key={row.id} className="border-t hover:bg-muted/40">
+                          <td className="px-3 py-2">
                             <div className="flex items-center gap-1">
                               <Button
                                 variant="ghost"
@@ -300,24 +295,18 @@ export function FingerDevicesPanel() {
                               <span>{row.name}</span>
                             </div>
                           </td>
-                          <td className={`px-2 py-2 ${STATUS_TONE[row.status] ?? ""}`}>
+                          <td className={`px-3 py-2 text-xs ${STATUS_TONE[row.status] ?? ""}`}>
                             {STATUS_LABEL[row.status] ?? row.status}
                           </td>
-                          <td className="px-2 py-2">TCP/IP</td>
-                          <td className="px-2 py-2 font-mono">{row.ipAddress}</td>
-                          <td className="px-2 py-2 font-mono">{row.port}</td>
-                          <td className="px-2 py-2">{row.model ?? row.brand ?? "—"}</td>
-                          <td className="px-2 py-2 text-right tabular-nums">
+                          <td className="px-3 py-2 font-mono text-xs">{row.ipAddress}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{row.port}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-xs">
                             {row.employeeCount.toLocaleString("es-CR")}
                           </td>
-                          <td className="px-2 py-2 text-right tabular-nums">
-                            {row.fingerprintCount.toLocaleString("es-CR")}
-                          </td>
-                          <td className="px-2 py-2 text-right tabular-nums">
+                          <td className="px-3 py-2 text-right tabular-nums text-xs">
                             {row.punchCount.toLocaleString("es-CR")}
                           </td>
-                          <td className="px-2 py-2 font-mono">{row.serialNumber ?? "—"}</td>
-                          <td className="px-2 py-2">
+                          <td className="px-3 py-2">
                             <div className="flex flex-wrap gap-1">
                               {canEditDevices ? (
                                 <Button variant="outline" size="sm" onClick={() => setEditingId(row.id)}>
@@ -374,8 +363,8 @@ export function FingerDevicesPanel() {
                     )}
                     {data.items.length === 0 ? (
                       <tr>
-                        <td colSpan={11} className="px-3 py-6 text-center text-slate-500">
-                          Sin dispositivos. Agregue manualmente por IP o configure ODOO_BIOMETRIC_DATABASE_URL.
+                        <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                          Sin relojes. Agregue por IP o revise la conexión Odoo.
                         </td>
                       </tr>
                     ) : null}

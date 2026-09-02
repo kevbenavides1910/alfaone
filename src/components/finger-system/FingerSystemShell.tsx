@@ -24,20 +24,26 @@ type Tab = {
   isActive?: (pathname: string) => boolean;
 };
 
+/** Nav diaria tipo Odoo: Relojes · Usuarios · Marcas · Asistencia · Config (+ Planillas). */
 const TABS: Tab[] = [
   {
     href: "/finger-system",
-    label: "Dashboard",
+    label: "Inicio",
     permission: "fingerSystem.dashboard",
     isActive: (p) => p === "/finger-system",
   },
   {
-    href: "/finger-system/empleados",
-    label: "Lista Empleados",
-    permission: "fingerSystem.empleados",
-    isActive: (p) => p.startsWith("/finger-system/empleados") || p.startsWith("/finger-system/empresas"),
+    href: "/finger-system/dispositivos",
+    label: "Relojes",
+    permission: "fingerSystem.dispositivos",
   },
-  { href: "/finger-system/dispositivos", label: "Dispositivos", permission: "fingerSystem.dispositivos" },
+  {
+    href: "/finger-system/empleados",
+    label: "Usuarios",
+    permission: "fingerSystem.empleados",
+    isActive: (p) =>
+      p.startsWith("/finger-system/empleados") || p.startsWith("/finger-system/empresas"),
+  },
   {
     href: "/finger-system/marcas",
     label: "Marcas",
@@ -80,46 +86,41 @@ export function FingerSystemShell({ children }: { children: React.ReactNode }) {
     return hasPermission(session, tab.permission, "view");
   });
 
-  const selectCompanyValue =
-    companyCode && companies.some((c) => c.code === companyCode) ? companyCode : undefined;
-
   return (
-    <>
+    <div className="flex min-h-screen flex-col bg-background">
       <Topbar
-        title={
-          <span className="inline-flex items-center gap-2">
-            <Fingerprint className="h-5 w-5 text-teal-600" />
-            {FINGER_BRAND.name}
-          </span>
+        title={FINGER_BRAND.name}
+        subtitle="Biométrico · relojes ZK y padrón Odoo"
+        icon={<Fingerprint className="h-5 w-5" />}
+        actions={
+          isMultiCompany ? (
+            <Select
+              value={companyCode ?? "ALL"}
+              onValueChange={(v) => setCompanyCode(v === "ALL" ? "" : v)}
+            >
+              <SelectTrigger className="h-8 w-[200px] text-xs">
+                <SelectValue placeholder="Compañía" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todas</SelectItem>
+                {companies.map((c) => (
+                  <SelectItem key={c.code} value={c.code}>
+                    {c.code} — {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null
         }
       />
-      {visibleTabs.length > 1 && (
-        <ModuleSubnav
-          ariaLabel="Secciones Finger System"
-          tabs={visibleTabs.map((tab) => ({
-            href: tab.href,
-            label: tab.label,
-            active: tabActive(tab, pathname),
-          }))}
-          trailing={
-            isMultiCompany && companies.length > 1 ? (
-              <Select value={selectCompanyValue} onValueChange={setCompanyCode}>
-                <SelectTrigger className="h-8 w-[10rem] text-xs">
-                  <SelectValue placeholder="Empresa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {companies.map((c) => (
-                    <SelectItem key={c.code} value={c.code}>
-                      {c.code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : null
-          }
-        />
-      )}
-      <main className="min-w-0">{children}</main>
-    </>
+      <ModuleSubnav
+        items={visibleTabs.map((tab) => ({
+          href: tab.href,
+          label: tab.label,
+          active: tabActive(tab, pathname),
+        }))}
+      />
+      <main className="flex-1">{children}</main>
+    </div>
   );
 }

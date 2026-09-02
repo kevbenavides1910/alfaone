@@ -5,6 +5,7 @@ import { FingerAccessModeBadge } from "@/components/finger-system/FingerAccessMo
 import { FingerAtt2016ConnectionPanel } from "@/components/finger-system/FingerAtt2016ConnectionPanel";
 import { FingerConfigAdminPanel } from "@/components/finger-system/FingerConfigAdminPanel";
 import { FingerConfigReadOnlyPanel } from "@/components/finger-system/FingerConfigReadOnlyPanel";
+import { FingerOdooStatusPanel } from "@/components/finger-system/FingerOdooStatusPanel";
 import { useFingerPermissions } from "@/components/finger-system/use-finger-permissions";
 
 export default function FingerConfiguracionPage() {
@@ -13,7 +14,7 @@ export default function FingerConfiguracionPage() {
   if (loading) {
     return (
       <div className="p-4 md:p-6">
-        <p className="text-slate-500">Cargando permisos…</p>
+        <p className="text-muted-foreground">Cargando permisos…</p>
       </div>
     );
   }
@@ -30,60 +31,52 @@ export default function FingerConfiguracionPage() {
     <div className="space-y-6 p-4 md:p-6 max-w-4xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Configuración biométrica</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            {canAdminConfig
-              ? "Administración: seleccione la ruta ATT2016, reconozca la base y ajuste el módulo."
-              : "Consulta de la configuración activa. Los cambios requieren rol administrador biométrico."}
+          <h1 className="text-xl font-semibold">Configuración</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Estado Odoo y opciones del módulo. ATT2016 queda como legado.
           </p>
         </div>
         <FingerAccessModeBadge />
       </div>
 
-      {canAdminConfig ? (
-        <>
-          <FingerAtt2016ConnectionPanel />
-          <FingerConfigAdminPanel />
-        </>
-      ) : (
-        <FingerConfigReadOnlyPanel />
-      )}
+      <FingerOdooStatusPanel />
+
+      {canAdminConfig ? <FingerConfigAdminPanel /> : <FingerConfigReadOnlyPanel />}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Herramientas avanzadas</CardTitle>
+          <CardTitle className="text-base">Herramientas</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2 text-sm">
-          <a className="underline text-blue-700" href="/finger-system/biometria">
-            Biometría
-          </a>
-          <a className="underline text-blue-700" href="/finger-system/mantenimiento">
+        <CardContent className="flex flex-wrap gap-3 text-sm">
+          <a className="underline text-primary" href="/finger-system/mantenimiento">
             Mantenimiento
           </a>
-          <a className="underline text-blue-700" href="/finger-system/auditoria">
+          <a className="underline text-primary" href="/finger-system/auditoria">
             Auditoría
           </a>
-          <a className="underline text-blue-700" href="/finger-system/backups">
-            Backups ATT2016
+          <a className="underline text-primary" href="/finger-system/biometria">
+            Biometría (legado)
           </a>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Credenciales de red</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-1 text-sm text-slate-600">
-          <p>
-            El usuario y contraseña SMB se configuran en el diálogo <strong>Propiedades de vínculo de datos</strong>.
-            Deben tener permiso de lectura y administración en la carpeta compartida (DB-Biometrico).
-          </p>
-          <p className="text-slate-500">
-            La contraseña se almacena cifrada en la base de datos de Finger System; no use variables
-            ATT2016_SMB_* en el servidor.
-          </p>
-        </CardContent>
-      </Card>
+      {canAdminConfig ? (
+        <details className="rounded-xl border bg-card p-4">
+          <summary className="cursor-pointer text-sm font-medium">
+            Legado ATT2016 (solo si aún se necesita)
+          </summary>
+          <div className="mt-4 space-y-4">
+            <FingerAtt2016ConnectionPanel />
+            <p className="text-xs text-muted-foreground">
+              <a className="underline" href="/finger-system/backups">
+                Backups ATT2016
+              </a>
+              {" · "}
+              Credenciales SMB se guardan cifradas en Finger; no use ATT2016_SMB_* en el servidor.
+            </p>
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }

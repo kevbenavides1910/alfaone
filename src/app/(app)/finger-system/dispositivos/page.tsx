@@ -27,11 +27,11 @@ export default function FingerDispositivosPage() {
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Dispositivos biométricos</h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <h1 className="text-xl font-semibold">Relojes</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {isBiometricAdmin
-              ? "Administre relojes por IP y conecte equipos en red."
-              : "Vista operativa: consulte relojes, conecte y actualice contadores. La ruta ATT2016 se configura en Configuración (admin)."}
+              ? "Conecte, edite y traiga usuarios/marcas desde los relojes ZK (TCP 4370)."
+              : "Consulte estado de relojes, conecte y traiga marcas. El padrón vive en Odoo."}
           </p>
         </div>
         <FingerAccessModeBadge />
