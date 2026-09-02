@@ -982,6 +982,8 @@ function PaymentRow({
 
 type ExpenseSummary = {
   type?: string;
+  description?: string | null;
+  referenceNumber?: string | null;
   notes?: string | null;
   registroCxp?: string | null;
   registroTr?: string | null;
@@ -1007,6 +1009,7 @@ function PaymentDetailDialog({
   const [paymentDate, setPaymentDate] = useState("");
   const [notes, setNotes] = useState("");
   const [description, setDescription] = useState("");
+  const [referenceNumber, setReferenceNumber] = useState("");
   const [category, setCategory] = useState("");
   const [subcategory, setSubcategory] = useState("");
 
@@ -1016,6 +1019,7 @@ function PaymentDetailDialog({
     setPaymentDate(calendarDateInputValue(payment.paymentDate));
     setNotes(payment.notes ?? "");
     setDescription(payment.description);
+    setReferenceNumber(payment.referenceNumber ?? "");
     setCategory(payment.category ?? "");
     setSubcategory(payment.subcategory ?? "");
     setTab("detalle");
@@ -1033,6 +1037,8 @@ function PaymentDetailDialog({
       const e = json.data ?? json;
       return {
         type: e.type,
+        description: e.description,
+        referenceNumber: e.referenceNumber,
         notes: e.notes,
         registroCxp: e.registroCxp,
         registroTr: e.registroTr,
@@ -1070,6 +1076,7 @@ function PaymentDetailDialog({
           paymentDate,
           notes,
           description: description.trim(),
+          referenceNumber: referenceNumber.trim(),
           category: category || null,
           subcategory: subcategory || null,
         }),
@@ -1097,6 +1104,7 @@ function PaymentDetailDialog({
       calendarDateInputValue(p.paymentDate) !== paymentDate ||
       (p.notes ?? "") !== notes ||
       p.description !== description.trim() ||
+      (p.referenceNumber ?? "") !== referenceNumber.trim() ||
       (p.category ?? "") !== category ||
       (p.subcategory ?? "") !== subcategory);
 
@@ -1129,10 +1137,18 @@ function PaymentDetailDialog({
               {canEdit ? (
                 <div className="grid gap-3 text-sm rounded-lg border p-4">
                   <div className="grid gap-1.5">
-                    <Label>Descripción</Label>
+                    <Label>Detalle de la compra</Label>
                     <Input
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label>Número de OC</Label>
+                    <Input
+                      value={referenceNumber}
+                      onChange={(e) => setReferenceNumber(e.target.value)}
+                      placeholder="Sin OC"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -1209,7 +1225,8 @@ function PaymentDetailDialog({
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3 text-sm bg-muted/40 rounded-lg p-4">
-                  <DetailField label="Descripción" value={p.description} className="col-span-2" />
+                  <DetailField label="Detalle de la compra" value={p.description || "—"} className="col-span-2" />
+                  <DetailField label="Número de OC" value={p.referenceNumber?.trim() || "—"} className="col-span-2" />
                   <DetailField label="Monto" value={formatCurrency(p.amount)} emphasize />
                   <DetailField label="Fecha de pago" value={formatDate(p.paymentDate)} />
                   <DetailField

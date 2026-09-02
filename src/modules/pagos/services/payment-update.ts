@@ -37,9 +37,9 @@ const FIELD_LABELS: Record<string, string> = {
   amount: "Monto",
   paymentDate: "Fecha de pago",
   paid: "Estado",
-  description: "Descripción",
+  description: "Detalle de la compra",
   notes: "Notas",
-  referenceNumber: "Referencia",
+  referenceNumber: "Número de OC",
   category: "Categoría",
   subcategory: "Subcategoría",
 };
