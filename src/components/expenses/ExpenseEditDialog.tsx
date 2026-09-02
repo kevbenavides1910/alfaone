@@ -152,6 +152,7 @@ export function ExpenseEditDialog({
                 <ExpenseOcPicker
                   value={editForm.referenceNumber}
                   company={editForm.company || undefined}
+                  linkedNoCia={editForm.nafOcNoCia || undefined}
                   onChange={(noOrden, row) => {
                     setEditForm((f) => {
                       if (!row) {

@@ -1314,6 +1314,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                 <ExpenseOcPicker
                   value={form.referenceNumber}
                   company={form.company || undefined}
+                  linkedNoCia={form.nafOcNoCia || undefined}
                   onChange={(noOrden, row) => {
                     setForm((f) => {
                       if (!row) {

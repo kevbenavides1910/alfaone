@@ -12,6 +12,8 @@ import type {
 type ExpenseOcPickerProps = {
   value: string;
   company?: string;
+  /** NO_CIA NAF ya ligado (para cargar detalle al abrir editar). */
+  linkedNoCia?: string;
   onChange: (noOrden: string, row?: OrdenCompraNafRow | null) => void;
   disabled?: boolean;
   id?: string;
@@ -42,9 +44,155 @@ function formatOcLabel(row: OrdenCompraNafRow): string {
   return parts.join(" · ");
 }
 
+async function fetchOcDetalle(opts: {
+  noOrden: string;
+  noCia?: string;
+  company?: string;
+  signal?: AbortSignal;
+}): Promise<OrdenCompraNafRow> {
+  const params = new URLSearchParams({ noOrden: opts.noOrden });
+  if (opts.noCia?.trim()) params.set("noCia", opts.noCia.trim());
+  if (opts.company?.trim()) params.set("company", opts.company.trim());
+  const res = await fetch(`/api/expenses/ordenes-compra/detalle?${params}`, {
+    signal: opts.signal,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body?.error?.message || "No se pudo cargar el detalle de la OC");
+  }
+  return body.data as OrdenCompraNafRow;
+}
+
+export function ExpenseOcDetallePanel({
+  oc,
+  loading,
+}: {
+  oc: OrdenCompraNafRow | null;
+  loading?: boolean;
+}) {
+  if (loading) {
+    return <p className="text-xs text-slate-500">Cargando líneas de la OC…</p>;
+  }
+  if (!oc) return null;
+
+  const lineas: OrdenCompraLinea[] = oc.lineas ?? [];
+
+  return (
+    <div className="rounded-md border border-slate-200 overflow-hidden">
+      <div className="bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 flex flex-wrap justify-between gap-2">
+        <span>
+          Detalle OC {oc.noOrden}
+          {oc.proveedor ? ` · ${oc.proveedor}` : ""}
+          {oc.estado ? ` · ${ESTADO_LABEL[oc.estado] ?? oc.estado}` : ""}
+        </span>
+        <span className="font-mono">Total ₡{formatMonto(oc.monto)}</span>
+      </div>
+      {oc.observaciones && (
+        <div className="px-3 py-2 text-xs text-slate-700 border-b bg-card">
+          <span className="text-slate-500">Descripción Codisa: </span>
+          {oc.observaciones}
+        </div>
+      )}
+      {lineas.length > 0 ? (
+        <div className="max-h-52 overflow-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-card text-slate-500">
+              <tr className="border-b">
+                <th className="px-2 py-1 text-left font-medium">#</th>
+                <th className="px-2 py-1 text-left font-medium">Artículo</th>
+                <th className="px-2 py-1 text-right font-medium">Cant.</th>
+                <th className="px-2 py-1 text-right font-medium">P. unit.</th>
+                <th className="px-2 py-1 text-right font-medium">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lineas.map((l) => (
+                <tr key={l.noLinea} className="border-b last:border-0">
+                  <td className="px-2 py-1 text-slate-400">{l.noLinea}</td>
+                  <td className="px-2 py-1">
+                    <div className="text-slate-800">{l.descripcion || l.noArti}</div>
+                    {l.descripcion && (
+                      <div className="font-mono text-[10px] text-slate-400">{l.noArti}</div>
+                    )}
+                  </td>
+                  <td className="px-2 py-1 text-right font-mono whitespace-nowrap">
+                    {formatMonto(l.cantidad)}
+                    {l.unidad ? ` ${l.unidad}` : ""}
+                  </td>
+                  <td className="px-2 py-1 text-right font-mono">₡{formatMonto(l.precioUni)}</td>
+                  <td className="px-2 py-1 text-right font-mono">₡{formatMonto(l.subtotal)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="px-3 py-2 text-xs text-slate-400">Sin líneas en Codisa para esta OC.</p>
+      )}
+      {oc.aplicaImpuesto && (
+        <p className="px-3 py-1.5 text-[10px] text-slate-400 bg-slate-50 border-t">
+          Monto = suma de líneas (sin IVA desglosado de Codisa).
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Solo lectura: carga y muestra detalle NAF si hay OC ligada. */
+export function ExpenseOcLinkedDetalle({
+  noOrden,
+  noCia,
+  company,
+}: {
+  noOrden?: string | null;
+  noCia?: string | null;
+  company?: string | null;
+}) {
+  const [oc, setOc] = useState<OrdenCompraNafRow | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const orden = (noOrden ?? "").trim();
+    if (!orden) {
+      setOc(null);
+      setError(null);
+      return;
+    }
+    const ac = new AbortController();
+    setLoading(true);
+    setError(null);
+    fetchOcDetalle({
+      noOrden: orden,
+      noCia: noCia ?? undefined,
+      company: company ?? undefined,
+      signal: ac.signal,
+    })
+      .then((detalle) => setOc(detalle))
+      .catch((e) => {
+        if (e?.name === "AbortError") return;
+        setOc(null);
+        setError(e instanceof Error ? e.message : "Error al cargar OC");
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setLoading(false);
+      });
+    return () => ac.abort();
+  }, [noOrden, noCia, company]);
+
+  if (!noOrden?.trim()) return null;
+  return (
+    <div className="space-y-1">
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <ExpenseOcDetallePanel oc={oc} loading={loading} />
+    </div>
+  );
+}
+
 export function ExpenseOcPicker({
   value,
   company,
+  linkedNoCia,
   onChange,
   disabled = false,
   id,
@@ -59,16 +207,52 @@ export function ExpenseOcPicker({
   const [selected, setSelected] = useState<OrdenCompraNafRow | null>(null);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const debounced = useDebouncedValue(query, 300);
+  const skipNextAutoLoad = useRef(false);
 
   useEffect(() => {
     if (!open) setQuery(value);
   }, [value, open]);
 
+  // Cargar detalle al abrir gasto ya ligado / con N° OC
   useEffect(() => {
-    if (!value.trim()) {
+    const orden = value.trim();
+    if (!orden) {
       setSelected(null);
+      return;
     }
-  }, [value]);
+    if (skipNextAutoLoad.current) {
+      skipNextAutoLoad.current = false;
+      return;
+    }
+    if (selected?.noOrden === orden && (selected.lineas?.length || selected.observaciones)) {
+      return;
+    }
+    const ac = new AbortController();
+    setLoadingDetalle(true);
+    setError(null);
+    fetchOcDetalle({
+      noOrden: orden,
+      noCia: linkedNoCia,
+      company,
+      signal: ac.signal,
+    })
+      .then((detalle) => {
+        setSelected(detalle);
+      })
+      .catch((e) => {
+        if (e?.name === "AbortError") return;
+        setSelected(null);
+        // No mostrar error agresivo si es ref libre no-OC
+        if (linkedNoCia) {
+          setError(e instanceof Error ? e.message : "Error al cargar OC");
+        }
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setLoadingDetalle(false);
+      });
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al cambiar vínculo/valor
+  }, [value, linkedNoCia, company]);
 
   useEffect(() => {
     if (!open || disabled) return;
@@ -111,6 +295,7 @@ export function ExpenseOcPicker({
   }, []);
 
   async function selectOc(row: OrdenCompraNafRow) {
+    skipNextAutoLoad.current = true;
     setQuery(row.noOrden);
     setOpen(false);
     setSelected(row);
@@ -118,14 +303,11 @@ export function ExpenseOcPicker({
     onChange(row.noOrden, row);
 
     try {
-      const params = new URLSearchParams({ noOrden: row.noOrden, noCia: row.noCia });
-      if (row.companyCode) params.set("company", row.companyCode);
-      const res = await fetch(`/api/expenses/ordenes-compra/detalle?${params}`);
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(body?.error?.message || "No se pudo cargar el detalle de la OC");
-      }
-      const detalle = body?.data as OrdenCompraNafRow;
+      const detalle = await fetchOcDetalle({
+        noOrden: row.noOrden,
+        noCia: row.noCia,
+        company: row.companyCode ?? company,
+      });
       setSelected(detalle);
       onChange(detalle.noOrden, detalle);
     } catch (e) {
@@ -134,8 +316,6 @@ export function ExpenseOcPicker({
       setLoadingDetalle(false);
     }
   }
-
-  const lineas: OrdenCompraLinea[] = selected?.lineas ?? [];
 
   return (
     <div ref={containerRef} className="relative space-y-2">
@@ -219,60 +399,9 @@ export function ExpenseOcPicker({
         </ul>
       )}
 
-      {loadingDetalle && (
-        <p className="text-xs text-slate-500">Cargando líneas de la OC…</p>
-      )}
+      <ExpenseOcDetallePanel oc={selected} loading={loadingDetalle} />
 
-      {selected && lineas.length > 0 && (
-        <div className="rounded-md border border-slate-200 overflow-hidden">
-          <div className="bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 flex justify-between gap-2">
-            <span>
-              Detalle OC {selected.noOrden}
-              {selected.proveedor ? ` · ${selected.proveedor}` : ""}
-            </span>
-            <span className="font-mono">Total ₡{formatMonto(selected.monto)}</span>
-          </div>
-          <div className="max-h-44 overflow-auto">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-card text-slate-500">
-                <tr className="border-b">
-                  <th className="px-2 py-1 text-left font-medium">#</th>
-                  <th className="px-2 py-1 text-left font-medium">Artículo</th>
-                  <th className="px-2 py-1 text-right font-medium">Cant.</th>
-                  <th className="px-2 py-1 text-right font-medium">P. unit.</th>
-                  <th className="px-2 py-1 text-right font-medium">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lineas.map((l) => (
-                  <tr key={l.noLinea} className="border-b last:border-0">
-                    <td className="px-2 py-1 text-slate-400">{l.noLinea}</td>
-                    <td className="px-2 py-1">
-                      <div className="text-slate-800">{l.descripcion || l.noArti}</div>
-                      {l.descripcion && (
-                        <div className="font-mono text-[10px] text-slate-400">{l.noArti}</div>
-                      )}
-                    </td>
-                    <td className="px-2 py-1 text-right font-mono whitespace-nowrap">
-                      {formatMonto(l.cantidad)}
-                      {l.unidad ? ` ${l.unidad}` : ""}
-                    </td>
-                    <td className="px-2 py-1 text-right font-mono">₡{formatMonto(l.precioUni)}</td>
-                    <td className="px-2 py-1 text-right font-mono">₡{formatMonto(l.subtotal)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {selected.aplicaImpuesto && (
-            <p className="px-3 py-1.5 text-[10px] text-slate-400 bg-slate-50 border-t">
-              Monto = suma de líneas (sin IVA desglosado de Codisa).
-            </p>
-          )}
-        </div>
-      )}
-
-      {!selected?.lineas?.length && !loadingDetalle && (
+      {!selected && !loadingDetalle && (
         <p className="text-xs text-slate-400">
           Números reales de orden de compra Codisa (NAF). También podés escribir otra referencia.
         </p>

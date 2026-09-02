@@ -12,6 +12,7 @@ import {
   type Contract,
   isPreviewable, formatSequentialNo,
 } from "@/app/(app)/(gastos)/expenses/expenses-types";
+import { ExpenseOcLinkedDetalle } from "@/components/expenses/ExpenseOcPicker";
 
 interface Company { code: string; name: string; isActive: boolean }
 interface ExpensePreviewDialogProps {
@@ -79,6 +80,14 @@ export function ExpensePreviewDialog({
                 <div><span className="text-slate-500">Fecha de pago:</span> <span className="font-medium ml-1">{formatDate(previewExpense.paymentDate ?? previewExpense.createdAt)}</span></div>
                 <div className="col-span-2">{approvalBadge(previewExpense)}</div>
               </div>
+
+              {previewExpense.nafOcNoOrden && (
+                <ExpenseOcLinkedDetalle
+                  noOrden={previewExpense.nafOcNoOrden}
+                  noCia={previewExpense.nafOcNoCia}
+                  company={previewExpense.company}
+                />
+              )}
 
               {previewExpense.isDeferred &&
                 (previewExpense.approvalStatus ?? "APPROVED") !== "APPROVED" &&
