@@ -1,7 +1,9 @@
-import { getCalendarMonth } from "@/modules/pagos/services/pagos";
+import { getCalendarMonth, searchPaymentsByOc } from "@/modules/pagos/services/pagos";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
 import { currentYearMonth, strArg } from "./shared";
+
+const MAX_LIST = 40;
 
 export function pagosTools(): SyntraTool[] {
   return [
@@ -46,6 +48,53 @@ export function pagosTools(): SyntraTool[] {
           })),
           moneda: "CRC",
           fuente: "Calendario de pagos Alfa One",
+        };
+      },
+    },
+    {
+      permission: { key: "pagos.calendario", level: "view" },
+      definition: toolDef(
+        "search_payments_by_oc",
+        "Busca pagos por número de OC (orden de compra / referencia) en todos los meses del calendario.",
+        {
+          type: "object",
+          properties: {
+            oc: {
+              type: "string",
+              description: "Número o fragmento de OC / referencia (mín. 2 caracteres).",
+            },
+            company: { type: "string", description: "Filtrar por empresa (opcional)." },
+          },
+          required: ["oc"],
+          additionalProperties: false,
+        },
+      ),
+      describeCall: (args) => {
+        const oc = strArg(args ?? {}, "oc") || "…";
+        return `Buscando pagos con OC «${oc}»…`;
+      },
+      handler: async (_session, args) => {
+        const oc = strArg(args, "oc");
+        if (!oc || oc.length < 2) {
+          return { error: "Indicá al menos 2 caracteres del número de OC." };
+        }
+        const company = strArg(args, "company") || undefined;
+        const rows = await searchPaymentsByOc(oc, company);
+        return {
+          oc,
+          total: rows.length,
+          pagos: rows.slice(0, MAX_LIST).map((p) => ({
+            id: p.id,
+            fecha: p.paymentDate,
+            oc: p.referenceNumber,
+            descripcion: p.description,
+            monto: p.amount,
+            compania: p.company,
+            fuente: p.source,
+            pagado: p.paid,
+          })),
+          moneda: "CRC",
+          fuente: "Calendario de pagos Alfa One (búsqueda por OC)",
         };
       },
     },

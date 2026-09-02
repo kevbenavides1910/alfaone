@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare, ScrollText } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare, ScrollText, Search, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,6 +101,10 @@ const EMPTY_DRAFT: NewPaymentDraft = {
 function currentMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthFromPaymentDate(paymentDate: string): string {
+  return paymentDate.slice(0, 7);
 }
 
 function dayLabel(d: Date): string {
@@ -255,6 +259,13 @@ export function PagosPageClient({ initialCompany }: Props) {
   const [detailPayment, setDetailPayment] = useState<PagoDto | null>(null);
   const [dayDialog, setDayDialog] = useState<CalendarDay | null>(null);
   const [activeTab, setActiveTab] = useState<"diarios" | "fijos" | "cronograma" | "bitacora">("diarios");
+  const [ocQuery, setOcQuery] = useState("");
+  const [ocDebounced, setOcDebounced] = useState("");
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setOcDebounced(ocQuery.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [ocQuery]);
 
   const canEdit = useMemo(
     () => hasPermission(session, "pagos.calendario", "edit"),
@@ -277,6 +288,35 @@ export function PagosPageClient({ initialCompany }: Props) {
     enabled: activeTab !== "bitacora",
     retry: 1,
   });
+
+  const ocSearchEnabled = ocDebounced.length >= 2;
+  const {
+    data: ocResults = [],
+    isFetching: ocSearching,
+    isError: ocSearchError,
+  } = useQuery({
+    queryKey: ["pagos-oc-search", ocDebounced, company],
+    queryFn: async () => {
+      const params = new URLSearchParams({ oc: ocDebounced });
+      if (company && company !== "all") params.set("company", company);
+      const res = await fetch(`/api/pagos?${params.toString()}`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.message || "Error al buscar OC");
+      }
+      const json = await res.json();
+      return (json.data ?? json) as PagoDto[];
+    },
+    enabled: ocSearchEnabled,
+    retry: 1,
+  });
+
+  const openOcResult = useCallback((p: PagoDto) => {
+    const targetMonth = monthFromPaymentDate(p.paymentDate);
+    if (targetMonth) setMonth(targetMonth);
+    if (activeTab === "bitacora") setActiveTab("diarios");
+    setDetailPayment(p);
+  }, [activeTab]);
 
   const { data: bitacoraGlobal = [], isFetching: bitacoraFetching } = useQuery({
     queryKey: ["pagos-bitacora-global", company],
@@ -303,6 +343,7 @@ export function PagosPageClient({ initialCompany }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-oc-search"] });
       queryClient.invalidateQueries({ queryKey: ["pagos-bitacora"] });
       queryClient.invalidateQueries({ queryKey: ["pagos-bitacora-global"] });
     },
@@ -324,6 +365,7 @@ export function PagosPageClient({ initialCompany }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-oc-search"] });
       setShowNew(false);
       setDraft(EMPTY_DRAFT);
       toast.success("Pago agregado");
@@ -338,6 +380,7 @@ export function PagosPageClient({ initialCompany }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-oc-search"] });
       toast.success("Pago eliminado");
     },
     onError: () => toast.error("No se pudo eliminar el pago"),
@@ -355,6 +398,7 @@ export function PagosPageClient({ initialCompany }: Props) {
     },
     onSuccess: (json) => {
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-oc-search"] });
       const d = json?.data ?? json;
       const months = Array.isArray(d?.monthsSynced) ? d.monthsSynced.length : 0;
       const apex = Number(d?.apexCreated ?? 0);
@@ -482,6 +526,26 @@ export function PagosPageClient({ initialCompany }: Props) {
           <option value="JOBEN">JOBEN</option>
           <option value="ACE">ACE</option>
         </select>
+        <div className="relative min-w-[220px] max-w-sm flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={ocQuery}
+            onChange={(e) => setOcQuery(e.target.value)}
+            placeholder="Buscar por número de OC…"
+            className="h-9 pl-8 pr-8"
+            aria-label="Buscar por número de OC en todos los meses"
+          />
+          {ocQuery && (
+            <button
+              type="button"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+              onClick={() => { setOcQuery(""); setOcDebounced(""); }}
+              aria-label="Limpiar búsqueda OC"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
         <div className="ml-auto flex items-center gap-4 text-sm">
           {activeTab !== "bitacora" ? (
             <>
@@ -498,6 +562,52 @@ export function PagosPageClient({ initialCompany }: Props) {
           )}
         </div>
       </div>
+
+      {ocSearchEnabled && (
+        <div className="rounded-lg border bg-card p-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <p className="font-medium">
+              Resultados por OC
+              <span className="ml-2 font-normal text-muted-foreground">«{ocDebounced}» · todos los meses</span>
+            </p>
+            {ocSearching ? (
+              <span className="text-xs text-muted-foreground animate-pulse">buscando…</span>
+            ) : (
+              <span className="text-xs text-muted-foreground">{ocResults.length} encontrado(s)</span>
+            )}
+          </div>
+          {ocSearchError ? (
+            <p className="text-sm text-destructive">No se pudo buscar. Probá de nuevo.</p>
+          ) : !ocSearching && ocResults.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Sin coincidencias. Si es un mes viejo, usá «Traer meses anteriores» y volvé a buscar.
+            </p>
+          ) : (
+            <ul className="max-h-56 overflow-y-auto divide-y rounded-md border">
+              {ocResults.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    className="flex w-full flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-left text-sm hover:bg-muted/60"
+                    onClick={() => openOcResult(p)}
+                  >
+                    <span className="font-mono font-semibold text-sky-700 shrink-0">
+                      {p.referenceNumber || "—"}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-medium">{p.description}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">{formatDate(p.paymentDate)}</span>
+                    <span className="font-semibold shrink-0">{formatCurrency(p.amount)}</span>
+                    <Badge className={`${FUENTE_BADGE[p.source]} shrink-0`}>{FUENTE_LABEL[p.source]}</Badge>
+                    <span className={p.paid ? "text-xs text-emerald-600" : "text-xs text-amber-600"}>
+                      {p.paid ? "Pagado" : "Pendiente"}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {calendarError && activeTab !== "bitacora" && (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive flex flex-wrap items-center gap-3">

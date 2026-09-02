@@ -3,12 +3,18 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
 import { withPermission } from "@/lib/permissions/middleware";
 import { ok, created, badRequest, serverError } from "@/lib/api/response";
-import { getCalendarMonth, serializeSinglePayment } from "@/modules/pagos/services/pagos";
+import {
+  getCalendarMonth,
+  searchPaymentsByOc,
+  serializeSinglePayment,
+} from "@/modules/pagos/services/pagos";
 
 /**
  * API del módulo Pagos (calendario).
  *   GET  /api/pagos?month=YYYY-MM[&company=...]
  *        → calendario del mes (días con sus pagos y totales)
+ *   GET  /api/pagos?oc=...[&company=...]
+ *        → búsqueda por número de OC en todos los meses (lista plana)
  *   POST /api/pagos
  *        { source:'MANUAL', description, amount, paymentDate, company?, refType?, referenceNumber?, notes? }
  *        Crear un pago manual. También acepta source='APEX' con apexPagoId (re-sync de un gasto fijo).
@@ -17,8 +23,18 @@ export const GET = withPermission(
 async (req: NextRequest) => {
   try {
     const { searchParams } = new URL(req.url);
-    const month = searchParams.get("month") ?? currentMonth();
     const company = searchParams.get("company")?.trim() || undefined;
+    const oc = searchParams.get("oc")?.trim() || "";
+
+    if (oc) {
+      if (oc.length < 2) {
+        return badRequest("Ingresá al menos 2 caracteres del número de OC");
+      }
+      const results = await searchPaymentsByOc(oc, company);
+      return ok(results);
+    }
+
+    const month = searchParams.get("month") ?? currentMonth();
     if (!/^\d{4}-\d{2}$/.test(month)) {
       return badRequest("Formato de mes inválido (esperado YYYY-MM)");
     }

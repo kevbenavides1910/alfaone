@@ -378,6 +378,32 @@ export async function getCalendarMonth(
   return result;
 }
 
+const OC_SEARCH_MAX = 100;
+
+/**
+ * Busca pagos por número de OC (`referenceNumber`) en todos los meses materializados.
+ * No sincroniza Oracle/gastos: solo consulta lo ya guardado en Postgres.
+ */
+export async function searchPaymentsByOc(
+  oc: string,
+  companyFilter?: string,
+  limit = OC_SEARCH_MAX,
+): Promise<PagoDto[]> {
+  const q = oc.trim();
+  if (!q) return [];
+
+  const take = Math.min(Math.max(limit, 1), OC_SEARCH_MAX);
+  const rows = await prisma.payment.findMany({
+    where: {
+      referenceNumber: { contains: q, mode: "insensitive" },
+      ...(companyFilter ? { company: companyFilter } : {}),
+    },
+    orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
+    take,
+  });
+  return rows.map(serializeSinglePayment);
+}
+
 class CalendarDraftGenerator {
   days: string[] = [];
   constructor(month: string) {
