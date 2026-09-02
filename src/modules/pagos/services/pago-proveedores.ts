@@ -13,6 +13,9 @@ export type PagoProveedorDto = {
   paymentDate: string | null;
   notes: string | null;
   createdAt: string;
+  /** unscheduled = sin Payment; scheduled_unpaid = ya en calendario pero no marcado pagado */
+  status: "unscheduled" | "scheduled_unpaid";
+  paymentId: string | null;
 };
 
 function toIsoDay(d: Date): string {
@@ -28,14 +31,26 @@ function toIsoMonth(d: Date): string {
   return `${y}-${m}`;
 }
 
-/** Gastos aprobados sin Payment EXPENSE (pendientes de programar en calendario). */
+/**
+ * Cola de pago a proveedores:
+ * - Gastos aprobados sin Payment EXPENSE (por programar).
+ * - Gastos aprobados con Payment EXPENSE impago (ya en calendario; se puede reprogramar fecha).
+ * No incluye los ya marcados pagados.
+ */
 export async function listPagoProveedores(companyFilter?: string): Promise<PagoProveedorDto[]> {
   const rows = await prisma.expense.findMany({
     where: {
       approvalStatus: "APPROVED",
       deletedAt: null,
-      payments: { none: { source: "EXPENSE" } },
       ...(companyFilter ? { company: companyFilter } : {}),
+      OR: [
+        { payments: { none: { source: "EXPENSE" } } },
+        {
+          payments: {
+            some: { source: "EXPENSE", paid: false },
+          },
+        },
+      ],
     },
     orderBy: [{ createdAt: "desc" }],
     select: {
@@ -49,22 +64,40 @@ export async function listPagoProveedores(companyFilter?: string): Promise<PagoP
       paymentDate: true,
       notes: true,
       createdAt: true,
+      payments: {
+        where: { source: "EXPENSE" },
+        select: { id: true, paid: true, paymentDate: true },
+        take: 1,
+      },
     },
     take: 500,
   });
 
-  return rows.map((e) => ({
-    id: e.id,
-    description: e.description,
-    amount: parseFloat(e.amount.toString()),
-    company: e.company,
-    type: e.type,
-    referenceNumber: e.referenceNumber,
-    periodMonth: toIsoMonth(e.periodMonth),
-    paymentDate: e.paymentDate ? toIsoDay(e.paymentDate) : null,
-    notes: e.notes,
-    createdAt: e.createdAt.toISOString(),
-  }));
+  return rows
+    .map((e) => {
+      const pay = e.payments[0] ?? null;
+      if (pay?.paid) return null;
+      const status: PagoProveedorDto["status"] = pay ? "scheduled_unpaid" : "unscheduled";
+      return {
+        id: e.id,
+        description: e.description,
+        amount: parseFloat(e.amount.toString()),
+        company: e.company,
+        type: e.type,
+        referenceNumber: e.referenceNumber,
+        periodMonth: toIsoMonth(e.periodMonth),
+        paymentDate: pay
+          ? toIsoDay(pay.paymentDate)
+          : e.paymentDate
+            ? toIsoDay(e.paymentDate)
+            : null,
+        notes: e.notes,
+        createdAt: e.createdAt.toISOString(),
+        status,
+        paymentId: pay?.id ?? null,
+      } satisfies PagoProveedorDto;
+    })
+    .filter((r): r is PagoProveedorDto => r != null);
 }
 
 export class ScheduleExpenseError extends Error {
@@ -76,8 +109,10 @@ export class ScheduleExpenseError extends Error {
 }
 
 /**
- * Asigna fecha de pago a un gasto aprobado y crea el Payment EXPENSE
- * para que aparezca en el calendario diario.
+ * Asigna o actualiza fecha de pago de un gasto aprobado.
+ * - Sin Payment → crea Payment EXPENSE (entra al calendario).
+ * - Con Payment impago → actualiza fecha.
+ * - Con Payment pagado → rechazo.
  */
 export async function scheduleExpensePayment(input: {
   expenseId: string;
@@ -102,18 +137,36 @@ export async function scheduleExpensePayment(input: {
   const existing = await prisma.payment.findFirst({
     where: { source: "EXPENSE", expenseId: expense.id },
   });
-  if (existing) {
+  if (existing?.paid) {
     throw new ScheduleExpenseError(
       "CONFLICT",
-      "Este gasto ya está en el calendario de pagos",
+      "Este gasto ya está marcado como pagado en el calendario",
     );
   }
 
-  const created = await prisma.$transaction(async (tx) => {
+  const prevDate = existing ? toIsoDay(existing.paymentDate) : null;
+  const newDate = toIsoDay(paymentDate);
+
+  const saved = await prisma.$transaction(async (tx) => {
     await tx.expense.update({
       where: { id: expense.id },
       data: { paymentDate },
     });
+
+    if (existing) {
+      return tx.payment.update({
+        where: { id: existing.id },
+        data: {
+          paymentDate,
+          description: expense.description,
+          company: expense.company,
+          refType: expense.type,
+          referenceNumber: expense.referenceNumber,
+          updatedById: input.userId,
+        },
+      });
+    }
+
     return tx.payment.create({
       data: {
         source: "EXPENSE",
@@ -131,15 +184,17 @@ export async function scheduleExpensePayment(input: {
     });
   });
 
-  await prisma.paymentChangeLog.create({
-    data: {
-      paymentId: created.id,
-      field: "paymentDate",
-      previousValue: null,
-      newValue: toIsoDay(paymentDate),
-      changedById: input.userId,
-    },
-  });
+  if (prevDate !== newDate) {
+    await prisma.paymentChangeLog.create({
+      data: {
+        paymentId: saved.id,
+        field: "paymentDate",
+        previousValue: prevDate,
+        newValue: newDate,
+        changedById: input.userId,
+      },
+    });
+  }
 
-  return serializeSinglePayment(created);
+  return serializeSinglePayment(saved);
 }

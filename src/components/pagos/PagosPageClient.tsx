@@ -91,6 +91,8 @@ type PagoProveedorDto = {
   paymentDate: string | null;
   notes: string | null;
   createdAt: string;
+  status: "unscheduled" | "scheduled_unpaid";
+  paymentId: string | null;
 };
 
 type PagosTab = "diarios" | "fijos" | "cronograma" | "proveedores" | "bitacora";
@@ -384,7 +386,11 @@ export function PagosPageClient({ initialCompany }: Props) {
       return (json.data ?? json) as PagoDto;
     },
     onSuccess: (p) => {
-      toast.success("Fecha asignada — ya aparece en el calendario");
+      toast.success(
+        p.paymentDate
+          ? "Fecha guardada — el gasto está en el calendario"
+          : "Fecha asignada — ya aparece en el calendario",
+      );
       queryClient.invalidateQueries({ queryKey: ["pagos-proveedores"] });
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
       setScheduleDates((prev) => {
@@ -733,7 +739,8 @@ export function PagosPageClient({ initialCompany }: Props) {
           </TabsContent>
           <TabsContent value="proveedores" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
             <p className="text-xs text-muted-foreground mb-3">
-              Gastos aprobados pendientes de fecha. Al asignar fecha de pago pasan al calendario diario.
+              Gastos aprobados sin pagar: sin fecha (por programar) o ya en el calendario (podés cambiar la fecha).
+              Los marcados pagados no aparecen aquí.
             </p>
             {proveedoresError ? (
               <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive flex flex-wrap items-center gap-3">
@@ -746,7 +753,7 @@ export function PagosPageClient({ initialCompany }: Props) {
               <p className="text-sm text-muted-foreground py-8 text-center animate-pulse">Cargando…</p>
             ) : proveedores.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
-                No hay gastos pendientes de programar.
+                No hay gastos pendientes de programar ni de pagar.
               </p>
             ) : (
               <div className="overflow-x-auto rounded-md border">
@@ -757,6 +764,7 @@ export function PagosPageClient({ initialCompany }: Props) {
                       <th className="px-3 py-2 font-medium">OC</th>
                       <th className="px-3 py-2 font-medium">Tipo</th>
                       <th className="px-3 py-2 font-medium">Cía</th>
+                      <th className="px-3 py-2 font-medium">Estado</th>
                       <th className="px-3 py-2 font-medium text-right">Monto</th>
                       <th className="px-3 py-2 font-medium">Fecha de pago</th>
                       <th className="px-3 py-2 font-medium" />
@@ -780,6 +788,13 @@ export function PagosPageClient({ initialCompany }: Props) {
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">{e.type}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{e.company ?? "—"}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {e.status === "unscheduled" ? (
+                              <span className="text-xs font-medium text-amber-700">Sin programar</span>
+                            ) : (
+                              <span className="text-xs font-medium text-sky-700">En calendario</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">
                             {formatCurrency(e.amount)}
                           </td>
@@ -809,7 +824,7 @@ export function PagosPageClient({ initialCompany }: Props) {
                                   })
                                 }
                               >
-                                Asignar fecha
+                                {e.status === "unscheduled" ? "Asignar fecha" : "Actualizar fecha"}
                               </Button>
                             )}
                           </td>
