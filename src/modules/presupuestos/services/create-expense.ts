@@ -15,7 +15,7 @@ import {
 import { assignableContractStatusWhereInput } from "@/modules/presupuestos/services/assignable-contract-where";
 import { splitAmountAcrossMonths, generateProrationMonths } from "@/modules/presupuestos/business/expense-proration";
 import type { ExpenseCreateInput } from "@/modules/presupuestos/validations/expense.schema";
-import { parseCalendarDateInput, todayCalendarDateString } from "@/lib/utils/format";
+import { parseCalendarDateInput } from "@/lib/utils/format";
 
 type CreateResult = {
   expenses: ExpenseWithIncludes[];
@@ -155,9 +155,12 @@ async function createExpenseCore(
   const spreadMonths = isDeferred ? 1 : rawSpread;
   const months = generateProrationMonths(periodMonth, spreadMonths);
   const paymentDate =
-    parseCalendarDateInput(rawPaymentDate) ??
-    parseCalendarDateInput(todayCalendarDateString()) ??
-    new Date();
+    rawPaymentDate && String(rawPaymentDate).trim()
+      ? parseCalendarDateInput(String(rawPaymentDate).trim())
+      : null;
+  if (rawPaymentDate && String(rawPaymentDate).trim() && !paymentDate) {
+    throw new ValidationError("Fecha de pago inválida");
+  }
 
   const stepCount = await getApprovalStepCountForType(type);
   const approval = initialApprovalFields(stepCount);

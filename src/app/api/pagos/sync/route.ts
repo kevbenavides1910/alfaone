@@ -5,7 +5,8 @@ import { syncPaymentsForYear } from "@/modules/pagos/services/pagos";
 
 /**
  * POST /api/pagos/sync?year=2026[&fromMonth=1&toMonth=8]
- * Materializa gastos aprobados + pagos fijos APEX de los meses indicados.
+ * Materializa pagos fijos APEX de los meses indicados y refresca metadatos
+ * de Payments EXPENSE ya existentes (no crea gastos nuevos en el calendario).
  * Por defecto: enero → mes anterior al actual del año pedido.
  */
 export const POST = withPermission(

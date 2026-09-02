@@ -33,7 +33,12 @@ export const expenseCreateSchema = z
     description: z.string().min(2, "Descripción requerida"),
     amount: z.number().positive("El monto debe ser positivo"),
     periodMonth: z.string(),
-    paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha de pago inválida (YYYY-MM-DD)"),
+    paymentDate: z
+      .union([
+        z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha de pago inválida (YYYY-MM-DD)"),
+        z.literal(""),
+      ])
+      .optional(),
     contractId: z.string().optional(),
     positionId: z.string().optional(),
     originId: z.string().optional(),

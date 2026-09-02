@@ -103,13 +103,15 @@ export function ExpenseEditDialog({
               <p className="text-xs text-slate-400">Mes contable al que se imputa este gasto.</p>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Fecha de pago</label>
+              <label className="text-sm font-medium text-slate-700">Fecha de pago (opcional)</label>
               <Input
                 type="date"
                 value={editForm.paymentDate}
                 onChange={(e) => setEditForm((f) => ({ ...f, paymentDate: e.target.value }))}
               />
-              <p className="text-xs text-slate-400">Día en que debe pagarse (calendario de pagos).</p>
+              <p className="text-xs text-slate-400">
+                La programación en calendario se hace en Pagos → Pago proveedores.
+              </p>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Tipo de gasto</label>

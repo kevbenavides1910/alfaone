@@ -1,4 +1,5 @@
 import { getCalendarMonth, searchPaymentsByOc } from "@/modules/pagos/services/pagos";
+import { listPagoProveedores } from "@/modules/pagos/services/pago-proveedores";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
 import { currentYearMonth, strArg } from "./shared";
@@ -11,7 +12,7 @@ export function pagosTools(): SyntraTool[] {
       permission: { key: "pagos.calendario", level: "view" },
       definition: toolDef(
         "query_payment_calendar",
-        "Calendario de pagos del mes: gastos aprobados, pagos APEX y manuales, con totales pagado/pendiente por día.",
+        "Calendario de pagos del mes: pagos APEX, manuales y gastos ya programados (con fecha asignada en Pago proveedores), con totales pagado/pendiente por día.",
         {
           type: "object",
           properties: {
@@ -95,6 +96,39 @@ export function pagosTools(): SyntraTool[] {
           })),
           moneda: "CRC",
           fuente: "Calendario de pagos Alfa One (búsqueda por OC)",
+        };
+      },
+    },
+    {
+      permission: { key: "pagos.calendario", level: "view" },
+      definition: toolDef(
+        "list_pago_proveedores",
+        "Lista gastos aprobados pendientes de programar (sin fecha en calendario). Pestaña Pago proveedores.",
+        {
+          type: "object",
+          properties: {
+            company: { type: "string", description: "Filtrar por empresa (opcional)." },
+          },
+          additionalProperties: false,
+        },
+      ),
+      describeCall: () => "Listando gastos pendientes de fecha (pago proveedores)…",
+      handler: async (_session, args) => {
+        const company = strArg(args, "company") || undefined;
+        const rows = await listPagoProveedores(company);
+        return {
+          total: rows.length,
+          gastos: rows.slice(0, MAX_LIST).map((e) => ({
+            id: e.id,
+            descripcion: e.description,
+            monto: e.amount,
+            oc: e.referenceNumber,
+            tipo: e.type,
+            compania: e.company,
+            periodo: e.periodMonth,
+          })),
+          moneda: "CRC",
+          fuente: "Pagos → Pago proveedores (cola sin fecha)",
         };
       },
     },

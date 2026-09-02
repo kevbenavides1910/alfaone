@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toaster";
-import { formatCurrency, formatMonthYear, todayCalendarDateString, calendarDateInputValue } from "@/lib/utils/format";
+import { formatCurrency, formatMonthYear, calendarDateInputValue } from "@/lib/utils/format";
 import { companyDisplayName, EXPENSE_BUDGET_LINES, EXPENSE_BUDGET_LINE_LABELS } from "@/lib/utils/constants";
 import { useCompanies } from "@/lib/hooks/use-companies";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
@@ -103,7 +103,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
     type: "OTHER" as ExpenseType,
     budgetLine: "LABOR" as ExpenseBudgetLine,
     periodMonth: currentMonth(),
-    paymentDate: todayCalendarDateString(),
+    paymentDate: "",
     company: "",
     description: "",
     originId: "",
@@ -120,7 +120,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
     description: "",
     amount: "",
     periodMonth: currentMonth(),
-    paymentDate: todayCalendarDateString(),
+    paymentDate: "",
     mode: "contract" as "contract" | "deferred" | "deferred_custom",
     contractId: "",
     positionId: "",
@@ -399,7 +399,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
       description: "",
       amount: "",
       periodMonth: currentMonth(),
-      paymentDate: todayCalendarDateString(),
+      paymentDate: "",
       mode: "contract",
       contractId: "",
       positionId: "",
@@ -428,7 +428,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
       type: e.type,
       budgetLine: e.budgetLine ?? "LABOR",
       periodMonth,
-      paymentDate: calendarDateInputValue(e.paymentDate ?? e.createdAt) || todayCalendarDateString(),
+      paymentDate: calendarDateInputValue(e.paymentDate) || "",
       company: e.company ?? "",
       description: e.description,
       originId: e.originId ?? "",
@@ -451,7 +451,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
         type: editForm.type,
         budgetLine: editForm.budgetLine,
         periodMonth: editForm.periodMonth,
-        paymentDate: editForm.paymentDate,
+        paymentDate: editForm.paymentDate.trim() || null,
         company: editForm.company || null,
         description: editForm.description.trim(),
         originId: editForm.originId || null,
@@ -468,7 +468,6 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
     if (!form.company) { toast.error("Seleccione la empresa a la que pertenece el gasto"); return; }
     if (!form.description.trim()) { toast.error("Ingrese una descripción"); return; }
     if (!form.amount || parseFloat(form.amount) <= 0) { toast.error("Ingrese un monto válido"); return; }
-    if (!form.paymentDate) { toast.error("Elegí la fecha de pago"); return; }
     if (form.mode === "contract" && !form.contractId) { toast.error("Seleccione un contrato"); return; }
     const spreadMonths =
       form.mode === "contract"
@@ -534,7 +533,7 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
         description: form.description.trim(),
         amount: parseFloat(form.amount),
         periodMonth: form.periodMonth,
-        paymentDate: form.paymentDate,
+        paymentDate: form.paymentDate.trim() || undefined,
         contractId: form.mode === "contract" ? form.contractId : undefined,
         positionId: form.mode === "contract" && form.positionId ? form.positionId : undefined,
         originId: form.originId || undefined,
@@ -1315,12 +1314,15 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Fecha de pago</label>
+                <label className="text-sm font-medium text-slate-700">Fecha de pago (opcional)</label>
                 <Input
                   type="date"
                   value={form.paymentDate}
                   onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
                 />
+                <p className="text-xs text-slate-400">
+                  La programación en calendario se hace en Pagos → Pago proveedores.
+                </p>
               </div>
             </div>
 

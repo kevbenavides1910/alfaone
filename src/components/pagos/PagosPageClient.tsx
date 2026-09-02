@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare, ScrollText, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare, ScrollText, Search, X, Building2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +79,21 @@ const FUENTE_BADGE: Record<PagoFuente, string> = {
   APEX: "bg-amber-100 text-amber-700",
   MANUAL: "bg-violet-100 text-violet-700",
 };
+
+type PagoProveedorDto = {
+  id: string;
+  description: string;
+  amount: number;
+  company: string | null;
+  type: string;
+  referenceNumber: string | null;
+  periodMonth: string;
+  paymentDate: string | null;
+  notes: string | null;
+  createdAt: string;
+};
+
+type PagosTab = "diarios" | "fijos" | "cronograma" | "proveedores" | "bitacora";
 
 interface NewPaymentDraft {
   description: string;
@@ -258,9 +273,10 @@ export function PagosPageClient({ initialCompany }: Props) {
   const [draft, setDraft] = useState<NewPaymentDraft>(EMPTY_DRAFT);
   const [detailPayment, setDetailPayment] = useState<PagoDto | null>(null);
   const [dayDialog, setDayDialog] = useState<CalendarDay | null>(null);
-  const [activeTab, setActiveTab] = useState<"diarios" | "fijos" | "cronograma" | "bitacora">("diarios");
+  const [activeTab, setActiveTab] = useState<PagosTab>("diarios");
   const [ocQuery, setOcQuery] = useState("");
   const [ocDebounced, setOcDebounced] = useState("");
+  const [scheduleDates, setScheduleDates] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const t = window.setTimeout(() => setOcDebounced(ocQuery.trim()), 300);
@@ -285,7 +301,7 @@ export function PagosPageClient({ initialCompany }: Props) {
       const json = await res.json();
       return json.data as CalendarDay[];
     },
-    enabled: activeTab !== "bitacora",
+    enabled: activeTab !== "bitacora" && activeTab !== "proveedores",
     retry: 1,
   });
 
@@ -314,7 +330,7 @@ export function PagosPageClient({ initialCompany }: Props) {
   const openOcResult = useCallback((p: PagoDto) => {
     const targetMonth = monthFromPaymentDate(p.paymentDate);
     if (targetMonth) setMonth(targetMonth);
-    if (activeTab === "bitacora") setActiveTab("diarios");
+    if (activeTab === "bitacora" || activeTab === "proveedores") setActiveTab("diarios");
     setDetailPayment(p);
   }, [activeTab]);
 
@@ -329,6 +345,57 @@ export function PagosPageClient({ initialCompany }: Props) {
       return (json.data ?? json) as PaymentChangeLogDto[];
     },
     enabled: activeTab === "bitacora",
+  });
+
+  const {
+    data: proveedores = [],
+    isFetching: proveedoresFetching,
+    isError: proveedoresError,
+    refetch: refetchProveedores,
+  } = useQuery({
+    queryKey: ["pagos-proveedores", company],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (company && company !== "all") params.set("company", company);
+      const qs = params.toString();
+      const res = await fetch(`/api/pagos/proveedores${qs ? `?${qs}` : ""}`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.message || "Error al cargar pago proveedores");
+      }
+      const json = await res.json();
+      return (json.data ?? json) as PagoProveedorDto[];
+    },
+    enabled: activeTab === "proveedores",
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: async ({ expenseId, paymentDate }: { expenseId: string; paymentDate: string }) => {
+      const res = await fetch("/api/pagos/proveedores/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expenseId, paymentDate }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error?.message || j.message || "No se pudo programar el pago");
+      }
+      const json = await res.json();
+      return (json.data ?? json) as PagoDto;
+    },
+    onSuccess: (p) => {
+      toast.success("Fecha asignada — ya aparece en el calendario");
+      queryClient.invalidateQueries({ queryKey: ["pagos-proveedores"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      setScheduleDates((prev) => {
+        const next = { ...prev };
+        if (p.expenseId) delete next[p.expenseId];
+        return next;
+      });
+      const targetMonth = monthFromPaymentDate(p.paymentDate);
+      if (targetMonth) setMonth(targetMonth);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Error al programar"),
   });
 
   const markMutation = useMutation({
@@ -465,7 +532,7 @@ export function PagosPageClient({ initialCompany }: Props) {
         <div>
           <h1 className="text-xl font-semibold">Calendario de Pagos</h1>
           <p className="text-sm text-muted-foreground">
-            Calendario diario con todos los pagos, pagos fijos de Oracle y cronograma del mes
+            Calendario diario, pagos fijos, programación de proveedores y bitácora
           </p>
         </div>
         {canEdit && (
@@ -547,7 +614,18 @@ export function PagosPageClient({ initialCompany }: Props) {
           )}
         </div>
         <div className="ml-auto flex items-center gap-4 text-sm">
-          {activeTab !== "bitacora" ? (
+          {activeTab === "bitacora" ? (
+            bitacoraFetching && <span className="text-xs text-muted-foreground animate-pulse">cargando bitácora…</span>
+          ) : activeTab === "proveedores" ? (
+            proveedoresFetching ? (
+              <span className="text-xs text-muted-foreground animate-pulse">cargando…</span>
+            ) : (
+              <span className="text-muted-foreground">
+                Pendientes de fecha:{" "}
+                <span className="font-semibold text-foreground">{proveedores.length}</span>
+              </span>
+            )
+          ) : (
             <>
               <span className="text-muted-foreground">Pendiente:</span>
               <span className="font-semibold text-amber-600">{formatCurrency(monthPending)}</span>
@@ -557,8 +635,6 @@ export function PagosPageClient({ initialCompany }: Props) {
               <span className="font-semibold">{formatCurrency(monthTotal)}</span>
               {isFetching && <span className="text-xs text-muted-foreground animate-pulse">cargando…</span>}
             </>
-          ) : (
-            bitacoraFetching && <span className="text-xs text-muted-foreground animate-pulse">cargando bitácora…</span>
           )}
         </div>
       </div>
@@ -609,7 +685,7 @@ export function PagosPageClient({ initialCompany }: Props) {
         </div>
       )}
 
-      {calendarError && activeTab !== "bitacora" && (
+      {calendarError && activeTab !== "bitacora" && activeTab !== "proveedores" && (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive flex flex-wrap items-center gap-3">
           <span>
             No se pudieron cargar los pagos
@@ -623,11 +699,14 @@ export function PagosPageClient({ initialCompany }: Props) {
 
       {/* Vistas */}
       <Card className="flex-1 min-h-0 overflow-auto">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "diarios" | "fijos" | "cronograma" | "bitacora")} className="h-full flex flex-col">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as PagosTab)} className="h-full flex flex-col">
           <div className="px-3 pt-3">
-            <TabsList>
+            <TabsList className="flex h-auto flex-wrap gap-1">
               <TabsTrigger value="diarios" className="flex items-center gap-1.5">
                 <CalendarDays className="h-4 w-4" /> Calendario de pagos diarios
+              </TabsTrigger>
+              <TabsTrigger value="proveedores" className="flex items-center gap-1.5">
+                <Building2 className="h-4 w-4" /> Pago proveedores
               </TabsTrigger>
               <TabsTrigger value="fijos" className="flex items-center gap-1.5">
                 <Repeat className="h-4 w-4" /> Pagos fijos
@@ -651,6 +730,96 @@ export function PagosPageClient({ initialCompany }: Props) {
               onViewDetail={setDetailPayment}
               onViewDay={setDayDialog}
             />
+          </TabsContent>
+          <TabsContent value="proveedores" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
+            <p className="text-xs text-muted-foreground mb-3">
+              Gastos aprobados pendientes de fecha. Al asignar fecha de pago pasan al calendario diario.
+            </p>
+            {proveedoresError ? (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive flex flex-wrap items-center gap-3">
+                <span>No se pudo cargar la cola de proveedores.</span>
+                <Button variant="outline" size="sm" onClick={() => refetchProveedores()}>
+                  Reintentar
+                </Button>
+              </div>
+            ) : proveedoresFetching && proveedores.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center animate-pulse">Cargando…</p>
+            ) : proveedores.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                No hay gastos pendientes de programar.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-md border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Detalle</th>
+                      <th className="px-3 py-2 font-medium">OC</th>
+                      <th className="px-3 py-2 font-medium">Tipo</th>
+                      <th className="px-3 py-2 font-medium">Cía</th>
+                      <th className="px-3 py-2 font-medium text-right">Monto</th>
+                      <th className="px-3 py-2 font-medium">Fecha de pago</th>
+                      <th className="px-3 py-2 font-medium" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {proveedores.map((e) => {
+                      const dateValue = scheduleDates[e.id] ?? e.paymentDate ?? "";
+                      return (
+                        <tr key={e.id} className="align-middle">
+                          <td className="px-3 py-2 max-w-[280px]">
+                            <div className="font-medium truncate" title={e.description}>
+                              {e.description}
+                            </div>
+                            {e.notes && (
+                              <div className="text-xs text-muted-foreground truncate">{e.notes}</div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
+                            {e.referenceNumber || "—"}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">{e.type}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{e.company ?? "—"}</td>
+                          <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+                            {formatCurrency(e.amount)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Input
+                              type="date"
+                              className="h-8 w-[150px]"
+                              value={dateValue}
+                              disabled={!canEdit || scheduleMutation.isPending}
+                              onChange={(ev) =>
+                                setScheduleDates((prev) => ({
+                                  ...prev,
+                                  [e.id]: ev.target.value,
+                                }))
+                              }
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {canEdit && (
+                              <Button
+                                size="sm"
+                                disabled={!dateValue || scheduleMutation.isPending}
+                                onClick={() =>
+                                  scheduleMutation.mutate({
+                                    expenseId: e.id,
+                                    paymentDate: dateValue,
+                                  })
+                                }
+                              >
+                                Asignar fecha
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </TabsContent>
           <TabsContent value="fijos" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
             <p className="text-xs text-muted-foreground mb-3">

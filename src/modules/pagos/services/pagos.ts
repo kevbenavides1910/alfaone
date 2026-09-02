@@ -217,75 +217,44 @@ export async function syncPaymentsForYear(options?: {
   };
 }
 
-/** Materializa los gastos APROBADOS del mes como Payments (EXPENSE). */
+/**
+ * Sincroniza metadatos de Payments EXPENSE ya existentes para el mes.
+ * No crea pagos nuevos: los gastos aprobados entran al calendario solo cuando
+ * se les asigna fecha en Pagos → Pago proveedores.
+ */
 async function syncExpensesForMonth(from: Date, to: Date): Promise<number> {
-  const approved = await prisma.expense.findMany({
+  const payments = await prisma.payment.findMany({
     where: {
-      approvalStatus: "APPROVED",
-      deletedAt: null,
+      source: "EXPENSE",
+      expenseId: { not: null },
       paymentDate: { gte: from, lt: to },
     },
-    select: {
-      id: true,
-      description: true,
-      amount: true,
-      paymentDate: true,
-      periodMonth: true,
-      createdAt: true,
-      company: true,
-      type: true,
-      referenceNumber: true,
-    },
+    select: { id: true, expenseId: true },
   });
 
-  let created = 0;
-  for (const exp of approved) {
-    const paymentDate = resolveExpensePaymentDate(exp);
-    const exists = await prisma.payment.findFirst({
-      where: { source: "EXPENSE", expenseId: exp.id },
-      select: { id: true },
-    });
-    const payload = {
-      description: exp.description,
-      amount: exp.amount,
-      paymentDate,
-      company: exp.company,
-      refType: exp.type,
-      referenceNumber: exp.referenceNumber,
-    };
-    if (exists) {
-      // No pisar amount/paymentDate: se editan en el calendario y quedan en bitácora.
-      await prisma.payment.update({
-        where: { id: exists.id },
-        data: {
-          description: exp.description,
-          company: exp.company,
-          refType: exp.type,
-          referenceNumber: exp.referenceNumber,
-        },
-      });
-      continue;
-    }
-    await prisma.payment.create({
-      data: {
-        source: "EXPENSE",
-        expenseId: exp.id,
-        ...payload,
+  for (const p of payments) {
+    if (!p.expenseId) continue;
+    const exp = await prisma.expense.findFirst({
+      where: { id: p.expenseId, deletedAt: null },
+      select: {
+        description: true,
+        company: true,
+        type: true,
+        referenceNumber: true,
       },
     });
-    created += 1;
+    if (!exp) continue;
+    await prisma.payment.update({
+      where: { id: p.id },
+      data: {
+        description: exp.description,
+        company: exp.company,
+        refType: exp.type,
+        referenceNumber: exp.referenceNumber,
+      },
+    });
   }
-  return created;
-}
-
-function resolveExpensePaymentDate(exp: {
-  paymentDate: Date | null;
-  periodMonth: Date;
-  createdAt: Date;
-}): Date {
-  if (exp.paymentDate) return exp.paymentDate;
-  const c = exp.createdAt;
-  return new Date(Date.UTC(c.getUTCFullYear(), c.getUTCMonth(), c.getUTCDate()));
+  return 0;
 }
 
 /** Materializa los gastos fijos APEX del mes como Payments (APEX). */

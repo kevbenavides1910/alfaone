@@ -33,7 +33,13 @@ const patchExpenseSchema = z
     registroCxp: z.string().nullable().optional(),
     registroTr: z.string().nullable().optional(),
     periodMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Periodo inválido (YYYY-MM)").optional(),
-    paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha de pago inválida (YYYY-MM-DD)").optional(),
+    paymentDate: z
+      .union([
+        z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha de pago inválida (YYYY-MM-DD)"),
+        z.literal(""),
+        z.null(),
+      ])
+      .optional(),
     /** Vacío en API = todos los contratos activos en el reparto (solo reparto proporcional). */
     deferredIncludeContractIds: z.array(z.string().min(1)).optional(),
     deferredManualAllocations: z
@@ -198,9 +204,13 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         data.periodMonth = new Date(yy, mm - 1, 1);
       }
       if (p.paymentDate !== undefined) {
-        const d = parseCalendarDateInput(p.paymentDate);
-        if (!d) return badRequest("Fecha de pago inválida");
-        data.paymentDate = d;
+        if (p.paymentDate === null || p.paymentDate === "") {
+          data.paymentDate = null;
+        } else {
+          const d = parseCalendarDateInput(p.paymentDate);
+          if (!d) return badRequest("Fecha de pago inválida");
+          data.paymentDate = d;
+        }
       }
 
       if (p.deferredManualAllocations !== undefined) {

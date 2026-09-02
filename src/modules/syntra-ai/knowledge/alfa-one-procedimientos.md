@@ -7,7 +7,7 @@ Plataforma web en https://one.grupocorporativoalfa.com
 - **Contratos** (`/contracts`): licitaciones, clientes, ubicaciones, puestos, zonas operativas.
 - **Gastos** (`/expenses`): solicitudes, aprobaciones, distribución por contrato.
 - **Facturación y cobro** (`/facturacion`): generación mensual, cuentas por cobrar.
-- **Pagos** (`/pagos`): calendario de pagos APEX + gastos aprobados.
+- **Pagos** (`/pagos`): calendario APEX + gastos programados; cola «Pago proveedores» para asignar fecha.
 - **Empleados NAF** (`/empleados-naf`): nómina Oracle NAF, planillas, cargas sociales.
 - **Disciplinario** (`/disciplinario`): marcas, apercibimientos, omisiones.
 - **SIG** (`/sig`): documentos, riesgos, incidentes, auditorías.
