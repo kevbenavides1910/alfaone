@@ -15,10 +15,12 @@
 /mnt/storage/apps/presupuestos-alfa/
 ├── expense-uploads/    # Adjuntos de gastos
 ├── branding/           # Logo de login y firma PDF disciplinario
+├── static-overrides/   # CSS hotfix (`alfa-overrides.css`) sin rebuild Next
 ├── exports/            # Exportaciones masivas / temporales (reservado)
 └── backups/            # Respaldos de archivos (opcional)
 ```
 
+En este VPS, `APP_DATA_HOST` puede ser `/mnt/data/projects/alfa-one/app` (ver `.env.production`); `static-overrides/` aplica igual.
 ## Configuración inicial (una vez por servidor)
 
 ```bash

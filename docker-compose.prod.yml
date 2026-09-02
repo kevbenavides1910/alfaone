@@ -76,6 +76,60 @@ services:
       SYNTRA_AI_MODEL: ${SYNTRA_AI_MODEL:-}
     volumes:
       - ${APP_DATA_HOST:-/mnt/storage/apps/presupuestos-alfa}:/data
+      - ${APP_DATA_HOST:-/mnt/storage/apps/presupuestos-alfa}/static-overrides/alfa-overrides.css:/app/public/alfa-overrides.css:ro
+      - /opt/oracle/instantclient_19_23:/opt/oracle/instantclient_19_23:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env.production
+
+  app-preview:
+    profiles: ["preview"]
+    image: ${APP_IMAGE:-presupuestos-alfa-app:latest}
+    container_name: security_contracts_app_preview
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/login',{signal:AbortSignal.timeout(8000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    ports:
+      - "${APP_PREVIEW_PORT:-3001}:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      NEXTAUTH_URL: ${NEXTAUTH_URL_PREVIEW:-${NEXTAUTH_URL}}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      TZ: ${TZ:-America/Costa_Rica}
+      NODE_ENV: production
+      APP_DATA_ROOT: /data
+      EXPENSE_UPLOAD_DIR: /data/expense-uploads
+      BRANDING_UPLOAD_DIR: /data/branding
+      NAF_ORACLE_CLIENT_DIR: /opt/oracle/instantclient_19_23
+      EXPEDIENTE_SMB_SHARE: ${EXPEDIENTE_SMB_SHARE:-//10.1.1.6/Expediente Digital}
+      EXPEDIENTE_SMB_USER: ${EXPEDIENTE_SMB_USER:-oracle}
+      EXPEDIENTE_SMB_PASSWORD: ${EXPEDIENTE_SMB_PASSWORD:-}
+      EXPEDIENTE_FS_ROOT: ${EXPEDIENTE_FS_ROOT:-}
+      LD_LIBRARY_PATH: /opt/oracle/instantclient_19_23
+      FRAPPE_BASE_URL: ${FRAPPE_BASE_URL:-}
+      FRAPPE_API_KEY: ${FRAPPE_API_KEY:-}
+      FRAPPE_API_SECRET: ${FRAPPE_API_SECRET:-}
+      FRAPPE_COMPANY: ${FRAPPE_COMPANY:-Grupo Alfa}
+      SYNTRA_AI_ENABLED: ${SYNTRA_AI_ENABLED:-true}
+      SYNTRA_AI_PROVIDER: ${SYNTRA_AI_PROVIDER:-}
+      SYNTRA_AI_API_KEY: ${SYNTRA_AI_API_KEY:-}
+      SYNTRA_AI_BASE_URL: ${SYNTRA_AI_BASE_URL:-}
+      SYNTRA_AI_MODEL: ${SYNTRA_AI_MODEL:-}
+    volumes:
+      - ${APP_DATA_HOST:-/mnt/storage/apps/presupuestos-alfa}:/data
+      - ${APP_DATA_HOST:-/mnt/storage/apps/presupuestos-alfa}/static-overrides/alfa-overrides.css:/app/public/alfa-overrides.css:ro
       - /opt/oracle/instantclient_19_23:/opt/oracle/instantclient_19_23:ro
     depends_on:
       postgres:
@@ -91,6 +145,7 @@ services:
       - "80:80"
     volumes:
       - ./deploy/nginx/docker-nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${APP_DATA_HOST:-/mnt/storage/apps/presupuestos-alfa}/static-overrides:/static-overrides:ro
     depends_on:
       app:
         condition: service_healthy

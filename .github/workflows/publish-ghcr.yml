@@ -2,8 +2,8 @@
 # Corre en self-hosted alfaia (48 cores). Usa driver docker para reutilizar
 # capas locales entre builds (mucho más rápido que ubuntu-latest + cache registry).
 #
-# Cache webpack/npm en /mnt/data/projects/alfa-one/build-cache (bind mount en
-# Dockerfile) — sobrevive `docker builder prune` semanal.
+# Cache webpack: BuildKit mount id=alfaone-next-cache (sin COPY 1.4G).
+# Opcional legado: ALFAONE_USE_DISK_CACHE=1.
 #
 # Build y push van en pasos separados: la imagen queda etiquetada en el daemon
 # local al terminar el build → ops:deploy:ghcr puede recrear la app sin esperar
@@ -38,7 +38,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restaurar cache webpack (disco → contexto Docker)
+      - name: Restaurar cache webpack (opcional, legado)
+        if: env.ALFAONE_USE_DISK_CACHE == '1'
         run: bash scripts/ops/sync-build-cache.sh pull
 
       - name: Set up Docker Buildx

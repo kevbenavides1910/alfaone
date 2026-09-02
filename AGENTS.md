@@ -14,24 +14,26 @@ npx prisma migrate deploy   # migraciones en prod (nunca db:reset)
 Despliegue prod (VPS 10.1.1.229 / alfaia):
 
 ```bash
-# Obligatorio para agentes Cursor — build local inmediato + recreate (~3 min + 16s)
+# Default agentes — elige el camino más rápido (0s / recreate / build)
 npm run ops:deploy:cursor
 
-# Fallback: espera Publish GHCR (más lento para el agente)
+# Hotfix CSS/branding (sin Next rebuild) ~10–30s
+npm run ops:deploy:patch-static
+
+# Preview :3001 → promote prod
+npm run ops:deploy:preview
+npm run ops:deploy:promote
+
+# Fallback
 npm run ops:deploy:ghcr
 
-# Tag explícito
-APP_IMAGE=ghcr.io/kevbenavides1910/alfaone:<sha> npm run ops:deploy:cursor
-
-# Login una vez (PAT con read:packages)
-export GHCR_TOKEN=ghp_...
-npm run ops:ghcr-login
-
-# Build local SOLO si el usuario lo pide explícitamente (~4–5 min)
+# Build local SOLO si el usuario dice «build local»
 npm run ops:deploy
 ```
 
-Flujo: commit → push `main` → **de inmediato** `npm run ops:deploy:cursor` (sin esperar Actions).
+**Al oír «despliega»:** patch-static si es CSS overlay; si no → push (si aplica) + `ops:deploy:cursor`. Stash WIP ajeno. No `ops:deploy` por defecto.
+
+Flujo: commit → push `main` → **de inmediato** `npm run ops:deploy:cursor`.
 
 Detalle: `docs/DEPLOYMENT.md`. Regla: `.cursor/rules/deploy-ghcr-obligatorio.mdc`.
 

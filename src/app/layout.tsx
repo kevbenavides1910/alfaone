@@ -17,6 +17,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `(function(){try{var t=localStorage.getItem('alfa-one:theme');if(t==='dark')document.documentElement.classList.add('dark');}catch(e){}})();`,
           }}
         />
+        {/* Hotfix CSS sin rebuild */}
+        <link rel="stylesheet" href="/alfa-overrides.css" />
       </head>
       <body className="font-sans antialiased">
         <Providers>{children}</Providers>

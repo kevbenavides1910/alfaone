@@ -14,26 +14,27 @@ RUN --mount=type=cache,target=/root/.npm \
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
-# Cache webpack persistido en disco del VPS (sync pre/post build vía scripts/ops/sync-build-cache.sh).
-COPY .build-cache/next-cache /tmp/next-cache-seed/
-COPY . .
+# Capa cacheable: solo regenera Prisma si cambia el schema (o package.json).
+COPY package.json package-lock.json* ./
+COPY prisma ./prisma
 RUN npx prisma generate
+
+# Código de la app (invalida a partir de aquí en cada cambio de fuentes).
+COPY . .
+
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXTAUTH_URL=http://localhost:3000
 ENV NEXTAUTH_SECRET=ci-build-placeholder-secret-min-32-characters!!
 ENV NODE_OPTIONS=--max-old-space-size=8192
 ENV DOCKER_BUILD=1
-RUN mkdir -p /app/.next/cache \
-    && if [ -n "$(ls -A /tmp/next-cache-seed 2>/dev/null)" ]; then \
-         cp -a /tmp/next-cache-seed/. /app/.next/cache/; \
-       fi \
-    && npm run build \
-    && mkdir -p /cache-out \
-    && cp -a /app/.next/cache/. /cache-out/
 
-# Exporta cache webpack al host tras el build (target liviano, reutiliza capas del builder).
+# BuildKit cache mount: webpack/.next/cache vive en el daemon (sin COPY/export 1.4G).
+RUN --mount=type=cache,id=alfaone-next-cache,target=/app/.next/cache \
+    npm run build
+
+# Stage legacy (stub): cache vive en BuildKit mount.
 FROM scratch AS export-next-cache
-COPY --from=builder /cache-out /
+COPY --from=builder /app/package.json /
 
 # Stage aislado: oracledb thick (glibc). Cache estable — no se reinstala en cada rebuild de Next.
 FROM node:20-bookworm-slim AS ora

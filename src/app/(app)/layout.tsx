@@ -6,6 +6,9 @@ import { SidebarPane } from "@/components/layout/SidebarPane";
 import { EnableTableColumnResize } from "@/components/ui/enable-table-column-resize";
 import { SyntraAiChatWidget } from "@/components/syntra-ai/SyntraAiChatWidget";
 
+/** Shell autenticado: no SSG. Reduce trabajo estático en next build. */
+export const dynamic = "force-dynamic";
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");

@@ -1,55 +1,35 @@
 ---
 name: deploy-alfa-one
-description: Despliega Alfa One a producción desde Cursor en alfaia (VPS). Usar cuando pidan deploy, subir a prod, publicar, ops:deploy, GHCR, o tras commit+push a main.
+description: Despliega Alfa One lo más rápido posible (patch-static / recreate / cursor). Usar cuando pidan deploy, subir a prod, publicar, ops:deploy, GHCR.
 ---
 
-# Deploy Alfa One (agente Cursor)
+# Deploy Alfa One (camino más rápido)
 
-## Path obligatorio
+## Path
 
 ```text
 /mnt/data/projects/alfa-one/code/presupuestos-alfa
 ```
 
-Nunca deploy desde worktree, `/tmp` ni checkout incompleto.
+## Checklist → comando
 
-## Comando (obligatorio para agentes)
+| Cambio | Comando | Tiempo |
+|--------|---------|--------|
+| CSS/branding overlay | `npm run ops:deploy:patch-static` | ~10–30 s |
+| Código (imagen SHA ya local/prod) | `npm run ops:deploy:cursor` | ~0–30 s |
+| Código (sin imagen) | push + `ops:deploy:cursor` | ~1.5–3 min |
+| Schema | migración + cursor | build + migrate |
+| WIP sin push | solo con «build local» → `ops:deploy` | lento |
+
+**Default al oír «despliega»:** si hay cambios de app → commit solo si lo pidieron → push → **cursor**. Si el cambio es solo overlay CSS → **patch-static**. Stash WIP ajeno antes de cursor.
+
+## Comandos
 
 ```bash
-cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
 npm run ops:deploy:cursor
+npm run ops:deploy:patch-static
+npm run ops:deploy:preview    # :3001
+npm run ops:deploy:promote
 ```
 
-**Qué hace:** build Docker local inmediato (cache webpack en disco) → recreate app ~16s → push GHCR en background. **No espera** GitHub Actions.
-
-## Flujo del agente
-
-1. Cambios commiteados y pusheados a `main` (commit solo si el usuario lo pidió).
-2. Login GHCR si falla pull/push: `npm run ops:ghcr-login` (requiere `/etc/alfa-one/ghcr.env` o `GHCR_TOKEN` — pedir al usuario, no inventar).
-3. `npm run ops:deploy:cursor` — bloquear hasta que termine; no poll manual con `sleep` + `gh run list`.
-4. Confirmar solo si el script reporta `DEPLOY OK` + health/smoke.
-
-## Salidas rápidas
-
-| Situación | Tiempo |
-|-----------|--------|
-| App ya en el SHA y healthy | ~0s |
-| Build con cache caliente | ~3 min + ~16s recreate |
-| Build cold | ~4–5 min |
-
-Cache persistente: `/mnt/data/projects/alfa-one/build-cache/next-cache`
-
-## Prohibido
-
-- `npm run ops:deploy` (build legacy compose) salvo que el usuario diga explícitamente «build local»
-- `ops:deploy:auto` (puede caer a build local)
-- `DEPLOY_ALLOW_MODULE_DROP=1` / `DEPLOY_ALLOW_FOREIGN_ROOT=1` sin confirmación explícita
-- Afirmar deploy OK sin pasar smoke del script
-
-## Fallback
-
-```bash
-npm run ops:deploy:ghcr   # espera Publish GHCR (más lento)
-```
-
-Detalle: `code/presupuestos-alfa/docs/DEPLOYMENT.md`, reglas `deploy-ghcr-obligatorio.mdc`, `deploy-anti-drop-rutas.mdc`.
+Confirmar solo con `DEPLOY OK` / `PATCH OK` / `PREVIEW OK` + health/smoke.

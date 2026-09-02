@@ -212,6 +212,11 @@ finish_if_already_deployed() {
     section "Ya desplegado"
     echo "OK: $APP_CONTAINER ya usa $img (healthy) — omito pull/recreate."
     echo "Tip: Publish GHCR en push ya despliega automático; no hace falta ops:deploy:ghcr manual."
+    echo "deploy_path=${DEPLOY_PATH_LABEL:-already}"
+    echo "elapsed_build=0"
+    echo "elapsed_recreate=0"
+    echo "cache_hit=1"
+    echo "elapsed=0s"
     exit 0
   fi
 }
@@ -270,11 +275,18 @@ if [ -z "$RESOLVED" ]; then
   if [ "${DEPLOY_CURSOR_FAST:-0}" = "1" ] || [ "${DEPLOY_CURSOR_FAST:-0}" = "true" ]; then
     if ! image_present_local "${DEFAULT_IMAGE_REPO}:${SHA}"; then
       section "Cursor fast: build local (sin esperar Publish GHCR)"
-      bash "$ROOT/scripts/ops/build-ghcr-image-local.sh"
+      BUILD_LOG="$(mktemp)"
+      bash "$ROOT/scripts/ops/build-ghcr-image-local.sh" | tee "$BUILD_LOG"
+      export ELAPSED_BUILD="$(grep -E '^elapsed_build=' "$BUILD_LOG" | tail -1 | cut -d= -f2 || echo 0)"
+      export CACHE_HIT="$(grep -E '^cache_hit=' "$BUILD_LOG" | tail -1 | cut -d= -f2 || echo 0)"
+      rm -f "$BUILD_LOG"
     else
       echo "OK: imagen local ya presente para $SHORT_SHA"
+      export ELAPSED_BUILD=0
+      export CACHE_HIT=1
     fi
     RESOLVED="${DEFAULT_IMAGE_REPO}:${SHA}"
+    export DEPLOY_PATH_LABEL="${DEPLOY_PATH_LABEL:-cursor}"
   fi
 
   if [ -z "${RESOLVED:-}" ]; then

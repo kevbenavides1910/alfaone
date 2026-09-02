@@ -14,7 +14,16 @@ Guía operativa alineada con [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 | App + migraciones | `prisma migrate deploy` en el `CMD` del contenedor |
 | Variables | `.env` / `.env.local`: `DATABASE_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET` |
 
-No existe hoy un despliegue “solo disciplinario”: cualquier cambio requiere **rebuild + redeploy de la misma imagen**.
+No existe hoy un despliegue “solo disciplinario” de la app completa: el release estándar es **una imagen**. Excepciones rápidas:
+
+| Camino | Cuándo | Tiempo |
+|--------|--------|--------|
+| `ops:deploy:cursor` | Código/UI/API (default agentes) | 0 s / ~15–30 s recreate / build si falta imagen |
+| `ops:deploy:patch-static` | Solo CSS overlay allowlisted | ~10–30 s |
+| `ops:deploy:preview` / `promote` | Validar en `:3001` luego prod | recreate |
+| `Dockerfile.fe-deps-patch` | Solo deps nativas FE | sin Next rebuild |
+
+**Checklist:** CSS overlay → patch-static; lógica → push + cursor; schema → migración + cursor; WIP → stash o «build local».
 
 ---
 

@@ -181,11 +181,24 @@ else
   docker pull "$APP_IMAGE"
 fi
 
+section "Asegurar CSS overlay"
+APP_DATA_HOST_EFF="${APP_DATA_HOST:-/mnt/storage/apps/presupuestos-alfa}"
+OVERRIDE_FILE="$APP_DATA_HOST_EFF/static-overrides/alfa-overrides.css"
+mkdir -p "$(dirname "$OVERRIDE_FILE")" 2>/dev/null || true
+if [ ! -f "$OVERRIDE_FILE" ]; then
+  cp "$ROOT/deploy/static-overrides/alfa-overrides.css" "$OVERRIDE_FILE" 2>/dev/null \
+    || cp "$ROOT/public/alfa-overrides.css" "$OVERRIDE_FILE" 2>/dev/null \
+    || echo "/* empty */" > "$OVERRIDE_FILE" 2>/dev/null || true
+fi
+[ -f "$OVERRIDE_FILE" ] && echo "OK: overlay $OVERRIDE_FILE" || echo "WARN: no overlay file"
+
+RECREATE_START="$(date +%s)"
 section "Recrear SOLO app (sin build)"
 "${COMPOSE[@]}" up -d --no-build --no-deps --force-recreate --pull never "$APP_SERVICE"
 
 section "Esperando arranque"
 wait_for_container_health
+ELAPSED_RECREATE=$(( $(date +%s) - RECREATE_START ))
 
 section "Verificación"
 docker inspect "$APP_CONTAINER" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q '^DATABASE_URL='
@@ -193,8 +206,6 @@ echo "DATABASE_URL:present"
 http_check "session" "/api/auth/session"
 http_check "login" "/login"
 export DEPLOY_FAST_SMOKE="${DEPLOY_FAST_SMOKE:-0}"
-# Baseline = imagen previa etiquetada como rollback; exige 0 drops de rutas.
-# DEPLOY_FAST_SMOKE=1 (auto-deploy CI): solo anclas/deps (~5s vs ~30–60s inventario).
 if [ "$DEPLOY_FAST_SMOKE" = "1" ] || [ "$DEPLOY_FAST_SMOKE" = "true" ]; then
   bash "$ROOT/scripts/ops/deploy-module-smoke.sh" "$APP_CONTAINER"
 elif [ -n "$ROLLBACK_TAG" ] && docker image inspect "$ROLLBACK_TAG" >/dev/null 2>&1; then
@@ -207,6 +218,10 @@ fi
 "${COMPOSE[@]}" ps
 
 section "DEPLOY OK (pull)"
+echo "deploy_path=${DEPLOY_PATH_LABEL:-pull}"
+echo "elapsed_build=${ELAPSED_BUILD:-0}"
+echo "elapsed_recreate=${ELAPSED_RECREATE}"
+echo "cache_hit=${CACHE_HIT:-0}"
 echo "elapsed=$(elapsed)"
 echo "image=$APP_IMAGE"
 echo "log=$LOG_FILE"

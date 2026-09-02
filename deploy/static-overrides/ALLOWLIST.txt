@@ -1,0 +1,2 @@
+# Allowlist ops:deploy:patch-static
+deploy/static-overrides/alfa-overrides.css

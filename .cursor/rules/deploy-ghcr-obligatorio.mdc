@@ -1,50 +1,46 @@
 ---
-description: Al pedir deploy, Cursor debe usar build local rápido en alfaia (sin esperar Actions)
+description: Al pedir deploy, el agente elige el camino MÁS RÁPIDO posible (patch / recreate / cursor)
 alwaysApply: true
 ---
 
-# Deploy — Cursor fast path (obligatorio para agentes)
+# Deploy — camino más rápido (obligatorio)
 
-Cuando el usuario pida **desplegar / deploy / subir a prod** Alfa One:
+Cuando el usuario diga **desplegar / deploy / subir a prod / publica**:
 
-## Comando obligatorio (agente Cursor en self-hosted alfaia)
+Path canónico únicamente:
 
 ```bash
 cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
-npm run ops:deploy:cursor
 ```
 
-**Qué hace (rápido):**
-1. Si la app ya corre el SHA y está healthy → **salida ~0 s**.
-2. Si no hay imagen local → **build Docker inmediato** con cache webpack en disco (~3 min caliente, compile ~66 s).
-3. Recreate app + smoke rápido → **~16 s**.
-4. Push a GHCR en **background** (no bloquea).
+## Decisión automática (orden)
 
-**No espera** GitHub Actions / Publish GHCR (evita cola, latencia de arranque y doble polling).
+1. **¿Solo CSS overlay / branding allowlisted?**  
+   → `npm run ops:deploy:patch-static` (~10–30 s). **No** rebuild.
 
-## Flujo obligatorio del agente
+2. **¿Cambios de código/UI/API pendientes?**  
+   → Commit **solo si el usuario lo pidió** → `git push origin HEAD` →  
+   → `npm run ops:deploy:cursor`  
+   - SHA ya en prod healthy → **~0 s**  
+   - Imagen local del SHA → recreate **~15–30 s**  
+   - Sin imagen → build BuildKit + recreate (~1.5–3 min)
 
-1. Path canónico únicamente (ver `deploy-solo-prod-path.mdc`).
-2. Si hay cambios sin commit/push: **commitear solo si el usuario lo pidió**; luego `git push origin HEAD` a `main`/`master`.
-3. Si no hay login GHCR: `npm run ops:ghcr-login` (requiere `GHCR_TOKEN` / `/etc/alfa-one/ghcr.env`) — **no** inventar tokens; pedir al usuario.
-4. Correr **de inmediato** `npm run ops:deploy:cursor` (no `sleep` manual ni poll de `gh run list`).
-5. Si falla (dirty tree, build roto, denied): **abortar y explicar**. No hacer fallback a `ops:deploy`.
+3. **Árbol sucio con WIP ajeno**  
+   → `git stash push -u -m "wip pre-deploy"` → deploy del SHA limpio → `git stash pop`  
+   → **No** usar `ops:deploy` (compose build lento).
 
-## Alternativa (solo si cursor falla)
-
-```bash
-npm run ops:deploy:ghcr
-```
-
-Espera Publish GHCR hasta 6 min — **más lento** para el agente; usar solo como fallback.
+4. **Fallback** solo si cursor falla: `npm run ops:deploy:ghcr`.
 
 ## Prohibido
 
-- `npm run ops:deploy` (build local legacy / compose up --build)
-- `ops:deploy:auto` (puede caer a build local)
-- Polling manual lento antes de lanzar el deploy
-- Afirmar “deploy OK” sin smoke/health del script
+- `npm run ops:deploy` / `ops:deploy:auto` salvo que el usuario diga «build local»
+- Esperar GitHub Actions con `sleep` / poll lento
+- Rebuild completo cuando basta recreate o `patch-static`
+- Afirmar OK sin `DEPLOY OK` / `PATCH OK` + health/smoke del script
+- Dejar mejoras de deploy sin commit (se pierden en el siguiente deploy de otro módulo)
 
-## Excepción
+## Después del primer recreate con overlay
 
-Solo si el usuario dice explícitamente: **“build local”** / **“compilar en el VPS”** / **`ops:deploy`**.
+Si `/alfa-overrides.css` da 404, el volumen aún no está montado: el recreate de `ops:deploy:cursor` lo monta una vez.
+
+Skill detalle: `.cursor/skills/deploy-alfa-one/SKILL.md`

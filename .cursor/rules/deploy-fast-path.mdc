@@ -1,0 +1,30 @@
+---
+description: Al pedir deploy, el agente elige el camino MÁS RÁPIDO posible (patch / recreate / cursor)
+alwaysApply: true
+---
+
+# Deploy — camino más rápido (obligatorio)
+
+Cuando el usuario diga **desplegar / deploy / subir a prod / publica** Alfa One:
+
+Path canónico:
+
+```bash
+cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
+```
+
+## Decisión automática (orden)
+
+1. **Solo CSS overlay / branding allowlisted** → `npm run ops:deploy:patch-static` (~10–30 s).
+2. **Código/UI/API** → push a `main` (si aplica) → `npm run ops:deploy:cursor`  
+   (0 s si SHA vivo; ~15–30 s recreate; build solo si falta imagen).
+3. **Árbol sucio** → stash → cursor → stash pop. Nunca `ops:deploy` por defecto.
+4. Fallback: `ops:deploy:ghcr` solo si cursor falla.
+
+## Prohibido
+
+- `ops:deploy` / `ops:deploy:auto` sin «build local» explícito
+- Poll lento de Actions; rebuild cuando basta recreate/patch
+- Afirmar OK sin salida del script; dejar infra de deploy sin commit
+
+Skill: `code/presupuestos-alfa/.cursor/skills/deploy-alfa-one/SKILL.md` o monorepo `.cursor/skills/deploy-alfa-one/SKILL.md`
