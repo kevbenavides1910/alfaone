@@ -23,6 +23,9 @@ interface ExpenseEditDialogProps {
     description: string;
     originId: string;
     referenceNumber: string;
+    nafOcNoCia: string;
+    nafOcNoOrden: string;
+    nafOcNoDocu: string;
     notes: string;
     registroCxp: string;
     registroTr: string;
@@ -151,10 +154,21 @@ export function ExpenseEditDialog({
                   company={editForm.company || undefined}
                   onChange={(noOrden, row) => {
                     setEditForm((f) => {
-                      if (!row) return { ...f, referenceNumber: noOrden };
+                      if (!row) {
+                        return {
+                          ...f,
+                          referenceNumber: noOrden,
+                          nafOcNoCia: "",
+                          nafOcNoOrden: "",
+                          nafOcNoDocu: "",
+                        };
+                      }
                       return {
                         ...f,
                         referenceNumber: noOrden,
+                        nafOcNoCia: row.noCia,
+                        nafOcNoOrden: row.noOrden,
+                        nafOcNoDocu: row.noDocu ?? "",
                         company: row.companyCode || f.company,
                         description:
                           row.observaciones && !f.description.trim()

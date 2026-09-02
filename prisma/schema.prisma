@@ -1330,6 +1330,11 @@ model Expense {
   originId                   String?
   origin                     ExpenseOrigin?        @relation(fields: [originId], references: [id])
   referenceNumber            String?
+  /// Vínculo a OC Codisa/NAF (ARIMENCORDEN). Se rellena al elegir OC o por backfill.
+  nafOcNoCia                 String?
+  nafOcNoOrden               String?
+  nafOcNoDocu                String?
+  nafOcLinkedAt              DateTime?
   company                    String?
   companyEntity              Company?              @relation(fields: [company], references: [code])
   isDeferred                 Boolean               @default(false)
@@ -1374,6 +1379,7 @@ model Expense {
   @@index([company, periodMonth])
   @@index([company, approvalStatus])
   @@index([deletedAt])
+  @@index([nafOcNoOrden, nafOcNoCia])
   @@map("expenses")
 }
 

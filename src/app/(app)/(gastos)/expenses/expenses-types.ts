@@ -48,7 +48,11 @@ export interface Expense {
   periodMonth: string; paymentDate?: string | null; isDeferred: boolean; isDistributed: boolean;
   deferredManualDistribution?: boolean;
   deferredIncludeContractIds?: string[];
-  contractId?: string; positionId?: string; originId?: string; referenceNumber?: string;
+  contractId?: string; positionId?: string; originId?: string;   referenceNumber?: string;
+  nafOcNoCia?: string | null;
+  nafOcNoOrden?: string | null;
+  nafOcNoDocu?: string | null;
+  nafOcLinkedAt?: string | null;
   company?: string; notes?: string; createdAt: string;
   approvalStatus?: ExpenseApprovalStatus;
   currentApprovalStep?: number | null;

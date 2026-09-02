@@ -43,6 +43,10 @@ export const expenseCreateSchema = z
     positionId: z.string().optional(),
     originId: z.string().optional(),
     referenceNumber: z.string().optional(),
+    /** Vínculo OC Codisa (al elegir desde picker). */
+    nafOcNoCia: z.string().trim().min(1).max(4).optional(),
+    nafOcNoOrden: z.string().trim().min(1).max(20).optional(),
+    nafOcNoDocu: z.string().trim().max(20).nullable().optional(),
     company: companyCodeSchema,
     isDeferred: z.boolean().default(false),
     notes: z.string().optional(),

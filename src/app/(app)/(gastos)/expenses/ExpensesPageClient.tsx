@@ -109,6 +109,9 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
     description: "",
     originId: "",
     referenceNumber: "",
+    nafOcNoCia: "",
+    nafOcNoOrden: "",
+    nafOcNoDocu: "",
     notes: "",
     registroCxp: "",
     registroTr: "",
@@ -127,6 +130,9 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
     positionId: "",
     originId: "",
     referenceNumber: "",
+    nafOcNoCia: "",
+    nafOcNoOrden: "",
+    nafOcNoDocu: "",
     company: "",
     notes: "",
     registroCxp: "",
@@ -406,6 +412,9 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
       positionId: "",
       originId: "",
       referenceNumber: "",
+      nafOcNoCia: "",
+      nafOcNoOrden: "",
+      nafOcNoDocu: "",
       company: "",
       notes: "",
       registroCxp: "",
@@ -434,6 +443,9 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
       description: e.description,
       originId: e.originId ?? "",
       referenceNumber: e.referenceNumber ?? "",
+      nafOcNoCia: e.nafOcNoCia ?? "",
+      nafOcNoOrden: e.nafOcNoOrden ?? "",
+      nafOcNoDocu: e.nafOcNoDocu ?? "",
       notes: e.notes ?? "",
       registroCxp: e.registroCxp ?? "",
       registroTr: e.registroTr ?? "",
@@ -457,6 +469,9 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
         description: editForm.description.trim(),
         originId: editForm.originId || null,
         referenceNumber: editForm.referenceNumber.trim() || null,
+        nafOcNoCia: editForm.nafOcNoOrden ? editForm.nafOcNoCia || null : null,
+        nafOcNoOrden: editForm.nafOcNoOrden.trim() || null,
+        nafOcNoDocu: editForm.nafOcNoOrden ? editForm.nafOcNoDocu || null : null,
         notes: editForm.notes.trim() || null,
         registroCxp: editForm.registroCxp.trim() || null,
         registroTr: editForm.registroTr.trim() || null,
@@ -539,6 +554,9 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
         positionId: form.mode === "contract" && form.positionId ? form.positionId : undefined,
         originId: form.originId || undefined,
         referenceNumber: form.referenceNumber.trim() || undefined,
+        nafOcNoCia: form.nafOcNoOrden ? form.nafOcNoCia || undefined : undefined,
+        nafOcNoOrden: form.nafOcNoOrden.trim() || undefined,
+        nafOcNoDocu: form.nafOcNoOrden ? form.nafOcNoDocu || undefined : undefined,
         isDeferred: form.mode === "deferred" || form.mode === "deferred_custom",
         notes: form.notes.trim() || undefined,
         registroCxp: form.registroCxp.trim() || undefined,
@@ -1070,10 +1088,26 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                             {e.origin ? (
                               <div>
                                 <div className="text-xs font-medium text-slate-700">{e.origin.name}</div>
-                                {e.referenceNumber && <div className="text-xs text-slate-400 font-mono">{e.referenceNumber}</div>}
+                                {e.referenceNumber && (
+                                  <div className="text-xs text-slate-400 font-mono flex items-center gap-1">
+                                    <span>{e.referenceNumber}</span>
+                                    {e.nafOcNoOrden && (
+                                      <span className="text-[10px] font-sans text-emerald-700 bg-emerald-50 px-1 rounded">
+                                        NAF
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             ) : e.referenceNumber ? (
-                              <div className="text-xs text-slate-500 font-mono">{e.referenceNumber}</div>
+                              <div className="text-xs text-slate-500 font-mono flex items-center gap-1">
+                                <span>{e.referenceNumber}</span>
+                                {e.nafOcNoOrden && (
+                                  <span className="text-[10px] font-sans text-emerald-700 bg-emerald-50 px-1 rounded">
+                                    NAF
+                                  </span>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-slate-300 text-xs">—</span>
                             )}
@@ -1282,10 +1316,21 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                   company={form.company || undefined}
                   onChange={(noOrden, row) => {
                     setForm((f) => {
-                      if (!row) return { ...f, referenceNumber: noOrden };
+                      if (!row) {
+                        return {
+                          ...f,
+                          referenceNumber: noOrden,
+                          nafOcNoCia: "",
+                          nafOcNoOrden: "",
+                          nafOcNoDocu: "",
+                        };
+                      }
                       return {
                         ...f,
                         referenceNumber: noOrden,
+                        nafOcNoCia: row.noCia,
+                        nafOcNoOrden: row.noOrden,
+                        nafOcNoDocu: row.noDocu ?? "",
                         company: row.companyCode || f.company,
                         amount:
                           row.monto != null && Number.isFinite(row.monto)

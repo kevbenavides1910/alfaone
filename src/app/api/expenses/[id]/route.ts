@@ -28,6 +28,9 @@ const patchExpenseSchema = z
     description: z.string().min(2, "Descripción muy corta").optional(),
     originId: z.string().nullable().optional(),
     referenceNumber: z.string().nullable().optional(),
+    nafOcNoCia: z.string().trim().min(1).max(4).nullable().optional(),
+    nafOcNoOrden: z.string().trim().min(1).max(20).nullable().optional(),
+    nafOcNoDocu: z.string().trim().max(20).nullable().optional(),
     notes: z.string().nullable().optional(),
     company: companyCodeSchema.nullable().optional(),
     registroCxp: z.string().nullable().optional(),
@@ -180,6 +183,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         description?: string;
         originId?: string | null;
         referenceNumber?: string | null;
+        nafOcNoCia?: string | null;
+        nafOcNoOrden?: string | null;
+        nafOcNoDocu?: string | null;
+        nafOcLinkedAt?: Date | null;
         notes?: string | null;
         company?: string | null;
         registroCxp?: string | null;
@@ -195,6 +202,22 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       if (p.description !== undefined) data.description = p.description;
       if (p.originId !== undefined) data.originId = p.originId;
       if (p.referenceNumber !== undefined) data.referenceNumber = p.referenceNumber;
+      if (p.nafOcNoOrden !== undefined) {
+        if (p.nafOcNoOrden === null || p.nafOcNoOrden === "") {
+          data.nafOcNoCia = null;
+          data.nafOcNoOrden = null;
+          data.nafOcNoDocu = null;
+          data.nafOcLinkedAt = null;
+        } else {
+          data.nafOcNoOrden = p.nafOcNoOrden;
+          data.nafOcNoCia = p.nafOcNoCia ?? null;
+          data.nafOcNoDocu = p.nafOcNoDocu ?? null;
+          data.nafOcLinkedAt = new Date();
+        }
+      } else if (p.nafOcNoCia !== undefined || p.nafOcNoDocu !== undefined) {
+        if (p.nafOcNoCia !== undefined) data.nafOcNoCia = p.nafOcNoCia;
+        if (p.nafOcNoDocu !== undefined) data.nafOcNoDocu = p.nafOcNoDocu;
+      }
       if (p.notes !== undefined) data.notes = p.notes;
       if (p.company !== undefined) data.company = p.company;
       if (p.registroCxp !== undefined) data.registroCxp = p.registroCxp;
