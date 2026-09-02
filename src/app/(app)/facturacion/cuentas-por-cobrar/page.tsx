@@ -477,7 +477,7 @@ export default function CuentasPorCobrarPage() {
                   rows={searchedRows}
                   filters={columnFilters}
                   onFilterChange={onColumnFilterChange}
-                  filterRowClassName="bg-slate-50"
+                  filterRowClassName="bg-muted/40 border-b border-border"
                   defaultColumnWidths={{
                     cliente: 200,
                     contacto: 160,
@@ -518,7 +518,7 @@ export default function CuentasPorCobrarPage() {
                     ? "collection"
                     : "due_reminder";
                   return (
-                    <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/80">
+                    <tr key={row.id} className="border-b border-border hover:bg-muted/60">
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-800">{row.clientNameCopied}</div>
                         {row.licitacionNo && row.contractId ? (
@@ -791,7 +791,7 @@ export default function CuentasPorCobrarPage() {
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-700">
+                <tr className="border-t border-border bg-muted/50 font-semibold text-foreground">
                   <td colSpan={4} className="px-4 py-3">
                     Totales ({numericTotals.totalCount} con monto · {displayedRows.length}{" "}
                     {displayedRows.length === 1 ? "fila" : "filas"})

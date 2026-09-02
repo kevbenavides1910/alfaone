@@ -52,14 +52,14 @@
     --card-foreground: 214 32% 94%;
     --popover: 222 32% 14%;
     --popover-foreground: 214 32% 94%;
-    --secondary: 222 28% 18%;
+    --secondary: 222 24% 24%;
     --secondary-foreground: 214 32% 94%;
-    --muted: 222 26% 17%;
-    --muted-foreground: 215 16% 68%;
-    --accent: 222 26% 20%;
+    --muted: 222 26% 18%;
+    --muted-foreground: 214 18% 78%;
+    --accent: 222 26% 22%;
     --accent-foreground: 214 32% 94%;
-    --border: 222 22% 22%;
-    --input: 222 26% 17%;
+    --border: 222 22% 28%;
+    --input: 222 26% 18%;
     --app-sidebar: #0b101b;
   }
 
@@ -347,8 +347,16 @@
 
   .dark .bg-gray-50,
   .dark .bg-slate-50,
-  .dark .bg-neutral-50 {
-    @apply bg-muted/50;
+  .dark .bg-neutral-50,
+  .dark .bg-slate-50\/50,
+  .dark .bg-slate-50\/60,
+  .dark .bg-slate-50\/70,
+  .dark .bg-slate-50\/80,
+  .dark .bg-slate-50\/90,
+  .dark .bg-gray-50\/50,
+  .dark .bg-gray-50\/80,
+  .dark .bg-gray-50\/90 {
+    background-color: hsl(var(--muted) / 0.55);
   }
 
   .dark .bg-gray-100,
@@ -438,15 +446,28 @@
     @apply border-border;
   }
 
+  /* Hover/selected de filas: nunca fondo claro con texto remapeado a blanco */
   .dark .hover\:bg-slate-50:hover,
   .dark .hover\:bg-gray-50:hover,
+  .dark .hover\:bg-slate-50\/50:hover,
+  .dark .hover\:bg-slate-50\/60:hover,
+  .dark .hover\:bg-slate-50\/70:hover,
+  .dark .hover\:bg-slate-50\/80:hover,
+  .dark .hover\:bg-slate-50\/90:hover,
+  .dark .hover\:bg-gray-50\/80:hover,
   .dark .hover\:bg-muted\/50:hover {
-    background-color: hsl(var(--muted) / 0.6);
+    background-color: hsl(var(--muted) / 0.72);
   }
 
   .dark .hover\:bg-slate-100:hover,
   .dark .hover\:bg-gray-100:hover {
-    @apply bg-muted;
+    background-color: hsl(var(--muted) / 0.9);
+  }
+
+  .dark .group:hover .group-hover\:bg-slate-50,
+  .dark .group:hover .group-hover\:bg-slate-50\/80,
+  .dark .group:hover .group-hover\:bg-white {
+    background-color: hsl(var(--muted) / 0.72);
   }
 
   .dark .hover\:bg-red-50:hover {
@@ -456,6 +477,12 @@
   .dark .hover\:text-slate-700:hover,
   .dark .hover\:text-slate-800:hover {
     @apply text-foreground;
+  }
+
+  /* Filas de tabla: contraste estable en dark (texto claro sobre navy) */
+  .dark tbody tr:hover > td,
+  .dark tbody tr:hover > th {
+    color: hsl(var(--foreground));
   }
 
   .dark .shadow-sm {

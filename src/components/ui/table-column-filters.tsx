@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ResizableTh } from "@/components/ui/resizable-th";
-import { useResizableTableColumns } from "@/lib/hooks/use-resizable-table-columns";;
+import { useResizableTableColumns } from "@/lib/hooks/use-resizable-table-columns";
 import {
   parseColumnMultiFilter,
   resolveColumnFilterOptions,
@@ -13,10 +13,10 @@ import {
 } from "@/lib/table/column-filters";
 
 const FILTER_INPUT_CLASS =
-  "w-full h-7 text-xs border border-slate-200 rounded px-2 pr-6 bg-card focus:outline-none focus:border-red-400 dark:border-slate-600 dark:bg-background";
+  "w-full h-7 text-xs border border-border rounded px-2 pr-6 bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-red-400 dark:bg-background";
 
 const FILTER_SELECT_CLASS =
-  "w-full h-7 text-xs border border-slate-200 rounded px-1.5 bg-card focus:outline-none focus:border-red-400 dark:border-slate-600 dark:bg-background";
+  "w-full h-7 text-xs border border-border rounded px-1.5 bg-card text-foreground focus:outline-none focus:border-red-400 dark:bg-background";
 
 export function ColumnFilterInput({
   value,

@@ -442,8 +442,8 @@ export default function FacturacionPage() {
                     rows={searchedRows}
                     filters={columnFilters}
                     onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
-                    headerRowClassName="border-b border-slate-200 bg-slate-50"
-                    filterRowClassName="border-b bg-slate-50/80"
+                    headerRowClassName="border-b border-border bg-muted/50"
+                    filterRowClassName="border-b border-border bg-muted/40"
                     defaultColumnWidths={{
                       cliente: 200,
                       administracion: 150,
@@ -467,7 +467,7 @@ export default function FacturacionPage() {
                   {displayedRows.map((row) => (
                     <tr
                       key={row.listKey}
-                      className="border-b border-slate-100 hover:bg-slate-50/80 cursor-pointer"
+                      className="border-b border-border hover:bg-muted/60 cursor-pointer"
                       onClick={() => openDetail(row)}
                     >
                       <td className="px-4 py-3">
@@ -584,7 +584,7 @@ export default function FacturacionPage() {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-700">
+                  <tr className="border-t border-border bg-muted/50 font-semibold text-foreground">
                     <td colSpan={3} className="px-4 py-3">
                       Totales ({numericTotals.withAmountCount} con monto · {displayedRows.length}{" "}
                       {displayedRows.length === 1 ? "fila" : "filas"})
