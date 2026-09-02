@@ -24,6 +24,7 @@ import {
   paymentCategoryLabel,
   paymentSubcategoryLabel,
   subcategoriesFor,
+  validatePaymentClassification,
 } from "@/modules/pagos/catalog/payment-categories";
 
 type PagoFuente = "EXPENSE" | "APEX" | "MANUAL";
@@ -104,6 +105,8 @@ interface NewPaymentDraft {
   company: string;
   referenceNumber: string;
   notes: string;
+  category: string;
+  subcategory: string;
 }
 
 const EMPTY_DRAFT: NewPaymentDraft = {
@@ -113,6 +116,8 @@ const EMPTY_DRAFT: NewPaymentDraft = {
   company: "",
   referenceNumber: "",
   notes: "",
+  category: "",
+  subcategory: "",
 };
 
 function currentMonth(): string {
@@ -513,11 +518,21 @@ export function PagosPageClient({ initialCompany }: Props) {
     [activeCalendar],
   );
 
+  const draftSubcategoryOptions = useMemo(
+    () => subcategoriesFor(draft.category || null),
+    [draft.category],
+  );
+
   const submitNew = () => {
     if (!draft.description.trim()) return toast.error("Escribí una descripción");
     const amount = Number(draft.amount);
     if (!Number.isFinite(amount) || amount <= 0) return toast.error("Monto inválido");
     if (!draft.paymentDate) return toast.error("Elegí la fecha del pago");
+    const classification = validatePaymentClassification(
+      draft.category || null,
+      draft.subcategory || null,
+    );
+    if (!classification.ok) return toast.error(classification.message);
     createMutation.mutate({
       source: "MANUAL",
       description: draft.description.trim(),
@@ -526,6 +541,8 @@ export function PagosPageClient({ initialCompany }: Props) {
       company: draft.company || undefined,
       referenceNumber: draft.referenceNumber || undefined,
       notes: draft.notes || undefined,
+      category: classification.category,
+      subcategory: classification.subcategory,
     });
   };
 
@@ -957,6 +974,41 @@ export function PagosPageClient({ initialCompany }: Props) {
                   onChange={(e) => setDraft((d) => ({ ...d, referenceNumber: e.target.value }))}
                   placeholder="Factura, proveedor…"
                 />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label>Categoría</Label>
+                <select
+                  className="h-9 border rounded-md px-2 text-sm bg-background"
+                  value={draft.category}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      category: e.target.value,
+                      subcategory: "",
+                    }))
+                  }
+                >
+                  <option value="">Sin clasificar</option>
+                  {PAYMENT_CATEGORIES.map((c) => (
+                    <option key={c.key} value={c.key}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Subcategoría</Label>
+                <select
+                  className="h-9 border rounded-md px-2 text-sm bg-background"
+                  value={draft.subcategory}
+                  onChange={(e) => setDraft((d) => ({ ...d, subcategory: e.target.value }))}
+                  disabled={!draft.category}
+                >
+                  <option value="">{draft.category ? "Elegí…" : "Primero la categoría"}</option>
+                  {draftSubcategoryOptions.map((s) => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="grid gap-1.5">

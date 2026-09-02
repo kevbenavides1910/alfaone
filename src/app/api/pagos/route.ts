@@ -8,6 +8,7 @@ import {
   searchPaymentsByOc,
   serializeSinglePayment,
 } from "@/modules/pagos/services/pagos";
+import { validatePaymentClassification } from "@/modules/pagos/catalog/payment-categories";
 
 /**
  * API del módulo Pagos (calendario).
@@ -16,7 +17,7 @@ import {
  *   GET  /api/pagos?oc=...[&company=...]
  *        → búsqueda por número de OC en todos los meses (lista plana)
  *   POST /api/pagos
- *        { source:'MANUAL', description, amount, paymentDate, company?, refType?, referenceNumber?, notes? }
+ *        { source:'MANUAL', description, amount, paymentDate, company?, refType?, referenceNumber?, notes?, category?, subcategory? }
  *        Crear un pago manual. También acepta source='APEX' con apexPagoId (re-sync de un gasto fijo).
  */
 export const GET = withPermission(
@@ -54,7 +55,7 @@ export const POST = withPermission(
       const source: string = body.source ?? "MANUAL";
 
       if (source === "MANUAL") {
-        const { description, amount, paymentDate, company, refType, referenceNumber, notes } = body;
+        const { description, amount, paymentDate, company, refType, referenceNumber, notes, category, subcategory } = body;
         if (!description || typeof description !== "string") {
           return badRequest("La descripción es obligatoria");
         }
@@ -64,6 +65,12 @@ export const POST = withPermission(
         }
         const date = parseDate(paymentDate);
         if (!date) return badRequest("La fecha de pago es inválida o falta");
+
+        const classification = validatePaymentClassification(
+          typeof category === "string" || category === null ? category : undefined,
+          typeof subcategory === "string" || subcategory === null ? subcategory : undefined,
+        );
+        if (!classification.ok) return badRequest(classification.message);
 
         const payment = await prisma.payment.create({
           data: {
@@ -75,6 +82,8 @@ export const POST = withPermission(
             refType: refType?.trim() || null,
             referenceNumber: referenceNumber?.trim() || null,
             notes: notes || null,
+            category: classification.category,
+            subcategory: classification.subcategory,
           },
         });
         return created(serializeSinglePayment(payment));
