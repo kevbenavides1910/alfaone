@@ -26,8 +26,12 @@ import {
   subcategoriesFor,
   validatePaymentClassification,
 } from "@/modules/pagos/catalog/payment-categories";
-import { ExpenseOcPicker } from "@/components/expenses/ExpenseOcPicker";
-import type { OrdenCompraNafRow } from "@/modules/presupuestos/services/list-ordenes-compra-naf";
+import {
+  PaymentOcMultiPicker,
+  formatPaymentOcReference,
+  sumPaymentOcMontos,
+  type PaymentOcItem,
+} from "@/components/pagos/PaymentOcMultiPicker";
 
 function apiErrorMessage(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== "object") return fallback;
@@ -113,8 +117,9 @@ interface NewPaymentDraft {
   amount: string;
   paymentDate: string;
   company: string;
-  referenceNumber: string;
-  /** Gasto de cola «Pago proveedores» ligado (crea Payment EXPENSE). */
+  /** OC Codisa incluidas en el movimiento (se suman al monto). */
+  ocs: PaymentOcItem[];
+  /** Gasto de cola «Pago proveedores» ligado (crea Payment EXPENSE; solo con 1 OC). */
   expenseId: string;
   notes: string;
   category: string;
@@ -126,12 +131,41 @@ const EMPTY_DRAFT: NewPaymentDraft = {
   amount: "",
   paymentDate: "",
   company: "",
-  referenceNumber: "",
+  ocs: [],
   expenseId: "",
   notes: "",
   category: "",
   subcategory: "",
 };
+
+function applyOcsToDraft(d: NewPaymentDraft, ocs: PaymentOcItem[]): NewPaymentDraft {
+  const total = sumPaymentOcMontos(ocs);
+  const first = ocs[0];
+  const next: NewPaymentDraft = {
+    ...d,
+    ocs,
+    expenseId: ocs.length === 1 ? d.expenseId : "",
+    amount: ocs.length > 0 ? String(total) : d.amount,
+  };
+  if (first?.companyCode && !d.company.trim()) {
+    next.company = first.companyCode;
+  }
+  if (ocs.length > 0) {
+    const nums = ocs.map((o) => o.noOrden).join(", ");
+    const proveedores = [...new Set(ocs.map((o) => o.proveedor).filter(Boolean))] as string[];
+    const autoDescription =
+      proveedores.length === 1
+        ? `OC ${nums} · ${proveedores[0]}`
+        : proveedores.length > 1
+          ? `OC ${nums} · ${proveedores.join("; ")}`
+          : `OC ${nums}`;
+    const prev = d.description.trim();
+    if (!prev || /^OC\s/i.test(prev)) {
+      next.description = autoDescription;
+    }
+  }
+  return next;
+}
 
 function currentMonth(): string {
   const d = new Date();
@@ -391,7 +425,8 @@ export function PagosPageClient({ initialCompany }: Props) {
     retry: 1,
   });
 
-  const draftOc = draft.referenceNumber.trim();
+  /** Ligar gasto solo con una OC (cola de proveedores es 1:1). */
+  const draftOc = draft.ocs.length === 1 ? draft.ocs[0].noOrden.trim() : "";
   const { data: ocProveedorMatches = [], isFetching: ocProveedorFetching } = useQuery({
     queryKey: ["pagos-proveedores-oc", draftOc, draft.company],
     queryFn: async () => {
@@ -434,7 +469,6 @@ export function PagosPageClient({ initialCompany }: Props) {
       description: d.description.trim() ? d.description : match.description,
       amount: d.amount.trim() ? d.amount : String(match.amount),
       company: d.company.trim() ? d.company : match.company ?? "",
-      referenceNumber: match.referenceNumber || d.referenceNumber,
       notes: d.notes.trim() ? d.notes : match.notes ?? "",
     }));
   }, [showNew, draftOc, ocProveedorFetching, ocProveedorMatches]);
@@ -602,14 +636,15 @@ export function PagosPageClient({ initialCompany }: Props) {
       draft.subcategory || null,
     );
     if (!classification.ok) return toast.error(classification.message);
+    const referenceNumber = formatPaymentOcReference(draft.ocs) || undefined;
     createMutation.mutate({
       source: "MANUAL",
       description: draft.description.trim(),
       amount,
       paymentDate: draft.paymentDate,
       company: draft.company || undefined,
-      referenceNumber: draft.referenceNumber || undefined,
-      expenseId: draft.expenseId || undefined,
+      referenceNumber,
+      expenseId: draft.ocs.length === 1 ? draft.expenseId || undefined : undefined,
       notes: draft.notes || undefined,
       category: classification.category,
       subcategory: classification.subcategory,
@@ -1031,6 +1066,11 @@ export function PagosPageClient({ initialCompany }: Props) {
                   onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
                   placeholder="0.00"
                 />
+                {draft.ocs.length > 1 && (
+                  <p className="text-xs text-muted-foreground">
+                    Suma de {draft.ocs.length} OC: {formatCurrency(sumPaymentOcMontos(draft.ocs))} (editable)
+                  </p>
+                )}
               </div>
               <div className="grid gap-1.5">
                 <Label>Fecha *</Label>
@@ -1051,35 +1091,16 @@ export function PagosPageClient({ initialCompany }: Props) {
             </div>
             <div className="grid gap-1.5">
               <Label>N° OC (Codisa)</Label>
-              <ExpenseOcPicker
-                value={draft.referenceNumber}
+              <PaymentOcMultiPicker
+                items={draft.ocs}
                 company={draft.company || undefined}
-                onChange={(noOrden, row?: OrdenCompraNafRow | null) => {
-                  setDraft((d) => {
-                    const next = {
-                      ...d,
-                      referenceNumber: noOrden,
-                      expenseId: "",
-                    };
-                    if (row) {
-                      if (row.companyCode && !d.company.trim()) {
-                        next.company = row.companyCode;
-                      }
-                      if (row.monto != null && Number.isFinite(row.monto) && !d.amount.trim()) {
-                        next.amount = String(row.monto);
-                      }
-                      if (row.proveedor && !d.description.trim()) {
-                        next.description = `OC ${row.noOrden} · ${row.proveedor}`;
-                      } else if (!d.description.trim()) {
-                        next.description = `OC ${row.noOrden}`;
-                      }
-                    }
-                    return next;
-                  });
-                }}
+                onChange={(ocs) => setDraft((d) => applyOcsToDraft(d, ocs))}
               />
               <p className="text-xs text-muted-foreground">
-                Si la OC coincide con un gasto en «Pago proveedores», podés ligarlo para que salga de la cola y entre al calendario.
+                Varias OC en un solo movimiento: el monto se calcula con la suma de todas.
+                {draft.ocs.length <= 1
+                  ? " Con una sola OC podés ligar un gasto de «Pago proveedores»."
+                  : " Con varias OC el pago queda manual (sin ligar gasto)."}
               </p>
             </div>
             {draftOc.length >= 1 && (
@@ -1100,7 +1121,6 @@ export function PagosPageClient({ initialCompany }: Props) {
                             description: d.description.trim() ? d.description : match.description,
                             amount: d.amount.trim() ? d.amount : String(match.amount),
                             company: d.company.trim() ? d.company : match.company ?? "",
-                            referenceNumber: match.referenceNumber || d.referenceNumber,
                             notes: d.notes.trim() ? d.notes : match.notes ?? "",
                           }
                         : {}),
@@ -1643,11 +1663,11 @@ function PaymentDetailDialog({
                     />
                   </div>
                   <div className="grid gap-1.5">
-                    <Label>Número de OC</Label>
+                    <Label>Número(s) de OC</Label>
                     <Input
                       value={referenceNumber}
                       onChange={(e) => setReferenceNumber(e.target.value)}
-                      placeholder="Sin OC"
+                      placeholder="Ej. 12345, 67890"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
