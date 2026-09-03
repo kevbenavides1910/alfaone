@@ -5,6 +5,8 @@ import { serializeSinglePayment, type PagoDto } from "./pagos";
 
 export type PagoProveedorDto = {
   id: string;
+  /** Todos los gastos de la misma OC (prorrateo presupuestario = varias filas). */
+  expenseIds: string[];
   description: string;
   amount: number;
   company: string | null;
@@ -17,6 +19,8 @@ export type PagoProveedorDto = {
   /** unscheduled = sin Payment; scheduled_unpaid = ya en calendario pero no marcado pagado */
   status: "unscheduled" | "scheduled_unpaid";
   paymentId: string | null;
+  /** Cuántas filas presupuestarias se agruparon (mes 1/N, diferido, etc.). */
+  budgetSlices: number;
 };
 
 function toIsoDay(d: Date): string {
@@ -36,10 +40,116 @@ function normalizeOcKey(value: string | null | undefined): string {
   return (value ?? "").trim().replace(/^0+/, "").toLowerCase();
 }
 
+/** Quita el sufijo «(mes X/Y)» del prorrateo presupuestario. */
+export function stripBudgetMonthSuffix(description: string): string {
+  return description.replace(/\s*\(mes\s+\d+\s*\/\s*\d+\)\s*$/i, "").trim();
+}
+
+function ocGroupKey(e: {
+  id: string;
+  nafOcNoOrden?: string | null;
+  referenceNumber?: string | null;
+}): string {
+  const fromNaf = normalizeOcKey(e.nafOcNoOrden);
+  if (fromNaf) return `oc:${fromNaf}`;
+  const fromRef = normalizeOcKey(e.referenceNumber);
+  if (fromRef) return `oc:${fromRef}`;
+  return `id:${e.id}`;
+}
+
+type QueueExpenseRow = {
+  id: string;
+  description: string;
+  amount: { toString(): string };
+  company: string | null;
+  type: string;
+  referenceNumber: string | null;
+  nafOcNoOrden: string | null;
+  periodMonth: Date;
+  paymentDate: Date | null;
+  notes: string | null;
+  createdAt: Date;
+  payments: { id: string; paid: boolean; paymentDate: Date }[];
+};
+
+function mapQueueRow(e: QueueExpenseRow): Omit<PagoProveedorDto, "expenseIds" | "budgetSlices"> | null {
+  const pay = e.payments[0] ?? null;
+  if (pay?.paid) return null;
+  const status: PagoProveedorDto["status"] = pay ? "scheduled_unpaid" : "unscheduled";
+  return {
+    id: e.id,
+    description: e.description,
+    amount: parseFloat(e.amount.toString()),
+    company: e.company,
+    type: e.type,
+    referenceNumber: e.nafOcNoOrden?.trim() || e.referenceNumber,
+    periodMonth: toIsoMonth(e.periodMonth),
+    paymentDate: pay
+      ? toIsoDay(pay.paymentDate)
+      : e.paymentDate
+        ? toIsoDay(e.paymentDate)
+        : null,
+    notes: e.notes,
+    createdAt: e.createdAt.toISOString(),
+    status,
+    paymentId: pay?.id ?? null,
+  };
+}
+
+/**
+ * Agrupa filas de la cola por OC: el diferido/prorrateo es solo presupuesto;
+ * en pagos la OC aparece una vez con el monto total.
+ */
+function collapseByOc(rows: QueueExpenseRow[]): PagoProveedorDto[] {
+  const groups = new Map<string, QueueExpenseRow[]>();
+  for (const row of rows) {
+    const key = ocGroupKey(row);
+    const list = groups.get(key);
+    if (list) list.push(row);
+    else groups.set(key, [row]);
+  }
+
+  const out: PagoProveedorDto[] = [];
+  for (const group of groups.values()) {
+    const mapped = group
+      .map(mapQueueRow)
+      .filter((r): r is NonNullable<typeof r> => r != null);
+    if (mapped.length === 0) continue;
+
+    mapped.sort((a, b) => a.periodMonth.localeCompare(b.periodMonth) || a.createdAt.localeCompare(b.createdAt));
+    const primary = mapped[0];
+    const amount =
+      Math.round(mapped.reduce((s, r) => s + r.amount, 0) * 100) / 100;
+    const anyScheduled = mapped.some((r) => r.status === "scheduled_unpaid");
+    const scheduled = mapped.find((r) => r.status === "scheduled_unpaid");
+
+    out.push({
+      id: primary.id,
+      expenseIds: mapped.map((r) => r.id),
+      description: stripBudgetMonthSuffix(primary.description),
+      amount,
+      company: primary.company,
+      type: primary.type,
+      referenceNumber: primary.referenceNumber,
+      periodMonth: primary.periodMonth,
+      paymentDate: scheduled?.paymentDate ?? primary.paymentDate,
+      notes: primary.notes,
+      createdAt: primary.createdAt,
+      status: anyScheduled ? "scheduled_unpaid" : "unscheduled",
+      paymentId: scheduled?.paymentId ?? primary.paymentId,
+      budgetSlices: mapped.length,
+    });
+  }
+
+  out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return out;
+}
+
 /**
  * Cola de pago a proveedores:
  * - Gastos aprobados sin Payment EXPENSE (por programar).
  * - Gastos aprobados con Payment EXPENSE impago (ya en calendario; se puede reprogramar fecha).
+ * - Misma OC (prorrateo / diferido presupuestario) → una sola fila con monto sumado.
  * No incluye los ya marcados pagados ni los liquidados por un pago consolidado.
  */
 export async function listPagoProveedores(
@@ -82,6 +192,7 @@ export async function listPagoProveedores(
       company: true,
       type: true,
       referenceNumber: true,
+      nafOcNoOrden: true,
       periodMonth: true,
       paymentDate: true,
       notes: true,
@@ -92,34 +203,10 @@ export async function listPagoProveedores(
         take: 1,
       },
     },
-    take: 500,
+    take: 3000,
   });
 
-  return rows
-    .map((e) => {
-      const pay = e.payments[0] ?? null;
-      if (pay?.paid) return null;
-      const status: PagoProveedorDto["status"] = pay ? "scheduled_unpaid" : "unscheduled";
-      return {
-        id: e.id,
-        description: e.description,
-        amount: parseFloat(e.amount.toString()),
-        company: e.company,
-        type: e.type,
-        referenceNumber: e.referenceNumber,
-        periodMonth: toIsoMonth(e.periodMonth),
-        paymentDate: pay
-          ? toIsoDay(pay.paymentDate)
-          : e.paymentDate
-            ? toIsoDay(e.paymentDate)
-            : null,
-        notes: e.notes,
-        createdAt: e.createdAt.toISOString(),
-        status,
-        paymentId: pay?.id ?? null,
-      } satisfies PagoProveedorDto;
-    })
-    .filter((r): r is PagoProveedorDto => r != null);
+  return collapseByOc(rows as QueueExpenseRow[]);
 }
 
 /**
@@ -144,6 +231,24 @@ export async function findProveedoresByOcNumbers(
   return [...byId.values()];
 }
 
+/** Ids de todos los gastos pendientes que comparten la misma OC (o solo el id si no hay OC). */
+export async function resolveProveedorExpenseGroupIds(expenseId: string): Promise<string[]> {
+  const expense = await prisma.expense.findFirst({
+    where: { id: expenseId, deletedAt: null },
+    select: { id: true, referenceNumber: true, nafOcNoOrden: true },
+  });
+  if (!expense) return [expenseId];
+
+  const oc = (expense.nafOcNoOrden || expense.referenceNumber || "").trim();
+  if (!oc) return [expense.id];
+
+  const queue = await listPagoProveedores(undefined, oc);
+  const key = normalizeOcKey(oc);
+  const group = queue.find((r) => normalizeOcKey(r.referenceNumber) === key);
+  if (group?.expenseIds.length) return group.expenseIds;
+  return [expense.id];
+}
+
 export class ScheduleExpenseError extends Error {
   code: "NOT_FOUND" | "BAD_REQUEST" | "CONFLICT";
   constructor(code: ScheduleExpenseError["code"], message: string) {
@@ -154,9 +259,8 @@ export class ScheduleExpenseError extends Error {
 
 /**
  * Asigna o actualiza fecha de pago de un gasto aprobado.
- * - Sin Payment → crea Payment EXPENSE (entra al calendario).
- * - Con Payment impago → actualiza fecha.
- * - Con Payment pagado → rechazo.
+ * Si la OC está prorrateada en varios meses (presupuesto), liquida todas las
+ * rebanadas en un solo movimiento con el monto total.
  */
 export async function scheduleExpensePayment(input: {
   expenseId: string;
@@ -166,6 +270,39 @@ export async function scheduleExpensePayment(input: {
   const paymentDate = parseCalendarDateInput(input.paymentDate);
   if (!paymentDate) {
     throw new ScheduleExpenseError("BAD_REQUEST", "Fecha de pago inválida (YYYY-MM-DD)");
+  }
+
+  const groupIds = await resolveProveedorExpenseGroupIds(input.expenseId);
+  if (groupIds.length > 1) {
+    const expenses = await prisma.expense.findMany({
+      where: { id: { in: groupIds }, deletedAt: null },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        company: true,
+        referenceNumber: true,
+        nafOcNoOrden: true,
+        notes: true,
+      },
+    });
+    const total =
+      Math.round(
+        expenses.reduce((s, e) => s + parseFloat(e.amount.toString()), 0) * 100,
+      ) / 100;
+    const primary =
+      expenses.find((e) => e.id === input.expenseId) ?? expenses[0];
+    return createPaymentFromProveedorExpenses({
+      expenseIds: groupIds,
+      paymentDate: input.paymentDate,
+      userId: input.userId,
+      description: stripBudgetMonthSuffix(primary.description),
+      amount: total,
+      company: primary.company,
+      notes: primary.notes,
+      referenceNumber:
+        primary.nafOcNoOrden?.trim() || primary.referenceNumber?.trim() || null,
+    });
   }
 
   const expense = await prisma.expense.findFirst({
@@ -203,10 +340,10 @@ export async function scheduleExpensePayment(input: {
         where: { id: existing.id },
         data: {
           paymentDate,
-          description: expense.description,
+          description: stripBudgetMonthSuffix(expense.description),
           company: expense.company,
           refType: expense.type,
-          referenceNumber: expense.referenceNumber,
+          referenceNumber: expense.nafOcNoOrden?.trim() || expense.referenceNumber,
           updatedById: input.userId,
         },
       });
@@ -221,12 +358,12 @@ export async function scheduleExpensePayment(input: {
       data: {
         source: "EXPENSE",
         expenseId: expense.id,
-        description: expense.description,
+        description: stripBudgetMonthSuffix(expense.description),
         amount: expense.amount,
         paymentDate,
         company: expense.company,
         refType: expense.type,
-        referenceNumber: expense.referenceNumber,
+        referenceNumber: expense.nafOcNoOrden?.trim() || expense.referenceNumber,
         notes: expense.notes,
         createdById: input.userId,
         updatedById: input.userId,
@@ -337,7 +474,7 @@ export async function createPaymentFromProveedorExpenses(input: {
       data: {
         source: single ? "EXPENSE" : "MANUAL",
         expenseId: single?.id ?? null,
-        description: input.description.trim(),
+        description: stripBudgetMonthSuffix(input.description.trim()),
         amount: amountDec,
         paymentDate,
         company: input.company?.trim() || single?.company || null,

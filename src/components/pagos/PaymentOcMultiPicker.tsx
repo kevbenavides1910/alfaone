@@ -9,6 +9,8 @@ import { formatCurrency } from "@/lib/utils/format";
 /** Gasto de «Pago proveedores» seleccionado (ya ligado a una OC). */
 export type PaymentOcItem = {
   expenseId: string;
+  /** Todas las rebanadas presupuestarias de la misma OC. */
+  expenseIds: string[];
   noOrden: string;
   companyCode: string | null;
   description: string;
@@ -18,11 +20,13 @@ export type PaymentOcItem = {
 
 export type ProveedorOcOption = {
   id: string;
+  expenseIds: string[];
   description: string;
   amount: number;
   company: string | null;
   referenceNumber: string | null;
   status: "unscheduled" | "scheduled_unpaid";
+  budgetSlices?: number;
 };
 
 type PaymentOcMultiPickerProps = {
@@ -42,8 +46,11 @@ function optionOc(opt: ProveedorOcOption): string {
 function optionToItem(opt: ProveedorOcOption): PaymentOcItem | null {
   const noOrden = optionOc(opt);
   if (!noOrden) return null;
+  const expenseIds =
+    opt.expenseIds?.length > 0 ? [...new Set(opt.expenseIds)] : [opt.id];
   return {
     expenseId: opt.id,
+    expenseIds,
     noOrden,
     companyCode: opt.company,
     description: opt.description,
@@ -196,6 +203,9 @@ export function PaymentOcMultiPicker({
                   </div>
                   <div className="text-xs text-slate-500 truncate mt-0.5">
                     {opt.description}
+                    {opt.budgetSlices && opt.budgetSlices > 1
+                      ? ` · ${opt.budgetSlices} meses (presupuesto)`
+                      : ""}
                     {opt.status === "scheduled_unpaid" ? " · ya en calendario" : ""}
                   </div>
                 </li>

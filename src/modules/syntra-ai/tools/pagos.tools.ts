@@ -128,6 +128,7 @@ export function pagosTools(): SyntraTool[] {
             periodo: e.periodMonth,
             estado: e.status === "unscheduled" ? "sin_programar" : "en_calendario_impago",
             fechaPago: e.paymentDate,
+            rebanadasPresupuesto: e.budgetSlices,
           })),
           moneda: "CRC",
           fuente: "Pagos → Pago proveedores",

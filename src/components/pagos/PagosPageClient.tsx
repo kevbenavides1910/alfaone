@@ -97,6 +97,7 @@ const FUENTE_BADGE: Record<PagoFuente, string> = {
 
 type PagoProveedorDto = {
   id: string;
+  expenseIds: string[];
   description: string;
   amount: number;
   company: string | null;
@@ -108,6 +109,7 @@ type PagoProveedorDto = {
   createdAt: string;
   status: "unscheduled" | "scheduled_unpaid";
   paymentId: string | null;
+  budgetSlices?: number;
 };
 
 type PagosTab = "diarios" | "fijos" | "cronograma" | "proveedores" | "bitacora";
@@ -424,11 +426,13 @@ export function PagosPageClient({ initialCompany }: Props) {
         .filter((e) => (e.referenceNumber ?? "").trim().length > 0)
         .map((e) => ({
           id: e.id,
+          expenseIds: e.expenseIds?.length ? e.expenseIds : [e.id],
           description: e.description,
           amount: e.amount,
           company: e.company,
           referenceNumber: e.referenceNumber,
           status: e.status,
+          budgetSlices: e.budgetSlices,
         })),
     [proveedores],
   );
@@ -443,11 +447,23 @@ export function PagosPageClient({ initialCompany }: Props) {
   }, [activeTab, ocDebounced, proveedores]);
 
   const scheduleMutation = useMutation({
-    mutationFn: async ({ expenseId, paymentDate }: { expenseId: string; paymentDate: string }) => {
+    mutationFn: async ({
+      expenseId,
+      expenseIds,
+      paymentDate,
+    }: {
+      expenseId: string;
+      expenseIds?: string[];
+      paymentDate: string;
+    }) => {
       const res = await fetch("/api/pagos/proveedores/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expenseId, paymentDate }),
+        body: JSON.stringify({
+          expenseId,
+          expenseIds,
+          paymentDate,
+        }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -611,7 +627,7 @@ export function PagosPageClient({ initialCompany }: Props) {
     );
     if (!classification.ok) return toast.error(classification.message);
     const referenceNumber = formatPaymentOcReference(draft.ocs) || undefined;
-    const expenseIds = draft.ocs.map((o) => o.expenseId);
+    const expenseIds = [...new Set(draft.ocs.flatMap((o) => o.expenseIds?.length ? o.expenseIds : [o.expenseId]))];
     createMutation.mutate({
       source: "MANUAL",
       description: draft.description.trim(),
@@ -889,6 +905,11 @@ export function PagosPageClient({ initialCompany }: Props) {
                             <div className="font-medium truncate" title={e.description}>
                               {e.description}
                             </div>
+                            {e.budgetSlices && e.budgetSlices > 1 && (
+                              <div className="text-xs text-muted-foreground">
+                                {e.budgetSlices} meses en presupuesto · 1 pago
+                              </div>
+                            )}
                             {e.notes && (
                               <div className="text-xs text-muted-foreground truncate">{e.notes}</div>
                             )}
@@ -930,6 +951,7 @@ export function PagosPageClient({ initialCompany }: Props) {
                                 onClick={() =>
                                   scheduleMutation.mutate({
                                     expenseId: e.id,
+                                    expenseIds: e.expenseIds?.length ? e.expenseIds : [e.id],
                                     paymentDate: dateValue,
                                   })
                                 }
