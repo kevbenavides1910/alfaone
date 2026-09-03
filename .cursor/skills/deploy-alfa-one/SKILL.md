@@ -23,6 +23,19 @@ description: Despliega Alfa One lo más rápido posible (patch-static / recreate
 
 **Default al oír «despliega»:** si hay cambios de app → commit solo si lo pidieron → **stash WIP ajeno** → **`npm run ops:deploy:cursor`** (el script hace `git push` en paralelo al build si HEAD va adelante). No hace falta `git push` secuencial antes. Si el cambio es solo overlay CSS → **patch-static**.
 
+## Prebuild (imagen lista al commit)
+
+Tras `npm run ops:prebuild:install-hook`, cada commit que toque `src/`/`prisma`/Dockerfile lanza **prebuild en background** (`ghcr.io/.../alfaone:<sha>`). Así el siguiente `ops:deploy:cursor` suele ser solo recreate (~15–30 s).
+
+```bash
+npm run ops:prebuild:install-hook   # una vez por clon
+npm run ops:prebuild                # forzar HEAD ahora
+npm run ops:prebuild -- --bg        # forzar en background
+ALFAONE_PREBUILD=0 git commit …    # saltar hook
+```
+
+Logs: `.deploy-logs/prebuild-<shortsha>.log`
+
 ## Comandos
 
 ```bash

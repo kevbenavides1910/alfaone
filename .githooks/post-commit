@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# post-commit: prebuild imagen del SHA en background (no bloquea el commit).
+# Instalación: npm run ops:prebuild:install-hook
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$ROOT" ]; then
+  exit 0
+fi
+
+# Solo ramas de deploy habituales
+BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+case "$BRANCH" in
+  main|master|HEAD) ;;
+  *)
+    # Otras ramas: igual prebuild (útil para preview); comentar si molesta
+    ;;
+esac
+
+if [ "${ALFAONE_PREBUILD:-1}" = "0" ] || [ "${ALFAONE_PREBUILD:-1}" = "false" ]; then
+  exit 0
+fi
+
+# Commits de solo docs/skills/rules → skip (rápido)
+CHANGED="$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)"
+if [ -n "$CHANGED" ]; then
+  APP_TOUCHED=0
+  while IFS= read -r f; do
+    case "$f" in
+      src/*|prisma/*|public/*|Dockerfile|package.json|package-lock.json|next.config.*|tsconfig*)
+        APP_TOUCHED=1
+        break
+        ;;
+    esac
+  done <<< "$CHANGED"
+  if [ "$APP_TOUCHED" = "0" ]; then
+    echo "[prebuild] skip: commit sin archivos de app"
+    exit 0
+  fi
+fi
+
+SCRIPT="$ROOT/scripts/ops/prebuild-image-sha.sh"
+if [ ! -x "$SCRIPT" ]; then
+  chmod +x "$SCRIPT" 2>/dev/null || true
+fi
+if [ -f "$SCRIPT" ]; then
+  bash "$SCRIPT" --bg || true
+fi

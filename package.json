@@ -24,6 +24,8 @@
     "ops:deploy:patch-static": "bash scripts/ops/deploy-patch-static.sh",
     "ops:deploy:preview": "bash scripts/ops/deploy-preview.sh",
     "ops:deploy:promote": "bash scripts/ops/deploy-promote.sh",
+    "ops:prebuild": "bash scripts/ops/prebuild-image-sha.sh",
+    "ops:prebuild:install-hook": "bash scripts/ops/install-prebuild-hook.sh",
     "ops:ghcr-login": "bash scripts/ghcr-login.sh",
     "ci:modules": "node scripts/ci/affected-modules.mjs",
     "ci:local": "npm run ci:modules && npm run lint && npm run deploy:check && npm run build",

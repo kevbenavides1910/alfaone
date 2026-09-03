@@ -16,8 +16,9 @@ cd /mnt/data/projects/alfa-one/code/presupuestos-alfa
 ## Decisión automática (orden)
 
 1. **Solo CSS overlay / branding allowlisted** → `npm run ops:deploy:patch-static` (~10–30 s).
-2. **Código/UI/API** → commit (si aplica) → `npm run ops:deploy:cursor`  
+2. **Código/UI/API** → commit (si aplica) → `npm run ops:deploy:cursor` 
    (push en paralelo al build si hace falta; 0 s si SHA vivo; ~15–30 s recreate; build solo si falta imagen).
+   Tras `ops:prebuild:install-hook`, el post-commit prebuilda en background para que el recreate sea lo habitual.
 3. **Árbol sucio** → stash → cursor → stash pop. Nunca `ops:deploy` por defecto.
 4. Fallback: `ops:deploy:ghcr` solo si cursor falla.
 
