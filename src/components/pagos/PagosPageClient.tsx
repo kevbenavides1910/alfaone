@@ -325,6 +325,9 @@ export function PagosPageClient({ initialCompany }: Props) {
   const [activeTab, setActiveTab] = useState<PagosTab>("diarios");
   const [ocQuery, setOcQuery] = useState("");
   const [ocDebounced, setOcDebounced] = useState("");
+  const [proveedorStatusFilter, setProveedorStatusFilter] = useState<
+    "all" | "unscheduled" | "scheduled_unpaid"
+  >("all");
   const [scheduleDates, setScheduleDates] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -438,13 +441,19 @@ export function PagosPageClient({ initialCompany }: Props) {
   );
 
   const proveedoresVisible = useMemo(() => {
+    let rows = proveedores;
+    if (proveedorStatusFilter !== "all") {
+      rows = rows.filter((e) => e.status === proveedorStatusFilter);
+    }
     const q = ocDebounced.trim().toLowerCase();
-    if (activeTab !== "proveedores" || q.length < 2) return proveedores;
-    return proveedores.filter((e) => {
-      const oc = (e.referenceNumber ?? "").toLowerCase();
-      return oc.includes(q) || e.description.toLowerCase().includes(q);
-    });
-  }, [activeTab, ocDebounced, proveedores]);
+    if (q.length >= 2) {
+      rows = rows.filter((e) => {
+        const oc = (e.referenceNumber ?? "").toLowerCase();
+        return oc.includes(q) || e.description.toLowerCase().includes(q);
+      });
+    }
+    return rows;
+  }, [ocDebounced, proveedores, proveedorStatusFilter]);
 
   const scheduleMutation = useMutation({
     mutationFn: async ({
@@ -745,11 +754,12 @@ export function PagosPageClient({ initialCompany }: Props) {
               <span className="text-xs text-muted-foreground animate-pulse">cargando…</span>
             ) : (
               <span className="text-muted-foreground">
-                Pendientes de fecha:{" "}
+                Mostrando:{" "}
                 <span className="font-semibold text-foreground">{proveedoresVisible.length}</span>
-                {ocDebounced.trim().length >= 2 && proveedoresVisible.length !== proveedores.length && (
-                  <span className="text-xs ml-1">de {proveedores.length}</span>
-                )}
+                {(proveedorStatusFilter !== "all" || ocDebounced.trim().length >= 2) &&
+                  proveedoresVisible.length !== proveedores.length && (
+                    <span className="text-xs ml-1">de {proveedores.length}</span>
+                  )}
               </span>
             )
           ) : (
@@ -859,10 +869,31 @@ export function PagosPageClient({ initialCompany }: Props) {
             />
           </TabsContent>
           <TabsContent value="proveedores" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
-            <p className="text-xs text-muted-foreground mb-3">
-              Gastos aprobados sin pagar: sin fecha (por programar) o ya en el calendario (podés cambiar la fecha).
-              Los marcados pagados no aparecen aquí.
-            </p>
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+              <p className="text-xs text-muted-foreground max-w-xl">
+                Gastos aprobados sin pagar: sin fecha (por programar) o ya en el calendario (podés cambiar la fecha).
+                Los marcados pagados no aparecen aquí.
+              </p>
+              <div className="flex items-center gap-2">
+                <label htmlFor="proveedor-status-filter" className="text-xs text-muted-foreground whitespace-nowrap">
+                  Estado
+                </label>
+                <select
+                  id="proveedor-status-filter"
+                  className="h-9 border rounded-md px-2 text-sm bg-background"
+                  value={proveedorStatusFilter}
+                  onChange={(e) =>
+                    setProveedorStatusFilter(
+                      e.target.value as "all" | "unscheduled" | "scheduled_unpaid",
+                    )
+                  }
+                >
+                  <option value="all">Todos</option>
+                  <option value="unscheduled">Sin programar</option>
+                  <option value="scheduled_unpaid">En calendario</option>
+                </select>
+              </div>
+            </div>
             {proveedoresError ? (
               <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive flex flex-wrap items-center gap-3">
                 <span>
@@ -879,7 +910,9 @@ export function PagosPageClient({ initialCompany }: Props) {
               <p className="text-sm text-muted-foreground py-8 text-center">
                 {proveedores.length === 0
                   ? "No hay gastos pendientes de programar ni de pagar."
-                  : "Ningún gasto coincide con la búsqueda de OC."}
+                  : proveedorStatusFilter !== "all"
+                    ? "Ningún gasto con ese estado."
+                    : "Ningún gasto coincide con la búsqueda de OC."}
               </p>
             ) : (
               <div className="overflow-x-auto rounded-md border">
