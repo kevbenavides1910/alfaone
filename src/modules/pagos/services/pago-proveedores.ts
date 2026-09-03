@@ -3,6 +3,8 @@ import { prisma } from "@/modules/core/db/prisma";
 import { parseCalendarDateInput } from "@/lib/utils/format";
 import { serializeSinglePayment, type PagoDto } from "./pagos";
 
+export type PagoProveedorStatus = "unscheduled" | "scheduled_unpaid" | "paid";
+
 export type PagoProveedorDto = {
   id: string;
   /** Todos los gastos de la misma OC (prorrateo presupuestario = varias filas). */
@@ -16,8 +18,8 @@ export type PagoProveedorDto = {
   paymentDate: string | null;
   notes: string | null;
   createdAt: string;
-  /** unscheduled = sin Payment; scheduled_unpaid = ya en calendario pero no marcado pagado */
-  status: "unscheduled" | "scheduled_unpaid";
+  /** unscheduled | scheduled_unpaid | paid */
+  status: PagoProveedorStatus;
   paymentId: string | null;
   /** Cuántas filas presupuestarias se agruparon (mes 1/N, diferido, etc.). */
   budgetSlices: number;
@@ -70,12 +72,48 @@ type QueueExpenseRow = {
   notes: string | null;
   createdAt: Date;
   payments: { id: string; paid: boolean; paymentDate: Date }[];
+  settledByPayment: { id: string; paid: boolean; paymentDate: Date } | null;
 };
 
-function mapQueueRow(e: QueueExpenseRow): Omit<PagoProveedorDto, "expenseIds" | "budgetSlices"> | null {
-  const pay = e.payments[0] ?? null;
-  if (pay?.paid) return null;
-  const status: PagoProveedorDto["status"] = pay ? "scheduled_unpaid" : "unscheduled";
+function resolveRowStatus(e: QueueExpenseRow): {
+  status: PagoProveedorStatus;
+  paymentId: string | null;
+  paymentDate: string | null;
+} {
+  const expensePay = e.payments[0] ?? null;
+  const settledPay = e.settledByPayment;
+  const effective = expensePay?.paid
+    ? expensePay
+    : settledPay?.paid
+      ? settledPay
+      : expensePay ?? settledPay;
+
+  if (expensePay?.paid || settledPay?.paid) {
+    const pay = expensePay?.paid ? expensePay : settledPay!;
+    return {
+      status: "paid",
+      paymentId: pay.id,
+      paymentDate: toIsoDay(pay.paymentDate),
+    };
+  }
+  if (effective) {
+    return {
+      status: "scheduled_unpaid",
+      paymentId: effective.id,
+      paymentDate: toIsoDay(effective.paymentDate),
+    };
+  }
+  return {
+    status: "unscheduled",
+    paymentId: null,
+    paymentDate: e.paymentDate ? toIsoDay(e.paymentDate) : null,
+  };
+}
+
+function mapQueueRow(
+  e: QueueExpenseRow,
+): Omit<PagoProveedorDto, "expenseIds" | "budgetSlices"> {
+  const resolved = resolveRowStatus(e);
   return {
     id: e.id,
     description: e.description,
@@ -84,16 +122,19 @@ function mapQueueRow(e: QueueExpenseRow): Omit<PagoProveedorDto, "expenseIds" | 
     type: e.type,
     referenceNumber: e.nafOcNoOrden?.trim() || e.referenceNumber,
     periodMonth: toIsoMonth(e.periodMonth),
-    paymentDate: pay
-      ? toIsoDay(pay.paymentDate)
-      : e.paymentDate
-        ? toIsoDay(e.paymentDate)
-        : null,
+    paymentDate: resolved.paymentDate,
     notes: e.notes,
     createdAt: e.createdAt.toISOString(),
-    status,
-    paymentId: pay?.id ?? null,
+    status: resolved.status,
+    paymentId: resolved.paymentId,
   };
+}
+
+function groupStatus(statuses: PagoProveedorStatus[]): PagoProveedorStatus {
+  if (statuses.length > 0 && statuses.every((s) => s === "paid")) return "paid";
+  if (statuses.some((s) => s === "unscheduled")) return "unscheduled";
+  if (statuses.some((s) => s === "scheduled_unpaid")) return "scheduled_unpaid";
+  return "paid";
 }
 
 /**
@@ -111,32 +152,37 @@ function collapseByOc(rows: QueueExpenseRow[]): PagoProveedorDto[] {
 
   const out: PagoProveedorDto[] = [];
   for (const group of groups.values()) {
-    const mapped = group
-      .map(mapQueueRow)
-      .filter((r): r is NonNullable<typeof r> => r != null);
+    const mapped = group.map(mapQueueRow);
     if (mapped.length === 0) continue;
 
     mapped.sort((a, b) => a.periodMonth.localeCompare(b.periodMonth) || a.createdAt.localeCompare(b.createdAt));
-    const primary = mapped[0];
+    const status = groupStatus(mapped.map((r) => r.status));
+    const active =
+      status === "paid" ? mapped : mapped.filter((r) => r.status !== "paid");
+    if (active.length === 0) continue;
+
+    const primary = active[0];
     const amount =
-      Math.round(mapped.reduce((s, r) => s + r.amount, 0) * 100) / 100;
-    const anyScheduled = mapped.some((r) => r.status === "scheduled_unpaid");
-    const scheduled = mapped.find((r) => r.status === "scheduled_unpaid");
+      Math.round(active.reduce((s, r) => s + r.amount, 0) * 100) / 100;
+    const withDate =
+      active.find((r) => r.status === status && r.paymentDate) ??
+      active.find((r) => r.paymentDate) ??
+      primary;
 
     out.push({
       id: primary.id,
-      expenseIds: mapped.map((r) => r.id),
+      expenseIds: active.map((r) => r.id),
       description: stripBudgetMonthSuffix(primary.description),
       amount,
       company: primary.company,
       type: primary.type,
       referenceNumber: primary.referenceNumber,
       periodMonth: primary.periodMonth,
-      paymentDate: scheduled?.paymentDate ?? primary.paymentDate,
+      paymentDate: withDate.paymentDate,
       notes: primary.notes,
       createdAt: primary.createdAt,
-      status: anyScheduled ? "scheduled_unpaid" : "unscheduled",
-      paymentId: scheduled?.paymentId ?? primary.paymentId,
+      status,
+      paymentId: withDate.paymentId,
       budgetSlices: mapped.length,
     });
   }
@@ -147,21 +193,22 @@ function collapseByOc(rows: QueueExpenseRow[]): PagoProveedorDto[] {
 
 /**
  * Cola de pago a proveedores:
- * - Gastos aprobados sin Payment EXPENSE (por programar).
- * - Gastos aprobados con Payment EXPENSE impago (ya en calendario; se puede reprogramar fecha).
+ * - Sin programar / en calendario (impago) / pagado.
  * - Misma OC (prorrateo / diferido presupuestario) → una sola fila con monto sumado.
- * No incluye los ya marcados pagados ni los liquidados por un pago consolidado.
+ * Por defecto no incluye pagados (cola operativa). Con `includePaid: true` sí.
  */
 export async function listPagoProveedores(
   companyFilter?: string,
   ocFilter?: string,
+  options?: { includePaid?: boolean },
 ): Promise<PagoProveedorDto[]> {
   const oc = ocFilter?.trim() || "";
+  const includePaid = options?.includePaid === true;
+
   const rows = await prisma.expense.findMany({
     where: {
       approvalStatus: "APPROVED",
       deletedAt: null,
-      settledByPaymentId: null,
       ...(companyFilter ? { company: companyFilter } : {}),
       ...(oc
         ? {
@@ -171,17 +218,24 @@ export async function listPagoProveedores(
             ],
           }
         : {}),
-      AND: [
+      OR: [
+        // Sin Payment EXPENSE ni liquidación
         {
-          OR: [
-            { payments: { none: { source: "EXPENSE" } } },
-            {
-              payments: {
-                some: { source: "EXPENSE", paid: false },
-              },
-            },
-          ],
+          settledByPaymentId: null,
+          payments: { none: { source: "EXPENSE" } },
         },
+        // En calendario (impago) vía Payment EXPENSE
+        {
+          payments: { some: { source: "EXPENSE", paid: false } },
+        },
+        // Liquidado por pago consolidado (aún impago o pagado)
+        {
+          settledByPaymentId: { not: null },
+        },
+        // Pagado vía Payment EXPENSE
+        ...(includePaid
+          ? [{ payments: { some: { source: "EXPENSE" as const, paid: true } } }]
+          : []),
       ],
     },
     orderBy: [{ createdAt: "desc" }],
@@ -200,13 +254,21 @@ export async function listPagoProveedores(
       payments: {
         where: { source: "EXPENSE" },
         select: { id: true, paid: true, paymentDate: true },
+        orderBy: { createdAt: "desc" },
         take: 1,
+      },
+      settledByPayment: {
+        select: { id: true, paid: true, paymentDate: true },
       },
     },
     take: 3000,
   });
 
-  return collapseByOc(rows as QueueExpenseRow[]);
+  let list = collapseByOc(rows as QueueExpenseRow[]);
+  if (!includePaid) {
+    list = list.filter((r) => r.status !== "paid");
+  }
+  return list;
 }
 
 /**
@@ -223,7 +285,7 @@ export async function findProveedoresByOcNumbers(
   const wanted = new Set(cleaned.map(normalizeOcKey));
   const matched = queue.filter((e) => {
     const ref = normalizeOcKey(e.referenceNumber);
-    return ref.length > 0 && wanted.has(ref);
+    return ref.length > 0 && wanted.has(ref) && e.status !== "paid";
   });
 
   const byId = new Map<string, PagoProveedorDto>();
@@ -244,7 +306,9 @@ export async function resolveProveedorExpenseGroupIds(expenseId: string): Promis
 
   const queue = await listPagoProveedores(undefined, oc);
   const key = normalizeOcKey(oc);
-  const group = queue.find((r) => normalizeOcKey(r.referenceNumber) === key);
+  const group = queue.find(
+    (r) => normalizeOcKey(r.referenceNumber) === key && r.status !== "paid",
+  );
   if (group?.expenseIds.length) return group.expenseIds;
   return [expense.id];
 }

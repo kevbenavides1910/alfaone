@@ -103,7 +103,7 @@ export function pagosTools(): SyntraTool[] {
       permission: { key: "pagos.calendario", level: "view" },
       definition: toolDef(
         "list_pago_proveedores",
-        "Lista gastos aprobados pendientes: sin programar en calendario o ya programados pero no pagados. Pestaña Pago proveedores.",
+        "Lista gastos de proveedores: sin programar, en calendario (impago) o pagados. Pestaña Pago proveedores.",
         {
           type: "object",
           properties: {
@@ -115,7 +115,7 @@ export function pagosTools(): SyntraTool[] {
       describeCall: () => "Listando gastos pendientes (pago proveedores)…",
       handler: async (_session, args) => {
         const company = strArg(args, "company") || undefined;
-        const rows = await listPagoProveedores(company);
+        const rows = await listPagoProveedores(company, undefined, { includePaid: true });
         return {
           total: rows.length,
           gastos: rows.slice(0, MAX_LIST).map((e) => ({
@@ -126,7 +126,12 @@ export function pagosTools(): SyntraTool[] {
             tipo: e.type,
             compania: e.company,
             periodo: e.periodMonth,
-            estado: e.status === "unscheduled" ? "sin_programar" : "en_calendario_impago",
+            estado:
+              e.status === "unscheduled"
+                ? "sin_programar"
+                : e.status === "paid"
+                  ? "pagado"
+                  : "en_calendario_impago",
             fechaPago: e.paymentDate,
             rebanadasPresupuesto: e.budgetSlices,
           })),

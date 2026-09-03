@@ -107,7 +107,7 @@ type PagoProveedorDto = {
   paymentDate: string | null;
   notes: string | null;
   createdAt: string;
-  status: "unscheduled" | "scheduled_unpaid";
+  status: "unscheduled" | "scheduled_unpaid" | "paid";
   paymentId: string | null;
   budgetSlices?: number;
 };
@@ -326,7 +326,7 @@ export function PagosPageClient({ initialCompany }: Props) {
   const [ocQuery, setOcQuery] = useState("");
   const [ocDebounced, setOcDebounced] = useState("");
   const [proveedorStatusFilter, setProveedorStatusFilter] = useState<
-    "all" | "unscheduled" | "scheduled_unpaid"
+    "all" | "unscheduled" | "scheduled_unpaid" | "paid"
   >("all");
   const [scheduleDates, setScheduleDates] = useState<Record<string, string>>({});
 
@@ -426,7 +426,10 @@ export function PagosPageClient({ initialCompany }: Props) {
   const proveedorOcOptions = useMemo(
     () =>
       proveedores
-        .filter((e) => (e.referenceNumber ?? "").trim().length > 0)
+        .filter(
+          (e) =>
+            (e.referenceNumber ?? "").trim().length > 0 && e.status !== "paid",
+        )
         .map((e) => ({
           id: e.id,
           expenseIds: e.expenseIds?.length ? e.expenseIds : [e.id],
@@ -434,7 +437,7 @@ export function PagosPageClient({ initialCompany }: Props) {
           amount: e.amount,
           company: e.company,
           referenceNumber: e.referenceNumber,
-          status: e.status,
+          status: e.status === "scheduled_unpaid" ? "scheduled_unpaid" as const : "unscheduled" as const,
           budgetSlices: e.budgetSlices,
         })),
     [proveedores],
@@ -871,8 +874,8 @@ export function PagosPageClient({ initialCompany }: Props) {
           <TabsContent value="proveedores" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
             <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
               <p className="text-xs text-muted-foreground max-w-xl">
-                Gastos aprobados sin pagar: sin fecha (por programar) o ya en el calendario (podés cambiar la fecha).
-                Los marcados pagados no aparecen aquí.
+                Gastos aprobados: sin programar, en calendario (impagos) o ya pagados.
+                Filtrá por estado para ver cada cola.
               </p>
               <div className="flex items-center gap-2">
                 <label htmlFor="proveedor-status-filter" className="text-xs text-muted-foreground whitespace-nowrap">
@@ -884,13 +887,14 @@ export function PagosPageClient({ initialCompany }: Props) {
                   value={proveedorStatusFilter}
                   onChange={(e) =>
                     setProveedorStatusFilter(
-                      e.target.value as "all" | "unscheduled" | "scheduled_unpaid",
+                      e.target.value as "all" | "unscheduled" | "scheduled_unpaid" | "paid",
                     )
                   }
                 >
                   <option value="all">Todos</option>
                   <option value="unscheduled">Sin programar</option>
                   <option value="scheduled_unpaid">En calendario</option>
+                  <option value="paid">Pagado</option>
                 </select>
               </div>
             </div>
@@ -955,6 +959,8 @@ export function PagosPageClient({ initialCompany }: Props) {
                           <td className="px-3 py-2 whitespace-nowrap">
                             {e.status === "unscheduled" ? (
                               <span className="text-xs font-medium text-amber-700">Sin programar</span>
+                            ) : e.status === "paid" ? (
+                              <span className="text-xs font-medium text-emerald-700">Pagado</span>
                             ) : (
                               <span className="text-xs font-medium text-sky-700">En calendario</span>
                             )}
@@ -963,21 +969,27 @@ export function PagosPageClient({ initialCompany }: Props) {
                             {formatCurrency(e.amount)}
                           </td>
                           <td className="px-3 py-2">
-                            <Input
-                              type="date"
-                              className="h-8 w-[150px]"
-                              value={dateValue}
-                              disabled={!canEdit || scheduleMutation.isPending}
-                              onChange={(ev) =>
-                                setScheduleDates((prev) => ({
-                                  ...prev,
-                                  [e.id]: ev.target.value,
-                                }))
-                              }
-                            />
+                            {e.status === "paid" ? (
+                              <span className="text-xs text-muted-foreground">
+                                {e.paymentDate ? formatDate(e.paymentDate) : "—"}
+                              </span>
+                            ) : (
+                              <Input
+                                type="date"
+                                className="h-8 w-[150px]"
+                                value={dateValue}
+                                disabled={!canEdit || scheduleMutation.isPending}
+                                onChange={(ev) =>
+                                  setScheduleDates((prev) => ({
+                                    ...prev,
+                                    [e.id]: ev.target.value,
+                                  }))
+                                }
+                              />
+                            )}
                           </td>
                           <td className="px-3 py-2 text-right">
-                            {canEdit && (
+                            {canEdit && e.status !== "paid" && (
                               <Button
                                 size="sm"
                                 disabled={!dateValue || scheduleMutation.isPending}
@@ -990,6 +1002,32 @@ export function PagosPageClient({ initialCompany }: Props) {
                                 }
                               >
                                 {e.status === "unscheduled" ? "Asignar fecha" : "Actualizar fecha"}
+                              </Button>
+                            )}
+                            {e.status === "paid" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const fromCal = e.paymentId
+                                    ? calendar
+                                        .flatMap((d) => d.payments)
+                                        .find((p) => p.id === e.paymentId)
+                                    : undefined;
+                                  if (fromCal) {
+                                    setDetailPayment(fromCal);
+                                    return;
+                                  }
+                                  if (e.paymentDate) {
+                                    const targetMonth = monthFromPaymentDate(e.paymentDate);
+                                    if (targetMonth) setMonth(targetMonth);
+                                  }
+                                  toast.info(
+                                    "Pago marcado — abrí el calendario en esa fecha o buscá por OC",
+                                  );
+                                }}
+                              >
+                                Ver pago
                               </Button>
                             )}
                           </td>

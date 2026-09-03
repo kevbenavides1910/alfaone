@@ -11,7 +11,7 @@ export const GET = withPermission(async (req: NextRequest) => {
   try {
     const company = req.nextUrl.searchParams.get("company")?.trim() || undefined;
     const oc = req.nextUrl.searchParams.get("oc")?.trim() || undefined;
-    const data = await listPagoProveedores(company, oc);
+    const data = await listPagoProveedores(company, oc, { includePaid: true });
     return ok(data);
   } catch (e) {
     return serverError("Error al listar pago proveedores", e);
