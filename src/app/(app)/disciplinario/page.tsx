@@ -89,7 +89,7 @@ interface ApercibimientoRow {
   evidenciaDisponible: boolean;
   firmado?: boolean;
   firmaRecibidoAt?: string | null;
-  omisiones?: { id: string; fecha: string; hora: string | null }[];
+  omisiones?: { id: string; fecha: string; hora: string | null; puntoOmitido?: string | null }[];
 }
 
 export default function DisciplinarioListPage() {
@@ -192,7 +192,18 @@ export default function DisciplinarioListPage() {
         label: "Zona / Sucursal",
         getValue: (r) => [r.zona, r.sucursal].filter(Boolean).join(" / "),
       },
-      { key: "omisiones", label: "Omisiones", align: "center", getValue: (r) => String(r.cantidadOmisiones) },
+      {
+        key: "omisiones",
+        label: "Omisiones",
+        align: "center",
+        getValue: (r) =>
+          [
+            String(r.cantidadOmisiones),
+            ...(r.omisiones ?? []).map((o) =>
+              o.hora ? `${formatDate(o.fecha)} ${o.hora}` : formatDate(o.fecha),
+            ),
+          ].join(" "),
+      },
       { key: "administrador", label: "Administrador", getValue: (r) => r.administrador ?? "" },
       {
         key: "estado",
@@ -636,7 +647,7 @@ export default function DisciplinarioListPage() {
                       codigo: 120,
                       nombre: 180,
                       zona: 120,
-                      omisiones: 100,
+                      omisiones: 220,
                       administrador: 160,
                       estado: 100,
                       vigencia: 110,
@@ -674,11 +685,18 @@ export default function DisciplinarioListPage() {
                         <div className="font-medium">{r.cantidadOmisiones}</div>
                         {r.omisiones && r.omisiones.length > 0 && (
                           <div className="mt-1 flex flex-wrap justify-center gap-1">
-                            {r.omisiones.map((o) => (
+                            {r.omisiones.map((o) => {
+                              const when = o.hora
+                                ? `${formatDate(o.fecha)} ${o.hora}`
+                                : formatDate(o.fecha);
+                              const title = o.puntoOmitido
+                                ? `${when} · ${o.puntoOmitido}`
+                                : `Omisión ${when}`;
+                              return (
                               <span
                                 key={o.id}
-                                className="inline-block rounded bg-amber-50 text-amber-800 px-1.5 py-0.5 text-[10px]"
-                                title={o.hora ? `Omisión ${formatDate(o.fecha)} ${o.hora}` : "Fecha de omisión"}
+                                className="inline-block rounded bg-amber-50 text-amber-800 px-1.5 py-0.5 text-[10px] whitespace-nowrap"
+                                title={title}
                               >
                                 {formatDate(o.fecha)}
                                 {o.hora && (
@@ -687,7 +705,8 @@ export default function DisciplinarioListPage() {
                                   </span>
                                 )}
                               </span>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </td>
