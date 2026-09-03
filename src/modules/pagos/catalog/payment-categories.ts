@@ -7,7 +7,8 @@ export type PaymentCategoryKey =
   | "PERSONAL"
   | "OPERATIVOS"
   | "ADMINISTRATIVOS"
-  | "FINANCIEROS";
+  | "FINANCIEROS"
+  | "CUOTAS_BANCARIAS";
 
 export type PaymentCategoryDef = {
   key: PaymentCategoryKey;
@@ -60,6 +61,7 @@ export const PAYMENT_CATEGORIES: PaymentCategoryDef[] = [
       { key: "PATENTES", label: "Patentes" },
       { key: "IVA", label: "IVA" },
       { key: "POLIZAS", label: "Pólizas" },
+      { key: "RENTA", label: "Renta" },
     ],
   },
   {
@@ -67,6 +69,13 @@ export const PAYMENT_CATEGORIES: PaymentCategoryDef[] = [
     label: "Financieros",
     subcategories: [
       { key: "INTERESES_CUOTAS", label: "Intereses de Cuotas Bancarias" },
+    ],
+  },
+  {
+    key: "CUOTAS_BANCARIAS",
+    label: "Cuotas bancarias",
+    subcategories: [
+      { key: "CUOTAS", label: "Cuotas" },
     ],
   },
 ];
