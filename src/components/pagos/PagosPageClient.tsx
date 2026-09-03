@@ -117,10 +117,8 @@ interface NewPaymentDraft {
   amount: string;
   paymentDate: string;
   company: string;
-  /** OC Codisa incluidas en el movimiento (se suman al monto). */
+  /** OC de Pago proveedores (cada una ya ligada a un gasto). */
   ocs: PaymentOcItem[];
-  /** Gasto de cola «Pago proveedores» ligado (crea Payment EXPENSE; solo con 1 OC). */
-  expenseId: string;
   notes: string;
   category: string;
   subcategory: string;
@@ -132,7 +130,6 @@ const EMPTY_DRAFT: NewPaymentDraft = {
   paymentDate: "",
   company: "",
   ocs: [],
-  expenseId: "",
   notes: "",
   category: "",
   subcategory: "",
@@ -144,7 +141,6 @@ function applyOcsToDraft(d: NewPaymentDraft, ocs: PaymentOcItem[]): NewPaymentDr
   const next: NewPaymentDraft = {
     ...d,
     ocs,
-    expenseId: ocs.length === 1 ? d.expenseId : "",
     amount: ocs.length > 0 ? String(total) : d.amount,
   };
   if (first?.companyCode && !d.company.trim()) {
@@ -152,13 +148,10 @@ function applyOcsToDraft(d: NewPaymentDraft, ocs: PaymentOcItem[]): NewPaymentDr
   }
   if (ocs.length > 0) {
     const nums = ocs.map((o) => o.noOrden).join(", ");
-    const proveedores = [...new Set(ocs.map((o) => o.proveedor).filter(Boolean))] as string[];
     const autoDescription =
-      proveedores.length === 1
-        ? `OC ${nums} · ${proveedores[0]}`
-        : proveedores.length > 1
-          ? `OC ${nums} · ${proveedores.join("; ")}`
-          : `OC ${nums}`;
+      ocs.length === 1
+        ? `OC ${nums} · ${ocs[0].description}`
+        : `OC ${nums} (${ocs.length} gastos proveedores)`;
     const prev = d.description.trim();
     if (!prev || /^OC\s/i.test(prev)) {
       next.description = autoDescription;
@@ -421,28 +414,24 @@ export function PagosPageClient({ initialCompany }: Props) {
       const json = await res.json();
       return (json.data ?? json) as PagoProveedorDto[];
     },
-    enabled: activeTab === "proveedores",
+    enabled: activeTab === "proveedores" || showNew,
     retry: 1,
   });
 
-  /** Ligar gasto solo con una OC (cola de proveedores es 1:1). */
-  const draftOc = draft.ocs.length === 1 ? draft.ocs[0].noOrden.trim() : "";
-  const { data: ocProveedorMatches = [], isFetching: ocProveedorFetching } = useQuery({
-    queryKey: ["pagos-proveedores-oc", draftOc, draft.company],
-    queryFn: async () => {
-      const params = new URLSearchParams({ oc: draftOc });
-      if (draft.company.trim()) params.set("company", draft.company.trim());
-      const res = await fetch(`/api/pagos/proveedores?${params}`);
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(apiErrorMessage(j, "Error al buscar gastos de la OC"));
-      }
-      const json = await res.json();
-      return (json.data ?? json) as PagoProveedorDto[];
-    },
-    enabled: showNew && draftOc.length >= 1,
-    retry: 0,
-  });
+  const proveedorOcOptions = useMemo(
+    () =>
+      proveedores
+        .filter((e) => (e.referenceNumber ?? "").trim().length > 0)
+        .map((e) => ({
+          id: e.id,
+          description: e.description,
+          amount: e.amount,
+          company: e.company,
+          referenceNumber: e.referenceNumber,
+          status: e.status,
+        })),
+    [proveedores],
+  );
 
   const proveedoresVisible = useMemo(() => {
     const q = ocDebounced.trim().toLowerCase();
@@ -452,26 +441,6 @@ export function PagosPageClient({ initialCompany }: Props) {
       return oc.includes(q) || e.description.toLowerCase().includes(q);
     });
   }, [activeTab, ocDebounced, proveedores]);
-
-  const autoLinkedOcRef = useRef("");
-  useEffect(() => {
-    if (!showNew) {
-      autoLinkedOcRef.current = "";
-      return;
-    }
-    if (ocProveedorFetching || ocProveedorMatches.length !== 1) return;
-    if (autoLinkedOcRef.current === draftOc) return;
-    autoLinkedOcRef.current = draftOc;
-    const match = ocProveedorMatches[0];
-    setDraft((d) => ({
-      ...d,
-      expenseId: match.id,
-      description: d.description.trim() ? d.description : match.description,
-      amount: d.amount.trim() ? d.amount : String(match.amount),
-      company: d.company.trim() ? d.company : match.company ?? "",
-      notes: d.notes.trim() ? d.notes : match.notes ?? "",
-    }));
-  }, [showNew, draftOc, ocProveedorFetching, ocProveedorMatches]);
 
   const scheduleMutation = useMutation({
     mutationFn: async ({ expenseId, paymentDate }: { expenseId: string; paymentDate: string }) => {
@@ -547,9 +516,14 @@ export function PagosPageClient({ initialCompany }: Props) {
       const linked =
         variables &&
         typeof variables === "object" &&
-        "expenseId" in variables &&
-        Boolean((variables as { expenseId?: string }).expenseId);
-      toast.success(linked ? "Pago ligado al gasto y agregado al calendario" : "Pago agregado");
+        "expenseIds" in variables &&
+        Array.isArray((variables as { expenseIds?: string[] }).expenseIds) &&
+        ((variables as { expenseIds?: string[] }).expenseIds?.length ?? 0) > 0;
+      toast.success(
+        linked
+          ? "Pago creado — OC ligadas y sacadas de Pago proveedores"
+          : "Pago agregado",
+      );
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error al crear pago"),
   });
@@ -637,6 +611,7 @@ export function PagosPageClient({ initialCompany }: Props) {
     );
     if (!classification.ok) return toast.error(classification.message);
     const referenceNumber = formatPaymentOcReference(draft.ocs) || undefined;
+    const expenseIds = draft.ocs.map((o) => o.expenseId);
     createMutation.mutate({
       source: "MANUAL",
       description: draft.description.trim(),
@@ -644,7 +619,7 @@ export function PagosPageClient({ initialCompany }: Props) {
       paymentDate: draft.paymentDate,
       company: draft.company || undefined,
       referenceNumber,
-      expenseId: draft.ocs.length === 1 ? draft.expenseId || undefined : undefined,
+      ...(expenseIds.length > 0 ? { expenseIds } : {}),
       notes: draft.notes || undefined,
       category: classification.category,
       subcategory: classification.subcategory,
@@ -1085,70 +1060,24 @@ export function PagosPageClient({ initialCompany }: Props) {
               <Label>Compañía</Label>
               <Input
                 value={draft.company}
-                onChange={(e) => setDraft((d) => ({ ...d, company: e.target.value, expenseId: "" }))}
+                onChange={(e) => setDraft((d) => ({ ...d, company: e.target.value }))}
                 placeholder="Ej. 01"
               />
             </div>
             <div className="grid gap-1.5">
-              <Label>N° OC (Codisa)</Label>
+              <Label>N° OC (Pago proveedores)</Label>
               <PaymentOcMultiPicker
                 items={draft.ocs}
+                options={proveedorOcOptions}
+                loading={proveedoresFetching}
                 company={draft.company || undefined}
                 onChange={(ocs) => setDraft((d) => applyOcsToDraft(d, ocs))}
               />
               <p className="text-xs text-muted-foreground">
-                Varias OC en un solo movimiento: el monto se calcula con la suma de todas.
-                {draft.ocs.length <= 1
-                  ? " Con una sola OC podés ligar un gasto de «Pago proveedores»."
-                  : " Con varias OC el pago queda manual (sin ligar gasto)."}
+                Las OC se eligen de la cola «Pago proveedores» y quedan ligadas automáticamente.
+                Varias OC = un solo movimiento con la suma; al guardar salen de la cola.
               </p>
             </div>
-            {draftOc.length >= 1 && (
-              <div className="grid gap-1.5">
-                <Label>Ligar a gasto en Pago proveedores</Label>
-                <select
-                  className="h-9 border rounded-md px-2 text-sm bg-background"
-                  value={draft.expenseId}
-                  disabled={ocProveedorFetching}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    const match = ocProveedorMatches.find((x) => x.id === id);
-                    setDraft((d) => ({
-                      ...d,
-                      expenseId: id,
-                      ...(match
-                        ? {
-                            description: d.description.trim() ? d.description : match.description,
-                            amount: d.amount.trim() ? d.amount : String(match.amount),
-                            company: d.company.trim() ? d.company : match.company ?? "",
-                            notes: d.notes.trim() ? d.notes : match.notes ?? "",
-                          }
-                        : {}),
-                    }));
-                  }}
-                >
-                  <option value="">
-                    {ocProveedorFetching
-                      ? "Buscando gastos…"
-                      : ocProveedorMatches.length === 0
-                        ? "Sin gastos pendientes con esta OC (queda solo manual)"
-                        : "No ligar — solo pago manual con esta OC"}
-                  </option>
-                  {ocProveedorMatches.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.referenceNumber || "—"} · {e.description.slice(0, 48)}
-                      {e.description.length > 48 ? "…" : ""} · {formatCurrency(e.amount)}
-                      {e.status === "scheduled_unpaid" ? " (en calendario)" : ""}
-                    </option>
-                  ))}
-                </select>
-                {draft.expenseId && (
-                  <p className="text-xs text-sky-700">
-                    Al guardar se programa ese gasto (sale de la cola de proveedores).
-                  </p>
-                )}
-              </div>
-            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
                 <Label>Categoría</Label>

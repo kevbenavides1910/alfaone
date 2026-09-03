@@ -17,6 +17,7 @@ import {
 } from "@/modules/pagos/services/pagos";
 import {
   scheduleExpensePayment,
+  createPaymentFromProveedorExpenses,
   ScheduleExpenseError,
 } from "@/modules/pagos/services/pago-proveedores";
 import { validatePaymentClassification } from "@/modules/pagos/catalog/payment-categories";
@@ -28,9 +29,9 @@ import { validatePaymentClassification } from "@/modules/pagos/catalog/payment-c
  *   GET  /api/pagos?oc=...[&company=...]
  *        → búsqueda por número de OC en todos los meses (lista plana)
  *   POST /api/pagos
- *        { source:'MANUAL', description, amount, paymentDate, company?, refType?, referenceNumber?, notes?, category?, subcategory?, expenseId? }
- *        Crear un pago manual. Si viene expenseId, programa el gasto de «Pago proveedores»
- *        (Payment EXPENSE) y lo saca de la cola. También acepta source='APEX'.
+ *        { source:'MANUAL', description, amount, paymentDate, company?, refType?, referenceNumber?, notes?, category?, subcategory?, expenseId?, expenseIds? }
+ *        Crear un pago manual. Con expenseId(s) liquida gastos de «Pago proveedores»
+ *        (uno o varios OC en un solo movimiento) y los saca de la cola. También acepta source='APEX'.
  */
 export const GET = withPermission(
 async (req: NextRequest) => {
@@ -78,6 +79,7 @@ export const POST = withPermission(
           category,
           subcategory,
           expenseId,
+          expenseIds,
         } = body;
         if (!description || typeof description !== "string") {
           return badRequest("La descripción es obligatoria");
@@ -95,34 +97,58 @@ export const POST = withPermission(
         );
         if (!classification.ok) return badRequest(classification.message);
 
-        const linkedExpenseId =
-          typeof expenseId === "string" && expenseId.trim() ? expenseId.trim() : null;
+        const linkedExpenseIds: string[] = [];
+        if (Array.isArray(expenseIds)) {
+          for (const id of expenseIds) {
+            if (typeof id === "string" && id.trim()) linkedExpenseIds.push(id.trim());
+          }
+        }
+        if (typeof expenseId === "string" && expenseId.trim()) {
+          linkedExpenseIds.push(expenseId.trim());
+        }
+        const uniqueExpenseIds = [...new Set(linkedExpenseIds)];
 
-        // Ligar a un gasto de «Pago proveedores»: crea/actualiza Payment EXPENSE.
-        if (linkedExpenseId) {
+        // Ligar a gasto(s) de «Pago proveedores»: un movimiento, salen de la cola.
+        if (uniqueExpenseIds.length > 0) {
           const userId = ctx.session.user?.id;
           if (!userId) return badRequest("Sesión sin usuario");
           try {
-            const scheduled = await scheduleExpensePayment({
-              expenseId: linkedExpenseId,
+            if (uniqueExpenseIds.length === 1) {
+              const scheduled = await scheduleExpensePayment({
+                expenseId: uniqueExpenseIds[0],
+                paymentDate: paymentDate.trim(),
+                userId,
+              });
+              const updated = await prisma.payment.update({
+                where: { id: scheduled.id },
+                data: {
+                  description: description.trim(),
+                  amount: new Prisma.Decimal(amountNum.toFixed(2)),
+                  company: company?.trim() || null,
+                  refType: refType?.trim() || null,
+                  referenceNumber: referenceNumber?.trim() || null,
+                  notes: notes || null,
+                  category: classification.category,
+                  subcategory: classification.subcategory,
+                  updatedById: userId,
+                },
+              });
+              return created(serializeSinglePayment(updated));
+            }
+
+            const consolidated = await createPaymentFromProveedorExpenses({
+              expenseIds: uniqueExpenseIds,
               paymentDate: paymentDate.trim(),
               userId,
+              description: description.trim(),
+              amount: amountNum,
+              company: company?.trim() || null,
+              notes: notes || null,
+              category: classification.category,
+              subcategory: classification.subcategory,
+              referenceNumber: referenceNumber?.trim() || null,
             });
-            const updated = await prisma.payment.update({
-              where: { id: scheduled.id },
-              data: {
-                description: description.trim(),
-                amount: new Prisma.Decimal(amountNum.toFixed(2)),
-                company: company?.trim() || null,
-                refType: refType?.trim() || null,
-                referenceNumber: referenceNumber?.trim() || null,
-                notes: notes || null,
-                category: classification.category,
-                subcategory: classification.subcategory,
-                updatedById: userId,
-              },
-            });
-            return created(serializeSinglePayment(updated));
+            return created(consolidated);
           } catch (e) {
             if (e instanceof ScheduleExpenseError) {
               if (e.code === "NOT_FOUND") return notFound(e.message);

@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
 import { parseCalendarDateInput } from "@/lib/utils/format";
 import { serializeSinglePayment, type PagoDto } from "./pagos";
@@ -31,11 +32,15 @@ function toIsoMonth(d: Date): string {
   return `${y}-${m}`;
 }
 
+function normalizeOcKey(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/^0+/, "").toLowerCase();
+}
+
 /**
  * Cola de pago a proveedores:
  * - Gastos aprobados sin Payment EXPENSE (por programar).
  * - Gastos aprobados con Payment EXPENSE impago (ya en calendario; se puede reprogramar fecha).
- * No incluye los ya marcados pagados.
+ * No incluye los ya marcados pagados ni los liquidados por un pago consolidado.
  */
 export async function listPagoProveedores(
   companyFilter?: string,
@@ -46,6 +51,7 @@ export async function listPagoProveedores(
     where: {
       approvalStatus: "APPROVED",
       deletedAt: null,
+      settledByPaymentId: null,
       ...(companyFilter ? { company: companyFilter } : {}),
       ...(oc
         ? {
@@ -116,6 +122,28 @@ export async function listPagoProveedores(
     .filter((r): r is PagoProveedorDto => r != null);
 }
 
+/**
+ * Resuelve gastos de la cola por N° OC (sin filtrar compañía).
+ * Prefiere coincidencia exacta de `referenceNumber` / `nafOcNoOrden`.
+ */
+export async function findProveedoresByOcNumbers(
+  ocNumbers: string[],
+): Promise<PagoProveedorDto[]> {
+  const cleaned = [...new Set(ocNumbers.map((o) => o.trim()).filter(Boolean))];
+  if (cleaned.length === 0) return [];
+
+  const queue = await listPagoProveedores();
+  const wanted = new Set(cleaned.map(normalizeOcKey));
+  const matched = queue.filter((e) => {
+    const ref = normalizeOcKey(e.referenceNumber);
+    return ref.length > 0 && wanted.has(ref);
+  });
+
+  const byId = new Map<string, PagoProveedorDto>();
+  for (const row of matched) byId.set(row.id, row);
+  return [...byId.values()];
+}
+
 export class ScheduleExpenseError extends Error {
   code: "NOT_FOUND" | "BAD_REQUEST" | "CONFLICT";
   constructor(code: ScheduleExpenseError["code"], message: string) {
@@ -149,6 +177,12 @@ export async function scheduleExpensePayment(input: {
   if (expense.approvalStatus !== "APPROVED") {
     throw new ScheduleExpenseError("BAD_REQUEST", "Solo se pueden programar gastos aprobados");
   }
+  if (expense.settledByPaymentId) {
+    throw new ScheduleExpenseError(
+      "CONFLICT",
+      "Este gasto ya está liquidado en otro pago del calendario",
+    );
+  }
 
   const existing = await prisma.payment.findFirst({
     where: { source: "EXPENSE", expenseId: expense.id },
@@ -164,13 +198,8 @@ export async function scheduleExpensePayment(input: {
   const newDate = toIsoDay(paymentDate);
 
   const saved = await prisma.$transaction(async (tx) => {
-    await tx.expense.update({
-      where: { id: expense.id },
-      data: { paymentDate },
-    });
-
     if (existing) {
-      return tx.payment.update({
+      const updated = await tx.payment.update({
         where: { id: existing.id },
         data: {
           paymentDate,
@@ -181,9 +210,14 @@ export async function scheduleExpensePayment(input: {
           updatedById: input.userId,
         },
       });
+      await tx.expense.update({
+        where: { id: expense.id },
+        data: { paymentDate, settledByPaymentId: updated.id },
+      });
+      return updated;
     }
 
-    return tx.payment.create({
+    const created = await tx.payment.create({
       data: {
         source: "EXPENSE",
         expenseId: expense.id,
@@ -198,6 +232,11 @@ export async function scheduleExpensePayment(input: {
         updatedById: input.userId,
       },
     });
+    await tx.expense.update({
+      where: { id: expense.id },
+      data: { paymentDate, settledByPaymentId: created.id },
+    });
+    return created;
   });
 
   if (prevDate !== newDate) {
@@ -211,6 +250,117 @@ export async function scheduleExpensePayment(input: {
       },
     });
   }
+
+  return serializeSinglePayment(saved);
+}
+
+/**
+ * Un solo movimiento de calendario que liquida uno o varios gastos de «Pago proveedores»
+ * (varias OC). Saca todos de la cola vía `settledByPaymentId`.
+ */
+export async function createPaymentFromProveedorExpenses(input: {
+  expenseIds: string[];
+  paymentDate: string;
+  userId: string;
+  description: string;
+  amount: number;
+  company?: string | null;
+  notes?: string | null;
+  category?: string | null;
+  subcategory?: string | null;
+  referenceNumber?: string | null;
+}): Promise<PagoDto> {
+  const ids = [...new Set(input.expenseIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) {
+    throw new ScheduleExpenseError("BAD_REQUEST", "Se requiere al menos un gasto de proveedores");
+  }
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw new ScheduleExpenseError("BAD_REQUEST", "El monto debe ser mayor a 0");
+  }
+  const paymentDate = parseCalendarDateInput(input.paymentDate);
+  if (!paymentDate) {
+    throw new ScheduleExpenseError("BAD_REQUEST", "Fecha de pago inválida (YYYY-MM-DD)");
+  }
+
+  const expenses = await prisma.expense.findMany({
+    where: { id: { in: ids }, deletedAt: null },
+    include: {
+      payments: {
+        where: { source: "EXPENSE" },
+        select: { id: true, paid: true },
+      },
+    },
+  });
+  if (expenses.length !== ids.length) {
+    throw new ScheduleExpenseError("NOT_FOUND", "Uno o más gastos no existen");
+  }
+  for (const expense of expenses) {
+    if (expense.approvalStatus !== "APPROVED") {
+      throw new ScheduleExpenseError(
+        "BAD_REQUEST",
+        `El gasto «${expense.description}» no está aprobado`,
+      );
+    }
+    if (expense.settledByPaymentId) {
+      throw new ScheduleExpenseError(
+        "CONFLICT",
+        `El gasto OC ${expense.referenceNumber || expense.id} ya está liquidado en otro pago`,
+      );
+    }
+    if (expense.payments.some((p) => p.paid)) {
+      throw new ScheduleExpenseError(
+        "CONFLICT",
+        `El gasto OC ${expense.referenceNumber || expense.id} ya está marcado pagado`,
+      );
+    }
+  }
+
+  const ocRefs = expenses
+    .map((e) => (e.nafOcNoOrden || e.referenceNumber || "").trim())
+    .filter(Boolean);
+  const referenceNumber =
+    input.referenceNumber?.trim() ||
+    [...new Set(ocRefs)].join(", ") ||
+    null;
+
+  const amountDec = new Prisma.Decimal(input.amount.toFixed(2));
+  const single = expenses.length === 1 ? expenses[0] : null;
+
+  const saved = await prisma.$transaction(async (tx) => {
+    const priorIds = expenses.flatMap((e) => e.payments.map((p) => p.id));
+    if (priorIds.length > 0) {
+      await tx.paymentChangeLog.deleteMany({ where: { paymentId: { in: priorIds } } });
+      await tx.payment.deleteMany({ where: { id: { in: priorIds } } });
+    }
+
+    const payment = await tx.payment.create({
+      data: {
+        source: single ? "EXPENSE" : "MANUAL",
+        expenseId: single?.id ?? null,
+        description: input.description.trim(),
+        amount: amountDec,
+        paymentDate,
+        company: input.company?.trim() || single?.company || null,
+        refType: single?.type ?? null,
+        referenceNumber,
+        notes: input.notes?.trim() || null,
+        category: input.category ?? null,
+        subcategory: input.subcategory ?? null,
+        createdById: input.userId,
+        updatedById: input.userId,
+      },
+    });
+
+    await tx.expense.updateMany({
+      where: { id: { in: ids } },
+      data: {
+        paymentDate,
+        settledByPaymentId: payment.id,
+      },
+    });
+
+    return payment;
+  });
 
   return serializeSinglePayment(saved);
 }

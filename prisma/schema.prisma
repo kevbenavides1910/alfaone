@@ -1370,6 +1370,10 @@ model Expense {
   assetsAcquired             Asset[]               @relation("AssetAcquisitionExpense")
   assetMovements             AssetMovement[]       @relation("AssetMovementExpense")
   payments                   Payment[]             @relation("PaymentExpense")
+  /// Pago del calendario que liquidó este gasto (pago manual multi-OC u otro consolidado).
+  /// Si está set, el gasto sale de la cola «Pago proveedores».
+  settledByPaymentId         String?
+  settledByPayment           Payment?              @relation("ExpenseSettledByPayment", fields: [settledByPaymentId], references: [id], onDelete: SetNull)
 
   @@index([contractId])
   @@index([positionId])
@@ -1380,6 +1384,7 @@ model Expense {
   @@index([company, approvalStatus])
   @@index([deletedAt])
   @@index([nafOcNoOrden, nafOcNoCia])
+  @@index([settledByPaymentId])
   @@map("expenses")
 }
 
@@ -6126,6 +6131,8 @@ model Payment {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   changeLogs      PaymentChangeLog[]
+  /// Gastos de «Pago proveedores» liquidados por este pago (p. ej. varias OC en un movimiento).
+  settledExpenses Expense[]     @relation("ExpenseSettledByPayment")
 
   @@unique([apexPagoId, source])
   @@index([paymentDate])

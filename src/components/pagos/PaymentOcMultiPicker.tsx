@@ -1,87 +1,60 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { formatCurrency } from "@/lib/utils/format";
-import type { OrdenCompraNafRow } from "@/modules/presupuestos/services/list-ordenes-compra-naf";
 
+/** Gasto de «Pago proveedores» seleccionado (ya ligado a una OC). */
 export type PaymentOcItem = {
+  expenseId: string;
   noOrden: string;
-  noCia: string;
   companyCode: string | null;
-  proveedor: string | null;
-  monto: number | null;
+  description: string;
+  monto: number;
+  status: "unscheduled" | "scheduled_unpaid";
+};
+
+export type ProveedorOcOption = {
+  id: string;
+  description: string;
+  amount: number;
+  company: string | null;
+  referenceNumber: string | null;
+  status: "unscheduled" | "scheduled_unpaid";
 };
 
 type PaymentOcMultiPickerProps = {
   items: PaymentOcItem[];
+  /** Cola de Pago proveedores (gastos aprobados pendientes). */
+  options: ProveedorOcOption[];
+  loading?: boolean;
   company?: string;
   onChange: (items: PaymentOcItem[]) => void;
   disabled?: boolean;
 };
 
-const ESTADO_LABEL: Record<string, string> = {
-  A: "Aprobada",
-  E: "En proceso",
-  P: "Pendiente",
-};
-
-function formatMonto(monto: number | null | undefined): string {
-  if (monto == null || !Number.isFinite(monto)) return "—";
-  return monto.toLocaleString("es-CR", { maximumFractionDigits: 2 });
+function optionOc(opt: ProveedorOcOption): string {
+  return (opt.referenceNumber ?? "").trim();
 }
 
-function formatOcLabel(row: OrdenCompraNafRow): string {
-  const estado = ESTADO_LABEL[row.estado] ?? row.estado;
-  const monto = row.monto != null ? `₡${formatMonto(row.monto)}` : null;
-  const parts = [
-    `OC ${row.noOrden}`,
-    row.companyCode || `cía ${row.noCia}`,
-    row.proveedor || null,
-    monto,
-    row.fecha || null,
-    estado || null,
-  ].filter(Boolean);
-  return parts.join(" · ");
-}
-
-function rowToItem(row: OrdenCompraNafRow): PaymentOcItem {
+function optionToItem(opt: ProveedorOcOption): PaymentOcItem | null {
+  const noOrden = optionOc(opt);
+  if (!noOrden) return null;
   return {
-    noOrden: row.noOrden,
-    noCia: row.noCia,
-    companyCode: row.companyCode,
-    proveedor: row.proveedor,
-    monto: row.monto,
+    expenseId: opt.id,
+    noOrden,
+    companyCode: opt.company,
+    description: opt.description,
+    monto: opt.amount,
+    status: opt.status,
   };
-}
-
-async function fetchOcDetalle(opts: {
-  noOrden: string;
-  noCia?: string;
-  company?: string;
-  signal?: AbortSignal;
-}): Promise<OrdenCompraNafRow> {
-  const params = new URLSearchParams({ noOrden: opts.noOrden });
-  if (opts.noCia?.trim()) params.set("noCia", opts.noCia.trim());
-  if (opts.company?.trim()) params.set("company", opts.company.trim());
-  const res = await fetch(`/api/expenses/ordenes-compra/detalle?${params}`, {
-    signal: opts.signal,
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(body?.error?.message || "No se pudo cargar el detalle de la OC");
-  }
-  return body.data as OrdenCompraNafRow;
 }
 
 export function sumPaymentOcMontos(items: PaymentOcItem[]): number {
   return Math.round(
-    items.reduce((acc, item) => {
-      if (item.monto == null || !Number.isFinite(item.monto)) return acc;
-      return acc + item.monto;
-    }, 0) * 100,
+    items.reduce((acc, item) => acc + (Number.isFinite(item.monto) ? item.monto : 0), 0) * 100,
   ) / 100;
 }
 
@@ -90,11 +63,13 @@ export function formatPaymentOcReference(items: PaymentOcItem[]): string {
 }
 
 /**
- * Selector de varias OC Codisa para un pago manual.
- * Cada selección se agrega a la lista; el monto total se calcula afuera con sumPaymentOcMontos.
+ * Selector de varias OC desde la cola «Pago proveedores».
+ * Cada fila ya es un gasto aprobado: al elegirla queda ligada automáticamente.
  */
 export function PaymentOcMultiPicker({
   items,
+  options,
+  loading,
   company,
   onChange,
   disabled,
@@ -103,44 +78,35 @@ export function PaymentOcMultiPicker({
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [rows, setRows] = useState<OrdenCompraNafRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const debounced = useDebouncedValue(query, 300);
+  const debounced = useDebouncedValue(query, 200);
 
-  const selectedKeys = new Set(items.map((item) => `${item.noCia}:${item.noOrden}`));
+  const selectedIds = useMemo(() => new Set(items.map((i) => i.expenseId)), [items]);
   const total = sumPaymentOcMontos(items);
 
-  useEffect(() => {
-    if (!open || disabled) return;
-    const q = debounced.trim();
-    const ac = new AbortController();
-    setLoading(true);
-    setError(null);
-    const params = new URLSearchParams({ limit: "25" });
-    if (q) params.set("search", q);
-    if (company?.trim()) params.set("company", company.trim());
-
-    fetch(`/api/expenses/ordenes-compra?${params}`, { signal: ac.signal })
-      .then(async (res) => {
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(body?.error?.message || "No se pudieron cargar las OC");
-        }
-        setRows((body?.data?.rows ?? []) as OrdenCompraNafRow[]);
-      })
-      .catch((e) => {
-        if (e?.name === "AbortError") return;
-        setRows([]);
-        setError(e instanceof Error ? e.message : "Error al buscar OC");
-      })
-      .finally(() => {
-        if (!ac.signal.aborted) setLoading(false);
-      });
-
-    return () => ac.abort();
-  }, [open, disabled, debounced, company]);
+  const available = useMemo(() => {
+    const q = debounced.trim().toLowerCase();
+    return options.filter((opt) => {
+      const oc = optionOc(opt);
+      if (!oc) return false;
+      if (selectedIds.has(opt.id)) return false;
+      if (company?.trim() && opt.company && opt.company !== company.trim()) {
+        // Mostrar igual si busca texto; solo priorizar misma compañía vía orden.
+      }
+      if (!q) return true;
+      return (
+        oc.toLowerCase().includes(q) ||
+        opt.description.toLowerCase().includes(q) ||
+        (opt.company ?? "").toLowerCase().includes(q)
+      );
+    }).sort((a, b) => {
+      if (company?.trim()) {
+        const aSame = a.company === company.trim() ? 0 : 1;
+        const bSame = b.company === company.trim() ? 0 : 1;
+        if (aSame !== bSame) return aSame - bSame;
+      }
+      return optionOc(a).localeCompare(optionOc(b), "es", { numeric: true });
+    });
+  }, [options, selectedIds, debounced, company]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -151,38 +117,17 @@ export function PaymentOcMultiPicker({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  async function addOc(row: OrdenCompraNafRow) {
-    const key = `${row.noCia}:${row.noOrden}`;
-    if (selectedKeys.has(key) || items.some((i) => i.noOrden === row.noOrden)) {
-      setQuery("");
-      setOpen(false);
-      return;
-    }
-
-    setAdding(true);
-    setError(null);
-    setOpen(false);
+  function addOption(opt: ProveedorOcOption) {
+    const item = optionToItem(opt);
+    if (!item || selectedIds.has(opt.id)) return;
+    if (items.some((i) => i.noOrden === item.noOrden)) return;
+    onChange([...items, item]);
     setQuery("");
-
-    let next = rowToItem(row);
-    try {
-      const detalle = await fetchOcDetalle({
-        noOrden: row.noOrden,
-        noCia: row.noCia,
-        company: row.companyCode ?? company,
-      });
-      next = rowToItem(detalle);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al cargar líneas de la OC");
-    } finally {
-      setAdding(false);
-    }
-
-    onChange([...items, next]);
+    setOpen(false);
   }
 
-  function removeOc(noOrden: string) {
-    onChange(items.filter((item) => item.noOrden !== noOrden));
+  function removeItem(expenseId: string) {
+    onChange(items.filter((item) => item.expenseId !== expenseId));
   }
 
   return (
@@ -194,12 +139,10 @@ export function PaymentOcMultiPicker({
           value={query}
           placeholder={
             items.length > 0
-              ? "Agregar otra OC…"
-              : company
-                ? "Buscar OC Codisa…"
-                : "Elegí empresa o buscá OC…"
+              ? "Agregar otra OC de proveedores…"
+              : "Buscar OC en Pago proveedores…"
           }
-          disabled={disabled || adding}
+          disabled={disabled}
           autoComplete="off"
           className="pl-9 h-9"
           onFocus={() => setOpen(true)}
@@ -222,45 +165,39 @@ export function PaymentOcMultiPicker({
           role="listbox"
         >
           {loading && (
-            <li className="px-3 py-2 text-sm text-slate-400">Buscando en Codisa…</li>
+            <li className="px-3 py-2 text-sm text-slate-400">Cargando cola de proveedores…</li>
           )}
-          {error && !loading && (
-            <li className="px-3 py-2 text-sm text-red-600">{error}</li>
-          )}
-          {!loading && !error && rows.length === 0 && (
+          {!loading && available.length === 0 && (
             <li className="px-3 py-2 text-sm text-slate-400">
-              Sin OC para «{debounced.trim() || "recientes"}»
+              {options.filter((o) => optionOc(o)).length === 0
+                ? "No hay gastos con OC en Pago proveedores"
+                : `Sin coincidencias para «${debounced.trim() || "…"}»`}
             </li>
           )}
           {!loading &&
-            rows.map((row) => {
-              const already = selectedKeys.has(`${row.noCia}:${row.noOrden}`)
-                || items.some((i) => i.noOrden === row.noOrden);
+            available.slice(0, 40).map((opt) => {
+              const oc = optionOc(opt);
               return (
                 <li
-                  key={`${row.noCia}-${row.noOrden}`}
+                  key={opt.id}
                   role="option"
-                  aria-disabled={already}
-                  className={`px-3 py-2 text-sm ${
-                    already
-                      ? "cursor-default text-slate-400"
-                      : "cursor-pointer hover:bg-slate-50"
-                  }`}
+                  className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50"
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    if (already) return;
-                    void addOc(row);
+                    addOption(opt);
                   }}
                 >
-                  <div className="font-medium font-mono">{formatOcLabel(row)}</div>
-                  {already && (
-                    <div className="text-xs text-slate-400 mt-0.5">Ya agregada</div>
-                  )}
-                  {!already && row.observaciones && (
-                    <div className="text-xs text-slate-500 line-clamp-2 mt-0.5">
-                      {row.observaciones}
-                    </div>
-                  )}
+                  <div className="font-medium font-mono">
+                    OC {oc}
+                    {opt.company ? (
+                      <span className="font-sans font-normal text-slate-500"> · {opt.company}</span>
+                    ) : null}
+                    <span className="font-sans font-normal"> · {formatCurrency(opt.amount)}</span>
+                  </div>
+                  <div className="text-xs text-slate-500 truncate mt-0.5">
+                    {opt.description}
+                    {opt.status === "scheduled_unpaid" ? " · ya en calendario" : ""}
+                  </div>
                 </li>
               );
             })}
@@ -271,7 +208,7 @@ export function PaymentOcMultiPicker({
         <ul className="space-y-1.5 rounded-md border bg-muted/30 p-2">
           {items.map((item) => (
             <li
-              key={`${item.noCia}-${item.noOrden}`}
+              key={item.expenseId}
               className="flex items-start justify-between gap-2 text-sm"
             >
               <div className="min-w-0">
@@ -284,15 +221,13 @@ export function PaymentOcMultiPicker({
                   ) : null}
                 </div>
                 <div className="text-xs text-muted-foreground truncate">
-                  {item.proveedor || "Sin proveedor"}
-                  {" · "}
-                  {item.monto != null ? formatCurrency(item.monto) : "sin monto"}
+                  {item.description} · {formatCurrency(item.monto)}
                 </div>
               </div>
               <button
                 type="button"
                 className="shrink-0 rounded p-1 text-muted-foreground hover:bg-background hover:text-destructive"
-                onClick={() => removeOc(item.noOrden)}
+                onClick={() => removeItem(item.expenseId)}
                 disabled={disabled}
                 aria-label={`Quitar OC ${item.noOrden}`}
               >
@@ -301,18 +236,17 @@ export function PaymentOcMultiPicker({
             </li>
           ))}
           <li className="flex items-center justify-between border-t pt-1.5 text-sm font-medium">
-            <span>Total OC ({items.length})</span>
+            <span>
+              Total · {items.length} OC · ligado a proveedores
+            </span>
             <span>{formatCurrency(total)}</span>
           </li>
         </ul>
       )}
 
-      {adding && (
-        <p className="text-xs text-slate-500">Cargando detalle de la OC…</p>
-      )}
-      {!items.length && !adding && (
+      {!items.length && !loading && (
         <p className="text-xs text-slate-400">
-          Podés agregar varias OC; el monto del pago se suma automáticamente.
+          Elegí OC de la cola «Pago proveedores»; al guardar salen de la cola en un solo movimiento.
         </p>
       )}
     </div>
