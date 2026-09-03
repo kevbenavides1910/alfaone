@@ -60,6 +60,7 @@ type PagoDto = {
   paid: boolean;
   paidAt: string | null;
   notes: string | null;
+  confirmedForDaily?: boolean;
 };
 
 type CalendarDay = {
@@ -200,6 +201,21 @@ function daysInGrid(month: string): { date: string; dayOfMonth: number; inMonth:
 function filterCalendar(calendar: CalendarDay[], sources: PagoFuente[]): CalendarDay[] {
   return calendar.map((day) => {
     const payments = day.payments.filter((p) => sources.includes(p.source));
+    return {
+      date: day.date,
+      payments,
+      total: payments.reduce((s, p) => s + p.amount, 0),
+      totalPaid: payments.filter((p) => p.paid).reduce((s, p) => s + p.amount, 0),
+    };
+  });
+}
+
+/** Diario / cronograma: APEX solo si ya está en verde o confirmado desde Pagos fijos. */
+function filterDailyCalendar(calendar: CalendarDay[]): CalendarDay[] {
+  return calendar.map((day) => {
+    const payments = day.payments.filter(
+      (p) => p.source !== "APEX" || p.paid || Boolean(p.confirmedForDaily),
+    );
     return {
       date: day.date,
       payments,
@@ -522,6 +538,38 @@ export function PagosPageClient({ initialCompany }: Props) {
     onError: () => toast.error("No se pudo actualizar el pago"),
   });
 
+  const confirmDailyMutation = useMutation({
+    mutationFn: async ({
+      id,
+      paymentDate,
+    }: {
+      id: string;
+      paymentDate?: string;
+    }) => {
+      const body: { confirmedForDaily: boolean; paymentDate?: string } = {
+        confirmedForDaily: true,
+      };
+      if (paymentDate) body.paymentDate = paymentDate;
+      const res = await fetch(`/api/pagos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(j, "No se pudo confirmar el pago fijo"));
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-bitacora-global"] });
+      toast.success("Confirmado — ya aparece en el calendario diario");
+    },
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : "No se pudo confirmar"),
+  });
+
   const createMutation = useMutation({
     mutationFn: async (body: object) => {
       const res = await fetch("/api/pagos", {
@@ -605,11 +653,16 @@ export function PagosPageClient({ initialCompany }: Props) {
     [calendar],
   );
 
+  const dailyCalendar = useMemo(
+    () => filterDailyCalendar(calendar),
+    [calendar],
+  );
+
   const allByDate = useMemo(() => {
     const map = new Map<string, CalendarDay>();
-    for (const day of calendar) map.set(day.date, day);
+    for (const day of dailyCalendar) map.set(day.date, day);
     return map;
-  }, [calendar]);
+  }, [dailyCalendar]);
 
   const fixedByDate = useMemo(() => {
     const map = new Map<string, CalendarDay>();
@@ -617,7 +670,7 @@ export function PagosPageClient({ initialCompany }: Props) {
     return map;
   }, [fixedCalendar]);
 
-  const activeCalendar = activeTab === "fijos" ? fixedCalendar : calendar;
+  const activeCalendar = activeTab === "fijos" ? fixedCalendar : dailyCalendar;
   const { total: monthTotal, paid: monthPaid, pending: monthPending } = useMemo(
     () => calendarTotals(activeCalendar),
     [activeCalendar],
@@ -1040,14 +1093,19 @@ export function PagosPageClient({ initialCompany }: Props) {
           </TabsContent>
           <TabsContent value="fijos" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
             <p className="text-xs text-muted-foreground mb-3">
-              Gastos fijos recurrentes sincronizados desde Oracle (APEX). El estado pagado/pendiente se guarda localmente.
+              Gastos fijos desde Oracle (APEX). No entran al calendario diario hasta que confirmés la fecha
+              («Confirmar en diario»). Los ya marcados en verde se mantienen en el diario.
             </p>
             <CalendarGrid
               month={month}
               today={today}
               byDate={fixedByDate}
               canEdit={canEdit}
+              showConfirmDaily
               onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
+              onConfirmDaily={(id, paymentDate) =>
+                confirmDailyMutation.mutate({ id, paymentDate })
+              }
               onDelete={(id) => deleteMutation.mutate(id)}
               onViewDetail={setDetailPayment}
               onViewDay={setDayDialog}
@@ -1057,7 +1115,7 @@ export function PagosPageClient({ initialCompany }: Props) {
             <CronogramaGrid
               month={month}
               today={today}
-              calendar={calendar}
+              calendar={dailyCalendar}
               canEdit={canEdit}
               onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
               onDelete={(id) => deleteMutation.mutate(id)}
@@ -1322,13 +1380,15 @@ function monthOptions(): [string, string][] {
 }
 
 function CalendarGrid({
-  month, today, byDate, canEdit, onTogglePaid, onDelete, onViewDetail, onViewDay,
+  month, today, byDate, canEdit, showConfirmDaily, onTogglePaid, onConfirmDaily, onDelete, onViewDetail, onViewDay,
 }: {
   month: string;
   today: string;
   byDate: Map<string, CalendarDay>;
   canEdit: boolean;
+  showConfirmDaily?: boolean;
   onTogglePaid: (id: string, paid: boolean) => void;
+  onConfirmDaily?: (id: string, paymentDate: string) => void;
   onDelete: (id: string) => void;
   onViewDetail: (p: PagoDto) => void;
   onViewDay: (day: CalendarDay) => void;
@@ -1401,7 +1461,9 @@ function CalendarGrid({
                           key={p.id}
                           p={p}
                           canEdit={canEdit}
+                          showConfirmDaily={showConfirmDaily}
                           onTogglePaid={onTogglePaid}
+                          onConfirmDaily={onConfirmDaily}
                           onDelete={onDelete}
                           onViewDetail={onViewDetail}
                         />
@@ -1440,20 +1502,33 @@ function CalendarGrid({
 }
 
 function PaymentRow({
-  p, canEdit, onTogglePaid, onDelete, onViewDetail, compact,
+  p, canEdit, showConfirmDaily, onTogglePaid, onConfirmDaily, onDelete, onViewDetail, compact,
 }: {
   p: PagoDto;
   canEdit: boolean;
+  showConfirmDaily?: boolean;
   onTogglePaid: (id: string, paid: boolean) => void;
+  onConfirmDaily?: (id: string, paymentDate: string) => void;
   onDelete: (id: string) => void;
   onViewDetail: (p: PagoDto) => void;
   compact?: boolean;
 }) {
+  const needsConfirm =
+    showConfirmDaily &&
+    p.source === "APEX" &&
+    !p.paid &&
+    !p.confirmedForDaily &&
+    Boolean(onConfirmDaily);
+
   return (
     <div
       className={[
         "group relative rounded px-1 py-0.5 text-[11px] leading-tight",
-        p.paid ? "bg-emerald-50 text-emerald-800" : "bg-background hover:bg-muted",
+        p.paid
+          ? "bg-emerald-50 text-emerald-800"
+          : p.confirmedForDaily
+            ? "bg-sky-50 text-sky-900"
+            : "bg-background hover:bg-muted",
       ].join(" ")}
       title={`${p.description} — ${formatCurrency(p.amount)}`}
     >
@@ -1507,6 +1582,21 @@ function PaymentRow({
             : ""}
         </span>
       </button>
+      {needsConfirm && (
+        <button
+          type="button"
+          className="mt-0.5 ml-4 text-[10px] font-semibold text-sky-700 hover:underline"
+          onClick={(e) => {
+            e.stopPropagation();
+            onConfirmDaily?.(p.id, p.paymentDate.slice(0, 10));
+          }}
+        >
+          Confirmar en diario
+        </button>
+      )}
+      {showConfirmDaily && p.confirmedForDaily && !p.paid && (
+        <div className="mt-0.5 ml-4 text-[10px] text-sky-700">En diario</div>
+      )}
       {canEdit && p.source === "MANUAL" && (
         <button
           className="absolute top-0.5 right-5 hidden group-hover:inline-flex text-destructive"
@@ -1635,6 +1725,39 @@ function PaymentDetailDialog({
       queryClient.invalidateQueries({ queryKey: ["pagos-bitacora-global"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error al guardar"),
+  });
+
+  const confirmDailyMutation = useMutation({
+    mutationFn: async () => {
+      if (!payment) throw new Error("Sin pago");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) {
+        throw new Error("Fecha de pago inválida");
+      }
+      const res = await fetch(`/api/pagos/${payment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirmedForDaily: true,
+          paymentDate,
+          amount: Number(amount),
+          notes,
+          description: description.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.message || "No se pudo confirmar");
+      }
+      const json = await res.json();
+      return (json.data ?? json) as PagoDto;
+    },
+    onSuccess: (p) => {
+      toast.success("Confirmado — ya aparece en el calendario diario");
+      onUpdated(p);
+      queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-bitacora", p.id] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Error al confirmar"),
   });
 
   const p = payment;
@@ -1865,9 +1988,18 @@ function PaymentDetailDialog({
           </Tabs>
         )}
 
-        <DialogFooter className="shrink-0 gap-2 sm:gap-0 pt-3">
+        <DialogFooter className="shrink-0 gap-2 sm:gap-0 pt-3 flex-wrap">
           {p && canEdit && tab === "detalle" && (
             <>
+              {p.source === "APEX" && !p.paid && !p.confirmedForDaily && (
+                <Button
+                  variant="secondary"
+                  onClick={() => confirmDailyMutation.mutate()}
+                  disabled={confirmDailyMutation.isPending}
+                >
+                  Confirmar en diario
+                </Button>
+              )}
               <Button
                 variant={p.paid ? "outline" : "default"}
                 onClick={() => onTogglePaid(p.id, !p.paid)}

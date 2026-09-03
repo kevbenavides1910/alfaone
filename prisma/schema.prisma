@@ -6123,6 +6123,9 @@ model Payment {
   /// Estado de pago, persistido aquí.
   paid            Boolean       @default(false)
   paidAt          DateTime?
+  /// Si source=APEX: confirmado desde «Pagos fijos» para aparecer en el calendario diario.
+  /// Los ya marcados pagados (verde) se tratan como confirmados.
+  confirmedForDaily Boolean     @default(false)
   notes           String?       @db.Text
   createdById     String?
   createdBy       User?         @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -6138,6 +6141,7 @@ model Payment {
   @@index([paymentDate])
   @@index([company])
   @@index([paid])
+  @@index([confirmedForDaily])
   @@index([category, subcategory])
   @@map("payments")
 }

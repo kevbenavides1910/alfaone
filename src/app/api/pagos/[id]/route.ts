@@ -6,7 +6,7 @@ import { updatePaymentWithAudit } from "@/modules/pagos/services/payment-update"
 
 /**
  * API de un pago individual.
- *   PATCH /api/pagos/[id]  { paid?, amount?, paymentDate?, notes?, description?, referenceNumber? }
+ *   PATCH /api/pagos/[id]  { paid?, amount?, paymentDate?, notes?, description?, referenceNumber?, confirmedForDaily? }
  *   DELETE /api/pagos/[id] → elimina un pago (solo MANUAL)
  */
 type Ctx = { params: Promise<{ id: string }> };
@@ -33,6 +33,8 @@ export const PATCH = withPermission(
             body.subcategory === null || typeof body.subcategory === "string"
               ? body.subcategory
               : undefined,
+          confirmedForDaily:
+            typeof body.confirmedForDaily === "boolean" ? body.confirmedForDaily : undefined,
         },
         userId,
       );

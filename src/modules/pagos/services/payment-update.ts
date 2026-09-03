@@ -31,6 +31,8 @@ export type UpdatePaymentInput = {
   paymentDate?: string; // YYYY-MM-DD
   category?: string | null;
   subcategory?: string | null;
+  /** Confirmar gasto fijo APEX para el calendario diario. */
+  confirmedForDaily?: boolean;
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -42,6 +44,7 @@ const FIELD_LABELS: Record<string, string> = {
   referenceNumber: "Número de OC",
   category: "Categoría",
   subcategory: "Subcategoría",
+  confirmedForDaily: "Confirmado en diario",
 };
 
 function formatStoredAmount(n: Prisma.Decimal | number): string {
@@ -146,10 +149,24 @@ export async function updatePaymentWithAudit(
   if (typeof input.paid === "boolean" && input.paid !== payment.paid) {
     data.paid = input.paid;
     data.paidAt = input.paid ? new Date() : null;
+    // Marcar verde implica que ya está en el diario.
+    if (input.paid) data.confirmedForDaily = true;
     logs.push({
       field: "paid",
       previousValue: String(payment.paid),
       newValue: String(input.paid),
+    });
+  }
+
+  if (
+    typeof input.confirmedForDaily === "boolean" &&
+    input.confirmedForDaily !== payment.confirmedForDaily
+  ) {
+    data.confirmedForDaily = input.confirmedForDaily;
+    logs.push({
+      field: "confirmedForDaily",
+      previousValue: String(payment.confirmedForDaily),
+      newValue: String(input.confirmedForDaily),
     });
   }
 

@@ -197,6 +197,7 @@ export const POST = withPermission(
             paymentDate: parseDate(body.paymentDate) ?? new Date(),
             company: body.company?.trim() || null,
             refType: body.refType?.trim() || null,
+            confirmedForDaily: false,
           },
         });
         return created(serializeSinglePayment(payment));
