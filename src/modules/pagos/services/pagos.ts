@@ -49,6 +49,8 @@ export type PagoDto = {
   paid: boolean;
   paidAt: string | null;
   notes: string | null;
+  /** APEX confirmado para el calendario diario (o ya pagado en verde). */
+  confirmedForDaily: boolean;
 };
 
 export type CalendarDay = {
@@ -75,6 +77,7 @@ export function serializeSinglePayment(p: {
   paid: boolean;
   paidAt: Date | null;
   notes: string | null;
+  confirmedForDaily?: boolean;
 }): PagoDto {
   return {
     id: p.id,
@@ -93,6 +96,7 @@ export function serializeSinglePayment(p: {
     paid: p.paid,
     paidAt: p.paidAt ? p.paidAt.toISOString() : null,
     notes: p.notes,
+    confirmedForDaily: Boolean(p.confirmedForDaily) || p.paid,
   };
 }
 
@@ -221,6 +225,8 @@ export async function syncPaymentsForYear(options?: {
  * Sincroniza metadatos de Payments EXPENSE ya existentes para el mes.
  * No crea pagos nuevos: los gastos aprobados entran al calendario solo cuando
  * se les asigna fecha en Pagos → Pago proveedores.
+ * Los EXPENSE ya marcados pagados (verde) se preservan; los impagos del sync
+ * automático viejo se sacaron del calendario (cola proveedores).
  */
 async function syncExpensesForMonth(from: Date, to: Date): Promise<number> {
   const payments = await prisma.payment.findMany({
@@ -314,6 +320,8 @@ async function syncApexForMonth(
         refType: b?.tipo,
         paid: atendido,
         paidAt: atendido ? paymentDate : null,
+        // Solo los ya atendidos en Oracle entran al diario; el resto se confirma en «Pagos fijos».
+        confirmedForDaily: atendido,
       },
     });
     created += 1;
