@@ -6,6 +6,8 @@
 #   npm run ops:prebuild -- --bg      # HEAD, background
 #   bash scripts/ops/prebuild-image-sha.sh <sha> [--bg]
 #
+# Construye desde un git worktree del SHA (no usa WIP del working tree).
+#
 # Env:
 #   ALFAONE_PREBUILD=0          → no-op
 #   DEPLOY_GHCR_PUSH=0|1        → push a GHCR (default 0 en prebuild)
@@ -44,6 +46,7 @@ DEFAULT_IMAGE_REPO="${GHCR_IMAGE_REPO:-ghcr.io/kevbenavides1910/alfaone}"
 IMAGE_SHA="${DEFAULT_IMAGE_REPO}:${SHA}"
 LOG_DIR="${ALFAONE_PREBUILD_LOG_DIR:-$ROOT/.deploy-logs}"
 LOG="${ALFAONE_PREBUILD_LOG:-$LOG_DIR/prebuild-${SHORT_SHA}.log}"
+WT_DIR="${ALFAONE_PREBUILD_WORKTREE:-/tmp/alfaone-prebuild-wt-${SHORT_SHA}}"
 
 if docker image inspect "$IMAGE_SHA" >/dev/null 2>&1; then
   echo "OK: imagen ya lista $IMAGE_SHA (prebuild no-op)"
@@ -52,25 +55,78 @@ fi
 
 run_build() {
   export DEPLOY_GHCR_PUSH="${DEPLOY_GHCR_PUSH:-0}"
-  HEAD="$(git rev-parse HEAD)"
-  if [ "$SHA" != "$HEAD" ]; then
-    echo "SKIP: prebuild solo aplica a HEAD (pedido=$SHORT_SHA head=$(git rev-parse --short HEAD))."
-    exit 0
-  fi
-  if [ -n "$(git status --porcelain)" ]; then
-    echo "WARN: árbol sucio — prebuild usa el árbol de trabajo; preferible commit limpio."
-  fi
-  echo "== Prebuild imagen $SHORT_SHA =="
+  echo "== Prebuild imagen $SHORT_SHA (worktree limpio) =="
   echo "image=$IMAGE_SHA"
+  echo "worktree=$WT_DIR"
   echo "log=$LOG"
-  bash "$ROOT/scripts/ops/build-ghcr-image-local.sh"
+
+  # Limpiar worktree previo colgado
+  if [ -d "$WT_DIR" ]; then
+    git worktree remove --force "$WT_DIR" 2>/dev/null || rm -rf "$WT_DIR"
+  fi
+  git worktree add --detach "$WT_DIR" "$SHA"
+
+  cleanup() {
+    git -C "$ROOT" worktree remove --force "$WT_DIR" 2>/dev/null || rm -rf "$WT_DIR"
+  }
+  trap cleanup EXIT
+
+  # Reutilizar lock/cache del build canónico, pero con contexto = worktree
+  BUILD_LOCK="${ALFAONE_BUILD_LOCK_FILE:-/tmp/presupuestos-alfa-build.lock}"
+  START=$(date +%s)
+  _build_once() {
+    (
+      cd "$WT_DIR"
+      DOCKER_BUILDKIT=1 docker buildx build --builder default -f Dockerfile \
+        -t "$IMAGE_SHA" \
+        -t "${DEFAULT_IMAGE_REPO}:${SHORT_SHA}" \
+        -t "${DEFAULT_IMAGE_REPO}:latest" \
+        --load .
+    )
+  }
+
+  mkdir -p "$(dirname "$BUILD_LOCK")"
+  exec 8>"$BUILD_LOCK"
+  if flock -n 8; then
+    if docker image inspect "$IMAGE_SHA" >/dev/null 2>&1; then
+      echo "OK: otro proceso terminó el build"
+    else
+      _build_once
+    fi
+  else
+    echo "Build en curso — espero imagen $SHORT_SHA…"
+    waited=0
+    while [ "$waited" -lt "${ALFAONE_BUILD_WAIT_SECONDS:-420}" ]; do
+      if docker image inspect "$IMAGE_SHA" >/dev/null 2>&1; then
+        echo "OK: imagen lista tras ${waited}s"
+        break
+      fi
+      sleep 2
+      waited=$((waited + 2))
+    done
+    flock 8
+    if ! docker image inspect "$IMAGE_SHA" >/dev/null 2>&1; then
+      _build_once
+    fi
+  fi
+
+  ELAPSED=$(( $(date +%s) - START ))
+  echo "elapsed_build=${ELAPSED}"
+
+  if [ "${DEPLOY_GHCR_PUSH:-0}" = "1" ] || [ "${DEPLOY_GHCR_PUSH:-0}" = "true" ]; then
+    echo "== Push GHCR (background) =="
+    ( docker push "$IMAGE_SHA" || true
+      docker push "${DEFAULT_IMAGE_REPO}:${SHORT_SHA}" || true
+      docker push "${DEFAULT_IMAGE_REPO}:latest" || true
+    ) >/tmp/alfaone-ghcr-push.log 2>&1 &
+  fi
+
   echo "OK: prebuild listo $IMAGE_SHA"
 }
 
 mkdir -p "$(dirname "$LOG")"
 
 if [ "$BG" = "1" ]; then
-  # Evitar dos prebuilds simultáneos del mismo SHA
   LOCK="/tmp/alfaone-prebuild-${SHORT_SHA}.lock"
   if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
     echo "OK: prebuild ya en curso para $SHORT_SHA (pid=$(cat "$LOCK"))"
