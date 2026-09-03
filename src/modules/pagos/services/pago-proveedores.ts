@@ -37,18 +37,34 @@ function toIsoMonth(d: Date): string {
  * - Gastos aprobados con Payment EXPENSE impago (ya en calendario; se puede reprogramar fecha).
  * No incluye los ya marcados pagados.
  */
-export async function listPagoProveedores(companyFilter?: string): Promise<PagoProveedorDto[]> {
+export async function listPagoProveedores(
+  companyFilter?: string,
+  ocFilter?: string,
+): Promise<PagoProveedorDto[]> {
+  const oc = ocFilter?.trim() || "";
   const rows = await prisma.expense.findMany({
     where: {
       approvalStatus: "APPROVED",
       deletedAt: null,
       ...(companyFilter ? { company: companyFilter } : {}),
-      OR: [
-        { payments: { none: { source: "EXPENSE" } } },
+      ...(oc
+        ? {
+            OR: [
+              { referenceNumber: { contains: oc, mode: "insensitive" } },
+              { nafOcNoOrden: { contains: oc, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+      AND: [
         {
-          payments: {
-            some: { source: "EXPENSE", paid: false },
-          },
+          OR: [
+            { payments: { none: { source: "EXPENSE" } } },
+            {
+              payments: {
+                some: { source: "EXPENSE", paid: false },
+              },
+            },
+          ],
         },
       ],
     },

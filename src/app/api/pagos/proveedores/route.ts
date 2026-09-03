@@ -10,9 +10,10 @@ import { listPagoProveedores } from "@/modules/pagos/services/pago-proveedores";
 export const GET = withPermission(async (req: NextRequest) => {
   try {
     const company = req.nextUrl.searchParams.get("company")?.trim() || undefined;
-    const data = await listPagoProveedores(company);
+    const oc = req.nextUrl.searchParams.get("oc")?.trim() || undefined;
+    const data = await listPagoProveedores(company, oc);
     return ok(data);
   } catch (e) {
     return serverError("Error al listar pago proveedores", e);
   }
-}, "pagos.calendario");
+}, "pagos.calendario", "view");

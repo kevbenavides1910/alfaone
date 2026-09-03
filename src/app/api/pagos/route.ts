@@ -2,12 +2,23 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
 import { withPermission } from "@/lib/permissions/middleware";
-import { ok, created, badRequest, serverError } from "@/lib/api/response";
+import {
+  ok,
+  created,
+  badRequest,
+  conflict,
+  notFound,
+  serverError,
+} from "@/lib/api/response";
 import {
   getCalendarMonth,
   searchPaymentsByOc,
   serializeSinglePayment,
 } from "@/modules/pagos/services/pagos";
+import {
+  scheduleExpensePayment,
+  ScheduleExpenseError,
+} from "@/modules/pagos/services/pago-proveedores";
 import { validatePaymentClassification } from "@/modules/pagos/catalog/payment-categories";
 
 /**
@@ -17,8 +28,9 @@ import { validatePaymentClassification } from "@/modules/pagos/catalog/payment-c
  *   GET  /api/pagos?oc=...[&company=...]
  *        → búsqueda por número de OC en todos los meses (lista plana)
  *   POST /api/pagos
- *        { source:'MANUAL', description, amount, paymentDate, company?, refType?, referenceNumber?, notes?, category?, subcategory? }
- *        Crear un pago manual. También acepta source='APEX' con apexPagoId (re-sync de un gasto fijo).
+ *        { source:'MANUAL', description, amount, paymentDate, company?, refType?, referenceNumber?, notes?, category?, subcategory?, expenseId? }
+ *        Crear un pago manual. Si viene expenseId, programa el gasto de «Pago proveedores»
+ *        (Payment EXPENSE) y lo saca de la cola. También acepta source='APEX'.
  */
 export const GET = withPermission(
 async (req: NextRequest) => {
@@ -49,13 +61,24 @@ async (req: NextRequest) => {
 );
 
 export const POST = withPermission(
-  async (req: NextRequest) => {
+  async (req: NextRequest, ctx: { session: import("next-auth").Session }) => {
     try {
       const body = await req.json();
       const source: string = body.source ?? "MANUAL";
 
       if (source === "MANUAL") {
-        const { description, amount, paymentDate, company, refType, referenceNumber, notes, category, subcategory } = body;
+        const {
+          description,
+          amount,
+          paymentDate,
+          company,
+          refType,
+          referenceNumber,
+          notes,
+          category,
+          subcategory,
+          expenseId,
+        } = body;
         if (!description || typeof description !== "string") {
           return badRequest("La descripción es obligatoria");
         }
@@ -71,6 +94,44 @@ export const POST = withPermission(
           typeof subcategory === "string" || subcategory === null ? subcategory : undefined,
         );
         if (!classification.ok) return badRequest(classification.message);
+
+        const linkedExpenseId =
+          typeof expenseId === "string" && expenseId.trim() ? expenseId.trim() : null;
+
+        // Ligar a un gasto de «Pago proveedores»: crea/actualiza Payment EXPENSE.
+        if (linkedExpenseId) {
+          const userId = ctx.session.user?.id;
+          if (!userId) return badRequest("Sesión sin usuario");
+          try {
+            const scheduled = await scheduleExpensePayment({
+              expenseId: linkedExpenseId,
+              paymentDate: paymentDate.trim(),
+              userId,
+            });
+            const updated = await prisma.payment.update({
+              where: { id: scheduled.id },
+              data: {
+                description: description.trim(),
+                amount: new Prisma.Decimal(amountNum.toFixed(2)),
+                company: company?.trim() || null,
+                refType: refType?.trim() || null,
+                referenceNumber: referenceNumber?.trim() || null,
+                notes: notes || null,
+                category: classification.category,
+                subcategory: classification.subcategory,
+                updatedById: userId,
+              },
+            });
+            return created(serializeSinglePayment(updated));
+          } catch (e) {
+            if (e instanceof ScheduleExpenseError) {
+              if (e.code === "NOT_FOUND") return notFound(e.message);
+              if (e.code === "CONFLICT") return conflict(e.message);
+              return badRequest(e.message);
+            }
+            throw e;
+          }
+        }
 
         const payment = await prisma.payment.create({
           data: {

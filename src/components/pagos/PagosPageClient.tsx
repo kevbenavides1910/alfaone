@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, Fragment } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare, ScrollText, Search, X, Building2 } from "lucide-react";
 import Link from "next/link";
@@ -26,6 +26,16 @@ import {
   subcategoriesFor,
   validatePaymentClassification,
 } from "@/modules/pagos/catalog/payment-categories";
+import { ExpenseOcPicker } from "@/components/expenses/ExpenseOcPicker";
+import type { OrdenCompraNafRow } from "@/modules/presupuestos/services/list-ordenes-compra-naf";
+
+function apiErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") return fallback;
+  const p = payload as { message?: unknown; error?: { message?: unknown } };
+  if (typeof p.error?.message === "string" && p.error.message.trim()) return p.error.message;
+  if (typeof p.message === "string" && p.message.trim()) return p.message;
+  return fallback;
+}
 
 type PagoFuente = "EXPENSE" | "APEX" | "MANUAL";
 
@@ -104,6 +114,8 @@ interface NewPaymentDraft {
   paymentDate: string;
   company: string;
   referenceNumber: string;
+  /** Gasto de cola «Pago proveedores» ligado (crea Payment EXPENSE). */
+  expenseId: string;
   notes: string;
   category: string;
   subcategory: string;
@@ -115,6 +127,7 @@ const EMPTY_DRAFT: NewPaymentDraft = {
   paymentDate: "",
   company: "",
   referenceNumber: "",
+  expenseId: "",
   notes: "",
   category: "",
   subcategory: "",
@@ -358,6 +371,7 @@ export function PagosPageClient({ initialCompany }: Props) {
     data: proveedores = [],
     isFetching: proveedoresFetching,
     isError: proveedoresError,
+    error: proveedoresErr,
     refetch: refetchProveedores,
   } = useQuery({
     queryKey: ["pagos-proveedores", company],
@@ -368,13 +382,62 @@ export function PagosPageClient({ initialCompany }: Props) {
       const res = await fetch(`/api/pagos/proveedores${qs ? `?${qs}` : ""}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || "Error al cargar pago proveedores");
+        throw new Error(apiErrorMessage(j, "Error al cargar pago proveedores"));
       }
       const json = await res.json();
       return (json.data ?? json) as PagoProveedorDto[];
     },
     enabled: activeTab === "proveedores",
+    retry: 1,
   });
+
+  const draftOc = draft.referenceNumber.trim();
+  const { data: ocProveedorMatches = [], isFetching: ocProveedorFetching } = useQuery({
+    queryKey: ["pagos-proveedores-oc", draftOc, draft.company],
+    queryFn: async () => {
+      const params = new URLSearchParams({ oc: draftOc });
+      if (draft.company.trim()) params.set("company", draft.company.trim());
+      const res = await fetch(`/api/pagos/proveedores?${params}`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(j, "Error al buscar gastos de la OC"));
+      }
+      const json = await res.json();
+      return (json.data ?? json) as PagoProveedorDto[];
+    },
+    enabled: showNew && draftOc.length >= 1,
+    retry: 0,
+  });
+
+  const proveedoresVisible = useMemo(() => {
+    const q = ocDebounced.trim().toLowerCase();
+    if (activeTab !== "proveedores" || q.length < 2) return proveedores;
+    return proveedores.filter((e) => {
+      const oc = (e.referenceNumber ?? "").toLowerCase();
+      return oc.includes(q) || e.description.toLowerCase().includes(q);
+    });
+  }, [activeTab, ocDebounced, proveedores]);
+
+  const autoLinkedOcRef = useRef("");
+  useEffect(() => {
+    if (!showNew) {
+      autoLinkedOcRef.current = "";
+      return;
+    }
+    if (ocProveedorFetching || ocProveedorMatches.length !== 1) return;
+    if (autoLinkedOcRef.current === draftOc) return;
+    autoLinkedOcRef.current = draftOc;
+    const match = ocProveedorMatches[0];
+    setDraft((d) => ({
+      ...d,
+      expenseId: match.id,
+      description: d.description.trim() ? d.description : match.description,
+      amount: d.amount.trim() ? d.amount : String(match.amount),
+      company: d.company.trim() ? d.company : match.company ?? "",
+      referenceNumber: match.referenceNumber || d.referenceNumber,
+      notes: d.notes.trim() ? d.notes : match.notes ?? "",
+    }));
+  }, [showNew, draftOc, ocProveedorFetching, ocProveedorMatches]);
 
   const scheduleMutation = useMutation({
     mutationFn: async ({ expenseId, paymentDate }: { expenseId: string; paymentDate: string }) => {
@@ -437,16 +500,22 @@ export function PagosPageClient({ initialCompany }: Props) {
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || "Error al crear pago");
+        throw new Error(apiErrorMessage(j, "Error al crear pago"));
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_json, variables) => {
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
       queryClient.invalidateQueries({ queryKey: ["pagos-oc-search"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-proveedores"] });
       setShowNew(false);
       setDraft(EMPTY_DRAFT);
-      toast.success("Pago agregado");
+      const linked =
+        variables &&
+        typeof variables === "object" &&
+        "expenseId" in variables &&
+        Boolean((variables as { expenseId?: string }).expenseId);
+      toast.success(linked ? "Pago ligado al gasto y agregado al calendario" : "Pago agregado");
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error al crear pago"),
   });
@@ -540,6 +609,7 @@ export function PagosPageClient({ initialCompany }: Props) {
       paymentDate: draft.paymentDate,
       company: draft.company || undefined,
       referenceNumber: draft.referenceNumber || undefined,
+      expenseId: draft.expenseId || undefined,
       notes: draft.notes || undefined,
       category: classification.category,
       subcategory: classification.subcategory,
@@ -568,7 +638,12 @@ export function PagosPageClient({ initialCompany }: Props) {
             >
               {syncYearMutation.isPending ? "Sincronizando…" : "Traer meses anteriores"}
             </Button>
-            <Button onClick={() => setShowNew(true)}>
+            <Button
+              onClick={() => {
+                setDraft({ ...EMPTY_DRAFT, paymentDate: dayLabel(new Date()) });
+                setShowNew(true);
+              }}
+            >
               <Plus className="h-4 w-4 mr-1" /> Agregar pago manual
             </Button>
           </div>
@@ -645,7 +720,10 @@ export function PagosPageClient({ initialCompany }: Props) {
             ) : (
               <span className="text-muted-foreground">
                 Pendientes de fecha:{" "}
-                <span className="font-semibold text-foreground">{proveedores.length}</span>
+                <span className="font-semibold text-foreground">{proveedoresVisible.length}</span>
+                {ocDebounced.trim().length >= 2 && proveedoresVisible.length !== proveedores.length && (
+                  <span className="text-xs ml-1">de {proveedores.length}</span>
+                )}
               </span>
             )
           ) : (
@@ -761,16 +839,21 @@ export function PagosPageClient({ initialCompany }: Props) {
             </p>
             {proveedoresError ? (
               <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive flex flex-wrap items-center gap-3">
-                <span>No se pudo cargar la cola de proveedores.</span>
+                <span>
+                  No se pudo cargar la cola de proveedores
+                  {proveedoresErr instanceof Error ? `: ${proveedoresErr.message}` : "."}
+                </span>
                 <Button variant="outline" size="sm" onClick={() => refetchProveedores()}>
                   Reintentar
                 </Button>
               </div>
             ) : proveedoresFetching && proveedores.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center animate-pulse">Cargando…</p>
-            ) : proveedores.length === 0 ? (
+            ) : proveedoresVisible.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
-                No hay gastos pendientes de programar ni de pagar.
+                {proveedores.length === 0
+                  ? "No hay gastos pendientes de programar ni de pagar."
+                  : "Ningún gasto coincide con la búsqueda de OC."}
               </p>
             ) : (
               <div className="overflow-x-auto rounded-md border">
@@ -788,7 +871,7 @@ export function PagosPageClient({ initialCompany }: Props) {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {proveedores.map((e) => {
+                    {proveedoresVisible.map((e) => {
                       const dateValue = scheduleDates[e.id] ?? e.paymentDate ?? "";
                       return (
                         <tr key={e.id} className="align-middle">
@@ -924,7 +1007,7 @@ export function PagosPageClient({ initialCompany }: Props) {
 
       {/* Dialog nuevo pago */}
       <Dialog open={showNew} onOpenChange={setShowNew}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Agregar pago manual</DialogTitle>
           </DialogHeader>
@@ -958,24 +1041,94 @@ export function PagosPageClient({ initialCompany }: Props) {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label>Compañía</Label>
-                <Input
-                  value={draft.company}
-                  onChange={(e) => setDraft((d) => ({ ...d, company: e.target.value }))}
-                  placeholder="Ej. 01"
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Referencia</Label>
-                <Input
-                  value={draft.referenceNumber}
-                  onChange={(e) => setDraft((d) => ({ ...d, referenceNumber: e.target.value }))}
-                  placeholder="Factura, proveedor…"
-                />
-              </div>
+            <div className="grid gap-1.5">
+              <Label>Compañía</Label>
+              <Input
+                value={draft.company}
+                onChange={(e) => setDraft((d) => ({ ...d, company: e.target.value, expenseId: "" }))}
+                placeholder="Ej. 01"
+              />
             </div>
+            <div className="grid gap-1.5">
+              <Label>N° OC (Codisa)</Label>
+              <ExpenseOcPicker
+                value={draft.referenceNumber}
+                company={draft.company || undefined}
+                onChange={(noOrden, row?: OrdenCompraNafRow | null) => {
+                  setDraft((d) => {
+                    const next = {
+                      ...d,
+                      referenceNumber: noOrden,
+                      expenseId: "",
+                    };
+                    if (row) {
+                      if (row.companyCode && !d.company.trim()) {
+                        next.company = row.companyCode;
+                      }
+                      if (row.monto != null && Number.isFinite(row.monto) && !d.amount.trim()) {
+                        next.amount = String(row.monto);
+                      }
+                      if (row.proveedor && !d.description.trim()) {
+                        next.description = `OC ${row.noOrden} · ${row.proveedor}`;
+                      } else if (!d.description.trim()) {
+                        next.description = `OC ${row.noOrden}`;
+                      }
+                    }
+                    return next;
+                  });
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Si la OC coincide con un gasto en «Pago proveedores», podés ligarlo para que salga de la cola y entre al calendario.
+              </p>
+            </div>
+            {draftOc.length >= 1 && (
+              <div className="grid gap-1.5">
+                <Label>Ligar a gasto en Pago proveedores</Label>
+                <select
+                  className="h-9 border rounded-md px-2 text-sm bg-background"
+                  value={draft.expenseId}
+                  disabled={ocProveedorFetching}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const match = ocProveedorMatches.find((x) => x.id === id);
+                    setDraft((d) => ({
+                      ...d,
+                      expenseId: id,
+                      ...(match
+                        ? {
+                            description: d.description.trim() ? d.description : match.description,
+                            amount: d.amount.trim() ? d.amount : String(match.amount),
+                            company: d.company.trim() ? d.company : match.company ?? "",
+                            referenceNumber: match.referenceNumber || d.referenceNumber,
+                            notes: d.notes.trim() ? d.notes : match.notes ?? "",
+                          }
+                        : {}),
+                    }));
+                  }}
+                >
+                  <option value="">
+                    {ocProveedorFetching
+                      ? "Buscando gastos…"
+                      : ocProveedorMatches.length === 0
+                        ? "Sin gastos pendientes con esta OC (queda solo manual)"
+                        : "No ligar — solo pago manual con esta OC"}
+                  </option>
+                  {ocProveedorMatches.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.referenceNumber || "—"} · {e.description.slice(0, 48)}
+                      {e.description.length > 48 ? "…" : ""} · {formatCurrency(e.amount)}
+                      {e.status === "scheduled_unpaid" ? " (en calendario)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {draft.expenseId && (
+                  <p className="text-xs text-sky-700">
+                    Al guardar se programa ese gasto (sale de la cola de proveedores).
+                  </p>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
                 <Label>Categoría</Label>

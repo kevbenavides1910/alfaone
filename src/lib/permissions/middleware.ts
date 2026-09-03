@@ -26,14 +26,14 @@ export function withPermission<T extends Record<string, string> = Record<string,
   permissionKey: PermissionKey,
   minLevel: PermissionLevelId = "view"
 ) {
-  return async (req: NextRequest, ctx: RouteContext<T>) => {
+  return async (req: NextRequest, ctx?: RouteContext<T>) => {
     const token = req.headers.get("x-impersonation-token");
     const session = await getEffectiveSession(token);
     if (!session?.user) return unauthorized();
     if (!hasPermission(session, permissionKey, minLevel)) {
       return forbidden();
     }
-    const params = (await ctx.params) as T;
+    const params = ctx ? ((await ctx.params) as T) : ({} as T);
     return handler(req, { session, params });
   };
 }
