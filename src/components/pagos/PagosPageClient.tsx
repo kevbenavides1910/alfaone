@@ -874,8 +874,7 @@ export function PagosPageClient({ initialCompany }: Props) {
           <TabsContent value="proveedores" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
             <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
               <p className="text-xs text-muted-foreground max-w-xl">
-                Gastos aprobados: sin programar, en calendario (impagos) o ya pagados.
-                Filtrá por estado para ver cada cola.
+                Sin programar / en calendario (impagos) / pagado (marcados en verde en el calendario).
               </p>
               <div className="flex items-center gap-2">
                 <label htmlFor="proveedor-status-filter" className="text-xs text-muted-foreground whitespace-nowrap">
@@ -894,7 +893,7 @@ export function PagosPageClient({ initialCompany }: Props) {
                   <option value="all">Todos</option>
                   <option value="unscheduled">Sin programar</option>
                   <option value="scheduled_unpaid">En calendario</option>
-                  <option value="paid">Pagado</option>
+                  <option value="paid">Pagado (verde en calendario)</option>
                 </select>
               </div>
             </div>
