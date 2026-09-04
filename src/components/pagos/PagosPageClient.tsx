@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect, useRef, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare, ScrollText, Search, X, Building2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare, ScrollText, Search, X, Building2, PieChart } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ import {
   sumPaymentOcMontos,
   type PaymentOcItem,
 } from "@/components/pagos/PaymentOcMultiPicker";
+import { PagosReporteMensual } from "@/components/pagos/PagosReporteMensual";
 
 function apiErrorMessage(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== "object") return fallback;
@@ -113,7 +114,7 @@ type PagoProveedorDto = {
   budgetSlices?: number;
 };
 
-type PagosTab = "diarios" | "fijos" | "cronograma" | "proveedores" | "bitacora";
+type PagosTab = "diarios" | "fijos" | "cronograma" | "proveedores" | "bitacora" | "reporte";
 
 interface NewPaymentDraft {
   description: string;
@@ -676,6 +677,47 @@ export function PagosPageClient({ initialCompany }: Props) {
     [activeCalendar],
   );
 
+  const reportePayments = useMemo(
+    () =>
+      calendar.flatMap((d) =>
+        d.payments.map((p) => ({
+          id: p.id,
+          description: p.description,
+          amount: p.amount,
+          paymentDate: p.paymentDate,
+          company: p.company,
+          source: p.source,
+          referenceNumber: p.referenceNumber,
+          category: p.category,
+          subcategory: p.subcategory,
+          paid: p.paid,
+        })),
+      ),
+    [calendar],
+  );
+
+  const reportePaidTotal = useMemo(
+    () =>
+      Math.round(
+        reportePayments.filter((p) => p.paid).reduce((s, p) => s + p.amount, 0) * 100,
+      ) / 100,
+    [reportePayments],
+  );
+
+  const paymentsById = useMemo(() => {
+    const map = new Map<string, PagoDto>();
+    for (const day of calendar) {
+      for (const p of day.payments) map.set(p.id, p);
+    }
+    return map;
+  }, [calendar]);
+
+  const monthLabel = useMemo(() => {
+    const [y, m] = month.split("-").map(Number);
+    const d = new Date(y, m - 1, 1);
+    return d.toLocaleDateString("es-CR", { month: "long", year: "numeric" });
+  }, [month]);
+
   const draftSubcategoryOptions = useMemo(
     () => subcategoriesFor(draft.category || null),
     [draft.category],
@@ -818,6 +860,12 @@ export function PagosPageClient({ initialCompany }: Props) {
                   )}
               </span>
             )
+          ) : activeTab === "reporte" ? (
+            <>
+              <span className="text-muted-foreground">Pagado en el mes:</span>
+              <span className="font-semibold text-emerald-600">{formatCurrency(reportePaidTotal)}</span>
+              {isFetching && <span className="text-xs text-muted-foreground animate-pulse">cargando…</span>}
+            </>
           ) : (
             <>
               <span className="text-muted-foreground">Pendiente:</span>
@@ -909,6 +957,9 @@ export function PagosPageClient({ initialCompany }: Props) {
               </TabsTrigger>
               <TabsTrigger value="bitacora" className="flex items-center gap-1.5">
                 <ScrollText className="h-4 w-4" /> Bitácora
+              </TabsTrigger>
+              <TabsTrigger value="reporte" className="flex items-center gap-1.5">
+                <PieChart className="h-4 w-4" /> Reporte mensual de gasto
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1126,6 +1177,17 @@ export function PagosPageClient({ initialCompany }: Props) {
             <PagosBitacoraTable
               logs={bitacoraGlobal}
               loading={bitacoraFetching}
+            />
+          </TabsContent>
+          <TabsContent value="reporte" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
+            <PagosReporteMensual
+              monthLabel={monthLabel}
+              payments={reportePayments}
+              loading={isFetching && calendar.length === 0}
+              onViewDetail={(id) => {
+                const p = paymentsById.get(id);
+                if (p) setDetailPayment(p);
+              }}
             />
           </TabsContent>
         </Tabs>
