@@ -241,3 +241,227 @@ export async function mapFacturasByOcNumbers(
 }
 
 export { normalizeOcKey, normalizeFacturaKey };
+
+export type NafFacturaLinea = {
+  noLinea: number;
+  noArti: string;
+  descripcion: string | null;
+  cantidad: number;
+  precio: number;
+  montoLinea: number;
+  noDocu: string | null;
+  noOrden: string | null;
+};
+
+export type NafFacturaProveedorDetalle = {
+  noCia: string;
+  companyCode: string | null;
+  numFac: string;
+  noFisico: string;
+  serieFisico: string | null;
+  fecha: string | null;
+  fechaDoc: string | null;
+  proveedorCodigo: string | null;
+  proveedor: string | null;
+  estado: string | null;
+  total: number | null;
+  moneda: string | null;
+  impuesto: number | null;
+  tipoFac: string | null;
+  ordenes: string[];
+  lineas: NafFacturaLinea[];
+};
+
+function asNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function asDateIso(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const s = String(value).trim();
+  if (!s) return null;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+async function loadCompanyMap(): Promise<Map<string, string>> {
+  try {
+    const rows = await prisma.company.findMany({
+      where: { isActive: true, sapCode: { not: null } },
+      select: { code: true, sapCode: true },
+    });
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      const sap = row.sapCode?.trim();
+      if (!sap) continue;
+      map.set(sap.padStart(2, "0"), row.code);
+      map.set(sap.replace(/^0+/, "") || sap, row.code);
+    }
+    return map;
+  } catch (err) {
+    console.warn("[pagos] no se pudo mapear compañías para detalle factura:", err);
+    return new Map();
+  }
+}
+
+/**
+ * Detalle de factura de proveedor NAF (ARIMENCFACTURAS + líneas + OCs ligadas).
+ */
+export async function getFacturaProveedorDetalleNaf(input: {
+  noFisico: string;
+  companyCode?: string;
+  noOrden?: string;
+  noCia?: string;
+}): Promise<NafFacturaProveedorDetalle | null> {
+  const noFisico = input.noFisico.trim();
+  if (!noFisico) return null;
+
+  const sapCodes =
+    (input.noCia?.trim()
+      ? [input.noCia.trim().padStart(2, "0"), input.noCia.trim()]
+      : null) ?? (await resolveSapCodes(input.companyCode));
+  const companyMap = await loadCompanyMap();
+  const noOrdenHint = input.noOrden?.trim() || "";
+
+  return withNafOracleConnection(async (conn) => {
+    const binds: Record<string, unknown> = {
+      searchExact: normalizeFacturaKey(noFisico).toUpperCase(),
+      searchRaw: noFisico.toUpperCase(),
+    };
+    const ciaFilter = sapCodes?.length
+      ? `AND f.NO_CIA IN (${sapCodes.map((_, i) => {
+          binds[`cia${i}`] = sapCodes[i];
+          return `:cia${i}`;
+        }).join(", ")})`
+      : "";
+    const ordenFilter = noOrdenHint
+      ? `AND EXISTS (
+          SELECT 1 FROM NAF5.ARIMDETFACTURAS dx
+          JOIN NAF5.ARIMENCORDEN ex
+            ON ex.NO_CIA = dx.NO_CIA AND ex.NO_DOCU = dx.NO_DOCU
+          WHERE dx.NO_CIA = f.NO_CIA AND dx.NUM_FAC = f.NUM_FAC
+            AND ex.NO_ORDEN = :noOrdenHint
+        )`
+      : "";
+    if (noOrdenHint) binds.noOrdenHint = noOrdenHint;
+
+    const headerResult = await conn.execute(
+      `
+      SELECT * FROM (
+        SELECT
+          f.NO_CIA,
+          f.NUM_FAC,
+          f.NO_FISICO,
+          f.SERIE_FISICO,
+          f.FECHA,
+          f.FECHA_DOC,
+          f.COD_PROVEEDOR,
+          f.ESTADO,
+          f.TOTAL_GENERAL,
+          f.MONEDA,
+          f.IMPUESTO,
+          f.TIPO_FAC,
+          NVL(p.NOMBRE_LARGO, p.NOMBRE) AS PROVEEDOR
+        FROM NAF5.ARIMENCFACTURAS f
+        LEFT JOIN NAF5.ARCPMP p
+          ON p.NO_CIA = f.NO_CIA AND p.NO_PROVE = f.COD_PROVEEDOR
+        WHERE (
+          LTRIM(TRIM(f.NO_FISICO), '0') = :searchExact
+          OR UPPER(TRIM(f.NO_FISICO)) = :searchRaw
+        )
+        ${ciaFilter}
+        ${ordenFilter}
+        ORDER BY f.FECHA_DOC DESC NULLS LAST, f.NUM_FAC DESC
+      ) WHERE ROWNUM <= 1
+      `,
+      binds,
+    );
+
+    const headerRaw = (headerResult.rows?.[0] ?? null) as OracleRow | null;
+    if (!headerRaw) return null;
+
+    const noCia = asString(headerRaw.NO_CIA) ?? "";
+    const numFac = asString(headerRaw.NUM_FAC) ?? "";
+    if (!noCia || !numFac) return null;
+
+    const [linesResult, ordenesResult] = await Promise.all([
+      conn.execute(
+        `
+        SELECT
+          d.NO_LINEA,
+          d.NO_ARTI,
+          a.DESCRIPCION,
+          d.CANT_FACT,
+          d.PRECIO,
+          d.MONTO_LINEA,
+          d.NO_DOCU,
+          e.NO_ORDEN
+        FROM NAF5.ARIMDETFACTURAS d
+        LEFT JOIN NAF5.ARINDA a
+          ON a.NO_CIA = d.NO_CIA AND a.NO_ARTI = d.NO_ARTI
+        LEFT JOIN NAF5.ARIMENCORDEN e
+          ON e.NO_CIA = d.NO_CIA AND e.NO_DOCU = d.NO_DOCU
+        WHERE d.NO_CIA = :noCia AND d.NUM_FAC = :numFac
+        ORDER BY d.NO_LINEA
+        `,
+        { noCia, numFac },
+      ),
+      conn.execute(
+        `
+        SELECT DISTINCT e.NO_ORDEN
+        FROM NAF5.ARIMDETFACTURAS d
+        JOIN NAF5.ARIMENCORDEN e
+          ON e.NO_CIA = d.NO_CIA AND e.NO_DOCU = d.NO_DOCU
+        WHERE d.NO_CIA = :noCia AND d.NUM_FAC = :numFac
+          AND e.NO_ORDEN IS NOT NULL
+        ORDER BY e.NO_ORDEN
+        `,
+        { noCia, numFac },
+      ),
+    ]);
+
+    const lineas: NafFacturaLinea[] = (linesResult.rows ?? []).map((raw) => {
+      const row = raw as OracleRow;
+      return {
+        noLinea: asNumber(row.NO_LINEA) ?? 0,
+        noArti: asString(row.NO_ARTI) ?? "",
+        descripcion: asString(row.DESCRIPCION),
+        cantidad: asNumber(row.CANT_FACT) ?? 0,
+        precio: asNumber(row.PRECIO) ?? 0,
+        montoLinea: asNumber(row.MONTO_LINEA) ?? 0,
+        noDocu: asString(row.NO_DOCU),
+        noOrden: asString(row.NO_ORDEN),
+      };
+    });
+
+    const ordenes = (ordenesResult.rows ?? [])
+      .map((raw) => asString((raw as OracleRow).NO_ORDEN))
+      .filter((v): v is string => Boolean(v));
+
+    return {
+      noCia,
+      companyCode: companyMap.get(noCia) ?? companyMap.get(noCia.replace(/^0+/, "") || noCia) ?? null,
+      numFac,
+      noFisico: asString(headerRaw.NO_FISICO) ?? noFisico,
+      serieFisico: asString(headerRaw.SERIE_FISICO),
+      fecha: asDateIso(headerRaw.FECHA),
+      fechaDoc: asDateIso(headerRaw.FECHA_DOC),
+      proveedorCodigo: asString(headerRaw.COD_PROVEEDOR),
+      proveedor: asString(headerRaw.PROVEEDOR),
+      estado: asString(headerRaw.ESTADO),
+      total: asNumber(headerRaw.TOTAL_GENERAL),
+      moneda: asString(headerRaw.MONEDA),
+      impuesto: asNumber(headerRaw.IMPUESTO),
+      tipoFac: asString(headerRaw.TIPO_FAC),
+      ordenes,
+      lineas,
+    };
+  });
+}

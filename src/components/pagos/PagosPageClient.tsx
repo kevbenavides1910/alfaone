@@ -33,6 +33,10 @@ import {
   type PaymentOcItem,
 } from "@/components/pagos/PaymentOcMultiPicker";
 import { PagosReporteMensual } from "@/components/pagos/PagosReporteMensual";
+import {
+  PagosProveedorDetalleDialog,
+  type ProveedorDetalleTarget,
+} from "@/components/pagos/PagosProveedorDetalleDialog";
 
 function apiErrorMessage(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== "object") return fallback;
@@ -347,6 +351,7 @@ export function PagosPageClient({ initialCompany }: Props) {
     "all" | "unscheduled" | "scheduled_unpaid" | "paid"
   >("all");
   const [scheduleDates, setScheduleDates] = useState<Record<string, string>>({});
+  const [proveedorDetalle, setProveedorDetalle] = useState<ProveedorDetalleTarget | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => setOcDebounced(ocQuery.trim()), 300);
@@ -375,7 +380,11 @@ export function PagosPageClient({ initialCompany }: Props) {
     retry: 1,
   });
 
-  const ocSearchEnabled = ocDebounced.length >= 2;
+  const ocSearchEnabled =
+    ocDebounced.length >= 2 &&
+    activeTab !== "proveedores" &&
+    activeTab !== "bitacora" &&
+    activeTab !== "reporte";
   const {
     data: ocResults = [],
     isFetching: ocSearching,
@@ -996,6 +1005,7 @@ export function PagosPageClient({ initialCompany }: Props) {
               <p className="text-xs text-muted-foreground max-w-xl">
                 Sin programar / en calendario (impagos) / pagado (marcados en verde en el calendario).
                 Podés buscar por N° OC o por N° de factura de proveedor (NAF).
+                Hacé clic en la OC o en cada factura para ver el detalle.
               </p>
               <div className="flex items-center gap-2">
                 <label htmlFor="proveedor-status-filter" className="text-xs text-muted-foreground whitespace-nowrap">
@@ -1073,16 +1083,47 @@ export function PagosPageClient({ initialCompany }: Props) {
                             )}
                           </td>
                           <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
-                            {e.referenceNumber || "—"}
+                            {e.referenceNumber ? (
+                              <button
+                                type="button"
+                                className="text-sky-700 hover:underline dark:text-sky-400"
+                                title="Ver detalle de la orden de compra"
+                                onClick={() =>
+                                  setProveedorDetalle({
+                                    kind: "oc",
+                                    noOrden: e.referenceNumber!,
+                                    company: e.company,
+                                  })
+                                }
+                              >
+                                {e.referenceNumber}
+                              </button>
+                            ) : (
+                              "—"
+                            )}
                           </td>
-                          <td className="px-3 py-2 font-mono text-xs whitespace-nowrap max-w-[140px]">
+                          <td className="px-3 py-2 font-mono text-xs max-w-[180px]">
                             {(e.invoiceNumbers ?? []).length > 0 ? (
-                              <span title={(e.invoiceNumbers ?? []).join(", ")}>
-                                {(e.invoiceNumbers ?? []).slice(0, 2).join(", ")}
-                                {(e.invoiceNumbers ?? []).length > 2
-                                  ? ` +${(e.invoiceNumbers ?? []).length - 2}`
-                                  : ""}
-                              </span>
+                              <div className="flex flex-wrap gap-x-1.5 gap-y-0.5">
+                                {(e.invoiceNumbers ?? []).map((fac) => (
+                                  <button
+                                    key={fac}
+                                    type="button"
+                                    className="text-sky-700 hover:underline dark:text-sky-400"
+                                    title={`Ver detalle de factura ${fac}`}
+                                    onClick={() =>
+                                      setProveedorDetalle({
+                                        kind: "factura",
+                                        noFisico: fac,
+                                        noOrden: e.referenceNumber,
+                                        company: e.company,
+                                      })
+                                    }
+                                  >
+                                    {fac}
+                                  </button>
+                                ))}
+                              </div>
                             ) : (
                               "—"
                             )}
@@ -1222,6 +1263,18 @@ export function PagosPageClient({ initialCompany }: Props) {
           </TabsContent>
         </Tabs>
       </Card>
+
+      <PagosProveedorDetalleDialog
+        target={proveedorDetalle}
+        onClose={() => setProveedorDetalle(null)}
+        onOpenOc={(noOrden, companyCode) =>
+          setProveedorDetalle({
+            kind: "oc",
+            noOrden,
+            company: companyCode,
+          })
+        }
+      />
 
       <PaymentDetailDialog
         payment={detailPayment}
