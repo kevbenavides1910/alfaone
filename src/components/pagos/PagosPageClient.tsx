@@ -105,6 +105,7 @@ type PagoProveedorDto = {
   company: string | null;
   type: string;
   referenceNumber: string | null;
+  invoiceNumbers?: string[];
   periodMonth: string;
   paymentDate: string | null;
   notes: string | null;
@@ -423,10 +424,16 @@ export function PagosPageClient({ initialCompany }: Props) {
     error: proveedoresErr,
     refetch: refetchProveedores,
   } = useQuery({
-    queryKey: ["pagos-proveedores", company],
+    queryKey: [
+      "pagos-proveedores",
+      company,
+      ocDebounced.trim().length >= 2 ? ocDebounced.trim() : "",
+    ],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (company && company !== "all") params.set("company", company);
+      const q = ocDebounced.trim();
+      if (q.length >= 2) params.set("oc", q);
       const qs = params.toString();
       const res = await fetch(`/api/pagos/proveedores${qs ? `?${qs}` : ""}`);
       if (!res.ok) {
@@ -469,7 +476,12 @@ export function PagosPageClient({ initialCompany }: Props) {
     if (q.length >= 2) {
       rows = rows.filter((e) => {
         const oc = (e.referenceNumber ?? "").toLowerCase();
-        return oc.includes(q) || e.description.toLowerCase().includes(q);
+        const facturas = (e.invoiceNumbers ?? []).map((n) => n.toLowerCase());
+        return (
+          oc.includes(q) ||
+          e.description.toLowerCase().includes(q) ||
+          facturas.some((n) => n.includes(q) || n.replace(/^0+/, "").includes(q.replace(/^0+/, "")))
+        );
       });
     }
     return rows;
@@ -829,7 +841,11 @@ export function PagosPageClient({ initialCompany }: Props) {
           <Input
             value={ocQuery}
             onChange={(e) => setOcQuery(e.target.value)}
-            placeholder="Buscar por número de OC…"
+            placeholder={
+              activeTab === "proveedores"
+                ? "Buscar por OC o N° factura…"
+                : "Buscar por número de OC…"
+            }
             className="h-9 pl-8 pr-8"
             aria-label="Buscar por número de OC en todos los meses"
           />
@@ -979,6 +995,7 @@ export function PagosPageClient({ initialCompany }: Props) {
             <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
               <p className="text-xs text-muted-foreground max-w-xl">
                 Sin programar / en calendario (impagos) / pagado (marcados en verde en el calendario).
+                Podés buscar por N° OC o por N° de factura de proveedor (NAF).
               </p>
               <div className="flex items-center gap-2">
                 <label htmlFor="proveedor-status-filter" className="text-xs text-muted-foreground whitespace-nowrap">
@@ -1019,7 +1036,7 @@ export function PagosPageClient({ initialCompany }: Props) {
                   ? "No hay gastos pendientes de programar ni de pagar."
                   : proveedorStatusFilter !== "all"
                     ? "Ningún gasto con ese estado."
-                    : "Ningún gasto coincide con la búsqueda de OC."}
+                    : "Ningún gasto coincide con la búsqueda de OC o factura."}
               </p>
             ) : (
               <div className="overflow-x-auto rounded-md border">
@@ -1028,6 +1045,7 @@ export function PagosPageClient({ initialCompany }: Props) {
                     <tr>
                       <th className="px-3 py-2 font-medium">Detalle</th>
                       <th className="px-3 py-2 font-medium">OC</th>
+                      <th className="px-3 py-2 font-medium">Factura</th>
                       <th className="px-3 py-2 font-medium">Tipo</th>
                       <th className="px-3 py-2 font-medium">Cía</th>
                       <th className="px-3 py-2 font-medium">Estado</th>
@@ -1056,6 +1074,18 @@ export function PagosPageClient({ initialCompany }: Props) {
                           </td>
                           <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
                             {e.referenceNumber || "—"}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-xs whitespace-nowrap max-w-[140px]">
+                            {(e.invoiceNumbers ?? []).length > 0 ? (
+                              <span title={(e.invoiceNumbers ?? []).join(", ")}>
+                                {(e.invoiceNumbers ?? []).slice(0, 2).join(", ")}
+                                {(e.invoiceNumbers ?? []).length > 2
+                                  ? ` +${(e.invoiceNumbers ?? []).length - 2}`
+                                  : ""}
+                              </span>
+                            ) : (
+                              "—"
+                            )}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">{e.type}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{e.company ?? "—"}</td>

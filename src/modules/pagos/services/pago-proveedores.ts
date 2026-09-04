@@ -2,6 +2,11 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
 import { parseCalendarDateInput } from "@/lib/utils/format";
 import { serializeSinglePayment, type PagoDto } from "./pagos";
+import {
+  findOcByFacturaNumber,
+  mapFacturasByOcNumbers,
+  normalizeOcKey,
+} from "./naf-oc-factura";
 
 export type PagoProveedorStatus = "unscheduled" | "scheduled_unpaid" | "paid";
 
@@ -14,6 +19,8 @@ export type PagoProveedorDto = {
   company: string | null;
   type: string;
   referenceNumber: string | null;
+  /** N° factura proveedor NAF (ARIMENCFACTURAS.NO_FISICO) ligados a la OC. */
+  invoiceNumbers: string[];
   periodMonth: string;
   paymentDate: string | null;
   notes: string | null;
@@ -36,10 +43,6 @@ function toIsoMonth(d: Date): string {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   return `${y}-${m}`;
-}
-
-function normalizeOcKey(value: string | null | undefined): string {
-  return (value ?? "").trim().replace(/^0+/, "").toLowerCase();
 }
 
 /** Quita el sufijo «(mes X/Y)» del prorrateo presupuestario. */
@@ -248,6 +251,7 @@ function collapseByOc(
       company: primary.company,
       type: primary.type,
       referenceNumber: primary.referenceNumber,
+      invoiceNumbers: [],
       periodMonth: primary.periodMonth,
       paymentDate: withDate.paymentDate,
       notes: primary.notes,
@@ -260,6 +264,25 @@ function collapseByOc(
 
   out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return out;
+}
+
+async function attachInvoiceNumbers(
+  list: PagoProveedorDto[],
+  companyFilter?: string,
+): Promise<PagoProveedorDto[]> {
+  const ocNumbers = list
+    .map((r) => r.referenceNumber?.trim())
+    .filter((v): v is string => Boolean(v));
+  if (ocNumbers.length === 0) return list;
+
+  const byOc = await mapFacturasByOcNumbers(ocNumbers, companyFilter);
+  if (byOc.size === 0) return list;
+
+  return list.map((row) => {
+    const key = normalizeOcKey(row.referenceNumber);
+    const invoiceNumbers = key ? byOc.get(key) ?? [] : [];
+    return invoiceNumbers.length ? { ...row, invoiceNumbers } : row;
+  });
 }
 
 /**
@@ -276,6 +299,16 @@ export async function listPagoProveedores(
   const oc = ocFilter?.trim() || "";
   const includePaid = options?.includePaid === true;
 
+  let ocFromFactura: string[] = [];
+  if (oc.length >= 2) {
+    try {
+      const hits = await findOcByFacturaNumber(oc, companyFilter);
+      ocFromFactura = [...new Set(hits.map((h) => h.noOrden.trim()).filter(Boolean))];
+    } catch (err) {
+      console.warn("[pagos] búsqueda factura→OC NAF falló:", err);
+    }
+  }
+
   const [paidIndex, rows] = await Promise.all([
     loadCalendarPaidIndex(companyFilter),
     prisma.expense.findMany({
@@ -288,6 +321,13 @@ export async function listPagoProveedores(
               OR: [
                 { referenceNumber: { contains: oc, mode: "insensitive" } },
                 { nafOcNoOrden: { contains: oc, mode: "insensitive" } },
+                { description: { contains: oc, mode: "insensitive" } },
+                ...(ocFromFactura.length
+                  ? [
+                      { nafOcNoOrden: { in: ocFromFactura } },
+                      { referenceNumber: { in: ocFromFactura } },
+                    ]
+                  : []),
               ],
             }
           : {}),
@@ -338,7 +378,7 @@ export async function listPagoProveedores(
   if (!includePaid) {
     list = list.filter((r) => r.status !== "paid");
   }
-  return list;
+  return attachInvoiceNumbers(list, companyFilter);
 }
 
 /**

@@ -4,8 +4,8 @@ import { ok, serverError } from "@/lib/api/response";
 import { listPagoProveedores } from "@/modules/pagos/services/pago-proveedores";
 
 /**
- * GET /api/pagos/proveedores?company=
- * Cola de gastos aprobados pendientes de fecha en el calendario.
+ * GET /api/pagos/proveedores?company=&oc=
+ * Cola de gastos aprobados. `oc` también resuelve N° factura NAF → OC.
  */
 export const GET = withPermission(async (req: NextRequest) => {
   try {

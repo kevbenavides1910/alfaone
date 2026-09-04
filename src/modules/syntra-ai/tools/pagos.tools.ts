@@ -103,19 +103,27 @@ export function pagosTools(): SyntraTool[] {
       permission: { key: "pagos.calendario", level: "view" },
       definition: toolDef(
         "list_pago_proveedores",
-        "Lista gastos de proveedores: sin programar, en calendario (impago) o pagados. Pestaña Pago proveedores.",
+        "Lista gastos de proveedores: sin programar, en calendario (impago) o pagados. Busca por N° OC o N° factura NAF. Pestaña Pago proveedores.",
         {
           type: "object",
           properties: {
             company: { type: "string", description: "Filtrar por empresa (opcional)." },
+            oc_o_factura: {
+              type: "string",
+              description: "N° de OC o N° de factura de proveedor en NAF (opcional).",
+            },
           },
           additionalProperties: false,
         },
       ),
-      describeCall: () => "Listando gastos pendientes (pago proveedores)…",
+      describeCall: (args) =>
+        strArg(args, "oc_o_factura")
+          ? `Buscando proveedores por OC/factura ${strArg(args, "oc_o_factura")}…`
+          : "Listando gastos pendientes (pago proveedores)…",
       handler: async (_session, args) => {
         const company = strArg(args, "company") || undefined;
-        const rows = await listPagoProveedores(company, undefined, { includePaid: true });
+        const q = strArg(args, "oc_o_factura") || undefined;
+        const rows = await listPagoProveedores(company, q, { includePaid: true });
         return {
           total: rows.length,
           gastos: rows.slice(0, MAX_LIST).map((e) => ({
@@ -123,6 +131,7 @@ export function pagosTools(): SyntraTool[] {
             descripcion: e.description,
             monto: e.amount,
             oc: e.referenceNumber,
+            facturas: e.invoiceNumbers,
             tipo: e.type,
             compania: e.company,
             periodo: e.periodMonth,
@@ -136,7 +145,7 @@ export function pagosTools(): SyntraTool[] {
             rebanadasPresupuesto: e.budgetSlices,
           })),
           moneda: "CRC",
-          fuente: "Pagos → Pago proveedores",
+          fuente: "Pagos → Pago proveedores + NAF ARIMENCFACTURAS",
         };
       },
     },
