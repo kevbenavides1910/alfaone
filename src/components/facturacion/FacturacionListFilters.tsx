@@ -1140,6 +1140,7 @@ export function appendFacturacionFilters(params: URLSearchParams, filters: Factu
 }
 
 export function appendCxcFilters(params: URLSearchParams, filters: CxcSearchFilters) {
+  // paymentStatus debe venir ya alineado con el Select de la página (pending|collected|all).
   params.set("filter", filters.paymentStatus || "pending");
   if (filters.client.trim()) params.set("client", filters.client.trim());
   if (filters.licitacion.trim()) params.set("licitacion", filters.licitacion.trim());

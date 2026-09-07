@@ -124,9 +124,11 @@ export default function CuentasPorCobrarPage() {
   const { data, isLoading, refetch, isFetching, isError, error } = useQuery<{ data: CuentaPorCobrarRow[] }>({
     queryKey: ["cuentas-por-cobrar", filter, companyFilter, searchFilters],
     queryFn: async () => {
-      const params = new URLSearchParams({ filter });
+      const params = new URLSearchParams();
       companyFilter.forEach((c) => params.append("company", c));
-      appendCxcFilters(params, searchFilters);
+      // El Select de estado es la fuente de verdad; no dejar que paymentStatus
+      // de searchFilters (default "pending") pise filter=all|collected.
+      appendCxcFilters(params, { ...searchFilters, paymentStatus: filter });
       const r = await fetch(`/api/cuentas-por-cobrar?${params}`);
       const json = await r.json();
       if (json.error) throw new Error(json.error.message || "Error al cargar");
