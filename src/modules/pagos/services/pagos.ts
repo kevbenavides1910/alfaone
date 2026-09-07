@@ -117,9 +117,32 @@ function endOfMonth(month: string): Date {
   return new Date(Date.UTC(y, m, 1)); // exclusive
 }
 
+/** Si Oracle/dblink se cuelga, el GET no debe quedar en “cargando…”. */
+const APEX_GET_SYNC_TIMEOUT_MS = 3500;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label} timeout after ${ms}ms`)),
+      ms,
+    );
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 /**
- * Sincroniza el mes: garantiza que exista un Payment para cada gasto aprobado
- * del mes y para cada pago fijo APEX del mes. Luego lista los payments del mes.
+ * Lista el calendario del mes desde Postgres.
+ * Solo materializa APEX si el mes aún no tiene pagos fijos (primer open),
+ * con timeout para no bloquear la UI. Actualización completa: POST /api/pagos/sync.
  */
 export async function syncAndListPayments(
   month: string, // "YYYY-MM"
@@ -128,11 +151,20 @@ export async function syncAndListPayments(
   const from = startOfMonth(month);
   const to = endOfMonth(month);
 
-  await syncExpensesForMonth(from, to);
-  try {
-    await syncApexForMonth(from, to);
-  } catch (error) {
-    console.warn("[pagos] sync APEX falló; se listan pagos locales del mes:", error);
+  const apexInMonth = await prisma.payment.count({
+    where: { source: "APEX", paymentDate: { gte: from, lt: to } },
+  });
+
+  if (apexInMonth === 0) {
+    try {
+      await withTimeout(
+        syncApexForMonth(from, to),
+        APEX_GET_SYNC_TIMEOUT_MS,
+        "[pagos] sync APEX",
+      );
+    } catch (error) {
+      console.warn("[pagos] sync APEX falló/timeout; se listan pagos locales del mes:", error);
+    }
   }
 
   const payments = await prisma.payment.findMany({
@@ -238,28 +270,37 @@ async function syncExpensesForMonth(from: Date, to: Date): Promise<number> {
     select: { id: true, expenseId: true },
   });
 
-  for (const p of payments) {
-    if (!p.expenseId) continue;
-    const exp = await prisma.expense.findFirst({
-      where: { id: p.expenseId, deletedAt: null },
-      select: {
-        description: true,
-        company: true,
-        type: true,
-        referenceNumber: true,
-      },
-    });
-    if (!exp) continue;
-    await prisma.payment.update({
-      where: { id: p.id },
-      data: {
-        description: exp.description,
-        company: exp.company,
-        refType: exp.type,
-        referenceNumber: exp.referenceNumber,
-      },
-    });
-  }
+  if (payments.length === 0) return 0;
+
+  const expenseIds = [...new Set(payments.map((p) => p.expenseId!).filter(Boolean))];
+  const expenses = await prisma.expense.findMany({
+    where: { id: { in: expenseIds }, deletedAt: null },
+    select: {
+      id: true,
+      description: true,
+      company: true,
+      type: true,
+      referenceNumber: true,
+    },
+  });
+  const byId = new Map(expenses.map((e) => [e.id, e]));
+
+  await Promise.all(
+    payments.map(async (p) => {
+      if (!p.expenseId) return;
+      const exp = byId.get(p.expenseId);
+      if (!exp) return;
+      await prisma.payment.update({
+        where: { id: p.id },
+        data: {
+          description: exp.description,
+          company: exp.company,
+          refType: exp.type,
+          referenceNumber: exp.referenceNumber,
+        },
+      });
+    }),
+  );
   return 0;
 }
 
@@ -269,8 +310,11 @@ async function syncApexForMonth(
   to: Date,
   prefetch?: ApexPrefetch,
 ): Promise<number> {
+  const fromDay = toIsoDay(from);
+  const toDay = toIsoDay(to);
   const base = prefetch?.base ?? (await listApexCalendarioPagosBase());
-  const pagos = prefetch?.pagos ?? (await listApexCalendarioPagos());
+  const pagos =
+    prefetch?.pagos ?? (await listApexCalendarioPagos({ from: fromDay, to: toDay }));
 
   const inMonth = pagos.filter((p) => {
     if (!p.fechaPago) return false;
@@ -280,6 +324,20 @@ async function syncApexForMonth(
 
   const baseMap = new Map<number, (typeof base)[number]>();
   for (const b of base) baseMap.set(b.pagoBaseId, b);
+
+  const existing = await prisma.payment.findMany({
+    where: {
+      source: "APEX",
+      paymentDate: { gte: from, lt: to },
+    },
+    select: { apexPagoId: true, apexPagoBaseId: true, paymentDate: true },
+  });
+  const byPagoId = new Set<number>();
+  const byBaseDate = new Set<string>();
+  for (const e of existing) {
+    if (e.apexPagoId != null) byPagoId.add(e.apexPagoId);
+    byBaseDate.add(`${e.apexPagoBaseId ?? 0}|${toIsoDay(e.paymentDate)}`);
+  }
 
   // Deduplicar ocurrencias de Oracle: un gasto fijo puede venir repetido (mismo
   // pagoBaseId + misma fecha) con distinto pagoId. Agrupamos y creamos UN solo
@@ -291,21 +349,9 @@ async function syncApexForMonth(
     if (seen.has(key)) continue;
     seen.add(key);
 
+    if (byPagoId.has(p.pagoId) || byBaseDate.has(key)) continue;
+
     const paymentDate = new Date(p.fechaPago + "T00:00:00Z");
-    const exists = await prisma.payment.findFirst({
-      where: {
-        source: "APEX",
-        OR: [
-          { apexPagoId: p.pagoId },
-          {
-            apexPagoBaseId: p.pagoBaseId ?? null,
-            paymentDate,
-          },
-        ],
-      },
-      select: { id: true },
-    });
-    if (exists) continue;
     const b = p.pagoBaseId != null ? baseMap.get(p.pagoBaseId) : undefined;
     const atendido = (p.atendido ?? "N").trim().toUpperCase() === "S";
     await prisma.payment.create({
@@ -324,6 +370,8 @@ async function syncApexForMonth(
         confirmedForDaily: atendido,
       },
     });
+    byPagoId.add(p.pagoId);
+    byBaseDate.add(key);
     created += 1;
   }
   return created;

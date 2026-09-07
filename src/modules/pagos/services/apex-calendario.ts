@@ -35,9 +35,29 @@ export type ApexCalendarioPagoBaseRow = {
   fechaSiguiente: string | null;
 };
 
-/** Ocurrencias de pago del calendario APEX. */
-export async function listApexCalendarioPagos(): Promise<ApexCalendarioPagoRow[]> {
+/**
+ * Ocurrencias de pago del calendario APEX.
+ * Con `from`/`to` (ISO yyyy-mm-dd, to exclusivo) filtra por FECHA_PAGO
+ * para no traer todo el histórico en cada sync de un mes.
+ */
+export async function listApexCalendarioPagos(range?: {
+  from: string;
+  to: string;
+}): Promise<ApexCalendarioPagoRow[]> {
   return withNafOracleConnection(async (conn) => {
+    if (range) {
+      const rows = await executeRows(
+        conn,
+        `SELECT ID_CALENDARIO_PAGO, ID_CALENDARIO_PAGOS_BASE, FECHA_PAGO,
+                MONTO_PAGADO, ATENDIDO, OBSERVACION
+         FROM ALFA.CALENDARIO_PAGOS_V
+         WHERE ACTIVO = 1
+           AND FECHA_PAGO >= TO_DATE(:fromDay, 'YYYY-MM-DD')
+           AND FECHA_PAGO < TO_DATE(:toDay, 'YYYY-MM-DD')`,
+        { fromDay: range.from, toDay: range.to },
+      );
+      return rows.map(mapPago);
+    }
     const rows = await executeRows(
       conn,
       `SELECT ID_CALENDARIO_PAGO, ID_CALENDARIO_PAGOS_BASE, FECHA_PAGO,

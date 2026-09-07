@@ -60,6 +60,8 @@ async function withOracleConfig<T>(
     user: config.user,
     password: config.password,
     connectString: config.connectString,
+    // Evita colgar APIs (calendario de pagos, nómina) si Oracle/red no responde.
+    connectTimeout: Number(process.env.NAF_ORACLE_CONNECT_TIMEOUT_SEC) || 8,
   });
   try {
     return await fn(conn);
