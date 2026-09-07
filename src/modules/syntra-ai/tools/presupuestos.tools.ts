@@ -6,7 +6,8 @@ import { getContractProfitability } from "@/modules/presupuestos/business/profit
 import { buildContractListWhere } from "@/modules/presupuestos/services/contracts-list-where";
 import { listExpensesForSession } from "@/modules/presupuestos/services/expenses-list";
 import { listOrdenesCompraNaf } from "@/modules/presupuestos/services/list-ordenes-compra-naf";
-import { fromMonthString } from "@/lib/utils/format";
+import { listPendingAssignPayments } from "@/modules/presupuestos/services/pending-assign-payments";
+import { fromMonthString, toMonthString } from "@/lib/utils/format";
 import { nowServer } from "@/lib/utils/time";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
@@ -226,6 +227,58 @@ export function presupuestosTools(): SyntraTool[] {
           total: result.meta.total,
           moneda: "CRC",
           fuente: "Gastos Alfa One",
+        };
+      },
+    },
+    {
+      permission: { key: "gastos.expenses", level: "view" },
+      definition: toolDef(
+        "list_pending_assign_payments",
+        "Lista pagos marcados Pagado en un mes que aún no tienen gasto de presupuesto (cola Pendientes de asignar en Gastos). No incluye pagos ya ligados a un Expense.",
+        {
+          type: "object",
+          properties: {
+            month: { type: "string", description: "Mes YYYY-MM (default: mes actual)." },
+            company: { type: "string", description: "Código de empresa (opcional)." },
+            limit: { type: "integer", description: "Máximo filas (default 20)." },
+          },
+          additionalProperties: false,
+        },
+      ),
+      describeCall: (args) => {
+        const m = strArg(args ?? {}, "month");
+        return m
+          ? `Listando pagos pendientes de asignar (${m})…`
+          : "Listando pagos pendientes de asignar…";
+      },
+      handler: async (session, args) => {
+        const now = nowServer();
+        const month = strArg(args, "month") || toMonthString(now);
+        const limit = intArg(args, "limit", 20, MAX_LIST);
+        const rows = await listPendingAssignPayments({
+          db: dbForSession(session),
+          month,
+          company: strArg(args, "company") || null,
+          tenantCompany: session.user.company,
+        });
+        const sliced = rows.slice(0, limit);
+        const totalMonto = sliced.reduce((s, r) => s + r.amount, 0);
+        return {
+          mes: month,
+          total: rows.length,
+          mostrando: sliced.length,
+          totalMonto,
+          pagos: sliced.map((p) => ({
+            id: p.id,
+            origen: p.source,
+            descripcion: p.description,
+            monto: p.amount,
+            fecha: p.paymentDate,
+            empresa: p.company,
+            referencia: p.referenceNumber,
+          })),
+          moneda: "CRC",
+          fuente: "Pagos Pagado sin gasto (Pendientes de asignar)",
         };
       },
     },

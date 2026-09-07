@@ -1374,6 +1374,9 @@ model Expense {
   /// Si está set, el gasto sale de la cola «Pago proveedores».
   settledByPaymentId         String?
   settledByPayment           Payment?              @relation("ExpenseSettledByPayment", fields: [settledByPaymentId], references: [id], onDelete: SetNull)
+  /// Pago ya marcado Pagado desde el cual se creó este gasto («Pendientes de asignar»).
+  sourcePaymentId            String?
+  sourcePayment              Payment?              @relation("ExpenseSourcePayment", fields: [sourcePaymentId], references: [id], onDelete: SetNull)
 
   @@index([contractId])
   @@index([positionId])
@@ -1385,6 +1388,7 @@ model Expense {
   @@index([deletedAt])
   @@index([nafOcNoOrden, nafOcNoCia])
   @@index([settledByPaymentId])
+  @@index([sourcePaymentId])
   @@map("expenses")
 }
 
@@ -6136,6 +6140,8 @@ model Payment {
   changeLogs      PaymentChangeLog[]
   /// Gastos de «Pago proveedores» liquidados por este pago (p. ej. varias OC en un movimiento).
   settledExpenses Expense[]     @relation("ExpenseSettledByPayment")
+  /// Gastos de presupuesto creados desde este pago («Pendientes de asignar»).
+  sourceExpenses  Expense[]     @relation("ExpenseSourcePayment")
 
   @@unique([apexPagoId, source])
   @@index([paymentDate])

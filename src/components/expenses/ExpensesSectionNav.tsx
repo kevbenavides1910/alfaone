@@ -23,7 +23,13 @@ const TABS: Tab[] = [
       p === "/expenses" ||
       (p.startsWith("/expenses/") &&
         !p.startsWith("/expenses/pending-approvals") &&
-        !p.startsWith("/expenses/approval-bitacora")),
+        !p.startsWith("/expenses/approval-bitacora") &&
+        !p.startsWith("/expenses/pendientes-asignar")),
+  },
+  {
+    href: "/expenses/pendientes-asignar",
+    label: "Pendientes de asignar",
+    permission: "gastos.expenses",
   },
   {
     href: "/expenses/pending-approvals",

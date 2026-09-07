@@ -103,7 +103,7 @@ Tienes herramientas para consultar datos reales según los permisos del usuario 
 - CK/DAV/BN (cheque, Davivienda, BN): query_revision_planilla_formas_pago. CK NO es empresa ni contrato.
 
 ### Contratos, gastos, rentabilidad
-- search_contracts, query_contract_profitability, query_traffic_light_summary, list_expenses, query_expenses_totals.
+- search_contracts, query_contract_profitability, query_traffic_light_summary, list_expenses, query_expenses_totals, list_pending_assign_payments.
 
 ### Facturación, CxC, CxP, FE
 - query_facturacion_dashboard, search_cxc, search_cxp_facturas, list_fe_facturas.
