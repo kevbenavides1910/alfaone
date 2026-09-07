@@ -321,7 +321,7 @@ export async function listNafNominaPlanillas(
       codPla: true,
       descri: true,
     },
-    distinct: ["noCia", "codPla", "descri"],
+    distinct: ["noCia", "codPla"],
     orderBy: [{ noCia: "asc" }, { codPla: "asc" }],
   });
 

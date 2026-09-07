@@ -564,14 +564,72 @@ export default function RevisionPlanillaPage() {
     setSelectedPlanillas([]);
   };
 
-  const planillaOptions = useMemo(
-    () =>
-      planillas.map((planilla) => ({
-        value: `${planilla.noCia}|${planilla.codPla}`,
-        label: planilla.label,
-      })),
-    [planillas],
-  );
+  const planillaOptions = useMemo(() => {
+    const byCode = new Map<string, typeof planillas>();
+    for (const planilla of planillas) {
+      const list = byCode.get(planilla.codPla) ?? [];
+      list.push(planilla);
+      byCode.set(planilla.codPla, list);
+    }
+    const codeOptions = [...byCode.entries()]
+      .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+      .map(([codPla, rows]) => {
+        const nombre =
+          rows.find((r) => r.nominaNombre)?.nominaNombre?.trim() ||
+          rows[0]?.nominaNombre?.trim() ||
+          null;
+        return {
+          value: `*|${codPla}`,
+          label: nombre
+            ? `Todas · ${codPla} · ${nombre} (${rows.length})`
+            : `Todas · código ${codPla} (${rows.length} empresas)`,
+          searchText: `${codPla} ${nombre ?? ""}`,
+        };
+      });
+    const companyOptions = planillas.map((planilla) => ({
+      value: `${planilla.noCia}|${planilla.codPla}`,
+      label: planilla.label,
+      searchText: `${planilla.codPla} ${planilla.companyLabel} ${planilla.nominaNombre ?? ""}`,
+    }));
+    return [...codeOptions, ...companyOptions];
+  }, [planillas]);
+
+  const planillaQuickActions = useMemo(() => {
+    const byCode = new Map<string, number>();
+    for (const planilla of planillas) {
+      byCode.set(planilla.codPla, (byCode.get(planilla.codPla) ?? 0) + 1);
+    }
+    return [...byCode.entries()]
+      .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+      .map(([codPla, count]) => ({
+        id: `cod-${codPla}`,
+        label: count > 1 ? `Todas ${codPla}` : `Cód. ${codPla}`,
+        values: [`*|${codPla}`],
+      }));
+  }, [planillas]);
+
+  const handlePlanillasChange = (values: string[]) => {
+    // Si eligen «Todas · 03» (*|03), quitar las filas sueltas de ese código.
+    const wildCodes = new Set(
+      values.filter((v) => v.startsWith("*|")).map((v) => v.slice(2)),
+    );
+    const cleaned = values.filter((v) => {
+      if (v.startsWith("*|")) return true;
+      const codPla = v.includes("|") ? v.split("|")[1] : v;
+      return !wildCodes.has(codPla ?? "");
+    });
+    setSelectedPlanillas(cleaned);
+  };
+
+  const appliedPlanillaSummary = useMemo(() => {
+    if (appliedPlanillas.length === 0) return "Todas las planillas";
+    const wild = appliedPlanillas.filter((v) => v.startsWith("*|")).map((v) => v.slice(2));
+    const specific = appliedPlanillas.filter((v) => !v.startsWith("*|"));
+    const parts: string[] = [];
+    if (wild.length) parts.push(`códigos ${wild.join(", ")} (todas las empresas)`);
+    if (specific.length) parts.push(`${specific.length} planilla(s) suelta(s)`);
+    return parts.join(" · ");
+  }, [appliedPlanillas]);
 
   const selectedRangoIndex = selectedRango
     ? periodos.findIndex((p) => sameRango(selectedRango, p))
@@ -1237,7 +1295,10 @@ export default function RevisionPlanillaPage() {
         <MultiSelect
           options={planillaOptions}
           value={selectedPlanillas}
-          onChange={setSelectedPlanillas}
+          onChange={handlePlanillasChange}
+          searchable
+          searchPlaceholder="Buscar código, nombre o empresa…"
+          quickActions={planillaQuickActions}
           placeholder={
             selectedEmpresas.length === 0 || !selectedRango
               ? "Seleccione empresa y quincena"
@@ -1328,8 +1389,8 @@ export default function RevisionPlanillaPage() {
             : appliedEmpresas.length > 1
               ? ` · ${appliedEmpresas.length} empresas`
               : ""}
-          {!filtersDirty && selectedRangoMeta?.descri ? ` · ${selectedRangoMeta.descri}` : ""}
-          {filtersDirty ? " · Filtros sin aplicar" : ""}
+          {!filtersDirty && appliedEmpresas.length > 0 ? ` · ${appliedPlanillaSummary}` : ""}
+          {filtersDirty ? " · Filtros sin aplicar — pulse Aplicar" : ""}
           {detalleFetching ? " · Actualizando…" : ""}
         </p>
       )}
@@ -1415,8 +1476,28 @@ export default function RevisionPlanillaPage() {
                   appliedRango &&
                   visibleRows.length === 0 && (
                     <tr>
-                      <td colSpan={columnDefs.length} className="p-6 text-center text-muted-foreground">
-                        Sin datos de planilla para el filtro actual.
+                      <td colSpan={columnDefs.length} className="p-6 text-center text-muted-foreground space-y-2">
+                        <div>Sin datos de planilla para el filtro actual.</div>
+                        <div className="text-xs max-w-xl mx-auto">
+                          {appliedPlanillas.length > 0 ? (
+                            <>
+                              Filtro de planillas activo: <strong>{appliedPlanillaSummary}</strong>.
+                              Limpie el selector de planillas (vacío = todas) o use el chip{" "}
+                              <strong>Todas 03</strong> / busque <strong>03</strong> en el desplegable,
+                              luego pulse Aplicar.
+                            </>
+                          ) : rows.length === 0 ? (
+                            <>
+                              No hay planillas sincronizadas para esta quincena y empresas. Pruebe{" "}
+                              <strong>Sincronizar NAF</strong>.
+                            </>
+                          ) : (
+                            <>
+                              Hay {rows.length} fila(s) ocultas por la búsqueda o los filtros de columna.
+                              Limpie «Buscar…» en las columnas o el buscador superior.
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )}
