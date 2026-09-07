@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useSession } from "@/lib/auth/client-session";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileSpreadsheet, Search } from "lucide-react";
+import { FileSpreadsheet, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toaster";
-import { formatCurrency, formatMonthYear } from "@/lib/utils/format";
+import { formatCurrency } from "@/lib/utils/format";
 import { companyDisplayName, EXPENSE_BUDGET_LINES, EXPENSE_BUDGET_LINE_LABELS } from "@/lib/utils/constants";
 import { useCompanies } from "@/lib/hooks/use-companies";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
@@ -67,6 +67,34 @@ const SOURCE_LABEL: Record<PaymentSource, string> = {
 
 const TABLE_ID = "gastos-pendientes-asignar";
 
+/** Etiqueta de mes YYYY-MM sin desfase UTC (evita «sep → ago» en CR). */
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return ym;
+  return new Date(y, m - 1, 1).toLocaleDateString("es-CR", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function monthOptions(): [string, string][] {
+  const start = new Date();
+  start.setMonth(start.getMonth() - 18);
+  const out: [string, string][] = [];
+  for (let i = 0; i < 36; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    out.push([val, monthLabel(val)]);
+  }
+  return out;
+}
+
+function shiftMonthValue(ym: string, delta: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export default function PendientesAsignarClient() {
   const qc = useQueryClient();
   const { data: session } = useSession();
@@ -76,6 +104,13 @@ export default function PendientesAsignarClient() {
   const activeCompanies = companyRows.filter((c) => c.isActive);
 
   const [month, setMonth] = useState(currentMonth());
+  const monthChoices = useMemo(() => {
+    const opts = monthOptions();
+    if (!opts.some(([v]) => v === month)) {
+      return [[month, monthLabel(month)] as [string, string], ...opts];
+    }
+    return opts;
+  }, [month]);
   const [filterCompany, setFilterCompany] = useState("all");
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
 
@@ -410,12 +445,37 @@ export default function PendientesAsignarClient() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Mes (pagos)</label>
-              <Input
-                type="month"
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-                className="w-[160px]"
-              />
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Mes anterior"
+                  onClick={() => setMonth((m) => shiftMonthValue(m, -1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <select
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                  className="h-9 min-w-[180px] rounded-md border border-input bg-background px-2 text-sm font-medium"
+                >
+                  {monthChoices.map(([val, label]) => (
+                    <option key={val} value={val}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Mes siguiente"
+                  onClick={() => setMonth((m) => shiftMonthValue(m, 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Empresa</label>
@@ -453,7 +513,7 @@ export default function PendientesAsignarClient() {
           </div>
 
           <p className="text-sm text-slate-600">
-            Pagos marcados <strong>Pagado</strong> en {formatMonthYear(`${month}-01`)} que aún no tienen
+            Pagos marcados <strong>Pagado</strong> en {monthLabel(month)} que aún no tienen
             gasto de presupuesto. Al asignar se crea el gasto (contrato o diferido) como en Gastos.
           </p>
 
@@ -611,11 +671,20 @@ export default function PendientesAsignarClient() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Período presupuesto *</label>
-                  <Input
-                    type="month"
+                  <select
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                     value={form.periodMonth}
                     onChange={(e) => setForm((f) => ({ ...f, periodMonth: e.target.value }))}
-                  />
+                  >
+                    {monthChoices.map(([val, label]) => (
+                      <option key={val} value={val}>
+                        {label}
+                      </option>
+                    ))}
+                    {!monthChoices.some(([v]) => v === form.periodMonth) && form.periodMonth && (
+                      <option value={form.periodMonth}>{monthLabel(form.periodMonth)}</option>
+                    )}
+                  </select>
                 </div>
               </div>
 
