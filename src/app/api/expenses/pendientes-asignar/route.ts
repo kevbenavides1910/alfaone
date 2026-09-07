@@ -8,11 +8,13 @@ import { expenseCreateSchema } from "@/modules/presupuestos/validations/expense.
 import {
   listPendingAssignPayments,
   assignPaymentAsExpense,
+  assignPaymentsAsExpenseBatch,
   PendingAssignError,
 } from "@/modules/presupuestos/services/pending-assign-payments";
 
 const paymentIdSchema = z.object({
-  paymentId: z.string().min(1, "paymentId requerido"),
+  paymentId: z.string().min(1).optional(),
+  paymentIds: z.array(z.string().min(1)).min(1).max(100).optional(),
 });
 
 /**
@@ -44,7 +46,8 @@ export const GET = withPermission(async (req: NextRequest, { session }) => {
 
 /**
  * POST /api/expenses/pendientes-asignar
- * Crea gasto (contrato / diferido / personalizado) desde un pago pagado.
+ * Crea gasto(s) desde uno o varios pagos pagados (misma clasificación/distribución).
+ * Body: { paymentId } o { paymentIds: string[] } + ExpenseCreateInput.
  */
 export const POST = withPermission(async (req: NextRequest, { session }) => {
   if (!canManageExpenses(session)) return forbidden();
@@ -53,28 +56,55 @@ export const POST = withPermission(async (req: NextRequest, { session }) => {
     const body = await req.json();
     const idParsed = paymentIdSchema.safeParse(body);
     if (!idParsed.success) {
-      return badRequest("paymentId requerido", idParsed.error.flatten());
+      return badRequest("paymentId o paymentIds requerido", idParsed.error.flatten());
     }
+
+    const paymentIds =
+      idParsed.data.paymentIds?.length
+        ? idParsed.data.paymentIds
+        : idParsed.data.paymentId
+          ? [idParsed.data.paymentId]
+          : [];
+    if (paymentIds.length === 0) {
+      return badRequest("paymentId o paymentIds requerido");
+    }
+
     const parsed = expenseCreateSchema.safeParse(body);
     if (!parsed.success) {
       return badRequest("Datos inválidos", parsed.error.flatten());
     }
 
-    const result = await assignPaymentAsExpense({
+    if (paymentIds.length === 1) {
+      const result = await assignPaymentAsExpense({
+        db: dbForSession(session),
+        paymentId: paymentIds[0]!,
+        input: parsed.data,
+        createdById: session.user.id,
+        tenantCompany: session.user.company,
+      });
+
+      if (!result.ok) {
+        if (result.code === "NOT_FOUND") return notFound(result.message);
+        if (result.code === "CONFLICT") return conflict(result.message);
+        return badRequest(result.message);
+      }
+
+      return created(result);
+    }
+
+    const batch = await assignPaymentsAsExpenseBatch({
       db: dbForSession(session),
-      paymentId: idParsed.data.paymentId,
+      paymentIds,
       input: parsed.data,
       createdById: session.user.id,
       tenantCompany: session.user.company,
     });
 
-    if (!result.ok) {
-      if (result.code === "NOT_FOUND") return notFound(result.message);
-      if (result.code === "CONFLICT") return conflict(result.message);
-      return badRequest(result.message);
+    if (!batch.ok) {
+      return badRequest(batch.message);
     }
 
-    return created(result);
+    return created(batch);
   } catch (e) {
     return serverError("Error al asignar pago como gasto", e);
   }

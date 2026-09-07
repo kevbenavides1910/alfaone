@@ -110,8 +110,10 @@ export async function assignPaymentAsExpense(options: {
   input: ExpenseCreateInput;
   createdById: string;
   tenantCompany?: string | null;
+  /** Si true, la descripción del gasto es siempre la del Payment. */
+  keepPaymentDescription?: boolean;
 }): Promise<AssignPaymentResult> {
-  const { db, paymentId, input, createdById, tenantCompany } = options;
+  const { db, paymentId, input, createdById, tenantCompany, keepPaymentDescription } = options;
 
   try {
     return await db.$transaction(async (tx) => {
@@ -154,6 +156,31 @@ export async function assignPaymentAsExpense(options: {
       const originNote = `Origen: pago ${payment.source} ${payment.id.slice(0, 8)}`;
       const notes = [input.notes?.trim(), originNote].filter(Boolean).join("\n");
 
+      const description = keepPaymentDescription
+        ? payment.description
+        : input.description?.trim() || payment.description;
+
+      // Reparto manual: proporciones del template aplicadas al monto de este pago.
+      let deferredManualAllocations = input.deferredManualAllocations;
+      if (deferredManualAllocations?.length) {
+        const templateTotal = deferredManualAllocations.reduce((s, r) => s + r.amount, 0);
+        if (templateTotal > 0 && Math.abs(templateTotal - amount) > 0.02) {
+          const scaled = deferredManualAllocations.map((r) => ({
+            contractId: r.contractId,
+            amount: Math.round(((r.amount / templateTotal) * amount + Number.EPSILON) * 100) / 100,
+          }));
+          const scaledSum = scaled.reduce((s, r) => s + r.amount, 0);
+          const drift = Math.round((amount - scaledSum + Number.EPSILON) * 100) / 100;
+          if (scaled.length > 0 && drift !== 0) {
+            scaled[scaled.length - 1] = {
+              ...scaled[scaled.length - 1]!,
+              amount: Math.round((scaled[scaled.length - 1]!.amount + drift + Number.EPSILON) * 100) / 100,
+            };
+          }
+          deferredManualAllocations = scaled;
+        }
+      }
+
       const forcedInput: ExpenseCreateInput = {
         ...input,
         amount,
@@ -161,8 +188,9 @@ export async function assignPaymentAsExpense(options: {
         periodMonth,
         company: input.company || payment.company || "",
         referenceNumber: input.referenceNumber?.trim() || payment.referenceNumber || undefined,
-        description: input.description?.trim() || payment.description,
+        description,
         notes: notes || undefined,
+        ...(deferredManualAllocations ? { deferredManualAllocations } : {}),
       };
 
       if (!forcedInput.company) {
@@ -224,6 +252,53 @@ export async function assignPaymentAsExpense(options: {
     }
     throw e;
   }
+}
+
+export type AssignPaymentsBatchResult = {
+  ok: true;
+  assigned: number;
+  failed: Array<{ paymentId: string; message: string }>;
+  expensesCreated: number;
+};
+
+/**
+ * Asigna varios pagos con la misma clasificación/distribución.
+ * Cada pago conserva su monto y descripción; el reparto manual se escala por monto.
+ */
+export async function assignPaymentsAsExpenseBatch(options: {
+  db: PrismaClient;
+  paymentIds: string[];
+  input: ExpenseCreateInput;
+  createdById: string;
+  tenantCompany?: string | null;
+}): Promise<AssignPaymentsBatchResult | { ok: false; code: "BAD_REQUEST"; message: string }> {
+  const ids = [...new Set(options.paymentIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) {
+    return { ok: false, code: "BAD_REQUEST", message: "Seleccione al menos un pago" };
+  }
+  if (ids.length > 100) {
+    return { ok: false, code: "BAD_REQUEST", message: "Máximo 100 pagos por lote" };
+  }
+
+  let assigned = 0;
+  let expensesCreated = 0;
+  const failed: Array<{ paymentId: string; message: string }> = [];
+
+  for (const paymentId of ids) {
+    const result = await assignPaymentAsExpense({
+      ...options,
+      paymentId,
+      keepPaymentDescription: ids.length > 1,
+    });
+    if (result.ok) {
+      assigned += 1;
+      expensesCreated += result.count;
+    } else {
+      failed.push({ paymentId, message: result.message });
+    }
+  }
+
+  return { ok: true, assigned, failed, expensesCreated };
 }
 
 /** Prefill helpers for UI / Syntra. */

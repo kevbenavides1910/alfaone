@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSession } from "@/lib/auth/client-session";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileSpreadsheet, Search, ChevronLeft, ChevronRight } from "lucide-react";
@@ -113,8 +113,16 @@ export default function PendientesAsignarClient() {
   }, [month]);
   const [filterCompany, setFilterCompany] = useState("all");
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const [assignTarget, setAssignTarget] = useState<PendingPayment | null>(null);
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [month, filterCompany]);
+
+  /** Uno o varios pagos a asignar con la misma clasificación. */
+  const [assignTargets, setAssignTargets] = useState<PendingPayment[]>([]);
+  const assignTarget = assignTargets[0] ?? null;
+  const isBulkAssign = assignTargets.length > 1;
   const [form, setForm] = useState({
     type: "OTHER" as ExpenseType,
     budgetLine: "" as ExpenseBudgetLine | "",
@@ -159,7 +167,7 @@ export default function PendientesAsignarClient() {
         r.json()
       ),
     staleTime: 60_000,
-    enabled: !!assignTarget,
+    enabled: assignTargets.length > 0,
   });
 
   const allContracts = contractsData?.data ?? [];
@@ -183,7 +191,7 @@ export default function PendientesAsignarClient() {
         `/api/contracts?assignable=true&search=${encodeURIComponent(remoteContractQuery)}&pageSize=100`,
         { credentials: "same-origin" }
       ).then((r) => r.json()),
-    enabled: !!assignTarget && form.mode === "contract" && remoteContractQuery.length >= 2,
+    enabled: assignTargets.length > 0 && form.mode === "contract" && remoteContractQuery.length >= 2,
     staleTime: 60_000,
   });
 
@@ -200,7 +208,8 @@ export default function PendientesAsignarClient() {
         `/api/contracts?assignable=true&search=${encodeURIComponent(remoteDeferredQuery)}&pageSize=100`,
         { credentials: "same-origin" }
       ).then((r) => r.json()),
-    enabled: !!assignTarget && form.mode === "deferred_custom" && remoteDeferredQuery.length >= 2,
+    enabled:
+      assignTargets.length > 0 && form.mode === "deferred_custom" && remoteDeferredQuery.length >= 2,
     staleTime: 60_000,
   });
 
@@ -220,6 +229,10 @@ export default function PendientesAsignarClient() {
     [customDeferredRows]
   );
   const customDeferredTotalTarget = assignTarget?.amount ?? 0;
+  const bulkTotalAmount = useMemo(
+    () => assignTargets.reduce((s, p) => s + p.amount, 0),
+    [assignTargets]
+  );
 
   const enrichedRows: PendingRow[] = useMemo(
     () =>
@@ -233,6 +246,13 @@ export default function PendientesAsignarClient() {
 
   const filterCols: TableColumnFilterDef<PendingRow>[] = useMemo(
     () => [
+      {
+        key: "select",
+        label: "Sel.",
+        getValue: () => "",
+        headerClassName: "text-center px-2 py-2 font-semibold text-slate-600 w-10",
+        filterable: false,
+      },
       {
         key: "paymentDate",
         label: "Fecha",
@@ -286,15 +306,38 @@ export default function PendientesAsignarClient() {
     [enrichedRows, columnFilters, filterCols]
   );
 
-  function openAssign(p: PendingPayment) {
-    setAssignTarget(p);
+  const displayIds = useMemo(() => displayRows.map((r) => r.id), [displayRows]);
+  const allVisibleSelected =
+    displayIds.length > 0 && displayIds.every((id) => selectedIds.includes(id));
+  const someVisibleSelected = displayIds.some((id) => selectedIds.includes(id));
+
+  function toggleSelectAllVisible() {
+    if (allVisibleSelected) {
+      const drop = new Set(displayIds);
+      setSelectedIds((prev) => prev.filter((id) => !drop.has(id)));
+    } else {
+      setSelectedIds((prev) => [...new Set([...prev, ...displayIds])]);
+    }
+  }
+
+  function toggleSelectOne(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  function openAssign(targets: PendingPayment | PendingPayment[]) {
+    const list = Array.isArray(targets) ? targets : [targets];
+    if (list.length === 0) return;
+    const first = list[0]!;
+    setAssignTargets(list);
     setForm({
       type: "OTHER",
       budgetLine: "",
-      description: p.description,
-      periodMonth: p.paymentDate.slice(0, 7),
-      company: p.company || "",
-      notes: p.notes || "",
+      description: list.length === 1 ? first.description : "",
+      periodMonth: first.paymentDate.slice(0, 7),
+      company: first.company || "",
+      notes: "",
       mode: "deferred",
       contractId: "",
       spreadMonths: 1,
@@ -302,6 +345,15 @@ export default function PendientesAsignarClient() {
     setCreateDeferredDraft("all");
     setCustomDeferredRows([{ contractId: "", amount: "", contractQuery: "" }]);
     setContractSearch("");
+  }
+
+  function openAssignSelected() {
+    const selected = displayRows.filter((r) => selectedIds.includes(r.id));
+    if (selected.length === 0) {
+      toast.error("Seleccione al menos un pago");
+      return;
+    }
+    openAssign(selected);
   }
 
   const assignMutation = useMutation({
@@ -319,9 +371,20 @@ export default function PendientesAsignarClient() {
       return json;
     },
     onSuccess: (json) => {
-      const count = json?.data?.count ?? json?.count ?? 1;
-      toast.success(count > 1 ? `Se crearon ${count} gastos` : "Gasto creado y pago asignado");
-      setAssignTarget(null);
+      const data = json?.data ?? json;
+      if (typeof data?.assigned === "number") {
+        const failed = Array.isArray(data.failed) ? data.failed.length : 0;
+        if (failed > 0) {
+          toast.success(`Asignados ${data.assigned}; ${failed} con error`);
+        } else {
+          toast.success(`Se asignaron ${data.assigned} pagos`);
+        }
+      } else {
+        const count = data?.count ?? 1;
+        toast.success(count > 1 ? `Se crearon ${count} gastos` : "Gasto creado y pago asignado");
+      }
+      setAssignTargets([]);
+      setSelectedIds([]);
       qc.invalidateQueries({ queryKey: ["pendientes-asignar"] });
       qc.invalidateQueries({ queryKey: ["expenses"] });
     },
@@ -329,7 +392,7 @@ export default function PendientesAsignarClient() {
   });
 
   function handleAssignSubmit() {
-    if (!assignTarget) return;
+    if (assignTargets.length === 0) return;
     if (!form.budgetLine) {
       toast.error("Seleccione la partida");
       return;
@@ -338,7 +401,7 @@ export default function PendientesAsignarClient() {
       toast.error("Seleccione la empresa");
       return;
     }
-    if (!form.description.trim()) {
+    if (!isBulkAssign && !form.description.trim()) {
       toast.error("Ingrese una descripción");
       return;
     }
@@ -361,7 +424,13 @@ export default function PendientesAsignarClient() {
 
     let deferredManualAllocations: { contractId: string; amount: number }[] | undefined;
     if (form.mode === "deferred_custom") {
-      const total = assignTarget.amount;
+      if (isBulkAssign) {
+        toast.error(
+          "En lote use diferido proporcional o contrato; el personalizado se escala solo si es un pago"
+        );
+        return;
+      }
+      const total = assignTarget!.amount;
       const allocations: { contractId: string; amount: number }[] = [];
       for (const row of customDeferredRows) {
         if (!row.contractId) {
@@ -397,15 +466,20 @@ export default function PendientesAsignarClient() {
       deferredManualAllocations = allocations;
     }
 
+    const first = assignTargets[0]!;
     assignMutation.mutate({
-      paymentId: assignTarget.id,
+      ...(assignTargets.length === 1
+        ? { paymentId: first.id }
+        : { paymentIds: assignTargets.map((p) => p.id) }),
       type: form.type,
       budgetLine: form.budgetLine,
       company: form.company,
-      description: form.description.trim(),
-      amount: assignTarget.amount,
+      description: isBulkAssign
+        ? first.description || "Asignación en lote"
+        : form.description.trim(),
+      amount: first.amount,
       periodMonth: form.periodMonth,
-      paymentDate: assignTarget.paymentDate,
+      paymentDate: first.paymentDate,
       contractId: form.mode === "contract" ? form.contractId : undefined,
       isDeferred: form.mode === "deferred" || form.mode === "deferred_custom",
       notes: form.notes.trim() || undefined,
@@ -496,6 +570,11 @@ export default function PendientesAsignarClient() {
             <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
               Actualizar
             </Button>
+            {canEdit && selectedIds.length > 0 && (
+              <Button type="button" size="sm" onClick={openAssignSelected}>
+                Asignar seleccionados ({selectedIds.length})
+              </Button>
+            )}
             <Button type="button" variant="outline" size="sm" onClick={exportExcel}>
               <FileSpreadsheet className="h-4 w-4 mr-1.5" />
               Excel
@@ -532,6 +611,7 @@ export default function PendientesAsignarClient() {
                   onFilterChange={(k, v) => setColumnFilters((s) => ({ ...s, [k]: v }))}
                   headerRowClassName="border-b bg-muted/50"
                   defaultColumnWidths={{
+                    select: 44,
                     paymentDate: 110,
                     description: 280,
                     amount: 120,
@@ -545,19 +625,30 @@ export default function PendientesAsignarClient() {
               <tbody className="divide-y">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
+                    <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
                       Cargando…
                     </td>
                   </tr>
                 ) : displayRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
+                    <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
                       No hay pagos pendientes de asignar en este mes
                     </td>
                   </tr>
                 ) : (
                   displayRows.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/80">
+                      <td className="px-2 py-2 text-center">
+                        {canEdit ? (
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-red-600"
+                            checked={selectedIds.includes(r.id)}
+                            onChange={() => toggleSelectOne(r.id)}
+                            aria-label={`Seleccionar ${r.description}`}
+                          />
+                        ) : null}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">{r.paymentDate}</td>
                       <td className="px-3 py-2">
                         <span className="whitespace-nowrap" title={r.description}>
@@ -589,27 +680,72 @@ export default function PendientesAsignarClient() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-slate-500">{displayRows.length} registro(s)</p>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+            <p>
+              {displayRows.length} registro(s)
+              {selectedIds.length > 0 ? ` · ${selectedIds.length} seleccionado(s)` : ""}
+            </p>
+            {canEdit && displayRows.length > 0 && (
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-red-600"
+                  checked={allVisibleSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected;
+                  }}
+                  onChange={toggleSelectAllVisible}
+                />
+                Seleccionar visibles
+              </label>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      <Dialog open={!!assignTarget} onOpenChange={(o) => !o && setAssignTarget(null)}>
+      <Dialog
+        open={assignTargets.length > 0}
+        onOpenChange={(o) => !o && setAssignTargets([])}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Asignar pago como gasto</DialogTitle>
+            <DialogTitle>
+              {isBulkAssign
+                ? `Asignar ${assignTargets.length} pagos como gasto`
+                : "Asignar pago como gasto"}
+            </DialogTitle>
           </DialogHeader>
 
           {assignTarget && (
             <div className="space-y-4">
               <div className="rounded-md border bg-slate-50 px-3 py-2 text-sm space-y-1">
-                <p>
-                  <span className="text-slate-500">Monto del pago:</span>{" "}
-                  <strong>{formatCurrency(assignTarget.amount)}</strong>
-                </p>
-                <p>
-                  <span className="text-slate-500">Fecha pago:</span> {assignTarget.paymentDate} ·{" "}
-                  <Badge variant="secondary">{SOURCE_LABEL[assignTarget.source]}</Badge>
-                </p>
+                {isBulkAssign ? (
+                  <>
+                    <p>
+                      <span className="text-slate-500">Pagos:</span>{" "}
+                      <strong>{assignTargets.length}</strong>
+                    </p>
+                    <p>
+                      <span className="text-slate-500">Suma montos:</span>{" "}
+                      <strong>{formatCurrency(bulkTotalAmount)}</strong>
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Misma clasificación y distribución para todos. Cada pago conserva su descripción
+                      y monto; el diferido personalizado no aplica en lote.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      <span className="text-slate-500">Monto del pago:</span>{" "}
+                      <strong>{formatCurrency(assignTarget.amount)}</strong>
+                    </p>
+                    <p>
+                      <span className="text-slate-500">Fecha pago:</span> {assignTarget.paymentDate} ·{" "}
+                      <Badge variant="secondary">{SOURCE_LABEL[assignTarget.source]}</Badge>
+                    </p>
+                  </>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -688,24 +824,36 @@ export default function PendientesAsignarClient() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Descripción *</label>
-                <Input
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                />
-              </div>
+              {!isBulkAssign ? (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Descripción *</label>
+                  <Input
+                    value={form.description}
+                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Cada pago conserva su propia descripción del calendario.
+                </p>
+              )}
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Asignar a</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 rounded-md border border-slate-200 p-1 bg-muted/50">
+                <div
+                  className={`grid grid-cols-1 gap-1 rounded-md border border-slate-200 p-1 bg-muted/50 ${
+                    isBulkAssign ? "sm:grid-cols-2" : "sm:grid-cols-3"
+                  }`}
+                >
                   {(
                     [
-                      ["contract", "Contrato específico"],
-                      ["deferred", "Diferido proporcional"],
-                      ["deferred_custom", "Diferido personalizado"],
-                    ] as const
-                  ).map(([mode, label]) => (
+                      { mode: "contract" as const, label: "Contrato específico" },
+                      { mode: "deferred" as const, label: "Diferido proporcional" },
+                      ...(isBulkAssign
+                        ? []
+                        : [{ mode: "deferred_custom" as const, label: "Diferido personalizado" }]),
+                    ]
+                  ).map(({ mode, label }) => (
                     <button
                       key={mode}
                       type="button"
@@ -972,7 +1120,7 @@ export default function PendientesAsignarClient() {
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setAssignTarget(null)}>
+            <Button type="button" variant="outline" onClick={() => setAssignTargets([])}>
               Cancelar
             </Button>
             <Button
@@ -980,7 +1128,11 @@ export default function PendientesAsignarClient() {
               onClick={handleAssignSubmit}
               disabled={assignMutation.isPending}
             >
-              {assignMutation.isPending ? "Asignando…" : "Crear gasto"}
+              {assignMutation.isPending
+                ? "Asignando…"
+                : isBulkAssign
+                  ? `Crear ${assignTargets.length} gastos`
+                  : "Crear gasto"}
             </Button>
           </DialogFooter>
         </DialogContent>
