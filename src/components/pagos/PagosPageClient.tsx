@@ -23,6 +23,10 @@ import { useCompanies } from "@/lib/hooks/use-companies";
 import { companyDisplayName } from "@/lib/utils/constants";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
+  DEFAULT_SAP_TO_COMPANY,
+  nafCiaDisplayName,
+} from "@/modules/empleados/business/company-sap";
+import {
   PAYMENT_CATEGORIES,
   paymentCategoryLabel,
   paymentSubcategoryLabel,
@@ -348,7 +352,10 @@ function formatPaymentCompany(
   const c = code.trim();
   const byCode = rows.find((r) => r.code === c);
   if (byCode) {
-    const sap = byCode.sapCode?.trim();
+    const sap =
+      byCode.sapCode?.trim() ||
+      Object.entries(DEFAULT_SAP_TO_COMPANY).find(([, code]) => code === byCode.code)?.[0] ||
+      "";
     const name = companyDisplayName(byCode.code, rows);
     return sap ? `${name} (${sap})` : name;
   }
@@ -356,10 +363,19 @@ function formatPaymentCompany(
   if (bySap) {
     return `${companyDisplayName(bySap.code, rows)} (${c})`;
   }
-  return c;
+  const mappedCode = DEFAULT_SAP_TO_COMPANY[c];
+  if (mappedCode) {
+    const name =
+      companyDisplayName(mappedCode, rows) !== mappedCode
+        ? companyDisplayName(mappedCode, rows)
+        : nafCiaDisplayName(c) ?? mappedCode;
+    return `${name} (${c})`;
+  }
+  const nafName = nafCiaDisplayName(c);
+  return nafName ? `${nafName} (${c})` : c;
 }
 
-/** Códigos que aparecen en pagos pero no siempre en catálogo Company. */
+/** Códigos NAF que aparecen en pagos y no siempre tienen fila en `companies`. */
 const EXTRA_PAYMENT_COMPANY_CODES = ["06", "07", "31", "AA"];
 
 type Props = {
@@ -375,8 +391,12 @@ export function PagosPageClient({ initialCompany }: Props) {
   const companyOptions = useMemo(() => {
     const opts: { value: string; label: string; searchText?: string }[] = [];
     const seen = new Set<string>();
+
     for (const c of companyRows.filter((r) => r.isActive)) {
-      const sap = c.sapCode?.trim() || "";
+      const sap =
+        c.sapCode?.trim() ||
+        Object.entries(DEFAULT_SAP_TO_COMPANY).find(([, code]) => code === c.code)?.[0] ||
+        "";
       const name = companyDisplayName(c.code, companyRows);
       const label = sap ? `${name} (${sap})` : name;
       opts.push({
@@ -387,10 +407,20 @@ export function PagosPageClient({ initialCompany }: Props) {
       seen.add(c.code);
       if (sap) seen.add(sap);
     }
+
     for (const code of EXTRA_PAYMENT_COMPANY_CODES) {
       if (seen.has(code)) continue;
-      opts.push({ value: code, label: code, searchText: code });
+      const mapped = DEFAULT_SAP_TO_COMPANY[code];
+      if (mapped && seen.has(mapped)) continue;
+      const name = nafCiaDisplayName(code) ?? mapped ?? code;
+      const label = name === code ? code : `${name} (${code})`;
+      opts.push({
+        value: code,
+        label,
+        searchText: `${code} ${name} ${mapped ?? ""}`,
+      });
       seen.add(code);
+      if (mapped) seen.add(mapped);
     }
     return opts;
   }, [companyRows]);

@@ -1,4 +1,5 @@
 import { prisma } from "@/modules/core/db/prisma";
+import { DEFAULT_SAP_TO_COMPANY } from "@/modules/empleados/business/company-sap";
 
 export type PaymentCompanyFilter = string | string[] | undefined;
 
@@ -20,7 +21,7 @@ export function parsePaymentCompanyParams(searchParams: URLSearchParams): string
 
 /**
  * Expande códigos de filtro a alias almacenados en Payment.company
- * (p. ej. ALFA ↔ 01 vía Company.sapCode).
+ * (p. ej. ALFA ↔ 01 vía Company.sapCode + mapa SAP por defecto).
  */
 export async function expandPaymentCompanyFilter(
   filter?: PaymentCompanyFilter,
@@ -34,14 +35,22 @@ export async function expandPaymentCompanyFilter(
     select: { code: true, sapCode: true },
   });
   const set = new Set<string>();
+
+  const addAliases = (code: string, sap: string) => {
+    if (code) set.add(code);
+    if (sap) set.add(sap);
+  };
+
   for (const s of selected) {
     set.add(s);
     for (const c of companies) {
       const sap = c.sapCode?.trim() || "";
       if (c.code === s || (sap && sap === s)) {
-        set.add(c.code);
-        if (sap) set.add(sap);
+        addAliases(c.code, sap);
       }
+    }
+    for (const [sap, code] of Object.entries(DEFAULT_SAP_TO_COMPANY)) {
+      if (s === sap || s === code) addAliases(code, sap);
     }
   }
   return [...set];

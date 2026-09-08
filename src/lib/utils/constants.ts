@@ -39,6 +39,8 @@ export const FALLBACK_COMPANY_LABELS: Record<string, string> = {
   GRUPO: "Grupo",
   ACE: "ACE",
   DESARROLLOS: "Desarrollos Constructivos",
+  ALFASECURE: "Alfa Secure",
+  KBA: "Kevin Benavides Altamirano",
 };
 
 export function companyDisplayName(
