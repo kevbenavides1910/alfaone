@@ -7,6 +7,10 @@ import {
   paymentSubcategoryLabel,
   validatePaymentClassification,
 } from "@/modules/pagos/catalog/payment-categories";
+import {
+  expandPaymentCompanyFilter,
+  paymentCompanyWhere,
+} from "./payment-company-filter";
 
 export type PaymentChangeLogDto = {
   id: string;
@@ -111,12 +115,14 @@ export async function listPaymentChangeLogs(paymentId: string): Promise<PaymentC
 /** Bitácora global del módulo de pagos (todos los cambios). */
 export async function listAllPaymentChangeLogs(opts?: {
   take?: number;
-  company?: string;
+  company?: string | string[];
 }): Promise<PaymentChangeLogDto[]> {
   const take = Math.min(Math.max(opts?.take ?? 200, 1), 500);
+  const companyCodes = await expandPaymentCompanyFilter(opts?.company);
+  const paymentWhere = paymentCompanyWhere(companyCodes);
   const rows = await prisma.paymentChangeLog.findMany({
-    where: opts?.company
-      ? { payment: { company: opts.company } }
+    where: Object.keys(paymentWhere).length
+      ? { payment: paymentWhere }
       : undefined,
     orderBy: { createdAt: "desc" },
     take,

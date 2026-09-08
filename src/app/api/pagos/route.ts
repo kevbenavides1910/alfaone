@@ -21,10 +21,11 @@ import {
   ScheduleExpenseError,
 } from "@/modules/pagos/services/pago-proveedores";
 import { validatePaymentClassification } from "@/modules/pagos/catalog/payment-categories";
+import { parsePaymentCompanyParams } from "@/modules/pagos/services/payment-company-filter";
 
 /**
  * API del módulo Pagos (calendario).
- *   GET  /api/pagos?month=YYYY-MM[&company=...]
+ *   GET  /api/pagos?month=YYYY-MM[&company=...|&companies=a,b]
  *        → calendario del mes (días con sus pagos y totales)
  *   GET  /api/pagos?oc=...[&company=...]
  *        → búsqueda por número de OC en todos los meses (lista plana)
@@ -37,14 +38,15 @@ export const GET = withPermission(
 async (req: NextRequest) => {
   try {
     const { searchParams } = new URL(req.url);
-    const company = searchParams.get("company")?.trim() || undefined;
+    const companies = parsePaymentCompanyParams(searchParams);
+    const companyFilter = companies.length ? companies : undefined;
     const oc = searchParams.get("oc")?.trim() || "";
 
     if (oc) {
       if (oc.length < 2) {
         return badRequest("Ingresá al menos 2 caracteres del número de OC");
       }
-      const results = await searchPaymentsByOc(oc, company);
+      const results = await searchPaymentsByOc(oc, companyFilter);
       return ok(results);
     }
 
@@ -52,7 +54,7 @@ async (req: NextRequest) => {
     if (!/^\d{4}-\d{2}$/.test(month)) {
       return badRequest("Formato de mes inválido (esperado YYYY-MM)");
     }
-    const calendar = await getCalendarMonth(month, company);
+    const calendar = await getCalendarMonth(month, companyFilter);
     return ok(calendar);
   } catch (e) {
     return serverError("Error al obtener el calendario de pagos", e);

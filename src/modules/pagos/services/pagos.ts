@@ -6,6 +6,11 @@ import {
   type ApexCalendarioPagoBaseRow,
   type ApexCalendarioPagoRow,
 } from "./apex-calendario";
+import {
+  expandPaymentCompanyFilter,
+  paymentCompanyWhere,
+  type PaymentCompanyFilter,
+} from "./payment-company-filter";
 
 /**
  * Servicio del módulo de Pagos (calendario).
@@ -146,7 +151,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
  */
 export async function syncAndListPayments(
   month: string, // "YYYY-MM"
-  companyFilter?: string,
+  companyFilter?: PaymentCompanyFilter,
 ): Promise<PagoDto[]> {
   const from = startOfMonth(month);
   const to = endOfMonth(month);
@@ -167,10 +172,11 @@ export async function syncAndListPayments(
     }
   }
 
+  const companyCodes = await expandPaymentCompanyFilter(companyFilter);
   const payments = await prisma.payment.findMany({
     where: {
       paymentDate: { gte: from, lt: to },
-      ...(companyFilter ? { company: companyFilter } : {}),
+      ...paymentCompanyWhere(companyCodes),
     },
     orderBy: [{ paymentDate: "asc" }, { createdAt: "asc" }],
   });
@@ -380,7 +386,7 @@ async function syncApexForMonth(
 /** Devuelve el calendario del mes como días { fecha, pagos, totales }. */
 export async function getCalendarMonth(
   month: string,
-  companyFilter?: string,
+  companyFilter?: PaymentCompanyFilter,
 ): Promise<CalendarDay[]> {
   const payments = await syncAndListPayments(month, companyFilter);
   const byDay = new Map<string, PagoDto[]>();
@@ -411,17 +417,18 @@ const OC_SEARCH_MAX = 100;
  */
 export async function searchPaymentsByOc(
   oc: string,
-  companyFilter?: string,
+  companyFilter?: PaymentCompanyFilter,
   limit = OC_SEARCH_MAX,
 ): Promise<PagoDto[]> {
   const q = oc.trim();
   if (!q) return [];
 
   const take = Math.min(Math.max(limit, 1), OC_SEARCH_MAX);
+  const companyCodes = await expandPaymentCompanyFilter(companyFilter);
   const rows = await prisma.payment.findMany({
     where: {
       referenceNumber: { contains: q, mode: "insensitive" },
-      ...(companyFilter ? { company: companyFilter } : {}),
+      ...paymentCompanyWhere(companyCodes),
     },
     orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
     take,

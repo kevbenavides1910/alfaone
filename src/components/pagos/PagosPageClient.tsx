@@ -19,6 +19,9 @@ import { toast } from "@/components/ui/toaster";
 import { formatCurrency, formatDate, formatDateTime, calendarDateInputValue } from "@/lib/utils/format";
 import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
+import { useCompanies } from "@/lib/hooks/use-companies";
+import { companyDisplayName } from "@/lib/utils/constants";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   PAYMENT_CATEGORIES,
   paymentCategoryLabel,
@@ -331,6 +334,34 @@ function CalendarTotalsBar({
   );
 }
 
+function appendCompanyParams(params: URLSearchParams, companies: string[]) {
+  for (const code of companies) {
+    if (code.trim()) params.append("company", code.trim());
+  }
+}
+
+function formatPaymentCompany(
+  code: string | null | undefined,
+  rows: { code: string; name: string; sapCode?: string | null }[],
+): string {
+  if (!code?.trim()) return "—";
+  const c = code.trim();
+  const byCode = rows.find((r) => r.code === c);
+  if (byCode) {
+    const sap = byCode.sapCode?.trim();
+    const name = companyDisplayName(byCode.code, rows);
+    return sap ? `${name} (${sap})` : name;
+  }
+  const bySap = rows.find((r) => (r.sapCode?.trim() || "") === c);
+  if (bySap) {
+    return `${companyDisplayName(bySap.code, rows)} (${c})`;
+  }
+  return c;
+}
+
+/** Códigos que aparecen en pagos pero no siempre en catálogo Company. */
+const EXTRA_PAYMENT_COMPANY_CODES = ["06", "07", "31", "AA"];
+
 type Props = {
   initialCompany?: string | null;
 };
@@ -338,8 +369,36 @@ type Props = {
 export function PagosPageClient({ initialCompany }: Props) {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
+  const { data: companiesRes } = useCompanies();
+  const companyRows = companiesRes?.data ?? [];
+
+  const companyOptions = useMemo(() => {
+    const opts: { value: string; label: string; searchText?: string }[] = [];
+    const seen = new Set<string>();
+    for (const c of companyRows.filter((r) => r.isActive)) {
+      const sap = c.sapCode?.trim() || "";
+      const name = companyDisplayName(c.code, companyRows);
+      const label = sap ? `${name} (${sap})` : name;
+      opts.push({
+        value: c.code,
+        label,
+        searchText: `${c.code} ${sap} ${name}`,
+      });
+      seen.add(c.code);
+      if (sap) seen.add(sap);
+    }
+    for (const code of EXTRA_PAYMENT_COMPANY_CODES) {
+      if (seen.has(code)) continue;
+      opts.push({ value: code, label: code, searchText: code });
+      seen.add(code);
+    }
+    return opts;
+  }, [companyRows]);
+
   const [month, setMonth] = useState(currentMonth());
-  const [company, setCompany] = useState<string>(initialCompany ?? "all");
+  const [companies, setCompanies] = useState<string[]>(
+    initialCompany && initialCompany !== "all" ? [initialCompany] : [],
+  );
   const [showNew, setShowNew] = useState(false);
   const [draft, setDraft] = useState<NewPaymentDraft>(EMPTY_DRAFT);
   const [detailPayment, setDetailPayment] = useState<PagoDto | null>(null);
@@ -364,14 +423,14 @@ export function PagosPageClient({ initialCompany }: Props) {
   );
 
   const { data: calendar = [], isFetching, isError: calendarError, error: calendarErr, refetch } = useQuery({
-    queryKey: ["pagos", month, company],
+    queryKey: ["pagos", month, companies],
     queryFn: async () => {
       const params = new URLSearchParams({ month });
-      if (company && company !== "all") params.set("company", company);
+      appendCompanyParams(params, companies);
       const res = await fetch(`/api/pagos?${params.toString()}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || "Error al cargar pagos");
+        throw new Error(apiErrorMessage(j, "Error al cargar pagos"));
       }
       const json = await res.json();
       return json.data as CalendarDay[];
@@ -390,14 +449,14 @@ export function PagosPageClient({ initialCompany }: Props) {
     isFetching: ocSearching,
     isError: ocSearchError,
   } = useQuery({
-    queryKey: ["pagos-oc-search", ocDebounced, company],
+    queryKey: ["pagos-oc-search", ocDebounced, companies],
     queryFn: async () => {
       const params = new URLSearchParams({ oc: ocDebounced });
-      if (company && company !== "all") params.set("company", company);
+      appendCompanyParams(params, companies);
       const res = await fetch(`/api/pagos?${params.toString()}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || "Error al buscar OC");
+        throw new Error(apiErrorMessage(j, "Error al buscar OC"));
       }
       const json = await res.json();
       return (json.data ?? json) as PagoDto[];
@@ -414,10 +473,10 @@ export function PagosPageClient({ initialCompany }: Props) {
   }, [activeTab]);
 
   const { data: bitacoraGlobal = [], isFetching: bitacoraFetching } = useQuery({
-    queryKey: ["pagos-bitacora-global", company],
+    queryKey: ["pagos-bitacora-global", companies],
     queryFn: async () => {
       const params = new URLSearchParams({ limit: "300" });
-      if (company && company !== "all") params.set("company", company);
+      appendCompanyParams(params, companies);
       const res = await fetch(`/api/pagos/bitacora?${params.toString()}`);
       if (!res.ok) throw new Error("Error al cargar bitácora");
       const json = await res.json();
@@ -435,12 +494,12 @@ export function PagosPageClient({ initialCompany }: Props) {
   } = useQuery({
     queryKey: [
       "pagos-proveedores",
-      company,
+      companies,
       ocDebounced.trim().length >= 2 ? ocDebounced.trim() : "",
     ],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (company && company !== "all") params.set("company", company);
+      appendCompanyParams(params, companies);
       const q = ocDebounced.trim();
       if (q.length >= 2) params.set("oc", q);
       const qs = params.toString();
@@ -823,28 +882,15 @@ export function PagosPageClient({ initialCompany }: Props) {
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <select
-          value={company}
-          onChange={(e) => setCompany(e.target.value)}
-          className="h-9 border rounded-md px-2 text-sm"
-        >
-          <option value="all">Todas las compañías</option>
-          <option value="01">01</option>
-          <option value="02">02</option>
-          <option value="03">03</option>
-          <option value="04">04</option>
-          <option value="05">05</option>
-          <option value="06">06</option>
-          <option value="30">30</option>
-          <option value="AA">AA</option>
-          <option value="BENA">BENA</option>
-          <option value="GRUPO">GRUPO</option>
-          <option value="TANGO">TANGO</option>
-          <option value="MONITOREO">MONITOREO</option>
-          <option value="CONSORCIO">CONSORCIO</option>
-          <option value="JOBEN">JOBEN</option>
-          <option value="ACE">ACE</option>
-        </select>
+        <MultiSelect
+          options={companyOptions}
+          value={companies}
+          onChange={setCompanies}
+          placeholder="Todas las compañías"
+          searchable
+          searchPlaceholder="Buscar compañía…"
+          className="min-w-[240px] max-w-[360px] w-[280px]"
+        />
         <div className="relative min-w-[220px] max-w-sm flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -1129,7 +1175,7 @@ export function PagosPageClient({ initialCompany }: Props) {
                             )}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">{e.type}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{e.company ?? "—"}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{formatPaymentCompany(e.company, companyRows)}</td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             {e.status === "unscheduled" ? (
                               <span className="text-xs font-medium text-amber-700">Sin programar</span>
@@ -1255,6 +1301,7 @@ export function PagosPageClient({ initialCompany }: Props) {
               monthLabel={monthLabel}
               payments={reportePayments}
               loading={isFetching && calendar.length === 0}
+              formatCompany={(code) => formatPaymentCompany(code, companyRows)}
               onViewDetail={(id) => {
                 const p = paymentsById.get(id);
                 if (p) setDetailPayment(p);
@@ -1353,11 +1400,18 @@ export function PagosPageClient({ initialCompany }: Props) {
             </div>
             <div className="grid gap-1.5">
               <Label>Compañía</Label>
-              <Input
+              <select
                 value={draft.company}
                 onChange={(e) => setDraft((d) => ({ ...d, company: e.target.value }))}
-                placeholder="Ej. 01"
-              />
+                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              >
+                <option value="">Sin compañía</option>
+                {companyOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="grid gap-1.5">
               <Label>N° OC (Pago proveedores)</Label>

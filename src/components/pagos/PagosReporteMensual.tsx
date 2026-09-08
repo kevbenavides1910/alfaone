@@ -95,11 +95,13 @@ export function PagosReporteMensual({
   payments,
   loading,
   onViewDetail,
+  formatCompany,
 }: {
   monthLabel: string;
   payments: ReportePagoItem[];
   loading?: boolean;
   onViewDetail?: (id: string) => void;
+  formatCompany?: (code: string | null) => string;
 }) {
   const groups = useMemo(() => buildReport(payments), [payments]);
   const grandTotal = useMemo(
@@ -224,7 +226,9 @@ export function PagosReporteMensual({
                                   </span>
                                   <span className="text-muted-foreground shrink-0">
                                     {FUENTE_SHORT[item.source] ?? item.source}
-                                    {item.company ? ` · ${item.company}` : ""}
+                                    {item.company
+                                      ? ` · ${formatCompany ? formatCompany(item.company) : item.company}`
+                                      : ""}
                                     {item.referenceNumber ? ` · OC ${item.referenceNumber}` : ""}
                                   </span>
                                   <span className="font-semibold tabular-nums shrink-0 text-emerald-700">

@@ -7,6 +7,11 @@ import {
   mapFacturasByOcNumbers,
   normalizeOcKey,
 } from "./naf-oc-factura";
+import {
+  expandPaymentCompanyFilter,
+  paymentCompanyWhere,
+  type PaymentCompanyFilter,
+} from "./payment-company-filter";
 
 export type PagoProveedorStatus = "unscheduled" | "scheduled_unpaid" | "paid";
 
@@ -99,11 +104,12 @@ function parsePaymentOcTokens(referenceNumber: string | null | undefined): strin
  * Índice de pagos ya marcados en verde en el calendario (`Payment.paid = true`).
  * Cubre vínculo por expenseId, settledByPaymentId y N° OC en referenceNumber.
  */
-async function loadCalendarPaidIndex(companyFilter?: string): Promise<CalendarPaidIndex> {
+async function loadCalendarPaidIndex(companyFilter?: PaymentCompanyFilter): Promise<CalendarPaidIndex> {
+  const companyCodes = await expandPaymentCompanyFilter(companyFilter);
   const payments = await prisma.payment.findMany({
     where: {
       paid: true,
-      ...(companyFilter ? { company: companyFilter } : {}),
+      ...paymentCompanyWhere(companyCodes),
     },
     select: {
       id: true,
@@ -268,14 +274,20 @@ function collapseByOc(
 
 async function attachInvoiceNumbers(
   list: PagoProveedorDto[],
-  companyFilter?: string,
+  companyFilter?: PaymentCompanyFilter,
 ): Promise<PagoProveedorDto[]> {
   const ocNumbers = list
     .map((r) => r.referenceNumber?.trim())
     .filter((v): v is string => Boolean(v));
   if (ocNumbers.length === 0) return list;
 
-  const byOc = await mapFacturasByOcNumbers(ocNumbers, companyFilter);
+  const selected = Array.isArray(companyFilter)
+    ? companyFilter
+    : companyFilter
+      ? [companyFilter]
+      : [];
+  const oracleCompany = selected.length === 1 ? selected[0] : undefined;
+  const byOc = await mapFacturasByOcNumbers(ocNumbers, oracleCompany);
   if (byOc.size === 0) return list;
 
   return list.map((row) => {
@@ -292,17 +304,24 @@ async function attachInvoiceNumbers(
  * «Pagado» = `Payment.paid` en el calendario (círculo verde), no solo programado.
  */
 export async function listPagoProveedores(
-  companyFilter?: string,
+  companyFilter?: PaymentCompanyFilter,
   ocFilter?: string,
   options?: { includePaid?: boolean },
 ): Promise<PagoProveedorDto[]> {
   const oc = ocFilter?.trim() || "";
   const includePaid = options?.includePaid === true;
+  const companyCodes = await expandPaymentCompanyFilter(companyFilter);
+  const selected = Array.isArray(companyFilter)
+    ? companyFilter
+    : companyFilter
+      ? [companyFilter]
+      : [];
+  const oracleCompany = selected.length === 1 ? selected[0] : undefined;
 
   let ocFromFactura: string[] = [];
   if (oc.length >= 2) {
     try {
-      const hits = await findOcByFacturaNumber(oc, companyFilter);
+      const hits = await findOcByFacturaNumber(oc, oracleCompany);
       ocFromFactura = [...new Set(hits.map((h) => h.noOrden.trim()).filter(Boolean))];
     } catch (err) {
       console.warn("[pagos] búsqueda factura→OC NAF falló:", err);
@@ -315,7 +334,7 @@ export async function listPagoProveedores(
       where: {
         approvalStatus: "APPROVED",
         deletedAt: null,
-        ...(companyFilter ? { company: companyFilter } : {}),
+        ...paymentCompanyWhere(companyCodes),
         ...(oc
           ? {
               OR: [

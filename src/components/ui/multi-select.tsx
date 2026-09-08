@@ -91,11 +91,16 @@ export function MultiSelect({
   const label =
     value.length === 0
       ? placeholder
-      : value.length === 1
-        ? options.find((o) => o.value === value[0])?.label ??
-          quickActions?.find((a) => a.values.length === 1 && a.values[0] === value[0])?.label ??
-          value[0]
-        : `${value.length} seleccionadas`;
+      : (() => {
+          const names = value.map(
+            (v) =>
+              options.find((o) => o.value === v)?.label ??
+              quickActions?.find((a) => a.values.length === 1 && a.values[0] === v)?.label ??
+              v,
+          );
+          if (names.length <= 3) return names.join(", ");
+          return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
+        })();
 
   return (
     <div ref={ref} className={cn("relative", className)}>
