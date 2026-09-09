@@ -12,7 +12,7 @@ const PATH_LABELS: Array<{ prefix: string; label: string; toolHint?: string }> =
   { prefix: "/facturacion", label: "Facturación y cobro", toolHint: "query_facturacion_dashboard, search_cxc" },
   { prefix: "/cuentas-por-pagar", label: "Cuentas por pagar", toolHint: "search_cxp_facturas" },
   { prefix: "/facturacion-electronica", label: "Facturación electrónica", toolHint: "list_fe_facturas" },
-  { prefix: "/pagos", label: "Pagos", toolHint: "query_payment_calendar, search_payments_by_oc o list_pago_proveedores" },
+  { prefix: "/pagos", label: "Pagos", toolHint: "query_payment_calendar, search_payments_by_oc, list_pago_proveedores, list_payment_attachments o unschedule_pago_diario" },
   { prefix: "/tickets-ti", label: "Tickets TI", toolHint: "search_tickets, query_tickets_dashboard" },
   { prefix: "/inventory", label: "Inventario", toolHint: "search_assets" },
   { prefix: "/finger-system/marcas", label: "Finger System / Marcas", toolHint: "list_finger_punches" },

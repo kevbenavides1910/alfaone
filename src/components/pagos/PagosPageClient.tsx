@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect, useRef, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare, ScrollText, Search, X, Building2, PieChart } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, Eye, Trash2, CalendarDays, Repeat, GanttChartSquare, ScrollText, Search, X, Building2, PieChart, Paperclip } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import {
   DEFAULT_SAP_TO_COMPANY,
   nafCiaDisplayName,
 } from "@/modules/empleados/business/company-sap";
+import { AttachmentPreviewDialog } from "@/components/expenses/AttachmentPreviewDialog";
 import {
   PAYMENT_CATEGORIES,
   paymentCategoryLabel,
@@ -628,6 +629,31 @@ export function PagosPageClient({ initialCompany }: Props) {
       if (targetMonth) setMonth(targetMonth);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error al programar"),
+  });
+
+  const unscheduleMutation = useMutation({
+    mutationFn: async (input: { paymentId?: string; expenseId?: string }) => {
+      const res = await fetch("/api/pagos/proveedores/unschedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(j, "No se pudo desasignar el pago"));
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-proveedores"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-oc-search"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-bitacora-global"] });
+      setDetailPayment(null);
+      toast.success("Desasignado — volvió a Pago proveedores (sin programar)");
+    },
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : "No se pudo desasignar"),
   });
 
   const markMutation = useMutation({
@@ -1239,47 +1265,71 @@ export function PagosPageClient({ initialCompany }: Props) {
                             )}
                           </td>
                           <td className="px-3 py-2 text-right">
-                            {canEdit && e.status !== "paid" && (
-                              <Button
-                                size="sm"
-                                disabled={!dateValue || scheduleMutation.isPending}
-                                onClick={() =>
-                                  scheduleMutation.mutate({
-                                    expenseId: e.id,
-                                    expenseIds: e.expenseIds?.length ? e.expenseIds : [e.id],
-                                    paymentDate: dateValue,
-                                  })
-                                }
-                              >
-                                {e.status === "unscheduled" ? "Asignar fecha" : "Actualizar fecha"}
-                              </Button>
-                            )}
-                            {e.status === "paid" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  const fromCal = e.paymentId
-                                    ? calendar
-                                        .flatMap((d) => d.payments)
-                                        .find((p) => p.id === e.paymentId)
-                                    : undefined;
-                                  if (fromCal) {
-                                    setDetailPayment(fromCal);
-                                    return;
+                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                              {canEdit && e.status !== "paid" && (
+                                <Button
+                                  size="sm"
+                                  disabled={!dateValue || scheduleMutation.isPending}
+                                  onClick={() =>
+                                    scheduleMutation.mutate({
+                                      expenseId: e.id,
+                                      expenseIds: e.expenseIds?.length ? e.expenseIds : [e.id],
+                                      paymentDate: dateValue,
+                                    })
                                   }
-                                  if (e.paymentDate) {
-                                    const targetMonth = monthFromPaymentDate(e.paymentDate);
-                                    if (targetMonth) setMonth(targetMonth);
-                                  }
-                                  toast.info(
-                                    "Pago marcado — abrí el calendario en esa fecha o buscá por OC",
-                                  );
-                                }}
-                              >
-                                Ver pago
-                              </Button>
-                            )}
+                                >
+                                  {e.status === "unscheduled" ? "Asignar fecha" : "Actualizar fecha"}
+                                </Button>
+                              )}
+                              {canEdit && e.status === "scheduled_unpaid" && e.paymentId && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={unscheduleMutation.isPending}
+                                  onClick={() => {
+                                    if (
+                                      !window.confirm(
+                                        "¿Desasignar del calendario diario? El gasto vuelve a «Sin programar».",
+                                      )
+                                    ) {
+                                      return;
+                                    }
+                                    unscheduleMutation.mutate({
+                                      paymentId: e.paymentId!,
+                                      expenseId: e.id,
+                                    });
+                                  }}
+                                >
+                                  Desasignar
+                                </Button>
+                              )}
+                              {e.status === "paid" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const fromCal = e.paymentId
+                                      ? calendar
+                                          .flatMap((d) => d.payments)
+                                          .find((p) => p.id === e.paymentId)
+                                      : undefined;
+                                    if (fromCal) {
+                                      setDetailPayment(fromCal);
+                                      return;
+                                    }
+                                    if (e.paymentDate) {
+                                      const targetMonth = monthFromPaymentDate(e.paymentDate);
+                                      if (targetMonth) setMonth(targetMonth);
+                                    }
+                                    toast.info(
+                                      "Pago marcado — abrí el calendario en esa fecha o buscá por OC",
+                                    );
+                                  }}
+                                >
+                                  Ver pago
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1376,6 +1426,8 @@ export function PagosPageClient({ initialCompany }: Props) {
           queryClient.invalidateQueries({ queryKey: ["pagos"] });
           queryClient.invalidateQueries({ queryKey: ["pagos-bitacora-global"] });
         }}
+        onUnschedule={(paymentId) => unscheduleMutation.mutate({ paymentId })}
+        unschedulePending={unscheduleMutation.isPending}
       />
 
       <DayPaymentsDialog
@@ -1849,18 +1901,32 @@ type ExpenseSummary = {
   approvalStatus?: string;
 };
 
+type PaymentAttachmentDto = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  note: string | null;
+  createdAt: string;
+  downloadUrl: string;
+  uploadedBy: { id: string; name: string };
+};
+
 function PaymentDetailDialog({
   payment,
   onClose,
   canEdit,
   onTogglePaid,
   onUpdated,
+  onUnschedule,
+  unschedulePending,
 }: {
   payment: PagoDto | null;
   onClose: () => void;
   canEdit: boolean;
   onTogglePaid: (id: string, paid: boolean) => void;
   onUpdated: (p: PagoDto) => void;
+  onUnschedule?: (paymentId: string) => void;
+  unschedulePending?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<"detalle" | "bitacora">("detalle");
@@ -1871,6 +1937,7 @@ function PaymentDetailDialog({
   const [referenceNumber, setReferenceNumber] = useState("");
   const [category, setCategory] = useState("");
   const [subcategory, setSubcategory] = useState("");
+  const [previewAtt, setPreviewAtt] = useState<PaymentAttachmentDto | null>(null);
 
   useEffect(() => {
     if (!payment) return;
@@ -1882,6 +1949,7 @@ function PaymentDetailDialog({
     setCategory(payment.category ?? "");
     setSubcategory(payment.subcategory ?? "");
     setTab("detalle");
+    setPreviewAtt(null);
   }, [payment?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const subcategoryOptions = useMemo(() => subcategoriesFor(category || null), [category]);
@@ -1904,6 +1972,61 @@ function PaymentDetailDialog({
         approvalStatus: e.approvalStatus,
       } as ExpenseSummary;
     },
+  });
+
+  const {
+    data: attachments = [],
+    isFetching: attachmentsLoading,
+    refetch: refetchAttachments,
+  } = useQuery({
+    queryKey: ["pagos-attachments", payment?.id],
+    enabled: !!payment?.id,
+    queryFn: async () => {
+      const res = await fetch(`/api/pagos/${payment!.id}/attachments`);
+      if (!res.ok) throw new Error("Error al cargar comprobantes");
+      const json = await res.json();
+      return (json.data ?? json) as PaymentAttachmentDto[];
+    },
+  });
+
+  const uploadAttachmentMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!payment) throw new Error("Sin pago");
+      const fd = new FormData();
+      fd.set("file", file);
+      const res = await fetch(`/api/pagos/${payment.id}/attachments`, {
+        method: "POST",
+        body: fd,
+        credentials: "same-origin",
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(apiErrorMessage(j, "Error al subir comprobante"));
+      return j.data ?? j;
+    },
+    onSuccess: () => {
+      toast.success("Comprobante adjuntado");
+      refetchAttachments();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Error al subir"),
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: async (attachmentId: string) => {
+      if (!payment) throw new Error("Sin pago");
+      const res = await fetch(`/api/pagos/${payment.id}/attachments/${attachmentId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(j, "Error al eliminar comprobante"));
+      }
+    },
+    onSuccess: () => {
+      toast.success("Comprobante eliminado");
+      setPreviewAtt(null);
+      refetchAttachments();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Error al eliminar"),
   });
 
   const { data: bitacora = [], isFetching: bitacoraLoading } = useQuery({
@@ -2165,6 +2288,94 @@ function PaymentDetailDialog({
                   </Button>
                 </div>
               )}
+
+              <div className="rounded-lg border p-4 space-y-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="h-4 w-4 text-muted-foreground" />
+                  <p className="font-medium">Comprobante de pago</p>
+                  {attachments.length > 0 && (
+                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                      {attachments.length}
+                    </Badge>
+                  )}
+                </div>
+                {attachmentsLoading ? (
+                  <p className="text-xs text-muted-foreground animate-pulse">Cargando adjuntos…</p>
+                ) : attachments.length > 0 ? (
+                  <ul className="space-y-1.5">
+                    {attachments.map((att) => {
+                      const canPreview =
+                        att.mimeType.startsWith("image/") || att.mimeType === "application/pdf";
+                      return (
+                        <li
+                          key={att.id}
+                          className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs rounded-md border px-2 py-1.5"
+                        >
+                          {canPreview ? (
+                            <button
+                              type="button"
+                              className="font-medium text-sky-700 hover:underline dark:text-sky-400 truncate max-w-[220px]"
+                              onClick={() => setPreviewAtt(att)}
+                              title="Ver"
+                            >
+                              {att.fileName}
+                            </button>
+                          ) : (
+                            <a
+                              href={att.downloadUrl}
+                              className="font-medium text-sky-700 hover:underline dark:text-sky-400 truncate max-w-[220px]"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {att.fileName}
+                            </a>
+                          )}
+                          {canPreview && (
+                            <a
+                              href={att.downloadUrl}
+                              className="text-muted-foreground hover:underline"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              descargar
+                            </a>
+                          )}
+                          <span className="text-muted-foreground">· {att.uploadedBy.name}</span>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="ml-auto text-destructive hover:underline"
+                              disabled={deleteAttachmentMutation.isPending}
+                              onClick={() => {
+                                if (!window.confirm(`¿Eliminar «${att.fileName}»?`)) return;
+                                deleteAttachmentMutation.mutate(att.id);
+                              }}
+                            >
+                              quitar
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Sin comprobantes adjuntos.</p>
+                )}
+                {canEdit && (
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.xlsx,.xls,.csv"
+                    className="text-xs w-full"
+                    disabled={uploadAttachmentMutation.isPending}
+                    onChange={(ev) => {
+                      const f = ev.target.files?.[0];
+                      if (!f) return;
+                      uploadAttachmentMutation.mutate(f);
+                      ev.target.value = "";
+                    }}
+                  />
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="bitacora" className="flex-1 min-h-0 overflow-y-auto mt-0 data-[state=inactive]:hidden">
@@ -2229,6 +2440,25 @@ function PaymentDetailDialog({
                   Confirmar en diario
                 </Button>
               )}
+              {!p.paid && p.source !== "APEX" && onUnschedule && (
+                <Button
+                  variant="outline"
+                  className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                  disabled={unschedulePending}
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        "¿Desasignar del calendario diario? Si está ligado a Pago proveedores, vuelve a «Sin programar».",
+                      )
+                    ) {
+                      return;
+                    }
+                    onUnschedule(p.id);
+                  }}
+                >
+                  Desasignar del calendario
+                </Button>
+              )}
               <Button
                 variant={p.paid ? "outline" : "default"}
                 onClick={() => onTogglePaid(p.id, !p.paid)}
@@ -2248,6 +2478,12 @@ function PaymentDetailDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <AttachmentPreviewDialog
+        attachment={previewAtt}
+        onOpenChange={(open) => {
+          if (!open) setPreviewAtt(null);
+        }}
+      />
     </Dialog>
   );
 }

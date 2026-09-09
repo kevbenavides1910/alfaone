@@ -694,3 +694,111 @@ export async function createPaymentFromProveedorExpenses(input: {
 
   return serializeSinglePayment(saved);
 }
+
+/**
+ * Quita un pago programado del calendario diario y lo devuelve a
+ * «Pago proveedores» (Sin programar). No aplica a pagos ya marcados pagados
+ * ni a APEX (usar «quitar de diario» / confirmedForDaily).
+ */
+export async function unschedulePaymentFromDaily(input: {
+  paymentId?: string;
+  expenseId?: string;
+  userId: string;
+}): Promise<{ paymentId: string; expenseIds: string[] }> {
+  let paymentId = input.paymentId?.trim() || "";
+
+  if (!paymentId && input.expenseId?.trim()) {
+    const expenseId = input.expenseId.trim();
+    const expense = await prisma.expense.findFirst({
+      where: { id: expenseId, deletedAt: null },
+      select: {
+        settledByPaymentId: true,
+        payments: {
+          where: { source: "EXPENSE" },
+          select: { id: true, paid: true },
+          take: 1,
+        },
+      },
+    });
+    if (!expense) {
+      throw new ScheduleExpenseError("NOT_FOUND", "Gasto no encontrado");
+    }
+    paymentId =
+      expense.settledByPaymentId ||
+      expense.payments.find((p) => !p.paid)?.id ||
+      expense.payments[0]?.id ||
+      "";
+    if (!paymentId) {
+      throw new ScheduleExpenseError(
+        "BAD_REQUEST",
+        "Este gasto no tiene fecha asignada en el calendario",
+      );
+    }
+  }
+
+  if (!paymentId) {
+    throw new ScheduleExpenseError("BAD_REQUEST", "Se requiere paymentId o expenseId");
+  }
+
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      settledExpenses: { select: { id: true } },
+    },
+  });
+  if (!payment) {
+    throw new ScheduleExpenseError("NOT_FOUND", "Pago no encontrado");
+  }
+  if (payment.source === "APEX") {
+    throw new ScheduleExpenseError(
+      "BAD_REQUEST",
+      "Los gastos fijos APEX no se desasignan aquí; usá Pagos fijos",
+    );
+  }
+  if (payment.paid) {
+    throw new ScheduleExpenseError(
+      "CONFLICT",
+      "No se puede desasignar un pago ya marcado como pagado",
+    );
+  }
+
+  const expenseIds = new Set<string>();
+  if (payment.expenseId) expenseIds.add(payment.expenseId);
+  for (const e of payment.settledExpenses) expenseIds.add(e.id);
+
+  if (expenseIds.size === 0) {
+    throw new ScheduleExpenseError(
+      "BAD_REQUEST",
+      "Este pago no está ligado a Pago proveedores; usá Eliminar si es manual",
+    );
+  }
+
+  const ids = [...expenseIds];
+  const attachments = await prisma.paymentAttachment.findMany({
+    where: { paymentId: payment.id },
+    select: { storagePath: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.expense.updateMany({
+      where: { id: { in: ids } },
+      data: { paymentDate: null, settledByPaymentId: null },
+    });
+    await tx.paymentChangeLog.deleteMany({ where: { paymentId: payment.id } });
+    await tx.paymentAttachment.deleteMany({ where: { paymentId: payment.id } });
+    await tx.payment.delete({ where: { id: payment.id } });
+  });
+
+  // Limpia archivos de comprobantes (best-effort; la BD ya cascaded).
+  if (attachments.length > 0) {
+    const { unlink } = await import("fs/promises");
+    const { resolveUnderRoot } = await import("@/lib/security/path-safety");
+    const { PAYMENT_UPLOAD_ROOT } = await import("./payment-uploads");
+    for (const a of attachments) {
+      const abs = resolveUnderRoot(PAYMENT_UPLOAD_ROOT, a.storagePath);
+      if (abs) await unlink(abs).catch(() => undefined);
+    }
+  }
+
+  return { paymentId: payment.id, expenseIds: ids };
+}

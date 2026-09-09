@@ -276,6 +276,8 @@ export function presupuestosTools(): SyntraTool[] {
             fecha: p.paymentDate,
             empresa: p.company,
             referencia: p.referenceNumber,
+            categoria: p.category,
+            subcategoria: p.subcategory,
           })),
           moneda: "CRC",
           fuente: "Pagos Pagado sin gasto (Pendientes de asignar)",

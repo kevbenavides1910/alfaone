@@ -279,6 +279,7 @@ model User {
   expenseTypeApprovalSteps               ExpenseTypeApprovalStep[]     @relation("ExpenseTypeApprovalApprover")
   expenseApprovals                       ExpenseApproval[]             @relation("ExpenseApprovalApprover")
   expenseAttachments                     ExpenseAttachment[]           @relation("ExpenseAttachmentUploader")
+  paymentAttachments                     PaymentAttachment[]           @relation("PaymentAttachmentUploader")
   disciplinaryBatches                    DisciplinaryImportBatch[]     @relation("DisciplinaryBatchUploader")
   employeeImportBatches                  EmployeeImportBatch[]         @relation("EmployeeBatchUploader")
   sigDocumentsCreated                    SigDocument[]                 @relation("SigDocumentCreator")
@@ -6138,6 +6139,7 @@ model Payment {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   changeLogs      PaymentChangeLog[]
+  attachments     PaymentAttachment[]
   /// Gastos de «Pago proveedores» liquidados por este pago (p. ej. varias OC en un movimiento).
   settledExpenses Expense[]     @relation("ExpenseSettledByPayment")
   /// Gastos de presupuesto creados desde este pago («Pendientes de asignar»).
@@ -6150,6 +6152,24 @@ model Payment {
   @@index([confirmedForDaily])
   @@index([category, subcategory])
   @@map("payments")
+}
+
+/// Comprobante / adjunto de un pago del calendario (PDF, imagen, etc.).
+model PaymentAttachment {
+  id           String   @id @default(cuid())
+  paymentId    String
+  payment      Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  uploadedById String
+  uploadedBy   User     @relation("PaymentAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  fileName     String
+  mimeType     String
+  storagePath  String
+  note         String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([paymentId])
+  @@index([uploadedById])
+  @@map("payment_attachments")
 }
 
 /// Bitácora de cambios de un pago (fecha, monto, estado, etc.).

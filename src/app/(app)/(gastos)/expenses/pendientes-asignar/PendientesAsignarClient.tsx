@@ -25,6 +25,10 @@ import {
 import { canManageExpenses as userCanManageExpenses } from "@/modules/core/permissions";
 import type { ExpenseBudgetLine, ExpenseType, PaymentSource } from "@prisma/client";
 import {
+  paymentCategoryLabel,
+  paymentSubcategoryLabel,
+} from "@/modules/pagos/catalog/payment-categories";
+import {
   TableColumnFilterHead,
   hasActiveColumnFilters,
   clearColumnFilters,
@@ -57,6 +61,8 @@ type PendingPayment = {
 type PendingRow = PendingPayment & {
   companyLabel: string;
   sourceLabel: string;
+  categoryLabel: string;
+  subcategoryLabel: string;
 };
 
 const SOURCE_LABEL: Record<PaymentSource, string> = {
@@ -240,6 +246,10 @@ export default function PendientesAsignarClient() {
         ...r,
         companyLabel: r.company ? companyDisplayName(r.company, companyRows) : "—",
         sourceLabel: SOURCE_LABEL[r.source] ?? r.source,
+        categoryLabel: paymentCategoryLabel(r.category) ?? "Sin clasificar",
+        subcategoryLabel:
+          paymentSubcategoryLabel(r.category, r.subcategory) ??
+          (r.subcategory?.trim() || "Sin subcategoría"),
       })),
     [rows, companyRows]
   );
@@ -276,6 +286,18 @@ export default function PendientesAsignarClient() {
         key: "company",
         label: "Empresa",
         getValue: (r) => r.companyLabel,
+        headerClassName: "text-left px-3 py-2 font-semibold text-slate-600",
+      },
+      {
+        key: "category",
+        label: "Categoría",
+        getValue: (r) => r.categoryLabel,
+        headerClassName: "text-left px-3 py-2 font-semibold text-slate-600",
+      },
+      {
+        key: "subcategory",
+        label: "Subcategoría",
+        getValue: (r) => r.subcategoryLabel,
         headerClassName: "text-left px-3 py-2 font-semibold text-slate-600",
       },
       {
@@ -503,10 +525,12 @@ export default function PendientesAsignarClient() {
         Descripción: r.description,
         Monto: r.amount,
         Empresa: r.companyLabel,
+        Categoría: r.categoryLabel,
+        Subcategoría: r.subcategoryLabel,
         Origen: r.sourceLabel,
         Referencia: r.referenceNumber ?? "",
       })),
-      columnWidths: [12, 40, 14, 18, 12, 18],
+      columnWidths: [12, 40, 14, 18, 18, 20, 12, 18],
     });
   }
 
@@ -616,6 +640,8 @@ export default function PendientesAsignarClient() {
                     description: 280,
                     amount: 120,
                     company: 140,
+                    category: 140,
+                    subcategory: 160,
                     source: 90,
                     referenceNumber: 140,
                     actions: 100,
@@ -625,13 +651,13 @@ export default function PendientesAsignarClient() {
               <tbody className="divide-y">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
+                    <td colSpan={10} className="px-3 py-8 text-center text-slate-400">
                       Cargando…
                     </td>
                   </tr>
                 ) : displayRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
+                    <td colSpan={10} className="px-3 py-8 text-center text-slate-400">
                       No hay pagos pendientes de asignar en este mes
                     </td>
                   </tr>
@@ -659,6 +685,12 @@ export default function PendientesAsignarClient() {
                         {formatCurrency(r.amount)}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">{r.companyLabel}</td>
+                      <td className="px-3 py-2 whitespace-nowrap" title={r.categoryLabel}>
+                        {r.categoryLabel}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap" title={r.subcategoryLabel}>
+                        {r.subcategoryLabel}
+                      </td>
                       <td className="px-3 py-2">
                         <Badge variant="secondary">{r.sourceLabel}</Badge>
                       </td>

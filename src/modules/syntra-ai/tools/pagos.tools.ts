@@ -1,5 +1,9 @@
 import { getCalendarMonth, searchPaymentsByOc } from "@/modules/pagos/services/pagos";
-import { listPagoProveedores } from "@/modules/pagos/services/pago-proveedores";
+import {
+  listPagoProveedores,
+  unschedulePaymentFromDaily,
+  ScheduleExpenseError,
+} from "@/modules/pagos/services/pago-proveedores";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
 import { currentYearMonth, strArg } from "./shared";
@@ -147,6 +151,97 @@ export function pagosTools(): SyntraTool[] {
           moneda: "CRC",
           fuente: "Pagos → Pago proveedores + NAF ARIMENCFACTURAS",
         };
+      },
+    },
+    {
+      permission: { key: "pagos.calendario", level: "view" },
+      definition: toolDef(
+        "list_payment_attachments",
+        "Lista comprobantes/adjuntos de un pago del calendario (PDF, imágenes).",
+        {
+          type: "object",
+          properties: {
+            payment_id: { type: "string", description: "ID del Payment." },
+          },
+          required: ["payment_id"],
+          additionalProperties: false,
+        },
+      ),
+      describeCall: (args) =>
+        `Listando comprobantes del pago ${strArg(args ?? {}, "payment_id") || "…"}…`,
+      handler: async (_session, args) => {
+        const paymentId = strArg(args, "payment_id");
+        if (!paymentId) return { error: "Indicá payment_id." };
+        const { prisma } = await import("@/modules/core/db/prisma");
+        const rows = await prisma.paymentAttachment.findMany({
+          where: { paymentId },
+          orderBy: { createdAt: "asc" },
+          include: { uploadedBy: { select: { name: true } } },
+        });
+        return {
+          paymentId,
+          total: rows.length,
+          adjuntos: rows.map((r) => ({
+            id: r.id,
+            archivo: r.fileName,
+            tipo: r.mimeType,
+            subidoPor: r.uploadedBy.name,
+            url: `/api/pagos/${paymentId}/attachments/${r.id}`,
+          })),
+        };
+      },
+    },
+    {
+      permission: { key: "pagos.calendario", level: "edit" },
+      definition: toolDef(
+        "unschedule_pago_diario",
+        "Desasigna un pago del calendario diario y lo devuelve a Pago proveedores (sin programar). Solo si aún no está marcado pagado. Requiere payment_id o expense_id.",
+        {
+          type: "object",
+          properties: {
+            payment_id: {
+              type: "string",
+              description: "ID del Payment en el calendario.",
+            },
+            expense_id: {
+              type: "string",
+              description: "ID del gasto en Pago proveedores (alternativa a payment_id).",
+            },
+          },
+          additionalProperties: false,
+        },
+      ),
+      describeCall: (args) => {
+        const pid = strArg(args ?? {}, "payment_id");
+        const eid = strArg(args ?? {}, "expense_id");
+        return `Desasignando pago diario (${pid || eid || "…"})…`;
+      },
+      handler: async (session, args) => {
+        const userId = session.user?.id;
+        if (!userId) return { error: "Sesión sin usuario." };
+        const paymentId = strArg(args, "payment_id") || undefined;
+        const expenseId = strArg(args, "expense_id") || undefined;
+        if (!paymentId && !expenseId) {
+          return { error: "Indicá payment_id o expense_id." };
+        }
+        try {
+          const result = await unschedulePaymentFromDaily({
+            paymentId,
+            expenseId,
+            userId,
+          });
+          return {
+            ok: true,
+            ...result,
+            mensaje:
+              "Pago quitado del calendario; el gasto quedó sin programar en Pago proveedores.",
+          };
+        } catch (e) {
+          if (e instanceof ScheduleExpenseError) {
+            return { error: e.message, code: e.code };
+          }
+          throw e;
+        }
       },
     },
   ];

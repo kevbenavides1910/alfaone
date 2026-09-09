@@ -43,6 +43,7 @@ fi
 DIRS=(
   "$STORAGE_ROOT"
   "$STORAGE_ROOT/expense-uploads"
+  "$STORAGE_ROOT/payment-uploads"
   "$STORAGE_ROOT/branding"
   "$STORAGE_ROOT/sig-documents"
   "$STORAGE_ROOT/exports"
@@ -60,6 +61,7 @@ cat <<EOF
 
 Listo. Estructura:
   $STORAGE_ROOT/expense-uploads  → adjuntos de gastos (PDF, imágenes, Excel)
+  $STORAGE_ROOT/payment-uploads  → comprobantes de pago (calendario)
   $STORAGE_ROOT/branding         → logos y firma disciplinaria
   $STORAGE_ROOT/sig-documents    → documentos SIG (DMS)
   $STORAGE_ROOT/exports        → exportaciones / temporales (futuro)
