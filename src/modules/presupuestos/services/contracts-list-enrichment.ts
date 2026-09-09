@@ -49,16 +49,24 @@ export function enrichContractsListRows(
     let billing: number | null;
     let amountDefined: boolean;
 
+    let serviceDays: number | null = null;
+    let daysInMonth: number | null = null;
+    let serviceDaysFactor = 1;
+
     if (usePeriodView) {
       const resolved = resolveContractMonthlyBilling(
         c,
         hist,
         demandByContractId.get(c.id) ?? [],
         periodYear!,
-        periodMonth!
+        periodMonth!,
+        { prorateByServiceDays: true }
       );
       billing = resolved.billing;
       amountDefined = resolved.amountDefined;
+      serviceDays = resolved.serviceDays;
+      daysInMonth = resolved.daysInMonth;
+      serviceDaysFactor = resolved.serviceDaysFactor;
     } else {
       billing = getEffectiveMonthlyBilling(baseBilling, hist, asOf);
       amountDefined = true;
@@ -99,6 +107,9 @@ export function enrichContractsListRows(
       ...c,
       monthlyBilling: billing,
       amountDefined,
+      serviceDays,
+      daysInMonth,
+      serviceDaysFactor,
       suppliesBudgetPct: suppliesPctEff,
       laborPct,
       adminPct,

@@ -6,6 +6,7 @@ import { hasPermission } from "@/lib/permissions/check";
 import { getContractProfitability } from "@/modules/presupuestos/business/profitability";
 import { fromMonthString } from "@/lib/utils/format";
 import { autoExpireContracts } from "@/modules/presupuestos/business/autoExpire";
+import { contractVigenteInMonthWhere } from "@/modules/presupuestos/business/contractPeriodBilling";
 import { nowServer } from "@/lib/utils/time";
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -16,9 +17,14 @@ export async function GET(req: NextRequest) {
   const company = searchParams.get("company");
   const month = searchParams.get("month");
 
+  const now = nowServer();
+  const defaultMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const periodMonth = month ? fromMonthString(month) : defaultMonth;
+
   const where: Record<string, unknown> = {
     status: { notIn: ["CANCELLED", "FINISHED"] },
     deletedAt: null,
+    ...contractVigenteInMonthWhere(periodMonth.getFullYear(), periodMonth.getMonth() + 1),
   };
 
   if (session.user.company) where.company = session.user.company;
@@ -31,12 +37,6 @@ export async function GET(req: NextRequest) {
       where,
       orderBy: [{ company: "asc" }, { client: "asc" }],
     });
-
-    // Default to current month so the traffic light shows THIS month's execution,
-    // not a cumulative total vs a single month's budget (which inflates %).
-    const now = nowServer();
-    const defaultMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const periodMonth = month ? fromMonthString(month) : defaultMonth;
 
     const results = await Promise.all(
       contracts.map(async (c) => {

@@ -7,7 +7,10 @@ import {
 } from "@/modules/presupuestos/business/demandBilling";
 import { resolveAdministrationBillingPeriod } from "@/modules/presupuestos/business/administration-billing-period";
 import { resolveEmisionSubtotals } from "@/modules/presupuestos/business/administration-billing-amount";
-import { resolveContractMonthlyBilling } from "@/modules/presupuestos/business/contractPeriodBilling";
+import {
+  isContractVigenteInMonth,
+  resolveContractMonthlyBilling,
+} from "@/modules/presupuestos/business/contractPeriodBilling";
 import { normalizeRequirementKey } from "@/modules/presupuestos/business/contractBillingRequirementsDefaults";
 import { computeServicePeriodForInvoice } from "@/lib/utils/format";
 import {
@@ -104,9 +107,7 @@ function contractActiveInPeriod(
   periodYear: number,
   periodMonth: number
 ): boolean {
-  const periodStart = new Date(Date.UTC(periodYear, periodMonth - 1, 1));
-  const periodEnd = new Date(Date.UTC(periodYear, periodMonth, 0, 23, 59, 59, 999));
-  return startDate <= periodEnd && endDate >= periodStart;
+  return isContractVigenteInMonth(startDate, endDate, periodYear, periodMonth);
 }
 
 function isClosedStatus(status: string): boolean {

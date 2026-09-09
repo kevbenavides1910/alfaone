@@ -3,6 +3,7 @@ import { Decimal } from "@prisma/client/runtime/library";
 import { getEffectiveMonthlyBilling, getEffectiveMonthlyRevenue } from "@/modules/presupuestos/business/effectiveBilling";
 import {
   contractVigenteInMonthWhere,
+  prorateFixedMonthlyRevenue,
   resolveContractMonthlyBilling,
   type DemandBillingRow,
 } from "@/modules/presupuestos/business/contractPeriodBilling";
@@ -156,6 +157,8 @@ export async function getGlobalPartidaTotalsForPeriod(
       adminPct: true,
       profitPct: true,
       hiringType: true,
+      startDate: true,
+      endDate: true,
     },
   });
 
@@ -223,12 +226,23 @@ export async function getGlobalPartidaTotalsForPeriod(
     );
     if (!resolved.amountDefined || resolved.billing === null) continue;
 
-    const { billing: eff } = getEffectiveMonthlyRevenue(
+    const { billing: fullEff, baseBilling, specialServicesTotal } = getEffectiveMonthlyRevenue(
       resolved.billing,
       hist,
       specialServicesByContract.get(c.id) ?? [],
       monthStart,
     );
+    const eff =
+      c.hiringType === "ON_DEMAND"
+        ? fullEff
+        : prorateFixedMonthlyRevenue(
+            baseBilling,
+            specialServicesTotal,
+            c.startDate,
+            c.endDate,
+            periodYear,
+            periodMonth
+          ).billing;
     const supPct = effectiveSuppliesPct(c);
     const laborPct = toNum(c.laborPct);
     const adminPct = toNum(c.adminPct);

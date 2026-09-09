@@ -8,6 +8,11 @@ import {
   getNafLaborCostByContractForYear,
   resolveNafLaborSpendForContractMonth,
 } from "@/modules/empleados-naf/services/naf-labor-report";
+import {
+  isContractVigenteInMonth,
+  prorateFixedMonthlyRevenue,
+  yearBounds,
+} from "@/modules/presupuestos/business/contractPeriodBilling";
 
 export interface MonthCell {
   month: number;
@@ -112,8 +117,7 @@ export async function getAnnualReport(
   companyFilter?: string,
   partida: ReportPartidaFilter = "ALL"
 ): Promise<AnnualReport> {
-  const yearStart = new Date(year, 0, 1);
-  const yearEnd = new Date(year, 11, 31);
+  const { yearStart, yearEnd } = yearBounds(year);
   const where: Record<string, unknown> = {
     deletedAt: null,
     startDate: { lte: yearEnd },
@@ -203,8 +207,8 @@ export async function getAnnualReport(
       where: {
         contractId: { in: ids },
         periodMonth: {
-          gte: new Date(year, 0, 1),
-          lte: new Date(year, 11, 31, 23, 59, 59, 999),
+          gte: yearStart,
+          lte: yearEnd,
         },
       },
       select: { contractId: true, periodMonth: true, amount: true },
@@ -264,16 +268,27 @@ export async function getAnnualReport(
 
     const months: MonthCell[] = Array.from({ length: 12 }, (_, i) => {
       const mo = i + 1;
-      const monthStart = new Date(year, i, 1);
-      const monthEnd = new Date(year, i + 1, 0);
-      const contractActive = contractStart <= monthEnd && contractEnd >= monthStart;
+      const monthStart = new Date(year, i, 15);
+      const contractActive = isContractVigenteInMonth(contractStart, contractEnd, year, mo);
 
-      const { billing } = getEffectiveMonthlyRevenue(
+      const revenue = getEffectiveMonthlyRevenue(
         defaultBilling,
         billingHistForContract,
         specialServicesForContract,
         monthStart,
       );
+      const billing = contractActive
+        ? c.hiringType === "ON_DEMAND"
+          ? revenue.billing
+          : prorateFixedMonthlyRevenue(
+              revenue.baseBilling,
+              revenue.specialServicesTotal,
+              contractStart,
+              contractEnd,
+              year,
+              mo,
+            ).billing
+        : 0;
 
       const uniformsM = uniformsMap.get(c.id)?.get(mo) ?? 0;
       const auditM = auditsMap.get(c.id)?.get(mo) ?? 0;

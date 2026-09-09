@@ -8,6 +8,8 @@ import {
   calcMarginTrafficLight,
 } from "@/lib/utils/constants";
 import { getEffectiveMonthlyRevenue } from "@/modules/presupuestos/business/effectiveBilling";
+import { prorateFixedMonthlyRevenue } from "@/modules/presupuestos/business/contractPeriodBilling";
+import { monthsInContractRange } from "@/modules/presupuestos/business/demandBilling";
 import { applyNafLaborToRubros } from "@/modules/presupuestos/business/naf-labor-rubro";
 import {
   calcSuppliesBudget,
@@ -227,7 +229,20 @@ export function computeContractProfitability(
     specialServicesRows,
     asOfForRate,
   );
-  const billing = revenue.billing;
+  let billing = revenue.billing;
+  let monthlyBillingBase = revenue.baseBilling;
+  if (periodMonth && contract.hiringType !== "ON_DEMAND") {
+    const prorated = prorateFixedMonthlyRevenue(
+      revenue.baseBilling,
+      revenue.specialServicesTotal,
+      contract.startDate,
+      contract.endDate,
+      periodMonth.getFullYear(),
+      periodMonth.getMonth() + 1,
+    );
+    billing = prorated.billing;
+    monthlyBillingBase = prorated.baseBilling;
+  }
 
   const laborBudget = calcSuppliesBudget(billing, laborPct);
   const suppliesBudget = calcSuppliesBudget(billing, suppliesPctEff);
@@ -391,10 +406,7 @@ export function computeContractProfitability(
     const now = new Date();
     const contractEnd = new Date(contract.endDate);
     const limitDate = contractEnd < now ? contractEnd : now;
-    const startY = new Date(contract.startDate).getFullYear();
-    const startM = new Date(contract.startDate).getMonth();
-    const endY = limitDate.getFullYear();
-    const endM = limitDate.getMonth();
+    const slots = monthsInContractRange(new Date(contract.startDate), limitDate);
 
     let totalBilled = 0;
     let laborBudgetAccum = 0;
@@ -403,27 +415,31 @@ export function computeContractProfitability(
     let profitBudgetAccum = 0;
     let totalMonths = 0;
 
-    let y = startY;
-    let m = startM;
-    while (y < endY || (y === endY && m <= endM)) {
-      const monthAsOf = new Date(y, m, 1);
+    for (const slot of slots) {
+      const monthAsOf = new Date(slot.periodYear, slot.periodMonth - 1, 15);
       const monthRevenue = getEffectiveMonthlyRevenue(
         baseBilling,
         billingHistRows,
         specialServicesRows,
         monthAsOf,
       );
-      totalBilled += monthRevenue.billing;
-      laborBudgetAccum += monthRevenue.billing * laborPct;
-      suppliesBudgetAccum += monthRevenue.billing * suppliesPctEff;
-      adminBudgetAccum += monthRevenue.billing * adminPct;
-      profitBudgetAccum += monthRevenue.billing * profitPct;
+      const monthBilling =
+        contract.hiringType === "ON_DEMAND"
+          ? monthRevenue.billing
+          : prorateFixedMonthlyRevenue(
+              monthRevenue.baseBilling,
+              monthRevenue.specialServicesTotal,
+              contract.startDate,
+              contract.endDate,
+              slot.periodYear,
+              slot.periodMonth,
+            ).billing;
+      totalBilled += monthBilling;
+      laborBudgetAccum += monthBilling * laborPct;
+      suppliesBudgetAccum += monthBilling * suppliesPctEff;
+      adminBudgetAccum += monthBilling * adminPct;
+      profitBudgetAccum += monthBilling * profitPct;
       totalMonths++;
-      m++;
-      if (m > 11) {
-        m = 0;
-        y++;
-      }
     }
 
     const totalBudget =
@@ -505,7 +521,7 @@ export function computeContractProfitability(
   return {
     contractId,
     monthlyBilling: billing,
-    monthlyBillingBase: revenue.baseBilling,
+    monthlyBillingBase: monthlyBillingBase,
     specialServicesTotal: revenue.specialServicesTotal,
     suppliesBudgetPct: suppliesPctEff,
     laborBudget,

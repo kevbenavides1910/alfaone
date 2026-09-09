@@ -7,10 +7,10 @@ export function monthsInContractRange(
 ): { periodYear: number; periodMonth: number }[] {
   const start = new Date(startDate);
   const end = new Date(endDate);
-  let y = start.getFullYear();
-  let m = start.getMonth() + 1;
-  const endY = end.getFullYear();
-  const endM = end.getMonth() + 1;
+  let y = start.getUTCFullYear();
+  let m = start.getUTCMonth() + 1;
+  const endY = end.getUTCFullYear();
+  const endM = end.getUTCMonth() + 1;
   const out: { periodYear: number; periodMonth: number }[] = [];
 
   while (y < endY || (y === endY && m <= endM)) {

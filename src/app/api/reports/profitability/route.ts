@@ -7,6 +7,7 @@ import { getProfitabilityForContracts } from "@/modules/presupuestos/business/pr
 import { getNafLaborCostByContractForMonth } from "@/modules/empleados-naf/services/naf-labor-report";
 import { parseReportPartida, type ReportPartidaFilter } from "@/lib/utils/constants";
 import { fromMonthString } from "@/lib/utils/format";
+import { contractVigenteInMonthWhere } from "@/modules/presupuestos/business/contractPeriodBilling";
 import { ContractStatus } from "@prisma/client";
 import {
   buildProfitabilityReportCacheKey,
@@ -53,12 +54,10 @@ export async function GET(req: NextRequest) {
   }
 
   if (periodMonth) {
-    const y = periodMonth.getFullYear();
-    const mo = periodMonth.getMonth();
-    const monthStart = new Date(y, mo, 1);
-    const monthEnd = new Date(y, mo + 1, 0);
-    where.startDate = { lte: monthEnd };
-    where.endDate = { gte: monthStart };
+    Object.assign(
+      where,
+      contractVigenteInMonthWhere(periodMonth.getFullYear(), periodMonth.getMonth() + 1)
+    );
   }
 
   const cacheKey = buildProfitabilityReportCacheKey({

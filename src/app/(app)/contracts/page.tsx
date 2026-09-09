@@ -50,9 +50,9 @@ const PERIOD_VIEW_LABELS = {
 } as const;
 
 const PERIOD_VIEW_HINTS = {
-  past: "Montos según la tarifa vigente en ese mes (historial de precios y montos por demanda).",
-  current: "Facturación del mes en curso según tarifas y montos definidos.",
-  future: "Proyección con tarifas vigentes; contratos por demanda aparecen pendientes hasta definir el monto.",
+  past: "Montos según la tarifa vigente en ese mes, prorrateada por días de vigencia (historial de precios y montos por demanda).",
+  current: "Facturación del mes en curso según tarifas, prorrateada por días de vigencia.",
+  future: "Proyección con tarifas vigentes prorrateadas por días de vigencia; contratos por demanda aparecen pendientes hasta definir el monto.",
 } as const;
 
 interface Contract {
@@ -62,6 +62,9 @@ interface Contract {
   status: ContractStatus; startDate: string; endDate: string;
   monthlyBilling: number | null;
   amountDefined?: boolean;
+  serviceDays?: number | null;
+  daysInMonth?: number | null;
+  serviceDaysFactor?: number;
   suppliesBudgetPct: number;
   suppliesBudget: number | null;
   laborPct: number; adminPct: number; profitPct: number;
@@ -663,9 +666,20 @@ export default function ContractsPage() {
                         </Badge>
                       </td>
                       <td className="text-right font-medium tabular-nums">
-                        {c.amountDefined !== false && c.monthlyBilling != null
-                          ? formatCurrency(c.monthlyBilling)
-                          : <span className="text-[#8d8d8d] italic text-xs font-normal">Pendiente</span>}
+                        {c.amountDefined !== false && c.monthlyBilling != null ? (
+                          <div>
+                            {formatCurrency(c.monthlyBilling)}
+                            {c.serviceDays != null &&
+                              c.daysInMonth != null &&
+                              c.serviceDays < c.daysInMonth && (
+                                <span className="block text-[10px] font-normal text-[#8d8d8d]">
+                                  {c.serviceDays}/{c.daysInMonth} días
+                                </span>
+                              )}
+                          </div>
+                        ) : (
+                          <span className="text-[#8d8d8d] italic text-xs font-normal">Pendiente</span>
+                        )}
                       </td>
                       <BudgetPartidaCell amount={c.laborBudget} pct={c.laborPct ?? 0} amountDefined={c.amountDefined !== false} />
                       <BudgetPartidaCell amount={c.suppliesBudget} pct={c.suppliesBudgetPct ?? 0} amountDefined={c.amountDefined !== false} />

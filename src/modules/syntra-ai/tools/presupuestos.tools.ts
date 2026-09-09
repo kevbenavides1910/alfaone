@@ -8,6 +8,7 @@ import { listExpensesForSession } from "@/modules/presupuestos/services/expenses
 import { listOrdenesCompraNaf } from "@/modules/presupuestos/services/list-ordenes-compra-naf";
 import { listPendingAssignPayments } from "@/modules/presupuestos/services/pending-assign-payments";
 import { fromMonthString, toMonthString } from "@/lib/utils/format";
+import { contractVigenteInMonthWhere } from "@/modules/presupuestos/business/contractPeriodBilling";
 import { nowServer } from "@/lib/utils/time";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
@@ -336,9 +337,13 @@ export function presupuestosTools(): SyntraTool[] {
       describeCall: () => "Consultando semáforo de contratos…",
       handler: async (session, args) => {
         await autoExpireContracts();
+        const now = nowServer();
+        const defaultMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const periodMonth = strArg(args, "month") ? fromMonthString(strArg(args, "month")) : defaultMonth;
         const where: Record<string, unknown> = {
           status: { notIn: ["CANCELLED", "FINISHED"] },
           deletedAt: null,
+          ...contractVigenteInMonthWhere(periodMonth.getFullYear(), periodMonth.getMonth() + 1),
         };
         if (session.user.company) where.company = session.user.company;
         else if (strArg(args, "company")) where.company = strArg(args, "company");
@@ -347,9 +352,6 @@ export function presupuestosTools(): SyntraTool[] {
           where,
           orderBy: [{ company: "asc" }, { client: "asc" }],
         });
-        const now = nowServer();
-        const defaultMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const periodMonth = strArg(args, "month") ? fromMonthString(strArg(args, "month")) : defaultMonth;
 
         const results = await Promise.all(
           contracts.map(async (c) => {
