@@ -34,8 +34,27 @@ function currentQuarter() {
   return { year: now.getFullYear(), quarter: Math.floor(now.getMonth() / 3) + 1 };
 }
 
-function dateKey(value: string | Date) {
-  return new Date(value).toISOString().slice(0, 10);
+/** Día calendario UTC (las fechas de auditoría se guardan a medianoche UTC). */
+function calendarDayKey(value: string | Date) {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return value.trim();
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function cellDayKey(year: number, monthIndex: number, day: number) {
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function monthHeading(month: Date) {
+  const name = new Intl.DateTimeFormat("es-CR", { month: "long" }).format(month);
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${month.getFullYear()}`;
+}
+
+function weekdayLabel(year: number, monthIndex: number, day: number) {
+  return new Intl.DateTimeFormat("es-CR", { weekday: "short", day: "numeric" }).format(
+    new Date(year, monthIndex, day),
+  );
 }
 
 function quarterMonths(year: number, quarter: number) {
@@ -103,7 +122,7 @@ export function SigAuditsDashboard() {
     const map = new Map<string, QuarterProcedure[]>();
     for (const row of data?.rows ?? []) {
       if (!row.audit) continue;
-      const key = dateKey(row.audit.scheduledDate);
+      const key = calendarDayKey(row.audit.scheduledDate);
       map.set(key, [...(map.get(key) ?? []), row]);
     }
     return map;
@@ -193,47 +212,60 @@ export function SigAuditsDashboard() {
       </div>
 
       {view === "calendar" ? (
-        <div className="grid gap-4 xl:grid-cols-3">
+        <div className="space-y-6">
           {quarterMonths(year, quarter).map((month) => {
-            const monthName = new Intl.DateTimeFormat("es-CR", { month: "long", year: "numeric" }).format(month);
-            const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
-            const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+            const y = month.getFullYear();
+            const m = month.getMonth();
+            const firstDay = new Date(y, m, 1).getDay();
+            const daysInMonth = new Date(y, m + 1, 0).getDate();
             const leadingBlanks = (firstDay + 6) % 7;
             const cells = [
               ...Array.from({ length: leadingBlanks }, (_, index) => ({ key: `blank-${index}`, day: null as number | null })),
               ...Array.from({ length: daysInMonth }, (_, index) => ({ key: `day-${index + 1}`, day: index + 1 })),
             ];
+            const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}-`;
+            const monthAudits = (data?.rows ?? [])
+              .filter((row) => row.audit && calendarDayKey(row.audit.scheduledDate).startsWith(monthPrefix))
+              .sort((a, b) => calendarDayKey(a.audit!.scheduledDate).localeCompare(calendarDayKey(b.audit!.scheduledDate)));
 
             return (
-              <Card key={month.toISOString()}>
+              <Card key={`${y}-${m}`}>
                 <CardHeader className="pb-3">
-                  <CardTitle className="capitalize">{monthName}</CardTitle>
+                  <CardTitle>{monthHeading(month)}</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-slate-500">
-                    {["L", "M", "M", "J", "V", "S", "D"].map((day, index) => (
-                      <div key={`${day}-${index}`} className="py-1">
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-7 gap-1.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((day) => (
+                      <div key={day} className="py-1">
                         {day}
                       </div>
                     ))}
                   </div>
-                  <div className="mt-1 grid grid-cols-7 gap-1">
+                  <div className="grid grid-cols-7 gap-1.5">
                     {cells.map((cell) => {
-                      if (!cell.day) return <div key={cell.key} className="min-h-24 rounded-md bg-slate-50" />;
-                      const key = dateKey(new Date(month.getFullYear(), month.getMonth(), cell.day));
+                      if (!cell.day) return <div key={cell.key} className="min-h-[6.5rem] rounded-md bg-slate-50" />;
+                      const key = cellDayKey(y, m, cell.day);
                       const rows = auditsByDate.get(key) ?? [];
                       return (
-                        <div key={cell.key} className="min-h-24 rounded-md border bg-white p-1.5">
-                          <div className="mb-1 text-xs font-semibold text-slate-500">{cell.day}</div>
-                          <div className="space-y-1">
+                        <div
+                          key={cell.key}
+                          className={`min-h-[6.5rem] rounded-md border p-1.5 ${
+                            rows.length > 0 ? "border-red-200 bg-red-50/40" : "bg-white"
+                          }`}
+                        >
+                          <div className="mb-1 text-xs font-semibold text-slate-600">{cell.day}</div>
+                          <div className="space-y-1.5">
                             {rows.map((row) => (
                               <Link
                                 key={row.audit!.id}
                                 href={`/audits/${row.audit!.id}`}
-                                className="block rounded bg-red-50 px-1.5 py-1 text-[11px] leading-tight text-red-800 hover:bg-red-100"
+                                title={`${row.code} — ${row.title}`}
+                                className="block rounded-md border border-red-100 bg-white px-1.5 py-1 text-xs leading-snug text-red-900 shadow-sm hover:border-red-300 hover:bg-red-50"
                               >
-                                <span className="font-semibold">{row.code}</span>
-                                <span className="block truncate">{row.title}</span>
+                                <span className="block font-semibold">{row.code}</span>
+                                <span className="block whitespace-normal break-words font-medium text-slate-800">
+                                  {row.title}
+                                </span>
                               </Link>
                             ))}
                           </div>
@@ -241,6 +273,33 @@ export function SigAuditsDashboard() {
                       );
                     })}
                   </div>
+
+                  {monthAudits.length > 0 && (
+                    <div className="rounded-lg border bg-slate-50/80 p-3">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Auditorías del mes
+                      </p>
+                      <ul className="space-y-1.5">
+                        {monthAudits.map((row) => {
+                          const day = Number(calendarDayKey(row.audit!.scheduledDate).slice(-2));
+                          return (
+                            <li key={row.audit!.id}>
+                              <Link
+                                href={`/audits/${row.audit!.id}`}
+                                className="flex flex-wrap items-baseline gap-x-2 text-sm text-slate-800 hover:text-red-800"
+                              >
+                                <span className="w-16 shrink-0 font-semibold text-slate-500">
+                                  {weekdayLabel(y, m, day)}
+                                </span>
+                                <span className="font-semibold">{row.code}</span>
+                                <span>{row.title}</span>
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
