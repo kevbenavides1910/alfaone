@@ -13,6 +13,10 @@ import {
   prorateFixedMonthlyRevenue,
   yearBounds,
 } from "@/modules/presupuestos/business/contractPeriodBilling";
+import {
+  getProfitabilityReportCache,
+  setProfitabilityReportCache,
+} from "@/modules/presupuestos/services/profitability-report-cache";
 
 export interface MonthCell {
   month: number;
@@ -112,19 +116,125 @@ function getLine(
   return lineMap.get(cid)?.get(mo)?.get(line) ?? 0;
 }
 
+function totalsFromLineMap(
+  lineMap: Map<string, Map<number, Map<string, number>>>,
+): Map<string, Map<number, number>> {
+  const totals = new Map<string, Map<number, number>>();
+  for (const [cid, months] of lineMap) {
+    const byMonth = new Map<number, number>();
+    for (const [mo, lines] of months) {
+      let sum = 0;
+      for (const val of lines.values()) sum += val;
+      byMonth.set(mo, sum);
+    }
+    totals.set(cid, byMonth);
+  }
+  return totals;
+}
+
+function projectMonthCell(cell: MonthCell, partida: ReportPartidaFilter): MonthCell {
+  if (partida === "ALL" || !cell.partidaAllDetail) return cell;
+  const d = cell.partidaAllDetail;
+  const laborB = d.laborBudget;
+  const supB = d.suppliesBudget;
+  const admB = d.adminBudget;
+  let lineBudget: number;
+  let totalExpenses: number;
+  let usage = 0;
+  if (partida === "LABOR") {
+    lineBudget = laborB;
+    totalExpenses = d.laborSpend;
+    usage = laborB > 0 ? d.laborSpend / laborB : 0;
+  } else if (partida === "SUPPLIES") {
+    lineBudget = supB;
+    totalExpenses = d.suppliesSpend;
+    usage = supB > 0 ? d.suppliesSpend / supB : 0;
+  } else {
+    lineBudget = admB;
+    totalExpenses = d.adminSpend;
+    usage = admB > 0 ? d.adminSpend / admB : 0;
+  }
+  return {
+    ...cell,
+    lineBudget,
+    totalExpenses,
+    surplus: lineBudget - totalExpenses,
+    trafficLight: cell.hasData && lineBudget > 0 ? calcTrafficLight(usage) : "GREEN",
+  };
+}
+
+/** Recalcula celdas/totales de una partida sin volver a consultar BD. */
+export function projectAnnualReportPartida(
+  report: AnnualReport,
+  partida: ReportPartidaFilter,
+): AnnualReport {
+  if (partida === "ALL" || report.partida === partida) {
+    return { ...report, partida };
+  }
+  const rows = report.rows.map((row) => {
+    const months = row.months.map((cell) => projectMonthCell(cell, partida));
+    return {
+      ...row,
+      months,
+      annualBudget: months.reduce((s, m) => s + (m.hasData ? m.lineBudget : 0), 0),
+      annualExpenses: months.reduce((s, m) => s + m.totalExpenses, 0),
+      annualSurplus: months.reduce((s, m) => s + m.surplus, 0),
+    };
+  });
+  const monthlyTotals = Array.from({ length: 12 }, (_, i) => ({
+    month: i + 1,
+    budget: rows.reduce((s, r) => s + r.months[i].lineBudget, 0),
+    expenses: rows.reduce((s, r) => s + r.months[i].totalExpenses, 0),
+    surplus: rows.reduce((s, r) => s + r.months[i].surplus, 0),
+  }));
+  return {
+    ...report,
+    partida,
+    rows,
+    monthlyTotals,
+    grandBudget: rows.reduce((s, r) => s + r.annualBudget, 0),
+    grandExpenses: rows.reduce((s, r) => s + r.annualExpenses, 0),
+    grandSurplus: rows.reduce((s, r) => s + r.annualSurplus, 0),
+  };
+}
+
 export async function getAnnualReport(
   year: number,
   companyFilter?: string,
   partida: ReportPartidaFilter = "ALL"
 ): Promise<AnnualReport> {
+  const cacheKey = `annual:${year}:${companyFilter ?? "*"}`;
+  const cached = getProfitabilityReportCache<AnnualReport>(cacheKey);
+  if (cached) return projectAnnualReportPartida(cached, partida);
+
   const { yearStart, yearEnd } = yearBounds(year);
+  const rangeStart = new Date(Date.UTC(year, 0, 1));
+  const rangeEndExclusive = new Date(Date.UTC(year + 1, 0, 1));
   const where: Record<string, unknown> = {
     deletedAt: null,
     startDate: { lte: yearEnd },
     endDate: { gte: yearStart },
   };
   if (companyFilter) where.company = companyFilter;
-  const contracts = await prisma.contract.findMany({ where, orderBy: [{ company: "asc" }, { client: "asc" }] });
+  const contracts = await prisma.contract.findMany({
+    where,
+    orderBy: [{ company: "asc" }, { client: "asc" }],
+    select: {
+      id: true,
+      licitacionNo: true,
+      company: true,
+      client: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+      monthlyBilling: true,
+      hiringType: true,
+      laborPct: true,
+      adminPct: true,
+      suppliesPct: true,
+      suppliesBudgetPct: true,
+    },
+  });
   const ids = contracts.map((c) => c.id);
   if (ids.length === 0) {
     return { year, partida, rows: [], monthlyTotals: [], grandBudget: 0, grandExpenses: 0, grandSurplus: 0 };
@@ -135,50 +245,40 @@ export async function getAnnualReport(
     audits,
     deferred,
     admin,
-    direct,
-    expDist,
     directByLine,
     distByLine,
     billingHistRows,
     specialServicesRows,
+    nafLabor,
   ] = await Promise.all([
     prisma.$queryRaw<RawRow[]>`
       SELECT "contractId" as contractid, EXTRACT(MONTH FROM "periodMonth")::int AS month, CAST(SUM("totalCost") AS TEXT) AS total
       FROM uniform_expenses
-      WHERE EXTRACT(YEAR FROM "periodMonth") = ${year} AND "contractId" IN (${Prisma.join(ids)})
+      WHERE "periodMonth" >= ${rangeStart} AND "periodMonth" < ${rangeEndExclusive}
+        AND "contractId" IN (${Prisma.join(ids)})
       GROUP BY 1, 2`,
 
     prisma.$queryRaw<RawRow[]>`
       SELECT "contractId" as contractid, EXTRACT(MONTH FROM "findingDate")::int AS month, CAST(SUM("totalCost") AS TEXT) AS total
       FROM audit_findings
-      WHERE EXTRACT(YEAR FROM "findingDate") = ${year} AND "contractId" IN (${Prisma.join(ids)}) AND status = 'PENDING'
+      WHERE "findingDate" >= ${rangeStart} AND "findingDate" < ${rangeEndExclusive}
+        AND "contractId" IN (${Prisma.join(ids)}) AND status = 'PENDING'
       GROUP BY 1, 2`,
 
     prisma.$queryRaw<RawRow[]>`
       SELECT dd."contractId" as contractid, EXTRACT(MONTH FROM de."periodMonth")::int AS month, CAST(SUM(dd."allocatedAmount") AS TEXT) AS total
       FROM deferred_distributions dd
       JOIN deferred_expenses de ON de.id = dd."deferredExpenseId"
-      WHERE EXTRACT(YEAR FROM de."periodMonth") = ${year} AND dd."contractId" IN (${Prisma.join(ids)})
+      WHERE de."periodMonth" >= ${rangeStart} AND de."periodMonth" < ${rangeEndExclusive}
+        AND dd."contractId" IN (${Prisma.join(ids)})
       GROUP BY 1, 2`,
 
     prisma.$queryRaw<RawRow[]>`
       SELECT ad."contractId" as contractid, EXTRACT(MONTH FROM ae."periodMonth")::int AS month, CAST(SUM(ad."allocatedAmount") AS TEXT) AS total
       FROM admin_distributions ad
       JOIN admin_expenses ae ON ae.id = ad."adminExpenseId"
-      WHERE EXTRACT(YEAR FROM ae."periodMonth") = ${year} AND ad."contractId" IN (${Prisma.join(ids)})
-      GROUP BY 1, 2`,
-
-    prisma.$queryRaw<RawRow[]>`
-      SELECT "contractId" as contractid, EXTRACT(MONTH FROM "periodMonth")::int AS month, CAST(SUM(amount) AS TEXT) AS total
-      FROM expenses
-      WHERE EXTRACT(YEAR FROM "periodMonth") = ${year} AND "contractId" IN (${Prisma.join(ids)}) AND "isDeferred" = false
-      GROUP BY 1, 2`,
-
-    prisma.$queryRaw<RawRow[]>`
-      SELECT ed."contractId" as contractid, EXTRACT(MONTH FROM e."periodMonth")::int AS month, CAST(SUM(ed."allocatedAmount") AS TEXT) AS total
-      FROM expense_distributions ed
-      JOIN expenses e ON e.id = ed."expenseId"
-      WHERE EXTRACT(YEAR FROM e."periodMonth") = ${year} AND ed."contractId" IN (${Prisma.join(ids)})
+      WHERE ae."periodMonth" >= ${rangeStart} AND ae."periodMonth" < ${rangeEndExclusive}
+        AND ad."contractId" IN (${Prisma.join(ids)})
       GROUP BY 1, 2`,
 
     prisma.$queryRaw<RawLineRow[]>`
@@ -186,7 +286,8 @@ export async function getAnnualReport(
         COALESCE("budgetLine"::text, 'NULL') AS bl,
         CAST(SUM(amount) AS TEXT) AS total
       FROM expenses
-      WHERE EXTRACT(YEAR FROM "periodMonth") = ${year} AND "contractId" IN (${Prisma.join(ids)}) AND "isDeferred" = false
+      WHERE "periodMonth" >= ${rangeStart} AND "periodMonth" < ${rangeEndExclusive}
+        AND "contractId" IN (${Prisma.join(ids)}) AND "isDeferred" = false
       GROUP BY 1, 2, 3`,
 
     prisma.$queryRaw<RawLineRow[]>`
@@ -195,7 +296,8 @@ export async function getAnnualReport(
         CAST(SUM(ed."allocatedAmount") AS TEXT) AS total
       FROM expense_distributions ed
       JOIN expenses e ON e.id = ed."expenseId"
-      WHERE EXTRACT(YEAR FROM e."periodMonth") = ${year} AND ed."contractId" IN (${Prisma.join(ids)})
+      WHERE e."periodMonth" >= ${rangeStart} AND e."periodMonth" < ${rangeEndExclusive}
+        AND ed."contractId" IN (${Prisma.join(ids)})
       GROUP BY 1, 2, 3`,
 
     prisma.billingHistory.findMany({
@@ -213,22 +315,19 @@ export async function getAnnualReport(
       },
       select: { contractId: true, periodMonth: true, amount: true },
     }),
+    getNafLaborCostByContractForYear(year, companyFilter),
   ]);
 
   const uniformsMap = buildMap(uniforms);
   const auditsMap = buildMap(audits);
   const deferredMap = buildMap(deferred);
   const adminMap = buildMap(admin);
-  const directMap = buildMap(direct);
-  const expDistMap = buildMap(expDist);
-
   const directLineMap = buildLineMap(directByLine);
   const distLineMap = buildLineMap(distByLine);
+  const directMap = totalsFromLineMap(directLineMap);
+  const expDistMap = totalsFromLineMap(distLineMap);
 
-  const { hasNominaData, byContractMonth } = await getNafLaborCostByContractForYear(
-    year,
-    companyFilter,
-  );
+  const { hasNominaData, byContractMonth } = nafLabor;
 
   const billingHistoryByContract = new Map<
     string,
@@ -332,27 +431,27 @@ export async function getAnnualReport(
 
       const hasData = contractActive || totalExpenses > 0;
 
-      let lineBudget: number;
-      let surplus: number;
-      let trafficLight: TrafficLight;
-      let partidaAllDetail: MonthCell["partidaAllDetail"];
+      const lineBudget = laborB + supB + admB;
+      const surplus = lineBudget - totalExpenses;
+      const maxUsage = Math.max(
+        laborB > 0 ? laborSpend / laborB : 0,
+        supB > 0 ? suppliesSpendTotal / supB : 0,
+        admB > 0 ? adminSpendTotal / admB : 0
+      );
+      const trafficLight =
+        hasData && (laborB > 0 || supB > 0 || admB > 0)
+          ? calcTrafficLight(maxUsage)
+          : "GREEN";
 
-      if (partida === "ALL") {
-        // Presupuesto mostrado = MO + Insumos + Adm. (sin utilidad). Resultado del mes = ese total − gastos totales
-        // del mes (coherente con KPI anual: suma de presupuestos − suma de gastos). El semáforo sigue usando el
-        // mayor % de ejecución entre líneas (cuello de botella).
-        lineBudget = laborB + supB + admB;
-        surplus = lineBudget - totalExpenses;
-        const maxUsage = Math.max(
-          laborB > 0 ? laborSpend / laborB : 0,
-          supB > 0 ? suppliesSpendTotal / supB : 0,
-          admB > 0 ? adminSpendTotal / admB : 0
-        );
-        trafficLight =
-          hasData && (laborB > 0 || supB > 0 || admB > 0)
-            ? calcTrafficLight(maxUsage)
-            : "GREEN";
-        partidaAllDetail = {
+      return {
+        month: mo,
+        monthlyBilling: contractActive ? billing : 0,
+        lineBudget,
+        totalExpenses,
+        surplus,
+        hasData,
+        trafficLight,
+        partidaAllDetail: {
           laborBudget: laborB,
           suppliesBudget: supB,
           adminBudget: admB,
@@ -360,42 +459,7 @@ export async function getAnnualReport(
           suppliesSpend: suppliesSpendTotal,
           adminSpend: adminSpendTotal,
           unassignedSpend: unassignedU,
-        };
-      } else if (partida === "LABOR") {
-        lineBudget = laborB;
-        surplus = laborB > 0 ? laborB - laborSpend : 0;
-        trafficLight =
-          hasData && laborB > 0 ? calcTrafficLight(laborSpend / laborB) : "GREEN";
-      } else if (partida === "SUPPLIES") {
-        lineBudget = supB;
-        surplus = supB > 0 ? supB - suppliesSpendTotal : 0;
-        trafficLight =
-          hasData && supB > 0 ? calcTrafficLight(suppliesSpendTotal / supB) : "GREEN";
-      } else {
-        lineBudget = admB;
-        surplus = admB > 0 ? admB - adminSpendTotal : 0;
-        trafficLight =
-          hasData && admB > 0 ? calcTrafficLight(adminSpendTotal / admB) : "GREEN";
-      }
-
-      const cellTotalExpenses =
-        partida === "ALL"
-          ? totalExpenses
-          : partida === "LABOR"
-            ? laborSpend
-            : partida === "SUPPLIES"
-              ? suppliesSpendTotal
-              : adminSpendTotal;
-
-      return {
-        month: mo,
-        monthlyBilling: contractActive ? billing : 0,
-        lineBudget,
-        totalExpenses: cellTotalExpenses,
-        surplus,
-        hasData,
-        trafficLight,
-        ...(partida === "ALL" ? { partidaAllDetail } : {}),
+        },
       };
     });
 
@@ -425,13 +489,15 @@ export async function getAnnualReport(
     };
   });
 
-  return {
+  const fullReport: AnnualReport = {
     year,
-    partida,
+    partida: "ALL",
     rows,
     monthlyTotals,
     grandBudget: rows.reduce((s, r) => s + r.annualBudget, 0),
     grandExpenses: rows.reduce((s, r) => s + r.annualExpenses, 0),
     grandSurplus: rows.reduce((s, r) => s + r.annualSurplus, 0),
   };
+  setProfitabilityReportCache(cacheKey, fullReport);
+  return projectAnnualReportPartida(fullReport, partida);
 }

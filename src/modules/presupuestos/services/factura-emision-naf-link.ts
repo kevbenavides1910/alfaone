@@ -517,6 +517,7 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
         where: { periodYear: factura.periodYear, periodMonth: factura.periodMonth },
         select: { monthlyBilling: true },
       },
+      specialServices: { select: { periodMonth: true, amount: true } },
     },
   });
 
@@ -535,6 +536,7 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
       })),
       factura.periodYear,
       factura.periodMonth,
+      { specialServices: contractBilling.specialServices },
     );
     if (venta.amountDefined && venta.billing != null) {
       baselineSubtotal = venta.billing;

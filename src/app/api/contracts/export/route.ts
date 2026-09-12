@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
   ]);
 
   const ids = contracts.map((c) => c.id);
-  const [allHistory, allDemand] = await Promise.all([
+  const [allHistory, allDemand, allSpecialServices] = await Promise.all([
     ids.length > 0
       ? prisma.billingHistory.findMany({
           where: { contractId: { in: ids } },
@@ -79,6 +79,12 @@ export async function GET(req: NextRequest) {
           },
         })
       : [],
+    period.usePeriodView && ids.length > 0
+      ? prisma.contractSpecialService.findMany({
+          where: { contractId: { in: ids } },
+          select: { contractId: true, periodMonth: true, amount: true },
+        })
+      : [],
   ]);
 
   const demandByContractId = new Map<string, DemandBillingRow[]>();
@@ -88,11 +94,22 @@ export async function GET(req: NextRequest) {
     demandByContractId.set(row.contractId, arr);
   }
 
+  const specialServicesByContractId = new Map<
+    string,
+    { periodMonth: Date; amount: (typeof allSpecialServices)[number]["amount"] }[]
+  >();
+  for (const row of allSpecialServices) {
+    const arr = specialServicesByContractId.get(row.contractId) ?? [];
+    arr.push({ periodMonth: row.periodMonth, amount: row.amount });
+    specialServicesByContractId.set(row.contractId, arr);
+  }
+
   const rows = period.usePeriodView
     ? enrichContractsListRows(contracts, allHistory, globalTotals, {
         periodYear: period.periodYear,
         periodMonth: period.periodMonth,
         demandByContractId,
+        specialServicesByContractId,
       })
     : enrichContractsListRows(contracts, allHistory, globalTotals, new Date());
 

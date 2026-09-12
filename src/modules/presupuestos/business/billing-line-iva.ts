@@ -164,3 +164,21 @@ export function resolveFacturaTotalsFromBilling(
 
   return computeMixedIvaTotals([{ amount: fallbackSubtotal, appliesIva: true }], ivaPct);
 }
+
+/** Suma servicios especiales del mes sobre la tarifa base (IVA del contrato). */
+export function addSpecialServicesToInvoiceTotals(
+  totals: { subtotal: number; ivaAmount: number; total: number },
+  specialServicesTotal: number,
+  ivaPct: number
+): { subtotal: number; ivaAmount: number; total: number } {
+  if (specialServicesTotal <= 0) return totals;
+  const extra = computeMixedIvaTotals(
+    [{ amount: specialServicesTotal, appliesIva: true }],
+    ivaPct
+  );
+  return {
+    subtotal: roundMoney(totals.subtotal + extra.subtotal),
+    ivaAmount: roundMoney(totals.ivaAmount + extra.ivaAmount),
+    total: roundMoney(totals.total + extra.total),
+  };
+}

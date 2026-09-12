@@ -19,6 +19,9 @@ export const facturaListSerializeInclude = {
       demandBilling: {
         select: { periodYear: true, periodMonth: true, monthlyBilling: true },
       },
+      specialServices: {
+        select: { periodMonth: true, amount: true },
+      },
       billingLines: {
         select: { id: true, monthlyAmount: true, appliesIva: true },
       },

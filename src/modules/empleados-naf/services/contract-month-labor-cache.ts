@@ -128,6 +128,134 @@ export async function invalidateContractMonthLaborCacheForDateRange(
   );
 }
 
+async function runPool<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>) {
+  if (items.length === 0) return;
+  const queue = [...items];
+  const workerCount = Math.min(concurrency, queue.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (queue.length > 0) {
+        const item = queue.shift();
+        if (item === undefined) return;
+        await fn(item);
+      }
+    }),
+  );
+}
+
+function monthsWithNominaInYear(metaRows: { fDesde: Date | null; fHasta: Date | null }[], year: number): Set<number> {
+  const months = new Set<number>();
+  for (const row of metaRows) {
+    if (!row.fDesde || !row.fHasta) continue;
+    for (let m = 1; m <= 12; m++) {
+      const monthStart = new Date(year, m - 1, 1);
+      const monthEnd = new Date(year, m, 0, 23, 59, 59, 999);
+      if (row.fDesde <= monthEnd && row.fHasta >= monthStart) months.add(m);
+    }
+  }
+  return months;
+}
+
+/** Nómina NAF del año desde caché Postgres; solo recalcula meses vencidos o faltantes. */
+export async function getCachedNafLaborCostByContractForYear(
+  year: number,
+  companyCode?: string,
+): Promise<{ hasNominaData: boolean; byContractMonth: Map<string, Map<number, number>> }> {
+  const now = new Date();
+  const lastMonth = year < now.getFullYear() ? 12 : year === now.getFullYear() ? now.getMonth() + 1 : 0;
+
+  const yearStart = new Date(year, 0, 1);
+  const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+
+  const [cachedRows, metaRows] = await Promise.all([
+    lastMonth > 0
+      ? prisma.contractMonthLaborCache.findMany({
+          where: { year, month: { lte: lastMonth } },
+          select: {
+            contractId: true,
+            month: true,
+            laborSpend: true,
+            computedAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    lastMonth > 0
+      ? prisma.nafNominaPeriodMeta.findMany({
+          where: { fDesde: { lte: yearEnd }, fHasta: { gte: yearStart } },
+          select: { fDesde: true, fHasta: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const newestByMonth = new Map<number, Date>();
+  const rowsByMonth = new Map<number, typeof cachedRows>();
+  for (const row of cachedRows) {
+    const list = rowsByMonth.get(row.month) ?? [];
+    list.push(row);
+    rowsByMonth.set(row.month, list);
+    const prev = newestByMonth.get(row.month);
+    if (!prev || row.computedAt > prev) newestByMonth.set(row.month, row.computedAt);
+  }
+
+  const nominaMonths = monthsWithNominaInYear(metaRows, year);
+  const monthsToRefresh: number[] = [];
+  for (let month = 1; month <= lastMonth; month++) {
+    if (!nominaMonths.has(month)) continue;
+    const newest = newestByMonth.get(month);
+    const rows = rowsByMonth.get(month) ?? [];
+    if (rows.length === 0 || !newest || !isCacheFresh(newest, year, month)) {
+      monthsToRefresh.push(month);
+    }
+  }
+
+  const refreshed = new Map<number, NafLaborCostMonthResult>();
+  await runPool(monthsToRefresh, 3, async (month) => {
+    refreshed.set(month, await refreshContractMonthLaborCache(year, month));
+  });
+
+  const byContractMonth = new Map<string, Map<number, number>>();
+  const addMonth = (month: number, byContract: Map<string, number>) => {
+    for (const [contractId, amount] of byContract) {
+      const monthMap = byContractMonth.get(contractId) ?? new Map<number, number>();
+      monthMap.set(month, amount);
+      byContractMonth.set(contractId, monthMap);
+    }
+  };
+
+  for (let month = 1; month <= lastMonth; month++) {
+    const computed = refreshed.get(month);
+    if (computed) {
+      addMonth(month, computed.byContract);
+      continue;
+    }
+    const rows = rowsByMonth.get(month) ?? [];
+    for (const row of rows) {
+      const monthMap = byContractMonth.get(row.contractId) ?? new Map<number, number>();
+      monthMap.set(month, parseFloat(row.laborSpend.toString()));
+      byContractMonth.set(row.contractId, monthMap);
+    }
+  }
+
+  if (companyCode && byContractMonth.size > 0) {
+    const allowed = new Set(
+      (
+        await prisma.contract.findMany({
+          where: { id: { in: [...byContractMonth.keys()] }, company: companyCode },
+          select: { id: true },
+        })
+      ).map((row) => row.id),
+    );
+    for (const contractId of [...byContractMonth.keys()]) {
+      if (!allowed.has(contractId)) byContractMonth.delete(contractId);
+    }
+  }
+
+  return {
+    hasNominaData: nominaMonths.size > 0 || byContractMonth.size > 0,
+    byContractMonth,
+  };
+}
+
 export async function getCachedNafLaborCostByContractForMonth(
   year: number,
   month: number,

@@ -1,5 +1,13 @@
-import { getEffectiveMonthlyBilling } from "@/modules/presupuestos/business/effectiveBilling";
+import {
+  getEffectiveMonthlyBilling,
+  sumSpecialServicesForMonth,
+} from "@/modules/presupuestos/business/effectiveBilling";
 import { getDemandBillingForPeriod } from "@/modules/presupuestos/business/demandBilling";
+
+export type SpecialServiceAmountRow = {
+  periodMonth: Date;
+  amount: { toString(): string } | number | string;
+};
 
 export type DemandBillingRow = {
   periodYear: number;
@@ -149,29 +157,54 @@ export function resolveContractMonthlyBilling(
   demandBilling: DemandBillingRow[],
   periodYear: number,
   periodMonth: number,
-  options?: { prorateByServiceDays?: boolean }
+  options?: {
+    prorateByServiceDays?: boolean;
+    specialServices?: SpecialServiceAmountRow[];
+  }
 ): {
   billing: number | null;
+  baseBilling: number | null;
+  specialServicesTotal: number;
   amountDefined: boolean;
   serviceDaysFactor: number;
   serviceDays: number | null;
   daysInMonth: number | null;
 } {
+  const asOf = periodAsOfDate(periodYear, periodMonth);
+  const specialServicesTotal = sumSpecialServicesForMonth(
+    options?.specialServices ?? [],
+    asOf
+  );
+
   if (contract.hiringType === "ON_DEMAND") {
     const amount = getDemandBillingForPeriod(demandBilling, periodYear, periodMonth);
+    if (amount === null && specialServicesTotal <= 0) {
+      return {
+        billing: null,
+        baseBilling: null,
+        specialServicesTotal: 0,
+        amountDefined: false,
+        serviceDaysFactor: 1,
+        serviceDays: null,
+        daysInMonth: null,
+      };
+    }
+    const baseBilling = amount ?? 0;
     return {
-      billing: amount,
-      amountDefined: amount !== null,
+      billing: baseBilling + specialServicesTotal,
+      baseBilling: amount,
+      specialServicesTotal,
+      amountDefined: true,
       serviceDaysFactor: 1,
       serviceDays: null,
       daysInMonth: null,
     };
   }
-  const base = parseFloat(contract.monthlyBilling.toString());
-  let billing = getEffectiveMonthlyBilling(
-    base,
+  const catalogBase = parseFloat(contract.monthlyBilling.toString());
+  let baseBilling = getEffectiveMonthlyBilling(
+    catalogBase,
     billingHistory as { periodMonth: Date; monthlyBilling: number | string }[],
-    periodAsOfDate(periodYear, periodMonth)
+    asOf
   );
   let serviceDaysFactor = 1;
   let serviceDays: number | null = null;
@@ -190,9 +223,17 @@ export function resolveContractMonthlyBilling(
     serviceDaysFactor = coverage.factor;
     serviceDays = coverage.serviceDays;
     daysInMonth = coverage.daysInMonth;
-    billing *= serviceDaysFactor;
+    baseBilling *= serviceDaysFactor;
   }
-  return { billing, amountDefined: true, serviceDaysFactor, serviceDays, daysInMonth };
+  return {
+    billing: baseBilling + specialServicesTotal,
+    baseBilling,
+    specialServicesTotal,
+    amountDefined: true,
+    serviceDaysFactor,
+    serviceDays,
+    daysInMonth,
+  };
 }
 
 export type PeriodViewKind = "past" | "current" | "future";

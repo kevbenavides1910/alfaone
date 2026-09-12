@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Topbar } from "@/components/layout/Topbar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,7 +18,11 @@ import {
   type ReportPartidaFilter,
 } from "@/lib/utils/constants";
 import { useCompanies } from "@/lib/hooks/use-companies";
-import type { AnnualReport, MonthCell } from "@/modules/presupuestos/business/annualProfitability";
+import {
+  projectAnnualReportPartida,
+  type AnnualReport,
+  type MonthCell,
+} from "@/modules/presupuestos/business/annualProfitability";
 import { ContractMonthDrilldownDialog, type MonthDrilldownTarget } from "@/components/reports/ContractMonthDrilldownDialog";
 
 const MONTH_LABELS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
@@ -180,7 +184,7 @@ function BillingTotalCell({ amount }: { amount: number }) {
 type ViewMode = "rentabilidad" | "facturacion" | "gastos";
 
 export default function AnnualReportPage() {
-  const [year, setYear] = useState(0);
+  const [year, setYear] = useState(() => new Date().getFullYear());
   const [companies, setCompanies] = useState<string[]>([]);
   const [selectedPartida, setSelectedPartida] = useState<ReportPartidaFilter>("ALL");
   const [view, setView] = useState<ViewMode>("rentabilidad");
@@ -188,34 +192,27 @@ export default function AnnualReportPage() {
   const { data: companiesRes } = useCompanies();
   const companyRows = companiesRes?.data ?? [];
 
-  const serverYear = year || new Date().getFullYear();
-  const yearOpts = Array.from({ length: 6 }, (_, i) => serverYear - i + 1);
+  const yearOpts = Array.from({ length: 6 }, (_, i) => year - i + 1);
 
   const params = new URLSearchParams();
-  if (year > 0) params.set("year", String(year));
+  params.set("year", String(year));
   if (companies.length === 1) params.set("company", companies[0]);
   else if (companies.length > 1) params.set("companies", companies.join(","));
-  if (selectedPartida !== "ALL") params.set("partida", selectedPartida);
 
   const { data, isLoading, isFetching } = useQuery<{ data: AnnualReport }>({
-    queryKey: ["annual-report", year, companies, selectedPartida],
+    queryKey: ["annual-report", year, companies],
     queryFn: () => fetch(`/api/reports/annual?${params}`).then((r) => r.json()),
     staleTime: 5 * 60_000,
     placeholderData: keepPreviousData,
   });
 
-  // Sync year from server response using useEffect (avoids setState-during-render warning)
-  const reportYear = data?.data?.year;
-  useEffect(() => {
-    if (reportYear && year === 0) {
-      setYear(reportYear);
-    }
-  }, [reportYear, year]);
-
-  const report = data?.data;
-  const partida = report?.partida ?? "ALL";
+  const report = useMemo(
+    () => (data?.data ? projectAnnualReportPartida(data.data, selectedPartida) : undefined),
+    [data?.data, selectedPartida],
+  );
+  const partida = selectedPartida;
   const partidaLabel = REPORT_PARTIDA_OPTIONS.find((o) => o.value === partida)?.label ?? "Todas las partidas";
-  const effectiveYear = report?.year ?? (year > 0 ? year : new Date().getFullYear());
+  const effectiveYear = report?.year ?? year;
 
   // El API ya filtra por empresa(s); mantener filtro cliente solo como red de seguridad.
   const rows = report?.rows ?? [];
@@ -310,7 +307,7 @@ export default function AnnualReportPage() {
           {/* Year */}
           <div>
             <label className="text-xs font-medium text-slate-600 block mb-1">Año</label>
-            <Select value={String(year || "")} onValueChange={(v) => setYear(parseInt(v))}>
+            <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
               <SelectTrigger className="w-28"><SelectValue placeholder="Año" /></SelectTrigger>
               <SelectContent>
                 {yearOpts.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
@@ -426,7 +423,9 @@ export default function AnnualReportPage() {
         <Card>
           <CardContent className="p-0">
             {isLoading && !report ? (
-              <div className="p-12 text-center text-slate-400">Calculando reporte...</div>
+              <div className="p-12 text-center text-slate-400">
+                Cargando reporte del {year}…
+              </div>
             ) : rows.length === 0 ? (
               <div className="p-12 text-center text-slate-400">No hay contratos para el período seleccionado</div>
             ) : (

@@ -5,6 +5,7 @@ import { getEffectiveMonthlyBilling } from "@/modules/presupuestos/business/effe
 import {
   resolveContractMonthlyBilling,
   type DemandBillingRow,
+  type SpecialServiceAmountRow,
 } from "@/modules/presupuestos/business/contractPeriodBilling";
 import { calcSuppliesBudget, effectiveSuppliesPct } from "@/modules/presupuestos/business/profitability";
 
@@ -18,6 +19,7 @@ export type EnrichContractsListOptions = {
   periodYear?: number;
   periodMonth?: number;
   demandByContractId?: Map<string, DemandBillingRow[]>;
+  specialServicesByContractId?: Map<string, SpecialServiceAmountRow[]>;
 };
 
 /**
@@ -33,7 +35,12 @@ export function enrichContractsListRows(
   const options: EnrichContractsListOptions =
     asOfOrOptions instanceof Date ? {} : asOfOrOptions;
   const asOf = asOfOrOptions instanceof Date ? asOfOrOptions : new Date();
-  const { periodYear, periodMonth, demandByContractId = new Map() } = options;
+  const {
+    periodYear,
+    periodMonth,
+    demandByContractId = new Map(),
+    specialServicesByContractId = new Map(),
+  } = options;
   const usePeriodView = periodYear != null && periodMonth != null;
 
   const histByContract = new Map<string, HistoryRow[]>();
@@ -60,7 +67,10 @@ export function enrichContractsListRows(
         demandByContractId.get(c.id) ?? [],
         periodYear!,
         periodMonth!,
-        { prorateByServiceDays: true }
+        {
+          prorateByServiceDays: true,
+          specialServices: specialServicesByContractId.get(c.id) ?? [],
+        }
       );
       billing = resolved.billing;
       amountDefined = resolved.amountDefined;

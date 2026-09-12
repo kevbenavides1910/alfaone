@@ -108,36 +108,6 @@ function addContractLaborTotalsFromEmpleados(
   }
 }
 
-function addContractLaborTotalsToMonth(
-  byContractMonth: Map<string, Map<number, number>>,
-  month: number,
-  empleados: NafLaborEmpleadoRow[],
-) {
-  for (const empleado of empleados) {
-    if (isNafEmployeeExcludedFromRubros(empleado.noCia, empleado.codPla)) continue;
-    for (const contrato of empleado.contratosAsistencia) {
-      if (!contrato.contractId) continue;
-      const amount = contrato.brutoConCargasSociales ?? contrato.devengado ?? 0;
-      if (amount <= 0) continue;
-      const monthMap = byContractMonth.get(contrato.contractId) ?? new Map<number, number>();
-      monthMap.set(month, (monthMap.get(month) ?? 0) + amount);
-      byContractMonth.set(contrato.contractId, monthMap);
-    }
-  }
-}
-
-function monthsOverlappingYearRange(year: number, fDesde: string, fHasta: string): number[] {
-  const desde = new Date(fDesde);
-  const hasta = new Date(fHasta);
-  const months: number[] = [];
-  for (let m = 1; m <= 12; m++) {
-    const monthStart = new Date(year, m - 1, 1);
-    const monthEnd = new Date(year, m, 0, 23, 59, 59, 999);
-    if (desde <= monthEnd && hasta >= monthStart) months.push(m);
-  }
-  return months;
-}
-
 /**
  * Bruto + cargas sociales por contrato del sistema para un mes calendario,
  * sumando las quincenas NAF cuyo rango cae en ese mes (sin caché Postgres).
@@ -210,48 +180,10 @@ export async function getNafLaborCostByContractForYear(
   year: number,
   companyCode?: string,
 ): Promise<{ hasNominaData: boolean; byContractMonth: Map<string, Map<number, number>> }> {
-  const yearStart = new Date(year, 0, 1);
-  const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
-  const periodRanges = await findOverlappingNominaPeriods(yearStart, yearEnd, companyCode);
-
-  const byContractMonth = new Map<string, Map<number, number>>();
-  if (periodRanges.length === 0) {
-    return { hasNominaData: false, byContractMonth };
-  }
-
-  const allNoCias = [...new Set(periodRanges.flatMap((range) => range.noCias))];
-  const [contractCtx, pctByNoCia] = await Promise.all([
-    buildNominaContractContext(),
-    loadNafCargasSocialesPctByNoCia(allNoCias),
-  ]);
-  const nominaOptions = {
-    allowUnresolvedContracts: true as const,
-    contractCtx,
-    cargasPctByNoCia: pctByNoCia,
-  };
-
-  for (const range of periodRanges) {
-    const overlappingMonths = monthsOverlappingYearRange(year, range.fDesde, range.fHasta);
-    try {
-      const detalle = await getNafNominaByDateRange(
-        range.fDesde,
-        range.fHasta,
-        range.noCias,
-        undefined,
-        nominaOptions,
-      );
-      for (const month of overlappingMonths) {
-        addContractLaborTotalsToMonth(byContractMonth, month, detalle.empleados);
-      }
-    } catch (error) {
-      console.warn(
-        `[naf-labor-report] periodo omitido ${range.fDesde}–${range.fHasta} (${range.noCias.join(",")}):`,
-        error,
-      );
-    }
-  }
-
-  return { hasNominaData: true, byContractMonth };
+  const { getCachedNafLaborCostByContractForYear } = await import(
+    "@/modules/empleados-naf/services/contract-month-labor-cache"
+  );
+  return getCachedNafLaborCostByContractForYear(year, companyCode);
 }
 
 export type NafLaborEmployeeBreakdownContrato = {

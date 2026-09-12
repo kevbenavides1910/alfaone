@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
   ]);
 
   const pageIds = contracts.map((c) => c.id);
-  const [pageHistory, pageDemand] = await Promise.all([
+  const [pageHistory, pageDemand, pageSpecialServices] = await Promise.all([
     pageIds.length > 0
       ? prisma.billingHistory.findMany({
           where: { contractId: { in: pageIds } },
@@ -76,6 +76,12 @@ export async function GET(req: NextRequest) {
           },
         })
       : [],
+    period.usePeriodView && pageIds.length > 0
+      ? prisma.contractSpecialService.findMany({
+          where: { contractId: { in: pageIds } },
+          select: { contractId: true, periodMonth: true, amount: true },
+        })
+      : [],
   ]);
 
   const demandByContractId = new Map<string, DemandBillingRow[]>();
@@ -85,11 +91,22 @@ export async function GET(req: NextRequest) {
     demandByContractId.set(row.contractId, arr);
   }
 
+  const specialServicesByContractId = new Map<
+    string,
+    { periodMonth: Date; amount: (typeof pageSpecialServices)[number]["amount"] }[]
+  >();
+  for (const row of pageSpecialServices) {
+    const arr = specialServicesByContractId.get(row.contractId) ?? [];
+    arr.push({ periodMonth: row.periodMonth, amount: row.amount });
+    specialServicesByContractId.set(row.contractId, arr);
+  }
+
   const enrichedBase = period.usePeriodView
     ? enrichContractsListRows(contracts, pageHistory, globalTotals, {
         periodYear: period.periodYear,
         periodMonth: period.periodMonth,
         demandByContractId,
+        specialServicesByContractId,
       })
     : enrichContractsListRows(contracts, pageHistory, globalTotals, new Date());
 

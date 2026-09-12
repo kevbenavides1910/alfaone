@@ -1,10 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { syncContractAdministrations } from "@/modules/presupuestos/services/sync-contract-administrations";
-import { getEffectiveMonthlyBilling } from "@/modules/presupuestos/business/effectiveBilling";
-import {
-  FACTURA_CLOSED_STATUSES,
-  getDemandBillingForPeriod,
-} from "@/modules/presupuestos/business/demandBilling";
+import { FACTURA_CLOSED_STATUSES } from "@/modules/presupuestos/business/demandBilling";
 import { resolveAdministrationBillingPeriod } from "@/modules/presupuestos/business/administration-billing-period";
 import { resolveEmisionSubtotals } from "@/modules/presupuestos/business/administration-billing-amount";
 import {
@@ -14,6 +10,7 @@ import {
 import { normalizeRequirementKey } from "@/modules/presupuestos/business/contractBillingRequirementsDefaults";
 import { computeServicePeriodForInvoice } from "@/lib/utils/format";
 import {
+  addSpecialServicesToInvoiceTotals,
   calculateInvoiceTotal,
   computeAdministrationIvaTotals,
   extractBillingLineCatalog,
@@ -376,24 +373,24 @@ export async function repairOpenFacturaRequisitosForContract(
   return { removedLegacy, removedDuplicates };
 }
 
-function resolveSubtotalForContract(
+function resolvePeriodBillingForContract(
   contract: {
     hiringType: string;
     monthlyBilling: { toString(): string };
     billingHistory: { periodMonth: Date; monthlyBilling: { toString(): string } }[];
     demandBilling: { periodYear: number; periodMonth: number; monthlyBilling: { toString(): string } }[];
+    specialServices?: { periodMonth: Date; amount: { toString(): string } | number | string }[];
   },
   periodYear: number,
-  periodMonth: number,
-  asOf: Date
-): number | null {
-  if (contract.hiringType === "ON_DEMAND") {
-    return getDemandBillingForPeriod(contract.demandBilling, periodYear, periodMonth);
-  }
-  return getEffectiveMonthlyBilling(
-    toNum(contract.monthlyBilling),
-    contract.billingHistory as Parameters<typeof getEffectiveMonthlyBilling>[1],
-    asOf
+  periodMonth: number
+) {
+  return resolveContractMonthlyBilling(
+    contract,
+    contract.billingHistory,
+    contract.demandBilling,
+    periodYear,
+    periodMonth,
+    { specialServices: contract.specialServices ?? [] }
   );
 }
 
@@ -442,8 +439,6 @@ export async function syncFacturasForPeriod(
   periodMonth: number,
   createdById?: string
 ): Promise<void> {
-  const asOf = new Date(Date.UTC(periodYear, periodMonth - 1, 15));
-
   const contracts = await db.contract.findMany({
     where: {
       deletedAt: null,
@@ -465,6 +460,9 @@ export async function syncFacturasForPeriod(
         where: { periodYear, periodMonth },
         select: { periodYear: true, periodMonth: true, monthlyBilling: true, updatedAt: true },
       },
+      specialServices: {
+        select: { periodMonth: true, amount: true },
+      },
     },
   });
 
@@ -473,15 +471,20 @@ export async function syncFacturasForPeriod(
       continue;
     }
 
-    const subtotal = resolveSubtotalForContract(contract, periodYear, periodMonth, asOf);
+    const periodBilling = resolvePeriodBillingForContract(contract, periodYear, periodMonth);
+    const subtotal = periodBilling.amountDefined ? periodBilling.billing : null;
     const payload = buildSyncPayload(contract, periodYear, periodMonth, subtotal);
     const amountDefined = subtotal !== null && subtotal > 0;
     const totals = amountDefined
-      ? resolveFacturaTotalsFromBilling(
-          subtotal!,
-          payload.ivaPct,
-          contract.billingLines,
-          contract.administrations
+      ? addSpecialServicesToInvoiceTotals(
+          resolveFacturaTotalsFromBilling(
+            periodBilling.baseBilling ?? 0,
+            payload.ivaPct,
+            contract.billingLines,
+            contract.administrations
+          ),
+          periodBilling.specialServicesTotal,
+          payload.ivaPct
         )
       : { subtotal: 0, ivaAmount: 0, total: 0 };
     const total = totals.total;
@@ -560,6 +563,19 @@ export async function syncFacturasForPeriod(
     );
     await syncOpenFacturaEmisionesForContract(db, contract.id);
   }
+}
+
+export async function syncFacturasForPeriodMonthDate(
+  db: Db,
+  periodMonth: Date,
+  createdById?: string
+): Promise<void> {
+  await syncFacturasForPeriod(
+    db,
+    periodMonth.getFullYear(),
+    periodMonth.getMonth() + 1,
+    createdById
+  );
 }
 
 /** @deprecated Use syncFacturasForPeriod — conservado por compatibilidad interna. */
@@ -948,6 +964,7 @@ export function serializeFacturaMensual(
       monthlyBilling?: { toString(): string };
       billingHistory?: { periodMonth: Date; monthlyBilling: { toString(): string } }[];
       demandBilling?: { periodYear: number; periodMonth: number; monthlyBilling: { toString(): string } }[];
+      specialServices?: { periodMonth: Date; amount: { toString(): string } | number | string }[];
       administrations?: {
         id: string;
         billingLines: {
@@ -999,9 +1016,10 @@ export function serializeFacturaMensual(
           row.contract.billingHistory ?? [],
           row.contract.demandBilling ?? [],
           row.periodYear,
-          row.periodMonth
+          row.periodMonth,
+          { specialServices: row.contract.specialServices ?? [] }
         )
-      : { billing: null, amountDefined: false };
+      : { billing: null, baseBilling: null, specialServicesTotal: 0, amountDefined: false };
   const contractVentaSubtotal =
     contractVenta.amountDefined && contractVenta.billing != null ? contractVenta.billing : null;
   const billingCatalog =
@@ -1028,11 +1046,15 @@ export function serializeFacturaMensual(
 
   const contractVentaTotal =
     contractVentaSubtotal != null
-      ? resolveFacturaTotalsFromBilling(
-          contractVentaSubtotal,
-          ivaPct,
-          billingCatalog,
-          administrations
+      ? addSpecialServicesToInvoiceTotals(
+          resolveFacturaTotalsFromBilling(
+            contractVenta.baseBilling ?? 0,
+            ivaPct,
+            billingCatalog,
+            administrations
+          ),
+          contractVenta.specialServicesTotal,
+          ivaPct
         ).total
       : null;
   const nafParentSubtotal = (() => {

@@ -148,6 +148,7 @@ export function BillingHistoryTab({
       qc.invalidateQueries({ queryKey: ["special-services", contractId] });
       qc.invalidateQueries({ queryKey: ["profitability", contractId] });
       qc.invalidateQueries({ queryKey: ["contract", contractId] });
+      qc.invalidateQueries({ queryKey: ["facturacion"] });
       toast.success(editingService ? "Servicio especial actualizado" : "Servicio especial registrado");
       closeServiceDialog();
     },
@@ -165,6 +166,7 @@ export function BillingHistoryTab({
       qc.invalidateQueries({ queryKey: ["special-services", contractId] });
       qc.invalidateQueries({ queryKey: ["profitability", contractId] });
       qc.invalidateQueries({ queryKey: ["contract", contractId] });
+      qc.invalidateQueries({ queryKey: ["facturacion"] });
       toast.success("Servicio especial eliminado");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -407,7 +409,7 @@ export function BillingHistoryTab({
             Servicios especiales
           </h3>
           <p className="text-sm text-slate-500">
-            Montos adicionales fuera de la venta mensual. Se suman al total facturado desde el inicio
+            Montos adicionales del mes: se suman a la venta y a la facturación de ese período
             {servicesTotal > 0 && (
               <> · Acumulado: <span className="font-semibold text-amber-700">{formatCurrency(servicesTotal)}</span></>
             )}

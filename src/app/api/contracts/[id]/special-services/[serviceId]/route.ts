@@ -3,6 +3,7 @@ import { prisma } from "@/modules/core/db/prisma";
 import { getSession, canModifyContracts } from "@/lib/api/middleware";
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { specialServiceUpdateSchema } from "@/modules/presupuestos/validations/contract.schema";
+import { syncFacturasForPeriodMonthDate } from "@/modules/presupuestos/services/facturacion-cobro";
 
 type Ctx = { params: Promise<{ id: string; serviceId: string }> };
 
@@ -58,6 +59,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       data,
     });
 
+    await syncFacturasForPeriodMonthDate(prisma, existing.periodMonth, session.user.id);
+    if (updated.periodMonth.getTime() !== existing.periodMonth.getTime()) {
+      await syncFacturasForPeriodMonthDate(prisma, updated.periodMonth, session.user.id);
+    }
+
     return ok({
       id: updated.id,
       periodMonth: updated.periodMonth.toISOString(),
@@ -87,6 +93,7 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     if (!existing) return notFound();
 
     await prisma.contractSpecialService.delete({ where: { id: serviceId } });
+    await syncFacturasForPeriodMonthDate(prisma, existing.periodMonth, session.user.id);
     return ok({ deleted: true });
   } catch (e) {
     return serverError("Error al eliminar servicio especial", e);

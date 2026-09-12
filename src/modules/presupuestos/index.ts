@@ -22,7 +22,7 @@ export {
   distributeAdminExpense,
   previewDeferredDistribution,
 } from "./business/distribution";
-export { getAnnualReport } from "./business/annualProfitability";
+export { getAnnualReport, projectAnnualReportPartida } from "./business/annualProfitability";
 export type { AnnualReport, MonthCell } from "./business/annualProfitability";
 export { autoExpireContracts } from "./business/autoExpire";
 

@@ -5,6 +5,8 @@ import { getAnnualReport } from "@/modules/presupuestos/business/annualProfitabi
 import { currentYearServer } from "@/lib/utils/time";
 import { parseReportPartida } from "@/lib/utils/constants";
 
+export const maxDuration = 120;
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return unauthorized();

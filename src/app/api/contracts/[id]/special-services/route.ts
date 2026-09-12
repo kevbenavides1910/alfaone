@@ -3,6 +3,7 @@ import { prisma } from "@/modules/core/db/prisma";
 import { getSession, canModifyContracts } from "@/lib/api/middleware";
 import { ok, created, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { specialServiceSchema } from "@/modules/presupuestos/validations/contract.schema";
+import { syncFacturasForPeriodMonthDate } from "@/modules/presupuestos/services/facturacion-cobro";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -87,6 +88,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         createdById: session.user.id,
       },
     });
+
+    await syncFacturasForPeriodMonthDate(prisma, row.periodMonth, session.user.id);
 
     return created(serialize(row));
   } catch (e) {
