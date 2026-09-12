@@ -9,7 +9,10 @@ export async function GET(req: NextRequest) {
   if (!session) return unauthorized();
   if (
     !hasPermission(session, "sig.procesos", "view") &&
-    !hasPermission(session, "sig.biblioteca", "view")
+    !hasPermission(session, "sig.biblioteca", "view") &&
+    !hasPermission(session, "sig.evidencias", "view") &&
+    !hasPermission(session, "sig.controles", "view") &&
+    !hasPermission(session, "sig.riesgos", "view")
   ) {
     return forbidden();
   }

@@ -57,27 +57,29 @@ export default function SigEvidenciasPage() {
   });
   const [file, setFile] = useState<File | null>(null);
 
-  const { data: processes = [] } = useQuery({
+  const { data: processesRaw } = useQuery({
     queryKey: ["sig-procesos-filter"],
     queryFn: async () => {
       const r = await fetch("/api/sig/procesos", { credentials: "same-origin" });
-      if (!r.ok) throw new Error("Error procesos");
+      if (!r.ok) return [] as Array<{ id: string; code: string; name: string }>;
       const json = await r.json();
-      return json.data as Array<{ id: string; code: string; name: string }>;
+      return Array.isArray(json.data) ? json.data : [];
     },
   });
+  const processes = Array.isArray(processesRaw) ? processesRaw : [];
 
-  const { data: requirements = [] } = useQuery({
+  const { data: requirementsRaw } = useQuery({
     queryKey: ["sig-requirements-picker"],
     queryFn: async () => {
       const r = await fetch("/api/sig/requirements?applicable=1", { credentials: "same-origin" });
-      if (!r.ok) throw new Error("Error requisitos");
+      if (!r.ok) return [] as Array<{ id: string; code: string; title: string; standard?: { code?: string } | null }>;
       const json = await r.json();
-      return json.data as Array<{ id: string; code: string; title: string; standard: { code: string } }>;
+      return Array.isArray(json.data) ? json.data : [];
     },
   });
+  const requirements = Array.isArray(requirementsRaw) ? requirementsRaw : [];
 
-  const { data: rows = [], isLoading } = useQuery({
+  const { data: rowsRaw, isLoading } = useQuery({
     queryKey: ["sig-evidences", q],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -85,9 +87,10 @@ export default function SigEvidenciasPage() {
       const r = await fetch(`/api/sig/evidences?${params}`, { credentials: "same-origin" });
       if (!r.ok) throw new Error("Error cargando evidencias");
       const json = await r.json();
-      return json.data as EvidenceRow[];
+      return (Array.isArray(json.data) ? json.data : []) as EvidenceRow[];
     },
   });
+  const rows = Array.isArray(rowsRaw) ? rowsRaw : [];
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
@@ -188,7 +191,7 @@ export default function SigEvidenciasPage() {
                   <option value="">Sin requisito</option>
                   {requirements.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.standard.code} {r.code} — {r.title}
+                      {r.standard?.code ?? "—"} {r.code} — {r.title}
                     </option>
                   ))}
                 </select>
@@ -244,8 +247,10 @@ export default function SigEvidenciasPage() {
                       <td className="px-3 py-2">{formatDate(row.evidenceDate)}</td>
                       <td className="px-3 py-2">{row.process?.name ?? "—"}</td>
                       <td className="px-3 py-2">
-                        {row.requirementLinks.map((l) => `${l.requirement.standard.code} ${l.requirement.code}`).join(", ") ||
-                          "—"}
+                        {(row.requirementLinks ?? [])
+                          .map((l) => `${l.requirement?.standard?.code ?? "—"} ${l.requirement?.code ?? ""}`.trim())
+                          .filter(Boolean)
+                          .join(", ") || "—"}
                       </td>
                       <td className="px-3 py-2">
                         <Badge variant={row.status === "ACTIVE" ? "success" : "outline"}>{row.status}</Badge>

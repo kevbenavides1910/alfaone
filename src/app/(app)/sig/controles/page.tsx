@@ -165,7 +165,7 @@ export default function SigControlesPage() {
                   <option value="">Sin requisito</option>
                   {requirements.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.standard.code} {r.code} — {r.title}
+                      {r.standard?.code ?? "—"} {r.code} — {r.title}
                     </option>
                   ))}
                 </select>

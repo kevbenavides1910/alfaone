@@ -35,10 +35,16 @@ export function formatPctPoints(value: number | string | null | undefined): stri
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
   const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "—";
   // Las fechas se almacenan como medianoche UTC en el servidor.
   // Usar componentes UTC evita que el navegador en UTC-6 desplace el día.
   const local = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  return format(local, "dd/MM/yyyy", { locale: es });
+  if (Number.isNaN(local.getTime())) return "—";
+  try {
+    return format(local, "dd/MM/yyyy", { locale: es });
+  } catch {
+    return "—";
+  }
 }
 
 /** Hoy como YYYY-MM-DD (día local del servidor/cliente). */

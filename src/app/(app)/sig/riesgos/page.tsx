@@ -288,7 +288,7 @@ export default function SigRiesgosPage() {
                   <option value="">Ninguno</option>
                   {requirements.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.standard.code} {r.code} — {r.title}
+                      {r.standard?.code ?? "—"} {r.code} — {r.title}
                     </option>
                   ))}
                 </select>
