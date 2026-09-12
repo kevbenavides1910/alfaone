@@ -56,6 +56,12 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      { source: "/sigology", destination: "/sig", permanent: false },
+      { source: "/sigology/:path*", destination: "/sig/:path*", permanent: false },
+    ];
+  },
   // Lint ya corre en CI (`npm run lint`); no duplicar ~60s en cada docker build.
   eslint: {
     ignoreDuringBuilds: true,
