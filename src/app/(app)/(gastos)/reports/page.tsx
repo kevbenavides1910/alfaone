@@ -36,6 +36,7 @@ import {
   type RubroSpendDrilldownRubro,
   type RubroSpendDrilldownTarget,
 } from "@/components/reports/RubroSpendDrilldownDialog";
+import { ReportRubroMoneyCell } from "@/components/reports/ReportRubroMoneyCell";
 import { expenseTypeLabel } from "@/lib/utils/expense-type-labels";
 
 const REPORT_TABLE_HEADER_TH =
@@ -529,10 +530,8 @@ export default function ReportsPage() {
   }
 
 
-  /** Gasto real + presupuesto + semáforo de ejecución por rubro */
   function RubroSpendBudgetCell({
     budget,
-    billing,
     rubro,
     onSpendClick,
   }: {
@@ -541,43 +540,21 @@ export default function ReportsPage() {
     rubro: RubroTrafficSnapshot;
     onSpendClick?: () => void;
   }) {
-    const budgetPct = billing > 0 ? (budget / billing) * 100 : 0;
-    const spendClickable = rubro.spend > 0 && onSpendClick;
     return (
-      <div className="text-right tabular-nums leading-tight space-y-0.5 min-w-[7.5rem]">
-        <div className="flex justify-end">
-          <TrafficLightBadge light={rubro.trafficLight} pct={rubro.usagePctFormatted} size="sm" />
-        </div>
-        {spendClickable ? (
-          <button
-            type="button"
-            onClick={onSpendClick}
-            className="font-semibold text-blue-700 hover:text-blue-900 hover:underline underline-offset-2 cursor-pointer"
-            title="Ver desglose de este gasto"
-          >
-            {formatCurrency(rubro.spend)}
-          </button>
-        ) : (
-          <div className="font-semibold text-slate-800">
-            {rubro.spend > 0 ? formatCurrency(rubro.spend) : "—"}
-          </div>
-        )}
-        {(rubro.cargasSocialesSpend ?? 0) > 0 && (
-          <div className="text-[10px] text-amber-700 font-medium">
-            Cargas soc.: {formatCurrency(rubro.cargasSocialesSpend!)}
-          </div>
-        )}
-        <div className="text-[10px] text-slate-500">P: {formatCurrency(budget)}</div>
-        <div className="text-[10px] text-slate-400">{budgetPct.toFixed(1)}% fact.</div>
-      </div>
+      <ReportRubroMoneyCell
+        spend={rubro.spend}
+        budget={budget}
+        usagePct={rubro.usagePctFormatted}
+        trafficLight={rubro.trafficLight}
+        cargasSocialesSpend={rubro.cargasSocialesSpend}
+        onSpendClick={onSpendClick}
+      />
     );
   }
 
-  /** Partida única: gasto + presupuesto + % ejecución */
   function PartidaSpendBudgetCell({
     spend,
     budget,
-    pctOfBilling,
     usagePctFormatted,
     trafficLight,
     onSpendClick,
@@ -589,36 +566,20 @@ export default function ReportsPage() {
     trafficLight: TrafficLight;
     onSpendClick?: () => void;
   }) {
-    const spendClickable = spend > 0 && onSpendClick;
     return (
-      <div className="text-right tabular-nums leading-tight space-y-0.5 min-w-[7.5rem]">
-        <div className="flex justify-end">
-          <TrafficLightBadge light={trafficLight} pct={usagePctFormatted} size="sm" />
-        </div>
-        {spendClickable ? (
-          <button
-            type="button"
-            onClick={onSpendClick}
-            className="font-semibold text-blue-700 hover:text-blue-900 hover:underline underline-offset-2 cursor-pointer"
-            title="Ver desglose de este gasto"
-          >
-            {formatCurrency(spend)}
-          </button>
-        ) : (
-          <div className="font-semibold text-slate-800">
-            {spend > 0 ? formatCurrency(spend) : "—"}
-          </div>
-        )}
-        <div className="text-[10px] text-slate-500">P: {formatCurrency(budget)}</div>
-        <div className="text-[10px] text-slate-400">{(pctOfBilling * 100).toFixed(1)}% fact.</div>
-      </div>
+      <ReportRubroMoneyCell
+        spend={spend}
+        budget={budget}
+        usagePct={usagePctFormatted}
+        trafficLight={trafficLight}
+        onSpendClick={onSpendClick}
+      />
     );
   }
 
   function RubroTotalsCell({
     spend,
     budget,
-    billing,
     cargasSocialesSpend,
     onSpendClick,
   }: {
@@ -628,30 +589,14 @@ export default function ReportsPage() {
     cargasSocialesSpend?: number;
     onSpendClick?: () => void;
   }) {
-    const budgetPct = billing > 0 ? (budget / billing) * 100 : 0;
-    const spendClickable = spend > 0 && onSpendClick;
     return (
-      <div className="text-right tabular-nums leading-tight space-y-0.5">
-        {spendClickable ? (
-          <button
-            type="button"
-            onClick={onSpendClick}
-            className="font-semibold text-blue-700 hover:text-blue-900 hover:underline underline-offset-2 cursor-pointer"
-            title="Ver desglose consolidado de este gasto"
-          >
-            {formatCurrency(spend)}
-          </button>
-        ) : (
-          <div className="font-semibold">{formatCurrency(spend)}</div>
-        )}
-        {(cargasSocialesSpend ?? 0) > 0 && (
-          <div className="text-[10px] text-amber-700 font-medium">
-            Cargas soc.: {formatCurrency(cargasSocialesSpend!)}
-          </div>
-        )}
-        <div className="text-[10px] text-slate-500 font-normal">P: {formatCurrency(budget)}</div>
-        <div className="text-[10px] text-slate-400 font-normal">{budgetPct.toFixed(1)}% fact.</div>
-      </div>
+      <ReportRubroMoneyCell
+        spend={spend}
+        budget={budget}
+        cargasSocialesSpend={cargasSocialesSpend}
+        onSpendClick={onSpendClick}
+        showBadge={false}
+      />
     );
   }
 
@@ -789,22 +734,22 @@ export default function ReportsPage() {
               <div className="p-8 text-center text-slate-400">No hay datos para mostrar</div>
             ) : (
               <div className="max-h-[calc(100vh-14rem)] overflow-auto overscroll-contain">
-                <table data-table-id="gastos-reports-profitability" className="w-full text-xs">
+                <table data-table-id="gastos-reports-profitability-v2" className="w-full text-sm">
                   <thead>
                     <TableColumnFilterHead
-                      tableId="gastos-reports-profitability"
+                      tableId="gastos-reports-profitability-v2"
                       defaultColumnWidths={{
-                        licitacion: 120,
-                        cliente: 200,
+                        licitacion: 140,
+                        cliente: 220,
                         empresa: 140,
-                        facturacion: 110,
-                        mo: 90,
-                        insumos: 90,
-                        adm: 90,
-                        util: 90,
-                        presupuesto: 110,
-                        total: 110,
-                        peor: 100,
+                        facturacion: 130,
+                        mo: 180,
+                        insumos: 180,
+                        adm: 180,
+                        util: 180,
+                        presupuesto: 180,
+                        total: 130,
+                        peor: 110,
                       }}
                       columns={columnDefs}
                       rows={rows}
@@ -823,13 +768,15 @@ export default function ReportsPage() {
                             {r.licitacionNo}
                           </Link>
                         </td>
-                        <td className="px-3 py-2 max-w-36">
-                          <div className="truncate">{r.client}</div>
+                        <td className="px-3 py-2">
+                          <div className="whitespace-nowrap" title={r.client}>{r.client}</div>
                         </td>
                         <td className="px-3 py-2">
                           <Badge variant="outline" className="text-xs">{companyDisplayName(r.company, companyRows)}</Badge>
                         </td>
-                        <td className="px-3 py-2 text-right">{formatCurrency(r.monthlyBilling)}</td>
+                        <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
+                          {formatCurrency(r.monthlyBilling)}
+                        </td>
                         {partida === "ALL" ? (
                           <>
                             <td className="px-3 py-2">
@@ -885,7 +832,9 @@ export default function ReportsPage() {
                             </td>
                           );
                         })}
-                        <td className="px-3 py-2 text-right font-semibold">{r.grandTotal > 0 ? formatCurrency(r.grandTotal) : "—"}</td>
+                        <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
+                          {r.grandTotal > 0 ? formatCurrency(r.grandTotal) : "—"}
+                        </td>
                         <td className="px-3 py-2" title="Mayor % de ejecución entre M.O., insumos, administrativo y utilidad">
                           <TrafficLightBadge light={r.trafficLight} pct={r.budgetUsagePctFormatted} size="sm" />
                         </td>
@@ -896,7 +845,9 @@ export default function ReportsPage() {
                     <tfoot>
                       <tr className="border-t-2 bg-muted/50 font-bold">
                         <td colSpan={3} className="px-3 py-2 text-right">TOTALES:</td>
-                        <td className="px-3 py-2 text-right">{formatCurrency(displayTotals.totalBilling)}</td>
+                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
+                          {formatCurrency(displayTotals.totalBilling)}
+                        </td>
                         {partida === "ALL" ? (
                           <>
                             <td className="px-3 py-2">
@@ -948,7 +899,9 @@ export default function ReportsPage() {
                             {formatCurrency((displayTotals.totalsByType ?? {})[col.type] ?? 0)}
                           </td>
                         ))}
-                        <td className="px-3 py-2 text-right">{formatCurrency(displayTotals.totalExpenses)}</td>
+                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
+                          {formatCurrency(displayTotals.totalExpenses)}
+                        </td>
                         <td className="px-3 py-2" />
                       </tr>
                       <tr className="border-t bg-slate-100/90">

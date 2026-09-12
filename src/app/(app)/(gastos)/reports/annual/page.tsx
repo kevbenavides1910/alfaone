@@ -28,9 +28,16 @@ import { ContractMonthDrilldownDialog, type MonthDrilldownTarget } from "@/compo
 const MONTH_LABELS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 // ── Rentabilidad view cells ────────────────────────────────────────────────────
+function formatSignedAmount(amount: number): string {
+  const abs = formatCurrency(Math.abs(amount));
+  if (amount > 0) return `+${abs}`;
+  if (amount < 0) return `−${abs}`;
+  return abs;
+}
+
 function SurplusCell({ cell, onOpenMonth }: { cell: MonthCell; onOpenMonth?: () => void }) {
   if (!cell.hasData) {
-    return <td className="px-2 py-2 text-center text-slate-300 text-xs">—</td>;
+    return <td className="px-2 py-2 text-right text-slate-300">—</td>;
   }
   const isGood = cell.surplus >= 0;
   const title =
@@ -43,33 +50,33 @@ function SurplusCell({ cell, onOpenMonth }: { cell: MonthCell; onOpenMonth?: () 
       : `Presupuesto: ${formatCurrency(cell.lineBudget)} | Gastos: ${formatCurrency(cell.totalExpenses)}`;
   const content = (
     <span title={title} className={onOpenMonth ? "pointer-events-none" : undefined}>
-      {isGood ? "+" : ""}{formatCurrency(cell.surplus)}
+      {formatSignedAmount(cell.surplus)}
     </span>
   );
   return (
-    <td className={`px-1 py-1 text-center text-xs font-semibold tabular-nums ${isGood ? "text-green-700 bg-green-50" : "text-red-700 bg-red-50"}`}>
+    <td className={`px-1.5 py-1.5 text-right text-sm font-semibold tabular-nums tracking-tight ${isGood ? "text-emerald-800 bg-emerald-50" : "text-red-800 bg-red-50"}`}>
       {onOpenMonth ? (
         <button
           type="button"
           title={`${title} · Clic para ver ingresos y gastos del mes`}
           onClick={onOpenMonth}
-          className="w-full min-h-[2.25rem] rounded px-1 py-1.5 cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow text-inherit font-semibold"
+          className="w-full min-h-[2.5rem] rounded px-1.5 py-1.5 cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow text-inherit font-semibold whitespace-nowrap"
         >
           {content}
         </button>
       ) : (
-        <span className="block px-2 py-2">{content}</span>
+        <span className="block px-2 py-2 whitespace-nowrap">{content}</span>
       )}
     </td>
   );
 }
 
 function SurplusTotalCell({ surplus }: { surplus: number }) {
-  if (surplus === 0) return <td className="px-2 py-2 text-center text-slate-400 text-xs">₡0</td>;
+  if (surplus === 0) return <td className="px-2 py-2 text-right text-slate-400 text-sm tabular-nums">₡0</td>;
   const isGood = surplus >= 0;
   return (
-    <td className={`px-2 py-2 text-center text-sm font-bold tabular-nums ${isGood ? "text-green-800" : "text-red-800"}`}>
-      {isGood ? "+" : ""}{formatCurrency(surplus)}
+    <td className={`px-2 py-2 text-right text-sm font-bold tabular-nums tracking-tight whitespace-nowrap ${isGood ? "text-emerald-800" : "text-red-800"}`}>
+      {formatSignedAmount(surplus)}
     </td>
   );
 }
@@ -77,17 +84,17 @@ function SurplusTotalCell({ surplus }: { surplus: number }) {
 // ── Gastos view cells ─────────────────────────────────────────────────────────
 function ExpenseCell({ cell, onOpenMonth }: { cell: MonthCell; onOpenMonth?: () => void }) {
   if (!cell.hasData) {
-    return <td className="px-2 py-2 text-center text-slate-300 text-xs">—</td>;
+    return <td className="px-2 py-2 text-right text-slate-300">—</td>;
   }
   if (cell.totalExpenses === 0) {
     return (
-      <td className="px-1 py-1 text-center text-slate-400 text-xs">
+      <td className="px-1.5 py-1.5 text-right text-slate-400 text-sm tabular-nums">
         {onOpenMonth ? (
           <button
             type="button"
             title="Clic para ver ingresos y gastos del mes"
             onClick={onOpenMonth}
-            className="w-full min-h-[2.25rem] rounded px-1 py-1.5 cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full min-h-[2.5rem] rounded px-1.5 py-1.5 cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             ₡0
           </button>
@@ -97,7 +104,7 @@ function ExpenseCell({ cell, onOpenMonth }: { cell: MonthCell; onOpenMonth?: () 
       </td>
     );
   }
-  let cls = "text-slate-700";
+  let cls = "text-slate-800";
   let usagePct = 0;
   if (cell.partidaAllDetail) {
     const d = cell.partidaAllDetail;
@@ -106,12 +113,12 @@ function ExpenseCell({ cell, onOpenMonth }: { cell: MonthCell; onOpenMonth?: () 
       d.suppliesBudget > 0 ? d.suppliesSpend / d.suppliesBudget : 0,
       d.adminBudget > 0 ? d.adminSpend / d.adminBudget : 0
     );
-    if (usagePct > 1) cls = "text-red-700 bg-red-50 font-semibold";
-    else if (usagePct > 0.8) cls = "text-orange-700 bg-orange-50";
+    if (usagePct > 1) cls = "text-red-800 bg-red-50 font-semibold";
+    else if (usagePct > 0.8) cls = "text-amber-900 bg-amber-50";
   } else if (cell.lineBudget > 0) {
     usagePct = cell.totalExpenses / cell.lineBudget;
-    if (usagePct > 1) cls = "text-red-700 bg-red-50 font-semibold";
-    else if (usagePct > 0.8) cls = "text-orange-700 bg-orange-50";
+    if (usagePct > 1) cls = "text-red-800 bg-red-50 font-semibold";
+    else if (usagePct > 0.8) cls = "text-amber-900 bg-amber-50";
   }
   const pctLabel =
     cell.partidaAllDetail || cell.lineBudget > 0
@@ -120,27 +127,27 @@ function ExpenseCell({ cell, onOpenMonth }: { cell: MonthCell; onOpenMonth?: () 
   const tip = `Gastos: ${formatCurrency(cell.totalExpenses)} | Presupuesto partida: ${formatCurrency(cell.lineBudget)}${pctLabel}`;
   const inner = <span className={onOpenMonth ? "pointer-events-none" : undefined}>{formatCurrency(cell.totalExpenses)}</span>;
   return (
-    <td className={`px-1 py-1 text-center text-xs tabular-nums ${cls}`}>
+    <td className={`px-1.5 py-1.5 text-right text-sm tabular-nums tracking-tight ${cls}`}>
       {onOpenMonth ? (
         <button
           type="button"
           title={`${tip} · Clic para ver detalle`}
           onClick={onOpenMonth}
-          className="w-full min-h-[2.25rem] rounded px-1 py-1.5 cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow text-inherit"
+          className="w-full min-h-[2.5rem] rounded px-1.5 py-1.5 cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow text-inherit whitespace-nowrap"
         >
           {inner}
         </button>
       ) : (
-        <span className="block px-2 py-2" title={tip}>{inner}</span>
+        <span className="block px-2 py-2 whitespace-nowrap" title={tip}>{inner}</span>
       )}
     </td>
   );
 }
 
 function ExpenseTotalCell({ amount }: { amount: number }) {
-  if (amount === 0) return <td className="px-2 py-2 text-center text-slate-400 text-xs">₡0</td>;
+  if (amount === 0) return <td className="px-2 py-2 text-right text-slate-400 text-sm tabular-nums">₡0</td>;
   return (
-    <td className="px-2 py-2 text-center text-sm font-bold tabular-nums text-slate-800">
+    <td className="px-2 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
       {formatCurrency(amount)}
     </td>
   );
@@ -149,32 +156,32 @@ function ExpenseTotalCell({ amount }: { amount: number }) {
 // ── Facturación view cells ────────────────────────────────────────────────────
 function BillingCell({ cell, onOpenMonth }: { cell: MonthCell; onOpenMonth?: () => void }) {
   if (!cell.hasData) {
-    return <td className="px-2 py-2 text-center text-slate-300 text-xs">—</td>;
+    return <td className="px-2 py-2 text-right text-slate-300">—</td>;
   }
   const tip = `Presupuesto (vista actual): ${formatCurrency(cell.lineBudget)}`;
   const inner = <span className={onOpenMonth ? "pointer-events-none" : undefined}>{formatCurrency(cell.monthlyBilling)}</span>;
   return (
-    <td className="px-1 py-1 text-center text-xs tabular-nums text-slate-700">
+    <td className="px-1.5 py-1.5 text-right text-sm font-semibold tabular-nums tracking-tight text-slate-900">
       {onOpenMonth ? (
         <button
           type="button"
           title={`${tip} · Clic para ver ingresos y gastos del mes`}
           onClick={onOpenMonth}
-          className="w-full min-h-[2.25rem] rounded px-1 py-1.5 cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow text-inherit"
+          className="w-full min-h-[2.5rem] rounded px-1.5 py-1.5 cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow text-inherit whitespace-nowrap"
         >
           {inner}
         </button>
       ) : (
-        <span className="block px-2 py-2" title={tip}>{inner}</span>
+        <span className="block px-2 py-2 whitespace-nowrap" title={tip}>{inner}</span>
       )}
     </td>
   );
 }
 
 function BillingTotalCell({ amount }: { amount: number }) {
-  if (amount === 0) return <td className="px-2 py-2 text-center text-slate-400 text-xs">—</td>;
+  if (amount === 0) return <td className="px-2 py-2 text-right text-slate-400 text-sm">—</td>;
   return (
-    <td className="px-2 py-2 text-center text-sm font-bold tabular-nums text-slate-800">
+    <td className="px-2 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
       {formatCurrency(amount)}
     </td>
   );
@@ -436,9 +443,9 @@ export default function AnnualReportPage() {
                       <th className="text-left px-4 py-3 font-semibold sticky left-0 bg-slate-800 min-w-48">Contrato</th>
                       <th className="text-left px-3 py-3 font-semibold min-w-24">Empresa</th>
                       {MONTH_LABELS.map((m) => (
-                        <th key={m} className="px-2 py-3 font-semibold text-center min-w-24">{m}</th>
+                        <th key={m} className="px-2 py-3 font-semibold text-right min-w-[7.5rem]">{m}</th>
                       ))}
-                      <th className="px-3 py-3 font-semibold text-center min-w-28">Anual</th>
+                      <th className="px-3 py-3 font-semibold text-right min-w-32">Anual</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -514,28 +521,27 @@ export default function AnnualReportPage() {
                       </td>
                       {Array.from({ length: 12 }, (_, i) => {
                         const hasAnyData = rows.some((r) => r.months[i].hasData);
-                        if (!hasAnyData) return <td key={i} className="px-2 py-2 text-center text-slate-300 text-xs">—</td>;
+                        if (!hasAnyData) return <td key={i} className="px-2 py-2 text-right text-slate-300">—</td>;
 
                         if (view === "rentabilidad") {
                           const surplus = rows.reduce((s, r) => s + r.months[i].surplus, 0);
                           const isGood = surplus >= 0;
                           return (
-                            <td key={i} className={`px-2 py-2 text-center text-xs font-bold tabular-nums ${isGood ? "text-green-800" : "text-red-800"}`}>
-                              {isGood ? "+" : ""}{formatCurrency(surplus)}
+                            <td key={i} className={`px-2 py-2 text-right text-sm font-bold tabular-nums tracking-tight whitespace-nowrap ${isGood ? "text-emerald-800" : "text-red-800"}`}>
+                              {formatSignedAmount(surplus)}
                             </td>
                           );
                         } else if (view === "facturacion") {
                           const billing = rows.reduce((s, r) => s + (r.months[i].hasData ? r.months[i].monthlyBilling : 0), 0);
                           return (
-                            <td key={i} className="px-2 py-2 text-center text-xs font-bold tabular-nums text-slate-800">
+                            <td key={i} className="px-2 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
                               {formatCurrency(billing)}
                             </td>
                           );
                         } else {
-                          // gastos
                           const expenses = rows.reduce((s, r) => s + r.months[i].totalExpenses, 0);
                           return (
-                            <td key={i} className="px-2 py-2 text-center text-xs font-bold tabular-nums text-slate-800">
+                            <td key={i} className="px-2 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
                               {expenses > 0 ? formatCurrency(expenses) : <span className="text-slate-400">₡0</span>}
                             </td>
                           );
@@ -544,17 +550,17 @@ export default function AnnualReportPage() {
 
                       {/* Annual total */}
                       {view === "rentabilidad" && (
-                        <td className={`px-3 py-2 text-center text-sm font-bold ${totalSurplus >= 0 ? "text-green-800" : "text-red-800"}`}>
-                          {totalSurplus >= 0 ? "+" : ""}{formatCurrency(totalSurplus)}
+                        <td className={`px-3 py-2 text-right text-sm font-bold tabular-nums tracking-tight whitespace-nowrap ${totalSurplus >= 0 ? "text-emerald-800" : "text-red-800"}`}>
+                          {formatSignedAmount(totalSurplus)}
                         </td>
                       )}
                       {view === "facturacion" && (
-                        <td className="px-3 py-2 text-center text-sm font-bold text-slate-800">
+                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
                           {formatCurrency(totalBilling)}
                         </td>
                       )}
                       {view === "gastos" && (
-                        <td className="px-3 py-2 text-center text-sm font-bold text-slate-800">
+                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
                           {formatCurrency(totalExpenses)}
                         </td>
                       )}
@@ -584,16 +590,16 @@ export default function AnnualReportPage() {
                               const budgetM = rows.reduce((s, r) => s + spec.budget(r.months[i]), 0);
                               const spendM = rows.reduce((s, r) => s + spec.spend(r.months[i]), 0);
                               const hasAny = rows.some((r) => r.months[i].hasData);
-                              if (!hasAny) return <td key={i} className="px-2 py-2 text-center text-slate-300 text-xs">—</td>;
+                              if (!hasAny) return <td key={i} className="px-2 py-2 text-right text-slate-300">—</td>;
                               const over = budgetM > 0 && spendM > budgetM;
                               return (
-                                <td key={i} className={`px-2 py-2 text-center text-xs tabular-nums font-medium ${over ? "text-red-600" : spec.cellClass}`}
+                                <td key={i} className={`px-2 py-2 text-right text-sm tabular-nums font-medium tracking-tight whitespace-nowrap ${over ? "text-red-700" : spec.cellClass}`}
                                   title={budgetM > 0 ? `${((spendM / budgetM) * 100).toFixed(0)}% ejecutado` : undefined}>
                                   {formatCurrency(budgetM)}
                                 </td>
                               );
                             })}
-                            <td className={`px-3 py-2 text-center text-sm font-bold ${spec.cellClass}`}>
+                            <td className={`px-3 py-2 text-right text-sm font-bold tabular-nums tracking-tight whitespace-nowrap ${spec.cellClass}`}>
                               {formatCurrency(rows.reduce((s, r) => s + r.months.reduce((ss, m) => ss + spec.budget(m), 0), 0))}
                             </td>
                           </tr>
@@ -609,16 +615,16 @@ export default function AnnualReportPage() {
                           const budget = rows.reduce((s, r) => s + r.months[i].lineBudget, 0);
                           const expenses = rows.reduce((s, r) => s + r.months[i].totalExpenses, 0);
                           const hasAny = rows.some((r) => r.months[i].hasData);
-                          if (!hasAny) return <td key={i} className="px-2 py-2 text-center text-slate-300 text-xs">—</td>;
+                          if (!hasAny) return <td key={i} className="px-2 py-2 text-right text-slate-300">—</td>;
                           const over = budget > 0 && expenses > budget;
                           return (
-                            <td key={i} className={`px-2 py-2 text-center text-xs tabular-nums font-medium ${over ? "text-red-600" : "text-orange-700"}`}
+                            <td key={i} className={`px-2 py-2 text-right text-sm tabular-nums font-medium tracking-tight whitespace-nowrap ${over ? "text-red-700" : "text-orange-800"}`}
                               title={budget > 0 ? `${((expenses / budget) * 100).toFixed(0)}% consumido` : undefined}>
                               {formatCurrency(budget)}
                             </td>
                           );
                         })}
-                        <td className="px-3 py-2 text-center text-sm font-bold text-orange-700">
+                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-orange-800 whitespace-nowrap">
                           {formatCurrency(totalBudget)}
                         </td>
                       </tr>
@@ -643,14 +649,14 @@ export default function AnnualReportPage() {
                             {Array.from({ length: 12 }, (_, i) => {
                               const budgetM = rows.reduce((s, r) => s + spec.budget(r.months[i]), 0);
                               const hasAny = rows.some((r) => r.months[i].hasData);
-                              if (!hasAny) return <td key={i} className="px-2 py-2 text-center text-slate-300 text-xs">—</td>;
+                              if (!hasAny) return <td key={i} className="px-2 py-2 text-right text-slate-300">—</td>;
                               return (
-                                <td key={i} className={`px-2 py-2 text-center text-xs tabular-nums font-medium ${spec.cellClass}`}>
+                                <td key={i} className={`px-2 py-2 text-right text-sm tabular-nums font-medium tracking-tight whitespace-nowrap ${spec.cellClass}`}>
                                   {formatCurrency(budgetM)}
                                 </td>
                               );
                             })}
-                            <td className={`px-3 py-2 text-center text-sm font-bold ${spec.cellClass}`}>
+                            <td className={`px-3 py-2 text-right text-sm font-bold tabular-nums tracking-tight whitespace-nowrap ${spec.cellClass}`}>
                               {formatCurrency(rows.reduce((s, r) => s + r.months.reduce((ss, m) => ss + spec.budget(m), 0), 0))}
                             </td>
                           </tr>
@@ -665,14 +671,14 @@ export default function AnnualReportPage() {
                         {Array.from({ length: 12 }, (_, i) => {
                           const budget = rows.reduce((s, r) => s + r.months[i].lineBudget, 0);
                           const hasAny = rows.some((r) => r.months[i].hasData);
-                          if (!hasAny) return <td key={i} className="px-2 py-2 text-center text-slate-300 text-xs">—</td>;
+                          if (!hasAny) return <td key={i} className="px-2 py-2 text-right text-slate-300">—</td>;
                           return (
-                            <td key={i} className="px-2 py-2 text-center text-xs tabular-nums text-indigo-700 font-medium">
+                            <td key={i} className="px-2 py-2 text-right text-sm tabular-nums font-medium tracking-tight text-indigo-800 whitespace-nowrap">
                               {formatCurrency(budget)}
                             </td>
                           );
                         })}
-                        <td className="px-3 py-2 text-center text-sm font-bold text-indigo-700">
+                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-indigo-800 whitespace-nowrap">
                           {formatCurrency(totalBudget)}
                         </td>
                       </tr>
