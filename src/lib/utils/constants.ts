@@ -152,6 +152,7 @@ export const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   AUDIT_FINDINGS: "Hallazgos de auditoría",
   DEFERRED: "Diferidos",
   ADMIN: "Administrativos",
+  PLANILLA: "Planilla",
   TRANSPORT: "Transporte",
   FUEL: "Combustible",
   PHONES: "Teléfonos",

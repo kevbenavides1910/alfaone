@@ -184,9 +184,18 @@ export async function getAnnualReport(
       SELECT "contractId" as contractid, EXTRACT(MONTH FROM "periodMonth")::int AS month,
         COALESCE("budgetLine"::text, 'NULL') AS bl,
         CAST(SUM(amount) AS TEXT) AS total
-      FROM expenses
-      WHERE "periodMonth" >= ${rangeStart} AND "periodMonth" < ${rangeEndExclusive}
-        AND "contractId" IN (${Prisma.join(ids)}) AND "isDeferred" = false
+      FROM expenses e
+      WHERE e."periodMonth" >= ${rangeStart} AND e."periodMonth" < ${rangeEndExclusive}
+        AND e."contractId" IN (${Prisma.join(ids)}) AND e."isDeferred" = false
+        AND e."deletedAt" IS NULL
+        AND e.type::text <> 'PLANILLA'
+        AND NOT EXISTS (
+          SELECT 1 FROM payments p
+          WHERE p.id = e."sourcePaymentId"
+            AND p.category = 'PERSONAL'
+            AND p.subcategory IN ('PLANILLA','CCSS','VACACIONES','LIQUIDACIONES','ASOCIACION','EMBARGOS')
+        )
+        AND e.description !~* '(PLANILLA[[:space:]].*TRANSF|QUINCENA[[:space:]].*TRANSF|CCSS.*(CUOTA|OBRERO|PATRONAL)|OBRERO[[:space:]-]PATRONAL)'
       GROUP BY 1, 2, 3`,
 
     prisma.$queryRaw<RawLineRow[]>`
@@ -197,6 +206,15 @@ export async function getAnnualReport(
       JOIN expenses e ON e.id = ed."expenseId"
       WHERE e."periodMonth" >= ${rangeStart} AND e."periodMonth" < ${rangeEndExclusive}
         AND ed."contractId" IN (${Prisma.join(ids)})
+        AND e."deletedAt" IS NULL
+        AND e.type::text <> 'PLANILLA'
+        AND NOT EXISTS (
+          SELECT 1 FROM payments p
+          WHERE p.id = e."sourcePaymentId"
+            AND p.category = 'PERSONAL'
+            AND p.subcategory IN ('PLANILLA','CCSS','VACACIONES','LIQUIDACIONES','ASOCIACION','EMBARGOS')
+        )
+        AND e.description !~* '(PLANILLA[[:space:]].*TRANSF|QUINCENA[[:space:]].*TRANSF|CCSS.*(CUOTA|OBRERO|PATRONAL)|OBRERO[[:space:]-]PATRONAL)'
       GROUP BY 1, 2, 3`,
 
     prisma.billingHistory.findMany({

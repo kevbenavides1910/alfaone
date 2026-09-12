@@ -333,7 +333,9 @@ export function RubroSpendDrilldownDialog({ open, onOpenChange, target }: Props)
                     ? " · Nómina NAF consolidada: total del mes por empleado en los contratos del reporte"
                     : " · Nómina NAF: salario repartido por horas y precio del rol en cada contrato"
                 : null}
-              {payload?.laborSource === "manual" ? " · Fuente: gastos registrados" : null}
+              {payload?.laborSource === "manual"
+                ? " · Fuente: gastos registrados (sin pagos de planilla/CCSS)"
+                : null}
             </span>
           </DialogDescription>
         </DialogHeader>

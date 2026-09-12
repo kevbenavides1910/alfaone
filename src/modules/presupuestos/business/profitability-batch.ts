@@ -11,6 +11,7 @@ import { getEffectiveMonthlyRevenue } from "@/modules/presupuestos/business/effe
 import { prorateFixedMonthlyRevenue } from "@/modules/presupuestos/business/contractPeriodBilling";
 import { monthsInContractRange } from "@/modules/presupuestos/business/demandBilling";
 import { applyNafLaborToRubros } from "@/modules/presupuestos/business/naf-labor-rubro";
+import { isTreasuryPayrollExpense } from "@/modules/presupuestos/business/treasury-payroll-expense";
 import {
   calcSuppliesBudget,
   effectiveSuppliesPct,
@@ -155,7 +156,14 @@ export async function loadProfitabilityBatchData(
         isDeferred: false,
         ...(range ? { periodMonth: { gte: range.gte, lte: range.lte } } : {}),
       },
-      select: { contractId: true, amount: true, type: true, budgetLine: true },
+      select: {
+        contractId: true,
+        amount: true,
+        type: true,
+        budgetLine: true,
+        description: true,
+        sourcePayment: { select: { category: true, subcategory: true } },
+      },
     }),
     prisma.expenseDistribution.findMany({
       where: {
@@ -168,7 +176,14 @@ export async function loadProfitabilityBatchData(
       select: {
         contractId: true,
         allocatedAmount: true,
-        expense: { select: { type: true, budgetLine: true } },
+        expense: {
+          select: {
+            type: true,
+            budgetLine: true,
+            description: true,
+            sourcePayment: { select: { category: true, subcategory: true } },
+          },
+        },
       },
     }),
     prisma.contractSpecialService.findMany({
@@ -180,6 +195,9 @@ export async function loadProfitabilityBatchData(
     }),
   ]);
 
+  const operatingDirect = directExpenses.filter((row) => !isTreasuryPayrollExpense(row));
+  const operatingDists = expenseDists.filter((row) => !isTreasuryPayrollExpense(row.expense));
+
   return {
     billingByContract: groupByContractId(billingRows),
     uniformsByContract: groupByContractId(uniforms),
@@ -187,13 +205,13 @@ export async function loadProfitabilityBatchData(
     deferredByContract: groupByContractId(deferredDists),
     adminByContract: groupByContractId(adminDists),
     expensesByContract: groupByContractId(
-      directExpenses.flatMap((row) =>
+      operatingDirect.flatMap((row) =>
         row.contractId != null
           ? [{ contractId: row.contractId, amount: row.amount, type: row.type, budgetLine: row.budgetLine }]
           : [],
       ),
     ),
-    expenseDistsByContract: groupByContractId(expenseDists),
+    expenseDistsByContract: groupByContractId(operatingDists),
     specialServicesByContract: groupByContractId(specialServices),
   };
 }

@@ -1,23 +1,24 @@
 import { format, formatDistance, isAfter, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 
+/** Miles con coma (₡3,319,545). El locale es-CR usa espacios finos y en tablas se pegan los dígitos. */
+function formatColones(amount: number, fractionDigits: number): string {
+  const num = Number.isFinite(amount) ? amount : 0;
+  const grouped = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(Math.abs(num));
+  return `${num < 0 ? "−" : ""}₡${grouped}`;
+}
+
 export function formatCurrency(amount: number | string | null | undefined): string {
-  const num = typeof amount === "string" ? parseFloat(amount) : (amount ?? 0);
-  return new Intl.NumberFormat("es-CR", {
-    style: "currency",
-    currency: "CRC",
-    maximumFractionDigits: 0,
-  }).format(num);
+  const raw = typeof amount === "string" ? parseFloat(amount) : (amount ?? 0);
+  return formatColones(Number.isFinite(raw) ? raw : 0, 0);
 }
 
 export function formatCurrencyPrecise(amount: number | string | null | undefined): string {
-  const num = typeof amount === "string" ? parseFloat(amount) : (amount ?? 0);
-  return new Intl.NumberFormat("es-CR", {
-    style: "currency",
-    currency: "CRC",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(num);
+  const raw = typeof amount === "string" ? parseFloat(amount) : (amount ?? 0);
+  return formatColones(Number.isFinite(raw) ? raw : 0, 2);
 }
 
 export function formatPct(value: number | string | null | undefined): string {

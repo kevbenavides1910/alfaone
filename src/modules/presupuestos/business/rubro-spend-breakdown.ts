@@ -12,6 +12,7 @@ import {
   isNafEmployeeExcludedFromRubros,
   isNafLaborCountedAsAdmin,
 } from "@/modules/presupuestos/business/naf-labor-rubro";
+import { isTreasuryPayrollExpense } from "@/modules/presupuestos/business/treasury-payroll-expense";
 
 export type RubroSpendKey = "LABOR" | "SUPPLIES" | "ADMIN" | "PROFIT";
 
@@ -605,11 +606,13 @@ async function appendExpenseLineItemsBatch(
       description: true,
       amount: true,
       referenceNumber: true,
+      sourcePayment: { select: { category: true, subcategory: true } },
     },
     orderBy: { amount: "desc" },
   });
 
   for (const e of directExpenses) {
+    if (isTreasuryPayrollExpense(e)) continue;
     mergeItem({
       id: `exp-${e.id}`,
       group: expenseTypeLabel(e.type),
@@ -636,6 +639,7 @@ async function appendExpenseLineItemsBatch(
           type: true,
           description: true,
           referenceNumber: true,
+          sourcePayment: { select: { category: true, subcategory: true } },
         },
       },
     },
@@ -643,6 +647,7 @@ async function appendExpenseLineItemsBatch(
   });
 
   for (const d of expenseDists) {
+    if (isTreasuryPayrollExpense(d.expense)) continue;
     mergeItem({
       id: `exp-dist-${d.id}`,
       group: `${expenseTypeLabel(d.expense.type)} (dist.)`,
@@ -673,11 +678,13 @@ async function appendExpenseLineItems(
       description: true,
       amount: true,
       referenceNumber: true,
+      sourcePayment: { select: { category: true, subcategory: true } },
     },
     orderBy: { amount: "desc" },
   });
 
   for (const e of directExpenses) {
+    if (isTreasuryPayrollExpense(e)) continue;
     pushItem(items, {
       id: `exp-${e.id}`,
       group: expenseTypeLabel(e.type),
@@ -704,6 +711,7 @@ async function appendExpenseLineItems(
           type: true,
           description: true,
           referenceNumber: true,
+          sourcePayment: { select: { category: true, subcategory: true } },
         },
       },
     },
@@ -711,6 +719,7 @@ async function appendExpenseLineItems(
   });
 
   for (const d of expenseDists) {
+    if (isTreasuryPayrollExpense(d.expense)) continue;
     pushItem(items, {
       id: `exp-dist-${d.id}`,
       group: `${expenseTypeLabel(d.expense.type)} (dist.)`,

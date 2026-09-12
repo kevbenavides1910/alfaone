@@ -734,21 +734,21 @@ export default function ReportsPage() {
               <div className="p-8 text-center text-slate-400">No hay datos para mostrar</div>
             ) : (
               <div className="max-h-[calc(100vh-14rem)] overflow-auto overscroll-contain">
-                <table data-table-id="gastos-reports-profitability-v2" className="w-full text-sm">
+                <table data-table-id="gastos-reports-profitability-v3" className="w-full text-sm">
                   <thead>
                     <TableColumnFilterHead
-                      tableId="gastos-reports-profitability-v2"
+                      tableId="gastos-reports-profitability-v3"
                       defaultColumnWidths={{
                         licitacion: 140,
                         cliente: 220,
                         empresa: 140,
-                        facturacion: 130,
-                        mo: 180,
-                        insumos: 180,
-                        adm: 180,
-                        util: 180,
-                        presupuesto: 180,
-                        total: 130,
+                        facturacion: 152,
+                        mo: 200,
+                        insumos: 200,
+                        adm: 200,
+                        util: 200,
+                        presupuesto: 200,
+                        total: 152,
                         peor: 110,
                       }}
                       columns={columnDefs}
@@ -774,7 +774,7 @@ export default function ReportsPage() {
                         <td className="px-3 py-2">
                           <Badge variant="outline" className="text-xs">{companyDisplayName(r.company, companyRows)}</Badge>
                         </td>
-                        <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
+                        <td className="px-3 py-2 text-right text-[15px] font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
                           {formatCurrency(r.monthlyBilling)}
                         </td>
                         {partida === "ALL" ? (
@@ -827,12 +827,12 @@ export default function ReportsPage() {
                         {expenseTypeColumns.map((col) => {
                           const v = r.expensesByTypeMerged[col.type] ?? 0;
                           return (
-                            <td key={col.type} className="px-3 py-2 text-right tabular-nums">
+                            <td key={col.type} className="px-3 py-2 text-right text-[15px] font-semibold tabular-nums tracking-tight whitespace-nowrap">
                               {v > 0 ? formatCurrency(v) : "—"}
                             </td>
                           );
                         })}
-                        <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
+                        <td className="px-3 py-2 text-right text-[15px] font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
                           {r.grandTotal > 0 ? formatCurrency(r.grandTotal) : "—"}
                         </td>
                         <td className="px-3 py-2" title="Mayor % de ejecución entre M.O., insumos, administrativo y utilidad">
@@ -845,7 +845,7 @@ export default function ReportsPage() {
                     <tfoot>
                       <tr className="border-t-2 bg-muted/50 font-bold">
                         <td colSpan={3} className="px-3 py-2 text-right">TOTALES:</td>
-                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
+                        <td className="px-3 py-2 text-right text-[15px] font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
                           {formatCurrency(displayTotals.totalBilling)}
                         </td>
                         {partida === "ALL" ? (
@@ -895,11 +895,11 @@ export default function ReportsPage() {
                           </td>
                         )}
                         {expenseTypeColumns.map((col) => (
-                          <td key={col.type} className="px-3 py-2 text-right tabular-nums">
+                          <td key={col.type} className="px-3 py-2 text-right text-[15px] font-bold tabular-nums tracking-tight whitespace-nowrap">
                             {formatCurrency((displayTotals.totalsByType ?? {})[col.type] ?? 0)}
                           </td>
                         ))}
-                        <td className="px-3 py-2 text-right text-sm font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
+                        <td className="px-3 py-2 text-right text-[15px] font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
                           {formatCurrency(displayTotals.totalExpenses)}
                         </td>
                         <td className="px-3 py-2" />
@@ -990,8 +990,8 @@ export default function ReportsPage() {
                           </div>
                           {partida === "ALL" && displayTotals.totalLaborSpend > 0 && (
                             <p className="mt-2 text-[11px] text-slate-500">
-                              La mano de obra incluye nómina NAF asignada por asistencia; el detalle por concepto
-                              muestra los gastos registrados en el sistema (planilla, apertura, uniformes, etc.).
+                              La mano de obra sale de nómina NAF (bruto + cargas). Los pagos de planilla/CCSS
+                              asignados desde Pagos no se suman: son tesorería y duplicarían la nómina.
                             </p>
                           )}
                         </td>

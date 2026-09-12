@@ -54,7 +54,7 @@ function SurplusCell({ cell, onOpenMonth }: { cell: MonthCell; onOpenMonth?: () 
     </span>
   );
   return (
-    <td className={`px-1.5 py-1.5 text-right text-sm font-semibold tabular-nums tracking-tight ${isGood ? "text-emerald-800 bg-emerald-50" : "text-red-800 bg-red-50"}`}>
+    <td className={`px-1.5 py-1.5 text-right text-[15px] font-bold tabular-nums tracking-tight ${isGood ? "text-emerald-800 bg-emerald-50" : "text-red-800 bg-red-50"}`}>
       {onOpenMonth ? (
         <button
           type="button"
@@ -75,7 +75,7 @@ function SurplusTotalCell({ surplus }: { surplus: number }) {
   if (surplus === 0) return <td className="px-2 py-2 text-right text-slate-400 text-sm tabular-nums">₡0</td>;
   const isGood = surplus >= 0;
   return (
-    <td className={`px-2 py-2 text-right text-sm font-bold tabular-nums tracking-tight whitespace-nowrap ${isGood ? "text-emerald-800" : "text-red-800"}`}>
+    <td className={`px-2 py-2 text-right text-[15px] font-bold tabular-nums tracking-tight whitespace-nowrap ${isGood ? "text-emerald-800" : "text-red-800"}`}>
       {formatSignedAmount(surplus)}
     </td>
   );
