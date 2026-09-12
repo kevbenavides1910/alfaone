@@ -20,7 +20,10 @@ import {
   REPORT_PARTIDA_OPTIONS,
   type ReportPartidaFilter,
 } from "@/lib/utils/constants";
-import type { RubroTrafficSnapshot } from "@/modules/presupuestos/business/profitability";
+import {
+  EMPTY_RUBRO_TRAFFIC,
+  type RubroTrafficSnapshot,
+} from "@/modules/presupuestos/business/profitability-types";
 import { useCompanies } from "@/lib/hooks/use-companies";
 import { BarChart3, Download, DollarSign, TrendingUp, AlertTriangle, FileText } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -37,7 +40,6 @@ import {
   type RubroSpendDrilldownTarget,
 } from "@/components/reports/RubroSpendDrilldownDialog";
 import { ReportRubroMoneyCell } from "@/components/reports/ReportRubroMoneyCell";
-import { expenseTypeLabel } from "@/lib/utils/expense-type-labels";
 
 const REPORT_TABLE_HEADER_TH =
   "sticky top-0 z-20 bg-slate-50 align-top border-b border-slate-200 shadow-[0_1px_0_0_rgb(226,232,240)] px-3 py-2";
@@ -149,10 +151,10 @@ export default function ReportsPage() {
     ] as TableColumnFilterDef<ProfitabilityRow>[];
     if (partida === "ALL") {
       base.push(
-        { key: "mo", label: "Mano de obra", getValue: (r) => String(r.rubroTraffic.LABOR.spend) },
-        { key: "insumos", label: "Insumos", getValue: (r) => String(r.rubroTraffic.SUPPLIES.spend) },
-        { key: "adm", label: "Administrativo", getValue: (r) => String(r.rubroTraffic.ADMIN.spend) },
-        { key: "util", label: "Utilidad", getValue: (r) => String(r.rubroTraffic.PROFIT.spend) }
+        { key: "mo", label: "Mano de obra", getValue: (r) => String(r.rubroTraffic?.LABOR?.spend ?? 0) },
+        { key: "insumos", label: "Insumos", getValue: (r) => String(r.rubroTraffic?.SUPPLIES?.spend ?? 0) },
+        { key: "adm", label: "Administrativo", getValue: (r) => String(r.rubroTraffic?.ADMIN?.spend ?? 0) },
+        { key: "util", label: "Utilidad", getValue: (r) => String(r.rubroTraffic?.PROFIT?.spend ?? 0) }
       );
     } else {
       base.push({
@@ -199,14 +201,14 @@ export default function ReportsPage() {
       totalSuppliesBudget: displayedRows.reduce((s, r) => s + r.suppliesBudget, 0),
       totalAdminBudget: displayedRows.reduce((s, r) => s + r.adminBudget, 0),
       totalProfitBudget: displayedRows.reduce((s, r) => s + r.profitBudget, 0),
-      totalLaborSpend: displayedRows.reduce((s, r) => s + r.rubroTraffic.LABOR.spend, 0),
+      totalLaborSpend: displayedRows.reduce((s, r) => s + (r.rubroTraffic?.LABOR?.spend ?? 0), 0),
       totalLaborCargasSpend: displayedRows.reduce(
-        (s, r) => s + (r.rubroTraffic.LABOR.cargasSocialesSpend ?? 0),
+        (s, r) => s + (r.rubroTraffic?.LABOR?.cargasSocialesSpend ?? 0),
         0
       ),
-      totalSuppliesSpend: displayedRows.reduce((s, r) => s + r.rubroTraffic.SUPPLIES.spend, 0),
-      totalAdminSpend: displayedRows.reduce((s, r) => s + r.rubroTraffic.ADMIN.spend, 0),
-      totalProfitSpend: displayedRows.reduce((s, r) => s + r.rubroTraffic.PROFIT.spend, 0),
+      totalSuppliesSpend: displayedRows.reduce((s, r) => s + (r.rubroTraffic?.SUPPLIES?.spend ?? 0), 0),
+      totalAdminSpend: displayedRows.reduce((s, r) => s + (r.rubroTraffic?.ADMIN?.spend ?? 0), 0),
+      totalProfitSpend: displayedRows.reduce((s, r) => s + (r.rubroTraffic?.PROFIT?.spend ?? 0), 0),
       totalReportBudget:
         partida === "ALL"
           ? 0
@@ -271,22 +273,6 @@ export default function ReportsPage() {
     [displayedRows]
   );
 
-  const rubroColCount = partida === "ALL" ? 4 : 1;
-  const tableColCount = 4 + rubroColCount + expenseTypeColumns.length + 2;
-
-  const consolidatedExpenseEntries = useMemo(
-    () =>
-      expenseTypeColumns
-        .map((col) => ({
-          type: col.type,
-          label: col.label,
-          amount: (displayTotals.totalsByType ?? {})[col.type] ?? 0,
-        }))
-        .filter((e) => e.amount > 0)
-        .sort((a, b) => b.amount - a.amount),
-    [displayTotals.totalsByType, expenseTypeColumns]
-  );
-
   const partidaLabel =
     REPORT_PARTIDA_OPTIONS.find((o) => o.value === selectedPartida)?.label ?? "Todas las partidas";
 
@@ -297,31 +283,6 @@ export default function ReportsPage() {
 
   function pctOfBillingStr(amount: number, billing: number): string {
     return `${(toNumPct(amount, billing) * 100).toFixed(1)}%`;
-  }
-
-  function spendUsagePct(spend: number, budget: number): string {
-    if (budget <= 0) return "—";
-    return `${((spend / budget) * 100).toFixed(1)}%`;
-  }
-
-  function ConsolidatedSpendChip({
-    label,
-    spend,
-    budget,
-  }: {
-    label: string;
-    spend: number;
-    budget: number;
-  }) {
-    return (
-      <span className="tabular-nums whitespace-nowrap">
-        <span className="text-slate-600">{label}:</span>{" "}
-        <span className="font-semibold text-slate-900">{formatCurrency(spend)}</span>
-        {budget > 0 && (
-          <span className="text-slate-500 ml-1">({spendUsagePct(spend, budget)} del P.)</span>
-        )}
-      </span>
-    );
   }
 
   function ReportGeneralBalanceSummary({
@@ -580,7 +541,6 @@ export default function ReportsPage() {
   function RubroTotalsCell({
     spend,
     budget,
-    cargasSocialesSpend,
     onSpendClick,
   }: {
     spend: number;
@@ -589,21 +549,35 @@ export default function ReportsPage() {
     cargasSocialesSpend?: number;
     onSpendClick?: () => void;
   }) {
+    const spendLabel = spend > 0 ? formatCurrency(spend) : "—";
     return (
-      <ReportRubroMoneyCell
-        spend={spend}
-        budget={budget}
-        cargasSocialesSpend={cargasSocialesSpend}
-        onSpendClick={onSpendClick}
-        showBadge={false}
-      />
+      <div className="whitespace-nowrap text-right">
+        {spend > 0 && onSpendClick ? (
+          <button
+            type="button"
+            onClick={onSpendClick}
+            className="block w-full text-right text-base font-bold tabular-nums tracking-tight text-slate-900 hover:underline underline-offset-2"
+          >
+            {spendLabel}
+          </button>
+        ) : (
+          <div className="text-base font-bold tabular-nums tracking-tight text-slate-900">
+            {spendLabel}
+          </div>
+        )}
+        {budget > 0 && (
+          <div className="text-[11px] tabular-nums text-slate-500">
+            <span className="text-slate-400">ppto</span> {formatCurrency(budget)}
+          </div>
+        )}
+      </div>
     );
   }
 
   function partidaRubro(r: ProfitabilityRow): RubroTrafficSnapshot {
-    if (selectedPartida === "LABOR") return r.rubroTraffic.LABOR;
-    if (selectedPartida === "SUPPLIES") return r.rubroTraffic.SUPPLIES;
-    return r.rubroTraffic.ADMIN;
+    if (selectedPartida === "LABOR") return r.rubroTraffic?.LABOR ?? EMPTY_RUBRO_TRAFFIC;
+    if (selectedPartida === "SUPPLIES") return r.rubroTraffic?.SUPPLIES ?? EMPTY_RUBRO_TRAFFIC;
+    return r.rubroTraffic?.ADMIN ?? EMPTY_RUBRO_TRAFFIC;
   }
 
   function partidaRubroKey(): RubroSpendDrilldownRubro {
@@ -734,21 +708,21 @@ export default function ReportsPage() {
               <div className="p-8 text-center text-slate-400">No hay datos para mostrar</div>
             ) : (
               <div className="max-h-[calc(100vh-14rem)] overflow-auto overscroll-contain">
-                <table data-table-id="gastos-reports-profitability-v3" className="w-full text-sm">
+                <table data-table-id="gastos-reports-profitability-v4" className="w-full text-sm">
                   <thead>
                     <TableColumnFilterHead
-                      tableId="gastos-reports-profitability-v3"
+                      tableId="gastos-reports-profitability-v4"
                       defaultColumnWidths={{
                         licitacion: 140,
                         cliente: 220,
                         empresa: 140,
-                        facturacion: 152,
+                        facturacion: 160,
                         mo: 200,
                         insumos: 200,
                         adm: 200,
                         util: 200,
                         presupuesto: 200,
-                        total: 152,
+                        total: 168,
                         peor: 110,
                       }}
                       columns={columnDefs}
@@ -783,7 +757,7 @@ export default function ReportsPage() {
                               <RubroSpendBudgetCell
                                 budget={r.laborBudget}
                                 billing={r.monthlyBilling}
-                                rubro={r.rubroTraffic.LABOR}
+                                rubro={r.rubroTraffic?.LABOR ?? EMPTY_RUBRO_TRAFFIC}
                                 onSpendClick={() => openRubroDrilldown(r, "LABOR")}
                               />
                             </td>
@@ -791,7 +765,7 @@ export default function ReportsPage() {
                               <RubroSpendBudgetCell
                                 budget={r.suppliesBudget}
                                 billing={r.monthlyBilling}
-                                rubro={r.rubroTraffic.SUPPLIES}
+                                rubro={r.rubroTraffic?.SUPPLIES ?? EMPTY_RUBRO_TRAFFIC}
                                 onSpendClick={() => openRubroDrilldown(r, "SUPPLIES")}
                               />
                             </td>
@@ -799,7 +773,7 @@ export default function ReportsPage() {
                               <RubroSpendBudgetCell
                                 budget={r.adminBudget}
                                 billing={r.monthlyBilling}
-                                rubro={r.rubroTraffic.ADMIN}
+                                rubro={r.rubroTraffic?.ADMIN ?? EMPTY_RUBRO_TRAFFIC}
                                 onSpendClick={() => openRubroDrilldown(r, "ADMIN")}
                               />
                             </td>
@@ -807,7 +781,7 @@ export default function ReportsPage() {
                               <RubroSpendBudgetCell
                                 budget={r.profitBudget}
                                 billing={r.monthlyBilling}
-                                rubro={r.rubroTraffic.PROFIT}
+                                rubro={r.rubroTraffic?.PROFIT ?? EMPTY_RUBRO_TRAFFIC}
                                 onSpendClick={() => openRubroDrilldown(r, "PROFIT")}
                               />
                             </td>
@@ -842,24 +816,23 @@ export default function ReportsPage() {
                     ))}
                   </tbody>
                   {displayedRows.length > 0 && (
-                    <tfoot>
-                      <tr className="border-t-2 bg-muted/50 font-bold">
-                        <td colSpan={3} className="px-3 py-2 text-right">TOTALES:</td>
-                        <td className="px-3 py-2 text-right text-[15px] font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
+                    <tfoot className="sticky bottom-0 z-20 shadow-[0_-4px_10px_rgba(15,23,42,0.08)]">
+                      <tr className="border-t-2 border-slate-300 bg-slate-100 font-bold">
+                        <td colSpan={3} className="px-3 py-2.5 text-right text-slate-700">TOTALES</td>
+                        <td className="px-3 py-2.5 text-right text-base font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
                           {formatCurrency(displayTotals.totalBilling)}
                         </td>
                         {partida === "ALL" ? (
                           <>
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-2.5">
                               <RubroTotalsCell
                                 spend={displayTotals.totalLaborSpend}
                                 budget={displayTotals.totalLaborBudget}
                                 billing={displayTotals.totalBilling}
-                                cargasSocialesSpend={displayTotals.totalLaborCargasSpend}
                                 onSpendClick={() => openConsolidatedRubroDrilldown("LABOR")}
                               />
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-2.5">
                               <RubroTotalsCell
                                 spend={displayTotals.totalSuppliesSpend}
                                 budget={displayTotals.totalSuppliesBudget}
@@ -867,7 +840,7 @@ export default function ReportsPage() {
                                 onSpendClick={() => openConsolidatedRubroDrilldown("SUPPLIES")}
                               />
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-2.5">
                               <RubroTotalsCell
                                 spend={displayTotals.totalAdminSpend}
                                 budget={displayTotals.totalAdminBudget}
@@ -875,7 +848,7 @@ export default function ReportsPage() {
                                 onSpendClick={() => openConsolidatedRubroDrilldown("ADMIN")}
                               />
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-2.5">
                               <RubroTotalsCell
                                 spend={displayTotals.totalProfitSpend}
                                 budget={displayTotals.totalProfitBudget}
@@ -899,102 +872,10 @@ export default function ReportsPage() {
                             {formatCurrency((displayTotals.totalsByType ?? {})[col.type] ?? 0)}
                           </td>
                         ))}
-                        <td className="px-3 py-2 text-right text-[15px] font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
+                        <td className="px-3 py-2.5 text-right text-base font-bold tabular-nums tracking-tight text-slate-900 whitespace-nowrap">
                           {formatCurrency(displayTotals.totalExpenses)}
                         </td>
-                        <td className="px-3 py-2" />
-                      </tr>
-                      <tr className="border-t bg-slate-100/90">
-                        <td colSpan={4} className="px-3 py-3 align-top text-sm font-semibold text-slate-800">
-                          Gasto consolidado del mes
-                          <p className="mt-0.5 text-xs font-normal text-slate-500">
-                            {displayedRows.length} contrato{displayedRows.length === 1 ? "" : "s"} · suma de todos
-                          </p>
-                        </td>
-                        <td colSpan={tableColCount - 4} className="px-3 py-3">
-                          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-                            {partida === "ALL" ? (
-                              <>
-                                <span className="tabular-nums whitespace-nowrap">
-                                  <span className="text-slate-600">Mano de obra:</span>{" "}
-                                  <span className="font-semibold text-slate-900">
-                                    {formatCurrency(displayTotals.totalLaborSpend)}
-                                  </span>
-                                  {displayTotals.totalLaborCargasSpend > 0 && (
-                                    <span className="text-amber-700 ml-1 text-xs font-medium">
-                                      (Cargas soc.: {formatCurrency(displayTotals.totalLaborCargasSpend)})
-                                    </span>
-                                  )}
-                                  {displayTotals.totalLaborBudget > 0 && (
-                                    <span className="text-slate-500 ml-1">
-                                      ({spendUsagePct(
-                                        displayTotals.totalLaborSpend,
-                                        displayTotals.totalLaborBudget
-                                      )}{" "}
-                                      del P.)
-                                    </span>
-                                  )}
-                                </span>
-                                <ConsolidatedSpendChip
-                                  label="Insumos"
-                                  spend={displayTotals.totalSuppliesSpend}
-                                  budget={displayTotals.totalSuppliesBudget}
-                                />
-                                <ConsolidatedSpendChip
-                                  label="Administrativo"
-                                  spend={displayTotals.totalAdminSpend}
-                                  budget={displayTotals.totalAdminBudget}
-                                />
-                                <ConsolidatedSpendChip
-                                  label="Utilidad"
-                                  spend={displayTotals.totalProfitSpend}
-                                  budget={displayTotals.totalProfitBudget}
-                                />
-                              </>
-                            ) : (
-                              <ConsolidatedSpendChip
-                                label={partidaLabel}
-                                spend={displayTotals.totalExpenses}
-                                budget={displayTotals.totalReportBudget}
-                              />
-                            )}
-                            <span className="border-l border-slate-300 pl-4 tabular-nums whitespace-nowrap">
-                              <span className="text-slate-600">Total gastos:</span>{" "}
-                              <span className="font-bold text-slate-900">
-                                {formatCurrency(displayTotals.totalSpendAll)}
-                              </span>
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                      <tr className="bg-slate-50/90">
-                        <td colSpan={4} className="px-3 py-3 align-top text-sm font-semibold text-slate-800">
-                          ¿En qué se gastó?
-                          <p className="mt-0.5 text-xs font-normal text-slate-500">
-                            Desglose consolidado por concepto
-                          </p>
-                        </td>
-                        <td colSpan={tableColCount - 4} className="px-3 py-3">
-                          <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
-                            {consolidatedExpenseEntries.map(({ type, label, amount }) => (
-                              <span key={type} className="tabular-nums whitespace-nowrap">
-                                <span className="text-slate-600">
-                                  {label || expenseTypeLabel(type)}:
-                                </span>{" "}
-                                <span className="font-medium text-slate-900">{formatCurrency(amount)}</span>
-                              </span>
-                            ))}
-                            {consolidatedExpenseEntries.length === 0 && (
-                              <span className="text-slate-500">Sin gastos registrados en el mes</span>
-                            )}
-                          </div>
-                          {partida === "ALL" && displayTotals.totalLaborSpend > 0 && (
-                            <p className="mt-2 text-[11px] text-slate-500">
-                              La mano de obra sale de nómina NAF (bruto + cargas). Los pagos de planilla/CCSS
-                              asignados desde Pagos no se suman: son tesorería y duplicarían la nómina.
-                            </p>
-                          )}
-                        </td>
+                        <td className="px-3 py-2.5" />
                       </tr>
                     </tfoot>
                   )}

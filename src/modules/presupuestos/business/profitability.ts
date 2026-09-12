@@ -1,8 +1,10 @@
 import { prisma } from "@/modules/core/db/prisma";
 import { TrafficLight, type ReportPartidaFilter, calcTrafficLight } from "@/lib/utils/constants";
 import type { Decimal } from "@prisma/client/runtime/library";
+import type { RubroTrafficSnapshot } from "@/modules/presupuestos/business/profitability-types";
 
 export type { ReportPartidaFilter } from "@/lib/utils/constants";
+export type { RubroTrafficSnapshot } from "@/modules/presupuestos/business/profitability-types";
 
 function toNum(v: Decimal | number | string): number {
   return parseFloat(v.toString());
@@ -16,16 +18,6 @@ export function effectiveSuppliesPct(contract: {
   const s = toNum(contract.suppliesPct);
   return s > 0 ? s : toNum(contract.suppliesBudgetPct);
 }
-
-/** % ejecución, semáforo y monto de gasto por rubro de presupuesto. */
-export type RubroTrafficSnapshot = {
-  spend: number;
-  /** Cargas sociales incluidas en spend (solo MO con nómina NAF). */
-  cargasSocialesSpend?: number;
-  usagePct: number;
-  usagePctFormatted: number;
-  trafficLight: TrafficLight;
-};
 
 export interface ProfitabilityResult {
   contractId: string;

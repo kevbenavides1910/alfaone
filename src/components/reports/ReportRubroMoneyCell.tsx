@@ -31,7 +31,6 @@ export function ReportRubroMoneyCell({
   budget,
   usagePct,
   trafficLight,
-  cargasSocialesSpend,
   onSpendClick,
   showBadge = true,
 }: Props) {
@@ -39,12 +38,9 @@ export function ReportRubroMoneyCell({
   const spendLabel = spend > 0 ? formatCurrency(spend) : "—";
   const amountClass = trafficLight ? AMOUNT[trafficLight] : "text-slate-900";
   const title = [
-    spend > 0 ? `Gasto ${formatCurrency(spend)}` : null,
-    `Presupuesto ${formatCurrency(budget)}`,
-    (cargasSocialesSpend ?? 0) > 0
-      ? `Cargas sociales ${formatCurrency(cargasSocialesSpend!)} (incluidas en el gasto)`
-      : null,
-    usagePct != null ? `Ejecución ${usagePct.toFixed(1)}%` : null,
+    spend > 0 ? formatCurrency(spend) : null,
+    budget > 0 ? `ppto ${formatCurrency(budget)}` : null,
+    usagePct != null ? `${usagePct.toFixed(0)}%` : null,
   ]
     .filter(Boolean)
     .join(" · ");

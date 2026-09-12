@@ -14,7 +14,7 @@ const colors: Record<TrafficLight, { bg: string; text: string; dot: string; labe
 };
 
 export function TrafficLightBadge({ light, pct, size = "md" }: Props) {
-  const c = colors[light];
+  const c = colors[light] ?? colors.GREEN;
   return (
     <span className={cn(
       "inline-flex items-center gap-1.5 rounded-full font-semibold tabular-nums",
