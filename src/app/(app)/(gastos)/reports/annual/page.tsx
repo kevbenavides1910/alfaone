@@ -22,7 +22,7 @@ import {
   projectAnnualReportPartida,
   type AnnualReport,
   type MonthCell,
-} from "@/modules/presupuestos/business/annualProfitability";
+} from "@/modules/presupuestos/business/annualReportView";
 import { ContractMonthDrilldownDialog, type MonthDrilldownTarget } from "@/components/reports/ContractMonthDrilldownDialog";
 
 const MONTH_LABELS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];

@@ -22,8 +22,9 @@ export {
   distributeAdminExpense,
   previewDeferredDistribution,
 } from "./business/distribution";
-export { getAnnualReport, projectAnnualReportPartida } from "./business/annualProfitability";
-export type { AnnualReport, MonthCell } from "./business/annualProfitability";
+export { getAnnualReport } from "./business/annualProfitability";
+export { projectAnnualReportPartida } from "./business/annualReportView";
+export type { AnnualReport, MonthCell } from "./business/annualReportView";
 export { autoExpireContracts } from "./business/autoExpire";
 
 export { buildContractListWhere } from "./services/contracts-list-where";

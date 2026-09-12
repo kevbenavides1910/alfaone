@@ -127,6 +127,7 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
       "src/app/(app)/(gastos)/reports",
       "src/components/reports",
       "src/modules/presupuestos/business/annualProfitability.ts",
+      "src/modules/presupuestos/business/annualReportView.ts",
     ],
     prismaModels: [],
   },
