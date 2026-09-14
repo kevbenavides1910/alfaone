@@ -116,7 +116,11 @@ HAVING SUM(NVL(p.MONTO, 0)) <> 0
 ORDER BY MONTO DESC
 `;
 
-/** Solo deducciones activas (ESTATUS=A), como RPL3071; excluye anuladas (X). */
+/**
+ * Deducciones activas del empleado (ESTATUS=A, SOLO_CIA=N), como RPL3071.
+ * Incluye empleados sin ingresos en la planilla (p.ej. rebajo por pago de más
+ * manual): el resumen NAF sí los suma al total de deducciones / líquido.
+ */
 const OPEN_DEDUCCIONES_QUERY = `
 SELECT
   p.NO_DEDU AS CODIGO,
@@ -133,13 +137,6 @@ LEFT JOIN NAF5.ARPLMD d
   ON d.NO_CIA = p.NO_CIA AND d.NO_DEDU = p.NO_DEDU
 WHERE p.NO_CIA = :noCia
   AND TRIM(p.COD_PLA) = :codPla
-  AND EXISTS (
-    SELECT 1
-    FROM NAF5.ARPLPPI i
-    WHERE i.NO_CIA = p.NO_CIA
-      AND TRIM(i.COD_PLA) = TRIM(p.COD_PLA)
-      AND i.NO_EMPLE = p.NO_EMPLE
-  )
 GROUP BY p.NO_DEDU, d.DESCRI, p.DESCRIPCION
 HAVING SUM(
   CASE

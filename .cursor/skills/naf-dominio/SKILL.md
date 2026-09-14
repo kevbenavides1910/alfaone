@@ -12,7 +12,7 @@ Oracle NAF (NAF5) es **fuente de verdad** para planilla y muchos catálogos oper
 - Ingresos, deducciones y líquido deben **calzar con reportes NAF**.
 - **CK = cheque** (forma de pago), no empresa ni contrato.
 - Revisión de planilla: columnas CK/DAV/BN — priorizar `getRevisionPlanillaByDateRange` / tool `query_revision_planilla_formas_pago` en pantalla revisión-planilla.
-- ARPLPPD (planillas abiertas): deducciones solo `ESTATUS='A'`; `'X'` = anulada, no sumar (como RPL3071).
+- ARPLPPD (planillas abiertas): deducciones solo `ESTATUS='A'` y `SOLO_CIA='N'`; `'X'` = anulada. Incluir también empleados sin ingresos en PPI (rebajo pago de más, etc.).
 
 ## Zonas y ubicaciones (Operaciones)
 

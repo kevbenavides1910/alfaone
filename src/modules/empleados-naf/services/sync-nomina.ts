@@ -67,23 +67,20 @@ WHERE ANO_PROCE = :ano
 `;
 
 /**
- * Solo empleados con ingresos (ARPLPPI), como RPL3071 / Codisa.
- * Evita arrastrar deducciones huérfanas (p.ej. embargos manuales de
- * empleados inactivos sin salario en la planilla).
+ * Empleados con ingresos (ARPLPPI) y/o deducciones activas (ARPLPPD), como RPL3071.
+ * FULL OUTER: incluye rebajos sin salario en la planilla (p.ej. pago de más manual).
  *
- * COD_PLA se empareja en forma exacta con ARPLCP.CODPLA (TRIM), igual que Codisa.
- * No usar LPAD sobre PPI/PPD: filas basura con COD_PLA='4' se mezclaban con '04'
- * e inflaban embargos / deducciones vs el reporte para firmar.
+ * COD_PLA exacto con ARPLCP.CODPLA (TRIM), igual que Codisa.
+ * No LPAD sobre PPI/PPD: filas basura COD_PLA='4' vs '04' inflaban embargos.
  *
- * ESTATUS='A' en ARPLPPD: RPL3071 ignora deducciones anuladas (ESTATUS='X'),
- * p.ej. daños/multas suspendidos que inflaban el total vs el reporte para firmar.
+ * ESTATUS='A' / SOLO_CIA='N': ignora anuladas (X) y cargas patronales.
  */
 const NAF_NOMINA_OPEN_SUMMARY_QUERY = `
 SELECT
-  p.NO_CIA,
-  p.COD_PLA,
-  p.NO_EMPLE,
-  p.DEVENG,
+  NVL(p.NO_CIA, d.NO_CIA) AS NO_CIA,
+  NVL(p.COD_PLA, d.COD_PLA) AS COD_PLA,
+  NVL(p.NO_EMPLE, d.NO_EMPLE) AS NO_EMPLE,
+  NVL(p.DEVENG, 0) AS DEVENG,
   NVL(d.DEDUC, 0) AS DEDUC
 FROM (
   SELECT
@@ -101,7 +98,7 @@ FROM (
    AND c.F_HASTA - c.F_DESDE <= 45
   GROUP BY i.NO_CIA, LPAD(TRIM(c.CODPLA), 2, '0'), i.NO_EMPLE
 ) p
-LEFT JOIN (
+FULL OUTER JOIN (
   SELECT
     d.NO_CIA,
     LPAD(TRIM(c.CODPLA), 2, '0') AS COD_PLA,
@@ -122,6 +119,13 @@ LEFT JOIN (
    AND c.F_HASTA IS NOT NULL
    AND c.F_HASTA - c.F_DESDE <= 45
   GROUP BY d.NO_CIA, LPAD(TRIM(c.CODPLA), 2, '0'), d.NO_EMPLE
+  HAVING SUM(
+    CASE
+      WHEN NVL(d.SOLO_CIA, 'N') = 'N' AND NVL(d.ESTATUS, 'A') = 'A'
+      THEN NVL(d.MONTO, 0)
+      ELSE 0
+    END
+  ) <> 0
 ) d
   ON d.NO_CIA = p.NO_CIA
  AND d.COD_PLA = p.COD_PLA
@@ -352,7 +356,7 @@ async function syncOpenPlanillas(
     upserted += batch.length;
   }
 
-  // Quitar empleados que ya no aplican (p.ej. solo tenían deducción huérfana).
+  // Quitar empleados que ya no están en PPI/PPD de la planilla abierta vigente.
   const keepByPlanilla = new Map<string, Set<string>>();
   for (const row of summaryBatch) {
     const key = `${row.noCia}|${row.codPla}|${row.ano}|${row.periodo}`;
