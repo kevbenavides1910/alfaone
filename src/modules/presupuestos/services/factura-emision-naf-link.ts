@@ -197,6 +197,20 @@ export async function listLinkedNafKeys(keys: NafDocKey[]): Promise<
   return map;
 }
 
+/** Ventana de emisión NAF al ligar: mes de servicio + 2 meses siguientes.
+ * Casos como Coopesalud: planilla de agosto facturada en septiembre (FECHA NAF ≠ mes de servicio). */
+export function linkableNafEmissionDateRange(
+  periodMonth: number,
+  periodYear: number,
+): { dateFrom: string; dateTo: string } {
+  const from = new Date(Date.UTC(periodYear, periodMonth - 1, 1));
+  // Día 0 del mes (service + 3) = último día del mes de servicio + 2.
+  const to = new Date(Date.UTC(periodYear, periodMonth - 1 + 3, 0));
+  const ymd = (d: Date) =>
+    `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  return { dateFrom: ymd(from), dateTo: ymd(to) };
+}
+
 export async function listLinkableNafDocs(input: {
   noCia?: string | null;
   companyCode?: string | null;
@@ -214,9 +228,10 @@ export async function listLinkableNafDocs(input: {
 }> {
   const page = input.page ?? 1;
   const pageSize = input.pageSize ?? 30;
+  const { dateFrom, dateTo } = linkableNafEmissionDateRange(input.periodMonth, input.periodYear);
   const list = await listNafDocuments({
-    periodMonth: input.periodMonth,
-    periodYear: input.periodYear,
+    dateFrom,
+    dateTo,
     company: input.companyCode ?? undefined,
     search: input.search,
     page,
@@ -647,20 +662,22 @@ export type AutoLinkNafFromFeResult =
 export async function lookupNafDocKeysByFe(noCia: string, feRaw: string): Promise<NafDocKey[]> {
   const fe = normalizeFeConsecutivo(feRaw);
   if (!fe) return [];
-  const cia = noCia.trim();
-  if (!cia) return [];
+  const ciaRaw = noCia.trim();
+  if (!ciaRaw) return [];
+  const cia = ciaRaw.padStart(2, "0");
+  const ciaAlt = cia.replace(/^0+/, "") || cia;
 
   return withNafOracleConnection(async (conn) => {
     const result = await conn.execute(
       `
       SELECT f.NO_CIA, f.TIPO_DOC, TO_CHAR(f.NO_FACTU) NO_FACTU
       FROM NAF5.ARFAFE f
-      WHERE f.NO_CIA = :noCia
+      WHERE (f.NO_CIA = :noCia OR f.NO_CIA = :noCiaAlt)
         AND f.F_ELECTRONICA = :fe
         AND f.TIPO_DOC IN ('FC', 'ND', 'NC', 'AN')
       ORDER BY ABS(f.TOTAL) DESC
       `,
-      { noCia: cia, fe },
+      { noCia: cia, noCiaAlt: ciaAlt, fe },
     );
     const rows = (result.rows ?? []) as OracleRow[];
     return rows
@@ -766,7 +783,7 @@ export async function autoLinkNafFromFe(
     where: { code: emision.facturaMensual.companyCodeCopied },
     select: { sapCode: true },
   });
-  const noCia = (company?.sapCode ?? "").trim().replace(/^0+/, "") || company?.sapCode?.trim();
+  const noCia = company?.sapCode?.trim();
   if (!noCia) {
     return { ok: true, linked: false, reason: "no_sap_code" };
   }

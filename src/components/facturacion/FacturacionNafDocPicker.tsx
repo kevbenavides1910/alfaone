@@ -324,7 +324,8 @@ export function FacturacionNafDocPicker({
           <DialogHeader className="px-4 pt-4 pb-2 border-b border-slate-100">
             <DialogTitle className="text-base">Documentos NAF — {companyCode}</DialogTitle>
             <p className="text-xs text-slate-500 font-normal">
-              Periodo {periodMonth}/{periodYear}. Busque por cliente, Nº Codisa, físico o consecutivo FE.
+              Servicio {periodMonth}/{periodYear} (incluye facturas emitidas hasta 2 meses después). Busque por
+              cliente, Nº Codisa, físico o consecutivo FE.
             </p>
           </DialogHeader>
 
