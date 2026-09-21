@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/modules/core/auth/auth-options";
+import { getAppSession } from "@/modules/core/auth/auth-options";
 import { redirect } from "next/navigation";
 import { PermissionGuard } from "@/components/permissions/PermissionGuard";
 import { SidebarPane } from "@/components/layout/SidebarPane";
@@ -10,7 +9,7 @@ import { SyntraAiChatWidget } from "@/components/syntra-ai/SyntraAiChatWidget";
 export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession(authOptions);
+  const session = await getAppSession();
   if (!session) redirect("/login");
   if (session.user.mustChangePassword) redirect("/change-password");
 

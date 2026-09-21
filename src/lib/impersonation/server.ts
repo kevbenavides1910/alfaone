@@ -1,7 +1,6 @@
 import { headers } from "next/headers";
 import type { Session } from "next-auth";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/modules/core/auth/auth-options";
+import { getAppSession } from "@/modules/core/auth/auth-options";
 import { prisma } from "@/modules/core/db/prisma";
 import { getRolePermissions } from "@/lib/permissions/resolve";
 import { userIsPlatformAdmin } from "@/modules/core/auth/impersonation-admin";
@@ -29,7 +28,7 @@ async function resolveImpersonationToken(
 export async function getEffectiveSession(
   impersonationToken?: string | null
 ): Promise<Session | null> {
-  const session = await getServerSession(authOptions);
+  const session = await getAppSession();
   if (!session?.user?.id) return null;
 
   const token = await resolveImpersonationToken(impersonationToken);

@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/modules/core/auth/auth-options";
+import { getAppSession } from "@/modules/core/auth/auth-options";
 import { prisma } from "@/modules/core/db/prisma";
 import { ok, badRequest, unauthorized, serverError } from "@/lib/api/response";
 import bcrypt from "bcryptjs";
@@ -13,7 +12,7 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getAppSession();
   if (!session?.user?.id) return unauthorized();
 
   try {

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { isSelfAuthenticatedCronApi } from "@/lib/api/cron-auth";
+import { secureCookieForRequest } from "@/modules/core/auth/secure-cookie";
 
 const PUBLIC_PATHS = ["/login", "/api/branding"];
 
@@ -38,6 +39,14 @@ function isPublicPath(pathname: string): boolean {
     isNextAuthPublicRoute(pathname) ||
     isHrDocumentPublicApi(pathname)
   );
+}
+
+function sessionToken(req: NextRequest) {
+  return getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+    secureCookie: secureCookieForRequest(req.headers.get("host"), req.headers.get("x-forwarded-proto")),
+  });
 }
 
 function clientIp(req: NextRequest): string {
@@ -93,10 +102,7 @@ export async function middleware(req: NextRequest) {
   }
 
   if (pathname.startsWith("/api/") && !isPublicPath(pathname)) {
-    const token = await getToken({
-      req,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
+    const token = await sessionToken(req);
     if (!token?.sub) {
       return NextResponse.json({ error: { message: "No autenticado" } }, { status: 401 });
     }
@@ -108,10 +114,7 @@ export async function middleware(req: NextRequest) {
     !pathname.startsWith("/favicon") &&
     pathname !== "/login"
   ) {
-    const token = await getToken({
-      req,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
+    const token = await sessionToken(req);
     if (!token?.sub && (pathname.startsWith("/home") || pathname.startsWith("/admin") || pathname.startsWith("/contracts") || pathname.startsWith("/expenses") || pathname.startsWith("/disciplinario") || pathname.startsWith("/inventory") || pathname.startsWith("/reports") || pathname.startsWith("/dashboard") || pathname.startsWith("/sig") || pathname.startsWith("/recorridos"))) {
       const login = new URL("/login", req.url);
       login.searchParams.set("callbackUrl", pathname);

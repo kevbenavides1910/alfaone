@@ -83,7 +83,11 @@ function LoginForm({ primary, logoSrc }: { primary: string; logoSrc: string | nu
 
       const sessionRes = await fetch("/api/auth/session", { credentials: "same-origin" });
       const sessionJson = (await sessionRes.json()) as { user?: { mustChangePassword?: boolean } };
-      const target = sessionJson.user?.mustChangePassword ? "/change-password" : sameOriginPath(result.url);
+      if (!sessionJson.user) {
+        setError("El navegador no guardó la sesión. Recargue la página e intente de nuevo.");
+        return;
+      }
+      const target = sessionJson.user.mustChangePassword ? "/change-password" : sameOriginPath(result.url);
       window.location.assign(target);
     } catch {
       setError("Error de red o del servidor. Intente de nuevo.");

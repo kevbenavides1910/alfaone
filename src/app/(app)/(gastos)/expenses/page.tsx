@@ -1,11 +1,10 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/modules/core/auth/auth-options";
+import { getAppSession } from "@/modules/core/auth/auth-options";
 import { redirect } from "next/navigation";
 import { listExpensesForSession } from "@/modules/presupuestos/services/expenses-list";
 import ExpensesPageClient from "./ExpensesPageClient";
 
 export default async function ExpensesPage() {
-  const session = await getServerSession(authOptions);
+  const session = await getAppSession();
   if (!session) redirect("/login");
 
   const { data } = await listExpensesForSession(session, { pageSize: 200, page: 1 });

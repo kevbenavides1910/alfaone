@@ -1,5 +1,7 @@
-import { NextAuthOptions } from "next-auth";
+import { headers } from "next/headers";
+import { getServerSession, type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { secureCookieForRequest } from "@/modules/core/auth/secure-cookie";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/modules/core/db/prisma";
 import type { UserRole } from "@prisma/client";
@@ -142,6 +144,23 @@ function shouldUseSecureCookies(): boolean {
   const url = process.env.NEXTAUTH_URL?.trim().toLowerCase();
   if (!url) return false;
   return url.startsWith("https://");
+}
+
+/** Opciones de esta petición: por IP en HTTP la cookie no lleva Secure. */
+export function authOptionsForRequest(
+  host: string | null | undefined,
+  forwardedProto: string | null | undefined,
+): NextAuthOptions {
+  return {
+    ...authOptions,
+    useSecureCookies: secureCookieForRequest(host, forwardedProto),
+  };
+}
+
+/** Sesión alineada al host (dominio https vs IP http). */
+export async function getAppSession() {
+  const h = await headers();
+  return getServerSession(authOptionsForRequest(h.get("host"), h.get("x-forwarded-proto")));
 }
 
 export const authOptions: NextAuthOptions = {

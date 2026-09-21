@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/modules/core/auth/auth-options";
+import { getAppSession } from "@/modules/core/auth/auth-options";
 import { UserRole } from "@prisma/client";
 import { unauthorized, forbidden } from "./response";
 import { NextRequest } from "next/server";
@@ -66,7 +66,7 @@ export function withAuth<T = unknown>(
   options: { roles?: UserRole[]; permission?: PermissionKey; minLevel?: PermissionLevelId } = {}
 ) {
   return async (req: NextRequest, ctx?: { params?: T }) => {
-    const session = await getServerSession(authOptions);
+    const session = await getAppSession();
 
     if (!session?.user) {
       return unauthorized();
