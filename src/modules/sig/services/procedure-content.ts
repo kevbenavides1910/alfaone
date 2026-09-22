@@ -12,6 +12,8 @@ import {
   sectionDef,
   type AlfaSectionKey,
 } from "../business/procedure-sections";
+import { parseActivitiesFromText } from "../business/parse-activities";
+export { parseActivitiesFromText } from "../business/parse-activities";
 
 export type ProcedureActivityInput = {
   code: string;
@@ -146,73 +148,6 @@ function mapBodyFromKeyed(
     responsibilities: byKey.RESPONSABILIDADES ?? null,
     definitions: byKey.DEFINICIONES ?? null,
   };
-}
-
-/** Parsea filas de la tabla Actividad | Descripción | Documentos | Responsable. */
-export function parseActivitiesFromText(text: string): ProcedureActivityInput[] {
-  const cleaned = text.replace(/\r\n/g, "\n").replace(/\u00a0/g, " ");
-  const start =
-    cleaned.search(/descripci[oó]n\s+de\s+actividades/i) >= 0
-      ? cleaned.search(/descripci[oó]n\s+de\s+actividades/i)
-      : 0;
-  const endCandidates = [
-    cleaned.search(/\n\s*procesos?\s+que\s+interact/i),
-    cleaned.search(/\n\s*control\s+de\s+cambios/i),
-    cleaned.search(/\n\s*anexos?\s*$/im),
-  ].filter((i) => i > start);
-  const end = endCandidates.length ? Math.min(...endCandidates) : cleaned.length;
-  const chunk = cleaned.slice(start, end);
-  const lines = chunk.split("\n");
-
-  const activityStart = /^(\d+\.\d+(?:\.\d+)*)\s+(.+)$/;
-  type Block = { code: string; name: string; lines: string[] };
-  const blocks: Block[] = [];
-  let cur: Block | null = null;
-
-  for (const raw of lines) {
-    const t = raw.trim();
-    if (isBoilerplateLine(t) && !activityStart.test(t)) continue;
-    const m = t.match(activityStart);
-    if (m) {
-      if (cur) blocks.push(cur);
-      cur = { code: m[1], name: m[2].trim().slice(0, 200), lines: [] };
-      continue;
-    }
-    if (cur && t) cur.lines.push(t);
-  }
-  if (cur) blocks.push(cur);
-
-  return blocks.map((b) => {
-    const ls = b.lines;
-    let description = ls.join("\n");
-    let documents: string | null = null;
-    let responsible: string | null = null;
-    if (ls.length >= 2) {
-      const last = ls[ls.length - 1];
-      const prev = ls[ls.length - 2];
-      const looksMeta = (s: string) =>
-        s.length <= 140 ||
-        /^(NA|N\/A)$/i.test(s) ||
-        /\b(F-[A-Z]{1,3}-\d+|Sistema|SICOP|APEX|Centro|correo|Oficio|formulario)\b/i.test(s) ||
-        /\b(Encargado|Director|Financiero|Comercial|Coordinador|Supervisor|Gerente)\b/i.test(s);
-      if (looksMeta(last)) {
-        responsible = last;
-        if (looksMeta(prev) || prev.length <= 160) {
-          documents = prev;
-          description = ls.slice(0, -2).join("\n").trim() || "—";
-        } else {
-          description = ls.slice(0, -1).join("\n").trim() || "—";
-        }
-      }
-    }
-    return {
-      code: b.code,
-      name: b.name,
-      description: description || "—",
-      documents,
-      responsible,
-    };
-  });
 }
 
 export function parseExtractedTextToProcedure(text: string): {
@@ -574,7 +509,11 @@ async function persistStructuredContent(
   }
 }
 
-export async function bootstrapProcedureFromExtractedText(documentId: string, actorId: string) {
+export async function bootstrapProcedureFromExtractedText(
+  documentId: string,
+  actorId: string,
+  opts?: { replace?: boolean }
+) {
   const doc = await prisma.sigDocument.findUnique({
     where: { id: documentId },
     include: {
@@ -588,19 +527,23 @@ export async function bootstrapProcedureFromExtractedText(documentId: string, ac
   const version = doc.currentVersion;
   if (!version) throw new Error("El documento no tiene versión");
   if (!version.extractedText?.trim()) throw new Error("No hay texto indexado del archivo para convertir");
-  if (version.procedureStages.length > 0 || version.procedureActivities.length > 0) {
-    throw new Error("Ya existe contenido estructurado; edítelo o publique una nueva versión");
+  const hasStructured =
+    version.procedureStages.length > 0 || version.procedureActivities.length > 0 || Boolean(version.procedureBody);
+  if (hasStructured && !opts?.replace) {
+    throw new Error("Ya existe contenido estructurado; edítelo o regenérelo desde el archivo");
   }
 
   const parsed = parseExtractedTextToProcedure(version.extractedText);
   await prisma.$transaction(async (tx) => {
-    await persistStructuredContent(tx, version.id, parsed);
+    await persistStructuredContent(tx, version.id, parsed, null, false, version.procedureBody);
     await writeSigAuditLog(tx, {
       documentId,
       versionId: version.id,
       action: "CONTENT_UPDATED",
       actorId,
-      notes: "Estructura Alfa (secciones fijas + tabla de actividades) desde archivo",
+      notes: opts?.replace
+        ? "Regeneración Alfa (tabla de actividades) desde archivo"
+        : "Estructura Alfa (secciones fijas + tabla de actividades) desde archivo",
     });
   });
   return getSigProcedureContent(documentId);

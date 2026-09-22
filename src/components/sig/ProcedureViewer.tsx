@@ -63,7 +63,7 @@ type Props = {
   canEdit: boolean;
   onEdit: () => void;
   onRequestChange: () => void;
-  onBootstrap: () => void;
+  onBootstrap: (opts?: { replace?: boolean }) => void;
   bootstrapping?: boolean;
 };
 
@@ -130,10 +130,12 @@ export function ProcedureViewer({
   const activities = data.activities ?? [];
   const hasContent = sections.length > 0 || activities.length > 0;
   const canPersist = canEdit && data.sectionsFromPreview && !!data.extractedText;
+  const canRegenerate =
+    canEdit && data.hasStructuredContent && !!data.extractedText && !data.sectionsFromPreview;
   const canEditNow = canEdit && (data.hasStructuredContent || hasContent);
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden scroll-mt-24" id="procedimiento">
       <CardHeader className="bg-muted/30 border-b">
         <CardTitle className="text-base flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
@@ -160,8 +162,24 @@ export function ProcedureViewer({
               </Button>
             )}
             {canPersist && (
-              <Button size="sm" variant="secondary" onClick={onBootstrap} disabled={bootstrapping}>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => onBootstrap()}
+                disabled={bootstrapping}
+              >
                 {bootstrapping ? "Guardando…" : "Guardar estructura editable"}
+              </Button>
+            )}
+            {canRegenerate && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => onBootstrap({ replace: true })}
+                disabled={bootstrapping}
+                title="Vuelve a armar secciones y tabla de actividades desde el texto del PDF"
+              >
+                {bootstrapping ? "Regenerando…" : "Regenerar desde archivo"}
               </Button>
             )}
           </div>

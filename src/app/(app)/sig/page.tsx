@@ -288,10 +288,27 @@ export default function SigBibliotecaPage() {
                 )}
                 {displayedRows.map((row) => {
                   const v = row.currentVersion;
+                  const detailHref = `/sig/documentos/${row.id}#procedimiento`;
                   return (
-                    <tr key={row.id} className="border-b hover:bg-muted/20">
-                      <td className="px-3 py-2 font-mono text-xs">{row.code}</td>
-                      <td className="px-3 py-2">{row.title}</td>
+                    <tr
+                      key={row.id}
+                      className="border-b hover:bg-muted/20 cursor-pointer"
+                      onClick={(e) => {
+                        const t = e.target as HTMLElement;
+                        if (t.closest("a,button")) return;
+                        window.location.href = detailHref;
+                      }}
+                    >
+                      <td className="px-3 py-2 font-mono text-xs">
+                        <Link href={detailHref} className="hover:underline text-foreground">
+                          {row.code}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2">
+                        <Link href={detailHref} className="text-teal-800 hover:underline font-medium">
+                          {row.title}
+                        </Link>
+                      </td>
                       <td className="px-3 py-2">{row.documentType.name}</td>
                       <td className="px-3 py-2">{row.process?.name ?? "—"}</td>
                       <td className="px-3 py-2">{v?.versionLabel ?? "—"}</td>
@@ -301,27 +318,15 @@ export default function SigBibliotecaPage() {
                           {STATUS_LABELS[row.status] ?? row.status}
                         </Badge>
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
-                          {v?.canPreview ? (
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild title="Previsualizar">
-                              <a href={v.previewUrl} target="_blank" rel="noreferrer">
-                                <Eye className="h-4 w-4" />
-                              </a>
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 opacity-40"
-                              disabled
-                              title="Vista previa solo para PDF e imágenes"
-                            >
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild title="Ver procedimiento">
+                            <Link href={detailHref}>
                               <Eye className="h-4 w-4" />
-                            </Button>
-                          )}
+                            </Link>
+                          </Button>
                           {v ? (
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild title="Descargar">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild title="Descargar archivo">
                               <a href={v.downloadUrl} download={v.fileName}>
                                 <Download className="h-4 w-4" />
                               </a>
@@ -332,14 +337,14 @@ export default function SigBibliotecaPage() {
                             </Button>
                           )}
                           {canEditMetadata && (
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild title="Editar metadatos">
-                              <Link href={`/sig/documentos/${row.id}`}>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild title="Editar">
+                              <Link href={detailHref}>
                                 <Pencil className="h-4 w-4" />
                               </Link>
                             </Button>
                           )}
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild title="Ver ficha">
-                            <Link href={`/sig/documentos/${row.id}`}>
+                            <Link href={detailHref}>
                               <FileText className="h-4 w-4" />
                             </Link>
                           </Button>

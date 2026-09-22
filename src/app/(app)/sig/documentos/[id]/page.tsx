@@ -176,16 +176,22 @@ export default function SigDocumentoDetailPage() {
   const procedure = procedureData?.data;
 
   const bootstrapMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts?: { replace?: boolean }) => {
       const r = await fetch(`/api/sig/documents/${id}/procedure/bootstrap`, {
         method: "POST",
         credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ replace: Boolean(opts?.replace) }),
       });
       const json = await r.json();
       if (!r.ok) throw new Error(json?.error?.message ?? "Error al convertir");
     },
-    onSuccess: () => {
-      setMsg("Procedimiento generado desde el texto del archivo");
+    onSuccess: (_data, vars) => {
+      setMsg(
+        vars?.replace
+          ? "Tabla y secciones regeneradas desde el archivo"
+          : "Procedimiento generado desde el texto del archivo"
+      );
       invalidate();
     },
     onError: (e: Error) => setMsg(e.message),
@@ -243,6 +249,18 @@ export default function SigDocumentoDetailPage() {
       });
     }
   }, [doc]);
+
+  useEffect(() => {
+    if (procedureLoading || !procedure) return;
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== "#procedimiento") return;
+    const el = document.getElementById("procedimiento");
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [procedureLoading, procedure]);
 
   const newVersionMutation = useMutation({
     mutationFn: async () => {
@@ -560,7 +578,7 @@ export default function SigDocumentoDetailPage() {
             onRequestChange={() => {
               if (canRequestChange) setRequestOpen(true);
             }}
-            onBootstrap={() => bootstrapMutation.mutate()}
+            onBootstrap={(opts) => bootstrapMutation.mutate(opts)}
             bootstrapping={bootstrapMutation.isPending}
           />
         )}
