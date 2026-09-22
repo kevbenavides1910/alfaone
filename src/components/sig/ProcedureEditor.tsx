@@ -182,7 +182,7 @@ export function ProcedureEditor({
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <Label>7. Diagrama de Flujo</Label>
+              <Label>5. Diagrama de Flujo</Label>
               <p className="text-xs text-muted-foreground">Imagen PNG/JPEG/WebP</p>
             </div>
           </div>
@@ -220,7 +220,7 @@ export function ProcedureEditor({
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <Label>8. Descripción de Actividades</Label>
+            <Label>6. Descripción de Actividades</Label>
             <Button
               type="button"
               size="sm"
@@ -232,7 +232,7 @@ export function ProcedureEditor({
                     ...f.activities,
                     {
                       clientKey: newKey(),
-                      code: `8.${f.activities.length + 1}`,
+                      code: `6.${f.activities.length + 1}`,
                       name: "Nueva actividad",
                       description: "",
                       documents: "",

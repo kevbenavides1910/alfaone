@@ -366,11 +366,10 @@ function buildSectionsView(input: {
       level: 1,
     };
   }).filter((s) => {
-    // En preview/persistido: ocultar secciones vacías salvo diagrama y actividades (siempre visibles)
     if (s.kind === "flowchart" || s.kind === "activities") return true;
     if (s.body.trim()) return true;
-    // Mantener Objetivo/Alcance siempre visibles
-    return s.sectionKey === "OBJETIVO_GENERAL" || s.sectionKey === "ALCANCE";
+    const def = ALFA_FIXED_SECTIONS.find((d) => d.key === s.sectionKey);
+    return Boolean(def?.alwaysShow);
   });
 }
 

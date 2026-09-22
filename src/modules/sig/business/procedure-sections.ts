@@ -15,27 +15,33 @@ export type AlfaSectionKey =
 
 export type AlfaSectionDef = {
   key: AlfaSectionKey;
+  /** Numeración típica en procedimientos Alfa (P-*). */
   number: string;
   title: string;
-  /** prose | flowchart | activities */
   kind: "prose" | "flowchart" | "activities";
+  /** Si false, solo se muestra cuando hay contenido. */
+  alwaysShow?: boolean;
 };
 
+/**
+ * Orden canónico alineado a procedimientos corporativos
+ * (ej. P-FI-11: … 5. Diagrama, 6. Descripción de Actividades).
+ * Referencias/Responsabilidades son opcionales (manuales).
+ */
 export const ALFA_FIXED_SECTIONS: AlfaSectionDef[] = [
-  { key: "OBJETIVO_GENERAL", number: "1", title: "Objetivo General", kind: "prose" },
-  { key: "ALCANCE", number: "2", title: "Alcance", kind: "prose" },
+  { key: "OBJETIVO_GENERAL", number: "1", title: "Objetivo General", kind: "prose", alwaysShow: true },
+  { key: "ALCANCE", number: "2", title: "Alcance", kind: "prose", alwaysShow: true },
   { key: "REFERENCIAS_NORMATIVAS", number: "3", title: "Referencias Normativas", kind: "prose" },
-  { key: "DEFINICIONES", number: "4", title: "Definiciones", kind: "prose" },
-  { key: "RESPONSABILIDADES", number: "5", title: "Responsabilidades", kind: "prose" },
-  { key: "DOCUMENTOS_RELACIONADOS", number: "6", title: "Documentos Relacionados", kind: "prose" },
-  { key: "DIAGRAMA_FLUJO", number: "7", title: "Diagrama de Flujo", kind: "flowchart" },
-  { key: "DESCRIPCION_ACTIVIDADES", number: "8", title: "Descripción de Actividades", kind: "activities" },
-  { key: "PROCESOS_INTERACTUAN", number: "9", title: "Procesos que Interactúan", kind: "prose" },
-  { key: "CONTROL_CAMBIOS", number: "10", title: "Control de Cambios", kind: "prose" },
-  { key: "ANEXOS", number: "11", title: "Anexos", kind: "prose" },
+  { key: "DEFINICIONES", number: "3", title: "Definiciones", kind: "prose", alwaysShow: true },
+  { key: "RESPONSABILIDADES", number: "4", title: "Responsabilidades", kind: "prose" },
+  { key: "DOCUMENTOS_RELACIONADOS", number: "4", title: "Documentos Relacionados", kind: "prose", alwaysShow: true },
+  { key: "DIAGRAMA_FLUJO", number: "5", title: "Diagrama de Flujo", kind: "flowchart", alwaysShow: true },
+  { key: "DESCRIPCION_ACTIVIDADES", number: "6", title: "Descripción de Actividades", kind: "activities", alwaysShow: true },
+  { key: "PROCESOS_INTERACTUAN", number: "7", title: "Procesos que Interactúan", kind: "prose", alwaysShow: true },
+  { key: "CONTROL_CAMBIOS", number: "8", title: "Control de Cambios", kind: "prose", alwaysShow: true },
+  { key: "ANEXOS", number: "9", title: "Anexos", kind: "prose", alwaysShow: true },
 ];
 
-/** Numeración típica en PDFs Alfa (varía: a veces Definiciones es 3). */
 const TITLE_TO_KEY: Array<{ re: RegExp; key: AlfaSectionKey }> = [
   { re: /^objetivo(\s+general)?$/i, key: "OBJETIVO_GENERAL" },
   { re: /^alcance$/i, key: "ALCANCE" },
