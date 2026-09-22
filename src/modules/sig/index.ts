@@ -27,6 +27,7 @@ export {
   getSigProcedureContent,
   getSigProcedureByCodeOrId,
   bootstrapProcedureFromExtractedText,
+  tryAutoBootstrapProcedureVersion,
   publishProcedureContentVersion,
   parseExtractedTextToProcedure,
   parseActivitiesFromText,

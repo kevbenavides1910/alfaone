@@ -33,6 +33,17 @@ export async function indexSigDocumentVersionText(versionId: string) {
         textIndexedAt: new Date(),
       },
     });
+
+    if (text?.trim()) {
+      void import("./procedure-content")
+        .then(({ tryAutoBootstrapProcedureVersion }) => tryAutoBootstrapProcedureVersion(versionId))
+        .then((did) => {
+          if (did) console.info("[SIG] Conversión Alfa automática:", versionId);
+        })
+        .catch((err) => {
+          console.error("[SIG] Error en conversión Alfa automática:", versionId, err);
+        });
+    }
   } catch (err) {
     console.error("[SIG] Falló indexación de texto:", versionId, err);
     await prisma.sigDocumentVersion.update({

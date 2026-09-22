@@ -80,7 +80,7 @@ export default function SigNuevoDocumentoPage() {
       return json.data as { id: string };
     },
     onSuccess: (data) => {
-      router.push(`/sig/documentos/${data.id}`);
+      router.push(`/sig/documentos/${data.id}#procedimiento`);
     },
     onError: (e: Error) => setError(e.message),
   });
@@ -238,6 +238,10 @@ export default function SigNuevoDocumentoPage() {
                 accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.webp,.txt,.csv"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                En procedimientos, manuales e instructivos se genera sola la estructura editable
+                (secciones y tabla de actividades) al indexar el archivo.
+              </p>
             </div>
 
             {error && <p className="text-sm text-red-600">{error}</p>}

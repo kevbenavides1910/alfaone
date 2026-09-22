@@ -107,7 +107,7 @@ export type ProcedureContentView = {
   downloadUrl: string | null;
 };
 
-const PROCEDURE_TYPE_RE = /procedimiento|manual|procedure|proc/i;
+const PROCEDURE_TYPE_RE = /procedimiento|manual|instructivo|procedure|proc|instruc/i;
 const FLOWCHART_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const MAX_FLOWCHART_BYTES = 15 * 1024 * 1024;
 
@@ -514,7 +514,7 @@ async function persistStructuredContent(
 export async function bootstrapProcedureFromExtractedText(
   documentId: string,
   actorId: string,
-  opts?: { replace?: boolean }
+  opts?: { replace?: boolean; versionId?: string; auto?: boolean }
 ) {
   const doc = await prisma.sigDocument.findUnique({
     where: { id: documentId },
@@ -522,15 +522,28 @@ export async function bootstrapProcedureFromExtractedText(
       currentVersion: {
         include: { procedureBody: true, procedureStages: true, procedureActivities: true },
       },
+      versions: opts?.versionId
+        ? {
+            where: { id: opts.versionId },
+            take: 1,
+            include: { procedureBody: true, procedureStages: true, procedureActivities: true },
+          }
+        : false,
     },
   });
   if (!doc) throw new Error("Documento no encontrado");
   if (doc.status === "OBSOLETE") throw new Error("El documento está obsoleto");
-  const version = doc.currentVersion;
+
+  const version =
+    opts?.versionId != null
+      ? (Array.isArray(doc.versions) ? doc.versions[0] : null)
+      : doc.currentVersion;
   if (!version) throw new Error("El documento no tiene versión");
   if (!version.extractedText?.trim()) throw new Error("No hay texto indexado del archivo para convertir");
   const hasStructured =
-    version.procedureStages.length > 0 || version.procedureActivities.length > 0 || Boolean(version.procedureBody);
+    version.procedureStages.length > 0 ||
+    version.procedureActivities.length > 0 ||
+    Boolean(version.procedureBody);
   if (hasStructured && !opts?.replace) {
     throw new Error("Ya existe contenido estructurado; edítelo o regenérelo desde el archivo");
   }
@@ -545,10 +558,44 @@ export async function bootstrapProcedureFromExtractedText(
       actorId,
       notes: opts?.replace
         ? "Regeneración Alfa (tabla de actividades) desde archivo"
-        : "Estructura Alfa (secciones fijas + tabla de actividades) desde archivo",
+        : opts?.auto
+          ? "Conversión automática Alfa al indexar el archivo"
+          : "Estructura Alfa (secciones fijas + tabla de actividades) desde archivo",
     });
   });
   return getSigProcedureContent(documentId);
+}
+
+/**
+ * Tras indexar texto de un archivo: convierte a formato Alfa si el tipo es
+ * procedimiento/manual y aún no hay estructura en esa versión.
+ */
+export async function tryAutoBootstrapProcedureVersion(versionId: string): Promise<boolean> {
+  const version = await prisma.sigDocumentVersion.findUnique({
+    where: { id: versionId },
+    include: {
+      document: { include: { documentType: true } },
+      procedureBody: true,
+      procedureStages: { select: { id: true }, take: 1 },
+      procedureActivities: { select: { id: true }, take: 1 },
+    },
+  });
+  if (!version) return false;
+  if (version.document.status === "OBSOLETE") return false;
+  if (!isProcedureLikeType(version.document.documentType)) return false;
+  if (!version.extractedText?.trim()) return false;
+
+  const hasStructured =
+    version.procedureStages.length > 0 ||
+    version.procedureActivities.length > 0 ||
+    Boolean(version.procedureBody);
+  if (hasStructured) return false;
+
+  await bootstrapProcedureFromExtractedText(version.documentId, version.uploadedById, {
+    versionId: version.id,
+    auto: true,
+  });
+  return true;
 }
 
 export async function publishProcedureContentVersion(
