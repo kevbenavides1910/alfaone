@@ -8,18 +8,9 @@ import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { Topbar } from "@/components/layout/Topbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils/format";
+import { SIG_AUDIT_ACTION_LABELS } from "@/modules/sig/business/audit-labels";
 
-const ACTION_LABELS: Record<string, string> = {
-  CREATED: "Creado",
-  UPDATED: "Actualizado",
-  SUBMITTED_FOR_APPROVAL: "Enviado a aprobación",
-  APPROVED: "Aprobado",
-  REJECTED: "Rechazado",
-  REVISION_DATE_UPDATED: "Fecha de revisión actualizada",
-  NEW_VERSION: "Nueva versión",
-  SAME_VERSION_UPDATED: "Vigencia actualizada (misma versión)",
-  OBSOLETED: "Obsoleto",
-};
+const ACTION_LABELS = SIG_AUDIT_ACTION_LABELS;
 
 interface BitacoraRow {
   id: string;

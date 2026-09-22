@@ -723,6 +723,14 @@ export async function publishProcedureContentVersion(
         where: { id: { in: ids }, documentId, status: { in: ["OPEN", "ACCEPTED"] } },
         data: { status: "IMPLEMENTED", reviewerId: actorId, reviewedAt: new Date() },
       });
+      await writeSigAuditLog(tx, {
+        documentId,
+        versionId: created.id,
+        action: "CHANGE_REQUESTED",
+        actorId,
+        notes: `Solicitudes implementadas en v${versionLabel}`,
+        metadata: { changeRequestIds: ids, status: "IMPLEMENTED" },
+      });
     }
 
     return created;

@@ -43,7 +43,17 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (!hasPermission(session, "sig.bitacora", "view")) return forbidden();
+  if (sp.get("documentId")) {
+    // Historial del documento: basta con ver la biblioteca
+    if (
+      !hasPermission(session, "sig.biblioteca", "view") &&
+      !hasPermission(session, "sig.bitacora", "view")
+    ) {
+      return forbidden();
+    }
+  } else if (!hasPermission(session, "sig.bitacora", "view")) {
+    return forbidden();
+  }
 
   try {
     const actionRaw = sp.get("action");

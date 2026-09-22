@@ -90,6 +90,9 @@ export function ChangeRequestPanel({
 
   const rows = data?.data ?? [];
   const openRows = rows.filter((r) => r.status === "OPEN" || r.status === "ACCEPTED");
+  const closedRows = rows.filter(
+    (r) => r.status !== "OPEN" && r.status !== "ACCEPTED"
+  );
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -119,6 +122,7 @@ export function ChangeRequestPanel({
       });
       onRequestOpenChange(false);
       queryClient.invalidateQueries({ queryKey: ["sig-change-requests", documentId] });
+      queryClient.invalidateQueries({ queryKey: ["sig-document-bitacora", documentId] });
     },
     onError: (e: Error) => setMsg(e.message),
   });
@@ -141,6 +145,7 @@ export function ChangeRequestPanel({
     },
     onSuccess: (req, vars) => {
       queryClient.invalidateQueries({ queryKey: ["sig-change-requests", documentId] });
+      queryClient.invalidateQueries({ queryKey: ["sig-document-bitacora", documentId] });
       if (vars.reviewAction === "ACCEPT") onAcceptRequest(req);
     },
     onError: (e: Error) => setMsg(e.message),
@@ -222,6 +227,37 @@ export function ChangeRequestPanel({
                 </li>
               ))}
             </ul>
+          )}
+
+          {closedRows.length > 0 && (
+            <div className="pt-3 border-t space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Historial de solicitudes
+              </p>
+              <ul className="space-y-2">
+                {closedRows.map((r) => (
+                  <li key={r.id} className="rounded-md border bg-muted/20 p-3 text-sm space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{STATUS_LABELS[r.status] ?? r.status}</Badge>
+                      <Badge variant="secondary">{TYPE_LABELS[r.type] ?? r.type}</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {r.requester.name} · {formatDate(r.createdAt)}
+                      </span>
+                    </div>
+                    <p className="whitespace-pre-wrap text-muted-foreground">{r.description}</p>
+                    {r.reviewer && (
+                      <p className="text-xs text-muted-foreground">
+                        Revisó: {r.reviewer.name}
+                        {r.reviewedAt ? ` · ${formatDate(r.reviewedAt)}` : ""}
+                      </p>
+                    )}
+                    {r.reviewerNote && (
+                      <p className="text-xs whitespace-pre-wrap">Nota: {r.reviewerNote}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </CardContent>
       </Card>

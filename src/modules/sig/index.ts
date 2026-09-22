@@ -37,7 +37,9 @@ export {
   ALFA_FIXED_SECTIONS,
   ACTIVITY_TABLE_HEADERS,
   displaySectionTitle,
+  activityCodeForIndex,
 } from "./business/procedure-sections";
+export { SIG_AUDIT_ACTION_LABELS, sigAuditActionLabel } from "./business/audit-labels";
 export {
   listSigChangeRequests,
   createSigChangeRequest,

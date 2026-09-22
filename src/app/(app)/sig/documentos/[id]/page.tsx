@@ -16,6 +16,7 @@ import { formatDate } from "@/lib/utils/format";
 import { ProcedureViewer, type ProcedureContentData } from "@/components/sig/ProcedureViewer";
 import { ProcedureEditor, type ProcedureEditForm } from "@/components/sig/ProcedureEditor";
 import { ChangeRequestPanel } from "@/components/sig/ChangeRequestPanel";
+import { DocumentHistoryPanel } from "@/components/sig/DocumentHistoryPanel";
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING_APPROVAL: "Pendiente",
@@ -51,11 +52,16 @@ interface DocDetail {
     versionNumber: number;
     versionLabel: string;
     revisionDate: string;
+    effectiveFrom: string;
+    effectiveUntil: string | null;
     status: string;
     fileName: string;
+    changeSummary?: string | null;
+    createdAt?: string;
     downloadUrl: string;
     uploadedBy: { name: string };
     approvedBy: { name: string } | null;
+    approvedAt?: string | null;
   }[];
 }
 
@@ -163,6 +169,7 @@ export default function SigDocumentoDetailPage() {
     queryClient.invalidateQueries({ queryKey: ["sig-documents"] });
     queryClient.invalidateQueries({ queryKey: ["sig-procedure", id] });
     queryClient.invalidateQueries({ queryKey: ["sig-change-requests", id] });
+    queryClient.invalidateQueries({ queryKey: ["sig-document-bitacora", id] });
   };
 
   const { data: procedureData, isLoading: procedureLoading } = useQuery({
@@ -767,39 +774,11 @@ export default function SigDocumentoDetailPage() {
           </Card>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Historial de versiones</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/40 text-left">
-                  <th className="px-3 py-2">Ver.</th>
-                  <th className="px-3 py-2">Revisión</th>
-                  <th className="px-3 py-2">Estado</th>
-                  <th className="px-3 py-2">Subido por</th>
-                  <th className="px-3 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {doc.versions.map((v) => (
-                  <tr key={v.id} className="border-b">
-                    <td className="px-3 py-2">{v.versionLabel}</td>
-                    <td className="px-3 py-2">{formatDate(v.revisionDate)}</td>
-                    <td className="px-3 py-2">{STATUS_LABELS[v.status] ?? v.status}</td>
-                    <td className="px-3 py-2">{v.uploadedBy.name}</td>
-                    <td className="px-3 py-2">
-                      <a href={v.downloadUrl} className="text-teal-700 hover:underline text-xs">
-                        Descargar
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
+        <DocumentHistoryPanel
+          documentId={id}
+          versions={doc.versions}
+          currentVersionId={doc.currentVersion?.id}
+        />
       </div>
     </>
   );

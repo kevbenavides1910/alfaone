@@ -112,14 +112,43 @@ export async function reviewSigChangeRequest(
     throw new Error("Indique el motivo del rechazo");
   }
 
-  return prisma.sigChangeRequest.update({
-    where: { id: requestId },
-    data: {
-      status,
-      reviewerId,
-      reviewerNote: reviewerNote?.trim().slice(0, 4000) ?? null,
-      reviewedAt: new Date(),
-    },
-    include: changeRequestInclude,
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.sigChangeRequest.update({
+      where: { id: requestId },
+      data: {
+        status,
+        reviewerId,
+        reviewerNote: reviewerNote?.trim().slice(0, 4000) ?? null,
+        reviewedAt: new Date(),
+      },
+      include: changeRequestInclude,
+    });
+
+    const doc = await tx.sigDocument.findUnique({
+      where: { id: documentId },
+      select: { currentVersionId: true },
+    });
+
+    const actionNotes =
+      action === "ACCEPT"
+        ? "Solicitud de cambio aceptada"
+        : action === "REJECT"
+          ? `Solicitud de cambio rechazada${reviewerNote?.trim() ? `: ${reviewerNote.trim()}` : ""}`
+          : "Solicitud de cambio cancelada";
+
+    await writeSigAuditLog(tx, {
+      documentId,
+      versionId: doc?.currentVersionId ?? null,
+      action: "CHANGE_REQUESTED",
+      actorId: reviewerId,
+      notes: actionNotes.slice(0, 500),
+      metadata: {
+        changeRequestId: requestId,
+        reviewAction: action,
+        status,
+      },
+    });
+
+    return updated;
   });
 }
