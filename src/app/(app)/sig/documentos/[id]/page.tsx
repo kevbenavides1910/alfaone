@@ -13,6 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import { formatDate } from "@/lib/utils/format";
+import { ProcedureViewer, type ProcedureContentData } from "@/components/sig/ProcedureViewer";
+import { ProcedureEditor, type ProcedureEditForm } from "@/components/sig/ProcedureEditor";
+import { ChangeRequestPanel } from "@/components/sig/ChangeRequestPanel";
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING_APPROVAL: "Pendiente",
@@ -144,10 +147,73 @@ export default function SigDocumentoDetailPage() {
   const [approveNotes, setApproveNotes] = useState("");
   const [rejectNote, setRejectNote] = useState("");
   const [msg, setMsg] = useState("");
+  const [editingProcedure, setEditingProcedure] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [seedRequest, setSeedRequest] = useState<{
+    id: string;
+    proposedTitle?: string | null;
+    proposedBody?: string | null;
+    description?: string;
+    type?: string;
+    targetStageId?: string | null;
+  } | null>(null);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["sig-document", id] });
     queryClient.invalidateQueries({ queryKey: ["sig-documents"] });
+    queryClient.invalidateQueries({ queryKey: ["sig-procedure", id] });
+    queryClient.invalidateQueries({ queryKey: ["sig-change-requests", id] });
+  };
+
+  const { data: procedureData, isLoading: procedureLoading } = useQuery({
+    queryKey: ["sig-procedure", id],
+    queryFn: async () => {
+      const r = await fetch(`/api/sig/documents/${id}/procedure`, { credentials: "same-origin" });
+      if (!r.ok) throw new Error("Error al cargar procedimiento");
+      return r.json() as Promise<{ data: ProcedureContentData }>;
+    },
+  });
+  const procedure = procedureData?.data;
+
+  const bootstrapMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/sig/documents/${id}/procedure/bootstrap`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const json = await r.json();
+      if (!r.ok) throw new Error(json?.error?.message ?? "Error al convertir");
+    },
+    onSuccess: () => {
+      setMsg("Procedimiento generado desde el texto del archivo");
+      invalidate();
+    },
+    onError: (e: Error) => setMsg(e.message),
+  });
+
+  const publishProcedure = async (form: ProcedureEditForm) => {
+    const r = await fetch(`/api/sig/documents/${id}/procedure`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        objective: form.objective,
+        scope: form.scope,
+        responsibilities: form.responsibilities,
+        definitions: form.definitions,
+        stages: form.stages,
+        changeSummary: form.changeSummary,
+        assignedApproverId: form.assignedApproverId,
+        versionLabel: form.versionLabel || undefined,
+        changeRequestIds: form.changeRequestIds,
+      }),
+    });
+    const json = await r.json();
+    if (!r.ok) throw new Error(json?.error?.message ?? "Error al publicar");
+    setMsg("Cambios de procedimiento enviados a aprobación");
+    setEditingProcedure(false);
+    setSeedRequest(null);
+    invalidate();
   };
 
   useEffect(() => {
@@ -301,6 +367,8 @@ export default function SigDocumentoDetailPage() {
     doc.currentVersion?.assignedApprover?.id === session?.user?.id;
   const canApprove =
     hasPermission(session, "sig.aprobaciones", "edit") && isAssignedApprover;
+  const canEditProcedure = hasPermission(session, "sig.documentos", "edit");
+  const canRequestChange = hasPermission(session, "sig.biblioteca", "view");
 
   return (
     <>
@@ -453,13 +521,69 @@ export default function SigDocumentoDetailPage() {
                 <Button variant="outline" size="sm" asChild>
                   <a href={doc.currentVersion.downloadUrl} target="_blank" rel="noreferrer">
                     <Download className="h-4 w-4 mr-1" />
-                    Descargar
+                    Descargar archivo
                   </a>
                 </Button>
               </>
             )}
           </CardContent>
         </Card>
+
+        {procedureLoading && (
+          <p className="text-sm text-muted-foreground">Cargando procedimiento…</p>
+        )}
+
+        {procedure && !editingProcedure && (
+          <ProcedureViewer
+            data={procedure}
+            canEdit={canEditProcedure && doc.status !== "OBSOLETE"}
+            onEdit={() => {
+              setSeedRequest(null);
+              setEditingProcedure(true);
+            }}
+            onRequestChange={() => {
+              if (canRequestChange) setRequestOpen(true);
+            }}
+            onBootstrap={() => bootstrapMutation.mutate()}
+            bootstrapping={bootstrapMutation.isPending}
+          />
+        )}
+
+        {procedure && editingProcedure && canEditProcedure && (
+          <ProcedureEditor
+            initial={procedure}
+            approvers={approvers}
+            implementingRequestIds={seedRequest ? [seedRequest.id] : []}
+            seedFromRequest={seedRequest}
+            onCancel={() => {
+              setEditingProcedure(false);
+              setSeedRequest(null);
+            }}
+            onSave={publishProcedure}
+          />
+        )}
+
+        {procedure && canRequestChange && (
+          <ChangeRequestPanel
+            documentId={id}
+            stages={procedure.stages}
+            canEdit={canEditProcedure}
+            requestOpen={requestOpen}
+            onRequestOpenChange={setRequestOpen}
+            onAcceptRequest={(req) => {
+              setSeedRequest({
+                id: req.id,
+                proposedTitle: req.proposedTitle,
+                proposedBody: req.proposedBody,
+                description: req.description,
+                type: req.type,
+                targetStageId: req.targetStageId,
+              });
+              setEditingProcedure(true);
+              setMsg("Solicitud aceptada — revise y envíe a aprobación");
+            }}
+          />
+        )}
 
         {pending && !isAssignedApprover && doc.currentVersion?.assignedApprover && (
           <p className="text-sm text-muted-foreground bg-muted/40 border rounded p-3">

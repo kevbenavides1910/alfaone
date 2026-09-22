@@ -24,6 +24,19 @@ export {
   markSigDocumentObsolete,
 } from "./services/document-approval";
 export {
+  getSigProcedureContent,
+  getSigProcedureByCodeOrId,
+  bootstrapProcedureFromExtractedText,
+  publishProcedureContentVersion,
+  parseExtractedTextToProcedure,
+  isProcedureLikeType,
+} from "./services/procedure-content";
+export {
+  listSigChangeRequests,
+  createSigChangeRequest,
+  reviewSigChangeRequest,
+} from "./services/change-requests";
+export {
   listSigProcesses,
   createSigProcess,
   updateSigProcess,

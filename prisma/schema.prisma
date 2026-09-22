@@ -287,6 +287,8 @@ model User {
   sigVersionsApproved                    SigDocumentVersion[]          @relation("SigVersionApprover")
   sigVersionsAssigned                    SigDocumentVersion[]          @relation("SigVersionAssignedApprover")
   sigAuditLogs                           SigDocumentAuditLog[]         @relation("SigAuditActor")
+  sigChangeRequestsRequested             SigChangeRequest[]            @relation("SigChangeRequestRequester")
+  sigChangeRequestsReviewed              SigChangeRequest[]            @relation("SigChangeRequestReviewer")
   auditsCreated                          Audit[]                       @relation("AuditCreator")
   auditsAssigned                         Audit[]                       @relation("AuditAuditor")
   findingsCreated                        Finding[]                     @relation("FindingCreator")
@@ -1320,7 +1322,14 @@ model Expense {
   type                       ExpenseType
   budgetLine                 ExpenseBudgetLine?
   description                String
+  /// Monto en colones (CRC). Presupuesto y pagos siempre usan esta moneda.
   amount                     Decimal               @db.Decimal(15, 2)
+  /// Moneda de la OC Codisa / origen (CRC, USD, EUR). Null = ingreso manual sin OC FX.
+  monedaOrigen               String?
+  /// Monto en moneda origen (p. ej. dólares de la OC) antes de convertir a CRC.
+  montoOriginal              Decimal?              @db.Decimal(15, 2)
+  /// Tipo de cambio usado: CRC = montoOriginal × tipoCambio. 1 si monedaOrigen=CRC.
+  tipoCambio                 Decimal?              @db.Decimal(18, 5)
   periodMonth                DateTime
   /// Fecha prevista de pago (calendario de pagos). Distinta del período contable.
   paymentDate                DateTime?             @db.Date
@@ -1965,6 +1974,23 @@ enum SigAuditAction {
   NEW_VERSION
   SAME_VERSION_UPDATED
   OBSOLETED
+  CHANGE_REQUESTED
+  CONTENT_UPDATED
+}
+
+enum SigChangeRequestStatus {
+  OPEN
+  ACCEPTED
+  REJECTED
+  IMPLEMENTED
+  CANCELLED
+}
+
+enum SigChangeRequestType {
+  GENERAL
+  EDIT_STAGE
+  ADD_STAGE
+  REMOVE_STAGE
 }
 
 /// Catálogo extensible de tipos documentales (procedimiento, formulario, etc.).
@@ -2040,6 +2066,7 @@ model SigDocument {
 
   versions         SigDocumentVersion[]     @relation("SigDocumentVersions")
   auditLogs        SigDocumentAuditLog[]
+  changeRequests   SigChangeRequest[]
   audits           Audit[]
   requirementLinks SigRequirementDocument[]
   controlLinks     SigControlDocument[]
@@ -3239,6 +3266,8 @@ model SigDocumentVersion {
 
   currentFor SigDocument?          @relation("SigCurrentVersion")
   auditLogs  SigDocumentAuditLog[]
+  procedureBody SigProcedureBody?
+  procedureStages SigProcedureStage[]
 
   @@unique([documentId, versionNumber])
   @@index([documentId])
@@ -3252,6 +3281,66 @@ enum SigTextIndexStatus {
   DONE
   FAILED
   SKIPPED
+}
+
+/// Contenido en prosa del procedimiento (por versión).
+model SigProcedureBody {
+  id              String             @id @default(cuid())
+  versionId       String             @unique
+  version         SigDocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  objective       String?            @db.Text
+  scope           String?            @db.Text
+  responsibilities String?           @db.Text
+  definitions     String?            @db.Text
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@map("sig_procedure_bodies")
+}
+
+/// Etapa / paso numerado del procedimiento (por versión).
+model SigProcedureStage {
+  id          String             @id @default(cuid())
+  versionId   String
+  version     SigDocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  sortOrder   Int
+  title       String
+  body        String             @db.Text
+  responsible String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  changeRequests SigChangeRequest[]
+
+  @@index([versionId, sortOrder])
+  @@map("sig_procedure_stages")
+}
+
+/// Solicitud de cambio sobre un procedimiento (lectura → edición).
+model SigChangeRequest {
+  id             String                 @id @default(cuid())
+  documentId     String
+  document       SigDocument            @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  requesterId    String
+  requester      User                   @relation("SigChangeRequestRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  status         SigChangeRequestStatus @default(OPEN)
+  type           SigChangeRequestType   @default(GENERAL)
+  description    String                 @db.Text
+  targetStageId  String?
+  targetStage    SigProcedureStage?     @relation(fields: [targetStageId], references: [id], onDelete: SetNull)
+  proposedTitle  String?
+  proposedBody   String?                @db.Text
+  reviewerId     String?
+  reviewer       User?                  @relation("SigChangeRequestReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  reviewerNote   String?                @db.Text
+  reviewedAt     DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([documentId, status])
+  @@index([requesterId])
+  @@index([targetStageId])
+  @@map("sig_change_requests")
 }
 
 /// Bitácora de aprobaciones y cambios del módulo SIG.
