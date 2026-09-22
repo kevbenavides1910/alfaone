@@ -7,6 +7,7 @@ import { assertSigApproverUser } from "./approvers";
 import { sigDocumentDir, storagePathForSigFile } from "./document-uploads";
 import {
   ALFA_FIXED_SECTIONS,
+  activityCodeForIndex,
   displaySectionTitle,
   matchSectionKeyFromTitle,
   sectionDef,
@@ -333,10 +334,10 @@ export async function getSigProcedureContent(documentId: string): Promise<Proced
     body: s.body,
     responsible: s.responsible,
   }));
-  const activitiesDb = (v?.procedureActivities ?? []).map((a) => ({
+  const activitiesDb = (v?.procedureActivities ?? []).map((a, i) => ({
     id: a.id,
     sortOrder: a.sortOrder,
-    code: a.code,
+    code: activityCodeForIndex(i),
     name: a.name,
     description: a.description,
     documents: a.documents,
@@ -371,6 +372,7 @@ export async function getSigProcedureContent(documentId: string): Promise<Proced
       id: `preview-act-${i}`,
       sortOrder: i + 1,
       ...a,
+      code: activityCodeForIndex(i),
       documents: a.documents ?? null,
       responsible: a.responsible ?? null,
     }));
@@ -499,7 +501,7 @@ async function persistStructuredContent(
       data: parsed.activities.map((a, i) => ({
         versionId,
         sortOrder: i + 1,
-        code: a.code.trim().slice(0, 40) || `${i + 1}`,
+        code: activityCodeForIndex(i),
         name: a.name.trim().slice(0, 300) || `Actividad ${i + 1}`,
         description: (a.description?.trim() || "—").slice(0, 50000),
         documents: trimText(a.documents, 4000),

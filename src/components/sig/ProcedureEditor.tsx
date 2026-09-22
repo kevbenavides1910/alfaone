@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ProcedureContentData } from "./ProcedureViewer";
 import {
   ALFA_FIXED_SECTIONS,
+  activityCodeForIndex,
   displaySectionTitle,
   type AlfaSectionKey,
 } from "@/modules/sig/business/procedure-sections";
@@ -41,6 +42,15 @@ export type ProcedureEditForm = {
   flowchartFile: File | null;
   clearFlowchart: boolean;
 };
+
+type ActivityRow = ProcedureEditForm["activities"][number];
+
+function renumberActivities(rows: ActivityRow[]): ActivityRow[] {
+  return rows.map((a, i) => ({
+    ...a,
+    code: activityCodeForIndex(i),
+  }));
+}
 
 type Approver = { id: string; name: string; email: string };
 
@@ -93,14 +103,16 @@ export function ProcedureEditor({
     responsibilities: initial.body?.responsibilities ?? "",
     definitions: initial.body?.definitions ?? "",
     stages: proseSections,
-    activities: (initial.activities ?? []).map((a) => ({
-      clientKey: a.id.startsWith("preview-") ? newKey() : a.id,
-      code: a.code,
-      name: a.name,
-      description: a.description,
-      documents: a.documents ?? "",
-      responsible: a.responsible ?? "",
-    })),
+    activities: renumberActivities(
+      (initial.activities ?? []).map((a) => ({
+        clientKey: a.id.startsWith("preview-") ? newKey() : a.id,
+        code: a.code,
+        name: a.name,
+        description: a.description,
+        documents: a.documents ?? "",
+        responsible: a.responsible ?? "",
+      }))
+    ),
     changeSummary: seedFromRequest?.description?.slice(0, 500) ?? "",
     assignedApproverId: "",
     versionLabel: "",
@@ -131,7 +143,7 @@ export function ProcedureEditor({
       const j = index + dir;
       if (j < 0 || j >= next.length) return f;
       [next[index], next[j]] = [next[j], next[index]];
-      return { ...f, activities: next };
+      return { ...f, activities: renumberActivities(next) };
     });
   };
 
@@ -146,7 +158,7 @@ export function ProcedureEditor({
       return;
     }
     try {
-      await onSave(form);
+      await onSave({ ...form, activities: renumberActivities(form.activities) });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al guardar");
     }
@@ -228,17 +240,17 @@ export function ProcedureEditor({
               onClick={() =>
                 setForm((f) => ({
                   ...f,
-                  activities: [
+                  activities: renumberActivities([
                     ...f.activities,
                     {
                       clientKey: newKey(),
-                      code: `6.${f.activities.length + 1}`,
+                      code: "",
                       name: "Nueva actividad",
                       description: "",
                       documents: "",
                       responsible: "",
                     },
-                  ],
+                  ]),
                 }))
               }
             >
@@ -262,12 +274,12 @@ export function ProcedureEditor({
                 {form.activities.map((a, idx) => (
                   <tr key={a.clientKey} className="align-top">
                     <td className="border border-neutral-400 p-2 space-y-1 w-[18%]">
-                      <Input
-                        className="h-8 text-center"
-                        value={a.code}
-                        onChange={(e) => updateActivity(a.clientKey, { code: e.target.value })}
-                        placeholder="8.1"
-                      />
+                      <p
+                        className="h-8 flex items-center justify-center rounded-md border bg-muted/50 text-sm font-semibold tabular-nums"
+                        title="Numeración automática según el orden de la fila"
+                      >
+                        {a.code}
+                      </p>
                       <Input
                         className="h-8"
                         value={a.name}
@@ -315,7 +327,9 @@ export function ProcedureEditor({
                           onClick={() =>
                             setForm((f) => ({
                               ...f,
-                              activities: f.activities.filter((x) => x.clientKey !== a.clientKey),
+                              activities: renumberActivities(
+                                f.activities.filter((x) => x.clientKey !== a.clientKey)
+                              ),
                             }))
                           }
                         >

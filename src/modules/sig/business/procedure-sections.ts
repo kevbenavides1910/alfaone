@@ -66,6 +66,12 @@ export function displaySectionTitle(key: AlfaSectionKey): string {
   return `${d.number}. ${d.title}`;
 }
 
+/** Código de actividad según posición (6.1, 6.2, …). */
+export function activityCodeForIndex(index: number): string {
+  const n = ALFA_FIXED_SECTIONS.find((s) => s.kind === "activities")?.number ?? "6";
+  return `${n}.${index + 1}`;
+}
+
 export function matchSectionKeyFromTitle(rawTitle: string): AlfaSectionKey | null {
   const t = rawTitle
     .replace(/^\d+(?:\.\d+)*\s*[.)]?\s*/, "")
