@@ -21,7 +21,27 @@ const TABS: Tab[] = [
     permission: "sig.biblioteca",
     isActive: (p) =>
       p === "/sig" ||
-      (p.startsWith("/sig/documentos/") && !p.startsWith("/sig/documentos/nuevo")),
+      (p.startsWith("/sig/documentos/") &&
+        !p.startsWith("/sig/documentos/nuevo") &&
+        !p.startsWith("/sig/documentos/importar")),
+  },
+  {
+    href: "/sig/bandeja",
+    label: "Bandeja",
+    permission: "sig.aprobaciones",
+    isActive: (p) => p.startsWith("/sig/bandeja") || p.startsWith("/sig/aprobaciones"),
+  },
+  {
+    href: "/sig/vigencias",
+    label: "Vigencias",
+    permission: "sig.biblioteca",
+    isActive: (p) => p.startsWith("/sig/vigencias"),
+  },
+  {
+    href: "/sig/calidad-conversion",
+    label: "Calidad conversión",
+    permission: "sig.documentos",
+    isActive: (p) => p.startsWith("/sig/calidad-conversion"),
   },
   {
     href: "/sig/documentos/nuevo",
@@ -32,11 +52,6 @@ const TABS: Tab[] = [
     href: "/sig/documentos/importar",
     label: "Carga masiva",
     permission: "sig.documentos",
-  },
-  {
-    href: "/sig/aprobaciones",
-    label: "Aprobaciones",
-    permission: "sig.aprobaciones",
   },
   {
     href: "/sig/bitacora",

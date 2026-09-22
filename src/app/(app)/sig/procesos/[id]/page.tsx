@@ -142,6 +142,31 @@ export default function SigProcessDossierPage() {
     },
   });
 
+  const { data: matrixData } = useQuery({
+    queryKey: ["sig-process-matrix", id],
+    queryFn: async () => {
+      const r = await fetch(`/api/sig/procesos/${id}/matrix`, { credentials: "same-origin" });
+      if (!r.ok) throw new Error("No se pudo cargar la matriz");
+      const json = await r.json();
+      return json.data as {
+        rows: Array<{
+          id: string;
+          code: string;
+          title: string;
+          status: string;
+          versionLabel: string | null;
+          controls: Array<{
+            id: string;
+            code: string;
+            title: string;
+            risks: Array<{ id: string; code: string; title: string }>;
+          }>;
+          requirements: Array<{ id: string; code: string; title: string }>;
+        }>;
+      };
+    },
+  });
+
   if (isLoading || !data) {
     return (
       <div className="min-h-screen bg-[#f5f5f5]">
@@ -412,6 +437,90 @@ export default function SigProcessDossierPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Matriz documento ↔ control ↔ riesgo</CardTitle>
+            <p className="text-xs text-muted-foreground font-normal">
+              Documentos del proceso con controles y riesgos ligados.
+            </p>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40 text-left">
+                  <th className="px-3 py-2">Documento</th>
+                  <th className="px-3 py-2">Controles</th>
+                  <th className="px-3 py-2">Riesgos (vía control)</th>
+                  <th className="px-3 py-2">Requisitos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(matrixData?.rows ?? []).length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
+                      Sin filas de matriz
+                    </td>
+                  </tr>
+                )}
+                {(matrixData?.rows ?? []).map((row) => (
+                  <tr key={row.id} className="border-b align-top">
+                    <td className="px-3 py-2">
+                      <Link href={`/sig/documentos/${row.id}`} className="font-mono text-red-700 hover:underline">
+                        {row.code}
+                      </Link>
+                      <div className="text-muted-foreground">{row.title}</div>
+                      {row.versionLabel && (
+                        <div className="text-[11px] text-slate-500">v{row.versionLabel}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.controls.length === 0 ? (
+                        <span className="text-slate-400">—</span>
+                      ) : (
+                        row.controls.map((c) => (
+                          <div key={c.id}>
+                            <Link href={`/sig/controles/${c.id}`} className="hover:underline">
+                              {c.code}
+                            </Link>
+                          </div>
+                        ))
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.controls.flatMap((c) => c.risks).length === 0 ? (
+                        <span className="text-slate-400">—</span>
+                      ) : (
+                        row.controls.flatMap((c) =>
+                          c.risks.map((r) => (
+                            <div key={`${c.id}-${r.id}`}>
+                              <Link href={`/sig/riesgos/${r.id}`} className="hover:underline">
+                                {r.code}
+                              </Link>
+                            </div>
+                          ))
+                        )
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.requirements.length === 0 ? (
+                        <span className="text-slate-400">—</span>
+                      ) : (
+                        row.requirements.map((r) => (
+                          <div key={r.id}>
+                            <Link href={`/sig/requisitos/${r.id}`} className="hover:underline">
+                              {r.code}
+                            </Link>
+                          </div>
+                        ))
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

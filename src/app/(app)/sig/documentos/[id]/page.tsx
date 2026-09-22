@@ -17,6 +17,7 @@ import { ProcedureViewer, type ProcedureContentData } from "@/components/sig/Pro
 import { ProcedureEditor, type ProcedureEditForm } from "@/components/sig/ProcedureEditor";
 import { ChangeRequestPanel } from "@/components/sig/ChangeRequestPanel";
 import { DocumentHistoryPanel } from "@/components/sig/DocumentHistoryPanel";
+import { DocumentTraceabilityPanel } from "@/components/sig/DocumentTraceabilityPanel";
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING_APPROVAL: "Pendiente",
@@ -773,6 +774,8 @@ export default function SigDocumentoDetailPage() {
             </CardContent>
           </Card>
         )}
+
+        <DocumentTraceabilityPanel documentId={id} />
 
         <DocumentHistoryPanel
           documentId={id}

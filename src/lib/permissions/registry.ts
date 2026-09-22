@@ -584,8 +584,8 @@ export const PERMISSION_REGISTRY = {
     screens: {
       biblioteca: {
         label: "Biblioteca documental",
-        uiRoutes: ["/sig"],
-        apiPrefixes: ["/api/sig/documents", "/api/sig/revision-reminders"],
+        uiRoutes: ["/sig", "/sig/vigencias"],
+        apiPrefixes: ["/api/sig/documents", "/api/sig/revision-reminders", "/api/sig/bandeja"],
         actions: {
           view: "Consultar documentos y descargar",
           edit: "Editar metadatos del documento",
@@ -593,8 +593,12 @@ export const PERMISSION_REGISTRY = {
       },
       documentos: {
         label: "Carga de documentos",
-        uiRoutes: ["/sig/documentos/nuevo"],
-        apiPrefixes: ["/api/sig/documents", "/api/sig/aprobadores"],
+        uiRoutes: ["/sig/documentos/nuevo", "/sig/calidad-conversion"],
+        apiPrefixes: [
+          "/api/sig/documents",
+          "/api/sig/aprobadores",
+          "/api/sig/conversion-quality",
+        ],
         actions: {
           view: "Ver formularios de carga",
           edit: "Subir documentos y nuevas versiones",
@@ -602,9 +606,9 @@ export const PERMISSION_REGISTRY = {
         },
       },
       aprobaciones: {
-        label: "Aprobaciones",
-        uiRoutes: ["/sig/aprobaciones"],
-        apiPrefixes: ["/api/sig/documents"],
+        label: "Aprobaciones y bandeja",
+        uiRoutes: ["/sig/aprobaciones", "/sig/bandeja"],
+        apiPrefixes: ["/api/sig/documents", "/api/sig/bandeja"],
         actions: {
           view: "Ver pendientes de aprobación",
           edit: "Aprobar o rechazar documentos",

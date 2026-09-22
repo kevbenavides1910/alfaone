@@ -17,14 +17,15 @@ import type { AlfaSectionKey } from "@/modules/sig/business/procedure-sections";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(_req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, { params }: Ctx) {
   const session = await getSession();
   if (!session) return unauthorized();
   if (!hasPermission(session, "sig.biblioteca", "view")) return forbidden();
 
   const { id } = await params;
+  const versionId = req.nextUrl.searchParams.get("versionId") ?? undefined;
   try {
-    const data = await getSigProcedureContent(id);
+    const data = await getSigProcedureContent(id, versionId ? { versionId } : undefined);
     if (!data) return notFound("Documento no encontrado");
     return ok(data);
   } catch (e) {

@@ -309,7 +309,10 @@ function buildSectionsView(input: {
   });
 }
 
-export async function getSigProcedureContent(documentId: string): Promise<ProcedureContentView | null> {
+export async function getSigProcedureContent(
+  documentId: string,
+  opts?: { versionId?: string }
+): Promise<ProcedureContentView | null> {
   const doc = await prisma.sigDocument.findUnique({
     where: { id: documentId },
     include: {
@@ -321,11 +324,26 @@ export async function getSigProcedureContent(documentId: string): Promise<Proced
           procedureActivities: { orderBy: { sortOrder: "asc" } },
         },
       },
+      versions: opts?.versionId
+        ? {
+            where: { id: opts.versionId },
+            take: 1,
+            include: {
+              procedureBody: true,
+              procedureStages: { orderBy: { sortOrder: "asc" } },
+              procedureActivities: { orderBy: { sortOrder: "asc" } },
+            },
+          }
+        : false,
     },
   });
   if (!doc) return null;
 
-  const v = doc.currentVersion;
+  const v =
+    opts?.versionId != null
+      ? (Array.isArray(doc.versions) ? doc.versions[0] : null)
+      : doc.currentVersion;
+  if (opts?.versionId && !v) return null;
   const stages = (v?.procedureStages ?? []).map((s) => ({
     id: s.id,
     sortOrder: s.sortOrder,
@@ -408,6 +426,80 @@ export async function getSigProcedureContent(documentId: string): Promise<Proced
     stages,
     extractedText: v?.extractedText ?? null,
     downloadUrl: v ? `/api/sig/documents/${doc.id}/download?versionId=${v.id}` : null,
+  };
+}
+
+export async function compareSigProcedureVersions(
+  documentId: string,
+  versionIdA: string,
+  versionIdB: string
+) {
+  const [a, b] = await Promise.all([
+    getSigProcedureContent(documentId, { versionId: versionIdA }),
+    getSigProcedureContent(documentId, { versionId: versionIdB }),
+  ]);
+  if (!a || !b) return null;
+
+  const sectionKeys = new Set([
+    ...a.sections.map((s) => s.sectionKey ?? s.title),
+    ...b.sections.map((s) => s.sectionKey ?? s.title),
+  ]);
+  const sectionDiffs = [...sectionKeys].map((key) => {
+    const sa = a.sections.find((s) => (s.sectionKey ?? s.title) === key);
+    const sb = b.sections.find((s) => (s.sectionKey ?? s.title) === key);
+    const bodyA = sa?.body ?? "";
+    const bodyB = sb?.body ?? "";
+    return {
+      key,
+      title: sa?.title ?? sb?.title ?? String(key),
+      number: sa?.number ?? sb?.number ?? null,
+      changed: bodyA !== bodyB || Boolean(sa) !== Boolean(sb),
+      onlyInA: Boolean(sa) && !sb,
+      onlyInB: Boolean(sb) && !sa,
+      bodyA,
+      bodyB,
+    };
+  });
+
+  const maxAct = Math.max(a.activities.length, b.activities.length);
+  const activityDiffs = Array.from({ length: maxAct }, (_, i) => {
+    const aa = a.activities[i];
+    const bb = b.activities[i];
+    const changed =
+      !aa ||
+      !bb ||
+      aa.name !== bb.name ||
+      aa.description !== bb.description ||
+      (aa.documents ?? "") !== (bb.documents ?? "") ||
+      (aa.responsible ?? "") !== (bb.responsible ?? "");
+    return {
+      index: i + 1,
+      codeA: aa ? activityCodeForIndex(i) : null,
+      codeB: bb ? activityCodeForIndex(i) : null,
+      changed,
+      onlyInA: Boolean(aa) && !bb,
+      onlyInB: Boolean(bb) && !aa,
+      a: aa ?? null,
+      b: bb ?? null,
+    };
+  });
+
+  return {
+    documentId,
+    a: {
+      versionId: a.versionId,
+      versionLabel: a.versionLabel,
+      changeSummary: null as string | null,
+    },
+    b: {
+      versionId: b.versionId,
+      versionLabel: b.versionLabel,
+      changeSummary: null as string | null,
+    },
+    sectionDiffs,
+    activityDiffs,
+    left: a,
+    right: b,
   };
 }
 

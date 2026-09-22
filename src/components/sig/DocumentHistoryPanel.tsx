@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils/format";
 import { sigAuditActionLabel } from "@/modules/sig/business/audit-labels";
+import { DocumentVersionCompare } from "./DocumentVersionCompare";
 
 export type DocumentVersionHistoryRow = {
   id: string;
@@ -48,6 +51,7 @@ type Props = {
 };
 
 export function DocumentHistoryPanel({ documentId, versions, currentVersionId }: Props) {
+  const [compareOpen, setCompareOpen] = useState(false);
   const { data: bitacoraData, isLoading: bitacoraLoading } = useQuery({
     queryKey: ["sig-document-bitacora", documentId],
     queryFn: async () => {
@@ -65,11 +69,18 @@ export function DocumentHistoryPanel({ documentId, versions, currentVersionId }:
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Historial de versiones</CardTitle>
-          <p className="text-xs text-muted-foreground font-normal">
-            Cada versión conserva su archivo y el resumen de cambios de este documento.
-          </p>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-base">Historial de versiones</CardTitle>
+            <p className="text-xs text-muted-foreground font-normal">
+              Cada versión conserva su archivo y el resumen de cambios de este documento.
+            </p>
+          </div>
+          {versions.length >= 2 && (
+            <Button size="sm" variant="outline" onClick={() => setCompareOpen(true)}>
+              Comparar versiones
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-sm">
@@ -198,6 +209,13 @@ export function DocumentHistoryPanel({ documentId, versions, currentVersionId }:
           </table>
         </CardContent>
       </Card>
+
+      <DocumentVersionCompare
+        documentId={documentId}
+        versions={versions.map((v) => ({ id: v.id, versionLabel: v.versionLabel }))}
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+      />
     </div>
   );
 }

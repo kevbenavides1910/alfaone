@@ -10,6 +10,16 @@ export {
 } from "./services/evidence-uploads";
 export { listSigDocuments, listPendingSigApprovals } from "./services/documents-list";
 export { listSigRevisionReminders } from "./services/revision-reminders";
+export { sendSigRevisionReminderEmails } from "./services/revision-reminder-emails";
+export { getSigBandeja, listSigChangeRequestsInbox } from "./services/bandeja";
+export {
+  listSigConversionQualityQueue,
+  reindexSigDocumentVersion,
+} from "./services/conversion-quality";
+export {
+  getSigDocumentTraceability,
+  getSigProcessDocumentMatrix,
+} from "./services/document-traceability";
 export { listSigBitacora } from "./services/bitacora";
 export { listSigApprovers, assertSigApproverUser, isAssignedSigApprover } from "./services/approvers";
 export {
@@ -28,6 +38,7 @@ export {
   getSigProcedureByCodeOrId,
   bootstrapProcedureFromExtractedText,
   tryAutoBootstrapProcedureVersion,
+  compareSigProcedureVersions,
   publishProcedureContentVersion,
   parseExtractedTextToProcedure,
   parseActivitiesFromText,

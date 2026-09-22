@@ -154,9 +154,14 @@ export default function SigBibliotecaPage() {
         {reminders.length > 0 && (
           <Card className="border-amber-300 bg-amber-50/80">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2 text-amber-900 font-medium">
-                <AlertTriangle className="h-4 w-4" />
-                Recordatorios de revisión ({reminders.length})
+              <div className="flex items-center justify-between gap-2 mb-2 text-amber-900 font-medium">
+                <span className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  Recordatorios de revisión ({reminders.length})
+                </span>
+                <Link href="/sig/vigencias" className="text-xs font-normal text-teal-800 hover:underline">
+                  Ver todas las vigencias
+                </Link>
               </div>
               <ul className="space-y-1 text-sm">
                 {reminders.slice(0, 5).map((r) => (
