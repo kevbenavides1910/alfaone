@@ -24,6 +24,15 @@ export type ProcedureBodyInput = {
   changeRequestIds?: string[];
 };
 
+export type ProcedureSectionView = {
+  id: string;
+  number: string | null;
+  title: string;
+  body: string;
+  responsible: string | null;
+  level: number;
+};
+
 export type ProcedureContentView = {
   documentId: string;
   code: string;
@@ -34,6 +43,10 @@ export type ProcedureContentView = {
   versionStatus: string | null;
   hasStructuredContent: boolean;
   showAsProcedure: boolean;
+  /** Secciones formato corporativo Alfa (1., 2., 6.1…) — lectura unificada. */
+  sections: ProcedureSectionView[];
+  /** true si sections vienen del texto indexado (aún no persistidas). */
+  sectionsFromPreview: boolean;
   body: {
     objective: string | null;
     scope: string | null;
@@ -53,6 +66,10 @@ export type ProcedureContentView = {
 
 const PROCEDURE_TYPE_RE = /procedimiento|manual|procedure|proc/i;
 
+/** Títulos típicos del formato documental Alfa (con o sin número). */
+const ALFA_SECTION_TITLES =
+  "objetivo\\s+general|objetivo|alcance|referencias?\\s+normativas?|definiciones?|responsabilidades?|documentos?\\s+relacionados?|diagrama\\s+de\\s+flujo|descripci[oó]n\\s+de\\s+(?:actividades|lineamientos)|procesos?\\s+que\\s+interact[uú]an|control\\s+de\\s+cambios|anexos?|finalidad";
+
 export function isProcedureLikeType(type: Pick<SigDocumentType, "code" | "name">): boolean {
   return PROCEDURE_TYPE_RE.test(type.code) || PROCEDURE_TYPE_RE.test(type.name);
 }
@@ -63,7 +80,64 @@ function trimText(value: string | null | undefined, max = 20000): string | null 
   return t.slice(0, max);
 }
 
-/** Heurística: partes numeradas / títulos en mayúsculas → etapas; si no, una sola etapa. */
+function isBoilerplateLine(line: string): boolean {
+  const t = line.trim();
+  if (!t) return true;
+  if (/^(PROCEDIMIENTO|MANUAL|INSTRUCTIVO|POL[IÍ]TICA)\s*:?\s*$/i.test(t)) return true;
+  if (/^C[oó]digo\s*:/i.test(t)) return true;
+  if (/^(Emisi[oó]n|Modificaci[oó]n|Versi[oó]n|P[aá]gina)\s*:/i.test(t)) return true;
+  if (/COPIA\s+NO\s+CONTROLADA/i.test(t)) return true;
+  if (/^Únicamente para efectos de consulta/i.test(t)) return true;
+  if (/^Puede consultar la copia controlada/i.test(t)) return true;
+  if (/^Grupo Corporativo/i.test(t) && t.length < 80) return true;
+  return false;
+}
+
+function sectionLevel(number: string | null): number {
+  if (!number) return 1;
+  return number.split(".").filter(Boolean).length;
+}
+
+function mapBodyFromStages(stages: ProcedureStageInput[]) {
+  const body = {
+    objective: null as string | null,
+    scope: null as string | null,
+    responsibilities: null as string | null,
+    definitions: null as string | null,
+  };
+  for (const s of stages) {
+    const t = s.title.replace(/^\d+(?:\.\d+)*\.?\s*/, "").trim();
+    if (/^objetivo/i.test(t) && !body.objective) body.objective = s.body;
+    else if (/^alcance/i.test(t) && !body.scope) body.scope = s.body;
+    else if (/^responsab/i.test(t) && !body.responsibilities) body.responsibilities = s.body;
+    else if (/^definici/i.test(t) && !body.definitions) body.definitions = s.body;
+  }
+  return body;
+}
+
+function splitNumberedTitle(raw: string): { number: string | null; title: string } {
+  const m = raw.trim().match(/^(\d+(?:\.\d+)*)\s*[.)]?\s*(.+)$/);
+  if (m) return { number: m[1], title: m[2].trim() };
+  return { number: null, title: raw.trim() };
+}
+
+export function stagesToDisplaySections(
+  stages: { id?: string; sortOrder?: number; title: string; body: string; responsible?: string | null }[]
+): ProcedureSectionView[] {
+  return stages.map((s, i) => {
+    const { number, title } = splitNumberedTitle(s.title);
+    return {
+      id: s.id ?? `preview-${i}`,
+      number,
+      title,
+      body: s.body,
+      responsible: s.responsible ?? null,
+      level: sectionLevel(number),
+    };
+  });
+}
+
+/** Parsea texto Alfa (PDF indexado) a secciones numeradas del formato documental. */
 export function parseExtractedTextToProcedure(text: string): {
   body: {
     objective: string | null;
@@ -73,88 +147,91 @@ export function parseExtractedTextToProcedure(text: string): {
   };
   stages: ProcedureStageInput[];
 } {
-  const cleaned = text.replace(/\r\n/g, "\n").trim();
-  const body = {
-    objective: null as string | null,
-    scope: null as string | null,
-    responsibilities: null as string | null,
-    definitions: null as string | null,
-  };
-
-  const sectionPatterns: { key: keyof typeof body; re: RegExp }[] = [
-    { key: "objective", re: /^(?:objetivo|objectivo|purpose)\s*[:.\-]?\s*(.*)$/i },
-    { key: "scope", re: /^(?:alcance|scope)\s*[:.\-]?\s*(.*)$/i },
-    {
-      key: "responsibilities",
-      re: /^(?:responsabilidades?|responsables?)\s*[:.\-]?\s*(.*)$/i,
-    },
-    { key: "definitions", re: /^(?:definiciones?|términos?|terminos?)\s*[:.\-]?\s*(.*)$/i },
-  ];
-
+  const cleaned = text.replace(/\r\n/g, "\n").replace(/\u00a0/g, " ").trim();
   const lines = cleaned.split("\n");
-  const stageBlocks: { title: string; lines: string[] }[] = [];
-  let current: { title: string; lines: string[] } | null = null;
-  let preamble: string[] = [];
 
-  const numberedRe = /^\s*(?:etapa\s+)?(\d{1,3})[.)\-:\s]+(.+)$/i;
-  const capsTitleRe = /^\s*([A-ZÁÉÍÓÚÑÜ0-9][A-ZÁÉÍÓÚÑÜ0-9\s\-_/]{3,80})\s*$/;
+  const numberedHeaderRe = new RegExp(
+    `^\\s*(\\d+(?:\\.\\d+)*)\\s*[.)]?\\s*(.+?)\\s*$`,
+    "i"
+  );
+  const knownTitleRe = new RegExp(`^(?:${ALFA_SECTION_TITLES})$`, "i");
+  const namedHeaderRe = new RegExp(`^\\s*(${ALFA_SECTION_TITLES})\\s*:?\\s*$`, "i");
+
+  function isSectionHeader(number: string, titlePart: string): boolean {
+    const t = titlePart.trim();
+    if (!t || t.length > 100) return false;
+    if (/^[./\\d]/.test(t)) return false; // fechas tipo "16. /08/2018"
+    if (/^\d{1,2}\s*[/-]/.test(t)) return false;
+    if (/[.!?]$/.test(t) && t.split(/\s+/).length > 6) return false;
+    const words = t.split(/\s+/).filter(Boolean);
+    if (words.length > 12) return false;
+    if (knownTitleRe.test(t)) return true;
+    // Subsecciones 6.1 / 6.1.1: título corto que empieza con letra
+    if (number.includes(".") && /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(t) && words.length <= 10) {
+      return true;
+    }
+    // Secciones top-level: número simple + título con letra inicial
+    if (!number.includes(".") && /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(t) && words.length <= 10) {
+      return true;
+    }
+    return false;
+  }
+
+  const blocks: { number: string | null; title: string; lines: string[] }[] = [];
+  let current: { number: string | null; title: string; lines: string[] } | null = null;
+  let pastHeader = false;
 
   for (const raw of lines) {
-    const line = raw.trimEnd();
-    const trimmed = line.trim();
+    const trimmed = raw.trim();
+    if (!pastHeader) {
+      if (isBoilerplateLine(trimmed)) continue;
+      pastHeader = true;
+    }
+
     if (!trimmed) {
       if (current) current.lines.push("");
-      else preamble.push("");
       continue;
     }
 
-    let matchedSection = false;
-    for (const { key, re } of sectionPatterns) {
-      const m = trimmed.match(re);
-      if (m) {
-        const rest = (m[1] || "").trim();
-        body[key] = rest || null;
-        matchedSection = true;
-        break;
-      }
-    }
-    if (matchedSection) continue;
-
-    const num = trimmed.match(numberedRe);
-    if (num) {
-      if (current) stageBlocks.push(current);
-      current = { title: num[2].trim().slice(0, 200) || `Etapa ${num[1]}`, lines: [] };
+    const num = trimmed.match(numberedHeaderRe);
+    if (num && isSectionHeader(num[1], num[2])) {
+      if (current) blocks.push(current);
+      current = { number: num[1], title: num[2].trim(), lines: [] };
       continue;
     }
 
-    if (capsTitleRe.test(trimmed) && trimmed.length < 90 && !trimmed.includes(".")) {
-      if (current) stageBlocks.push(current);
-      current = { title: trimmed.slice(0, 200), lines: [] };
+    const named = trimmed.match(namedHeaderRe);
+    if (named) {
+      if (current) blocks.push(current);
+      current = {
+        number: null,
+        title: named[1].replace(/\s+/g, " ").trim(),
+        lines: [],
+      };
       continue;
     }
 
-    if (current) current.lines.push(line);
-    else preamble.push(line);
+    if (current) current.lines.push(raw.trimEnd());
+    else current = { number: null, title: "Introducción", lines: [raw.trimEnd()] };
   }
-  if (current) stageBlocks.push(current);
+  if (current) blocks.push(current);
 
-  let stages: ProcedureStageInput[] =
-    stageBlocks.length > 0
-      ? stageBlocks.map((b) => ({
-          title: b.title,
-          body: b.lines.join("\n").trim() || b.title,
-          responsible: null,
-        }))
-      : [];
+  let stages: ProcedureStageInput[] = blocks
+    .filter((b) => !(b.title === "Introducción" && blocks.some((x) => x.number)))
+    .map((b) => {
+      const displayTitle = b.number ? `${b.number}. ${b.title}` : b.title;
+      return {
+        title: displayTitle.slice(0, 300),
+        body: b.lines.join("\n").trim() || "—",
+        responsible: null,
+      };
+    });
 
   if (stages.length === 0) {
-    const leftover = preamble.join("\n").trim() || cleaned;
-    stages = [{ title: "Contenido", body: leftover.slice(0, 50000), responsible: null }];
-  } else if (preamble.join("\n").trim() && !body.objective) {
-    body.objective = preamble.join("\n").trim().slice(0, 8000);
+    stages = [{ title: "Contenido", body: cleaned.slice(0, 50000), responsible: null }];
   }
 
-  return { body, stages };
+  return { body: mapBodyFromStages(stages), stages };
 }
 
 export async function getSigProcedureContent(documentId: string): Promise<ProcedureContentView | null> {
@@ -173,8 +250,35 @@ export async function getSigProcedureContent(documentId: string): Promise<Proced
   if (!doc) return null;
 
   const v = doc.currentVersion;
-  const hasStructuredContent = Boolean(v?.procedureBody || (v?.procedureStages.length ?? 0) > 0);
+  const stages = (v?.procedureStages ?? []).map((s) => ({
+    id: s.id,
+    sortOrder: s.sortOrder,
+    title: s.title,
+    body: s.body,
+    responsible: s.responsible,
+  }));
+  const hasStructuredContent = Boolean(v?.procedureBody || stages.length > 0);
   const showAsProcedure = hasStructuredContent || isProcedureLikeType(doc.documentType);
+
+  let sections: ProcedureSectionView[] = [];
+  let sectionsFromPreview = false;
+
+  if (stages.length > 0) {
+    sections = stagesToDisplaySections(stages);
+  } else if (v?.extractedText?.trim()) {
+    const parsed = parseExtractedTextToProcedure(v.extractedText);
+    sections = stagesToDisplaySections(parsed.stages);
+    sectionsFromPreview = true;
+  } else if (v?.procedureBody) {
+    const synth: ProcedureStageInput[] = [];
+    if (v.procedureBody.objective) synth.push({ title: "1. Objetivo General", body: v.procedureBody.objective });
+    if (v.procedureBody.scope) synth.push({ title: "2. Alcance", body: v.procedureBody.scope });
+    if (v.procedureBody.definitions) synth.push({ title: "3. Definiciones", body: v.procedureBody.definitions });
+    if (v.procedureBody.responsibilities) {
+      synth.push({ title: "4. Responsabilidades", body: v.procedureBody.responsibilities });
+    }
+    sections = stagesToDisplaySections(synth);
+  }
 
   return {
     documentId: doc.id,
@@ -186,6 +290,8 @@ export async function getSigProcedureContent(documentId: string): Promise<Proced
     versionStatus: v?.status ?? null,
     hasStructuredContent,
     showAsProcedure,
+    sections,
+    sectionsFromPreview,
     body: v?.procedureBody
       ? {
           objective: v.procedureBody.objective,
@@ -194,13 +300,7 @@ export async function getSigProcedureContent(documentId: string): Promise<Proced
           definitions: v.procedureBody.definitions,
         }
       : null,
-    stages: (v?.procedureStages ?? []).map((s) => ({
-      id: s.id,
-      sortOrder: s.sortOrder,
-      title: s.title,
-      body: s.body,
-      responsible: s.responsible,
-    })),
+    stages,
     extractedText: v?.extractedText ?? null,
     downloadUrl: v ? `/api/sig/documents/${doc.id}/download?versionId=${v.id}` : null,
   };
@@ -247,7 +347,7 @@ export async function bootstrapProcedureFromExtractedText(documentId: string, ac
       data: parsed.stages.map((s, i) => ({
         versionId: version.id,
         sortOrder: i + 1,
-        title: s.title.trim().slice(0, 300) || `Etapa ${i + 1}`,
+        title: s.title.trim().slice(0, 300) || `Sección ${i + 1}`,
         body: s.body.trim().slice(0, 50000) || "—",
         responsible: trimText(s.responsible, 200),
       })),
@@ -257,7 +357,7 @@ export async function bootstrapProcedureFromExtractedText(documentId: string, ac
       versionId: version.id,
       action: "CONTENT_UPDATED",
       actorId,
-      notes: "Contenido estructurado generado desde texto del archivo",
+      notes: "Contenido estructurado generado desde texto del archivo (formato Alfa)",
     });
   });
 
@@ -272,9 +372,10 @@ export async function publishProcedureContentVersion(
 ) {
   const changeSummary = input.changeSummary?.trim();
   if (!changeSummary) throw new Error("Indique el resumen de cambios");
-  if (!input.stages?.length) throw new Error("Agregue al menos una etapa");
+  if (!input.stages?.length) throw new Error("Agregue al menos una sección");
 
   const assignedApprover = await assertSigApproverUser(input.assignedApproverId);
+  const mappedBody = mapBodyFromStages(input.stages);
 
   const doc = await prisma.sigDocument.findUnique({
     where: { id: documentId },
@@ -326,10 +427,10 @@ export async function publishProcedureContentVersion(
     await tx.sigProcedureBody.create({
       data: {
         versionId: created.id,
-        objective: trimText(input.objective),
-        scope: trimText(input.scope),
-        responsibilities: trimText(input.responsibilities),
-        definitions: trimText(input.definitions),
+        objective: trimText(input.objective) ?? mappedBody.objective,
+        scope: trimText(input.scope) ?? mappedBody.scope,
+        responsibilities: trimText(input.responsibilities) ?? mappedBody.responsibilities,
+        definitions: trimText(input.definitions) ?? mappedBody.definitions,
       },
     });
 
@@ -337,7 +438,7 @@ export async function publishProcedureContentVersion(
       data: input.stages.map((s, i) => ({
         versionId: created.id,
         sortOrder: i + 1,
-        title: s.title.trim().slice(0, 300) || `Etapa ${i + 1}`,
+        title: s.title.trim().slice(0, 300) || `Sección ${i + 1}`,
         body: (s.body?.trim() || "—").slice(0, 50000),
         responsible: trimText(s.responsible, 200),
       })),

@@ -78,15 +78,13 @@ export function sigTools(): SyntraTool[] {
           alcance: proc.body?.scope ?? null,
           responsabilidades: proc.body?.responsibilities ?? null,
           definiciones: proc.body?.definitions ?? null,
-          etapas: proc.stages.map((s) => ({
-            orden: s.sortOrder,
-            titulo: s.title,
+          etapas: proc.sections.map((s) => ({
+            orden: s.number ?? String(s.level),
+            titulo: s.number ? `${s.number}. ${s.title}` : s.title,
             cuerpo: s.body.slice(0, 800),
             responsable: s.responsible,
           })),
-          extractoArchivo: proc.hasStructuredContent
-            ? null
-            : proc.extractedText?.slice(0, 1500) ?? null,
+          extractoArchivo: null,
           fuente: "Procedimiento SIG (prosa)",
         };
       },

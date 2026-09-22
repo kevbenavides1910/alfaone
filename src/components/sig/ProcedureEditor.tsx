@@ -43,6 +43,11 @@ function newKey() {
   return `s_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function sectionTitle(number: string | null | undefined, title: string) {
+  if (number) return `${number}. ${title}`;
+  return title;
+}
+
 export function ProcedureEditor({
   initial,
   approvers,
@@ -53,15 +58,26 @@ export function ProcedureEditor({
   saving,
 }: Props) {
   const seededStages = (() => {
+    const fromSections =
+      initial.sections && initial.sections.length > 0
+        ? initial.sections.map((s) => ({
+            clientKey: s.id.startsWith("preview-") ? newKey() : s.id,
+            title: sectionTitle(s.number, s.title),
+            body: s.body,
+            responsible: s.responsible ?? "",
+          }))
+        : null;
+
     const base =
-      initial.stages.length > 0
+      fromSections ??
+      (initial.stages.length > 0
         ? initial.stages.map((s) => ({
             clientKey: s.id,
             title: s.title,
             body: s.body,
             responsible: s.responsible ?? "",
           }))
-        : [{ clientKey: newKey(), title: "Etapa 1", body: "", responsible: "" }];
+        : [{ clientKey: newKey(), title: "1. Objetivo General", body: "", responsible: "" }]);
 
     if (!seedFromRequest) return base;
     if (seedFromRequest.type === "ADD_STAGE") {
@@ -69,7 +85,7 @@ export function ProcedureEditor({
         ...base,
         {
           clientKey: newKey(),
-          title: seedFromRequest.proposedTitle || "Nueva etapa",
+          title: seedFromRequest.proposedTitle || "Nueva sección",
           body: seedFromRequest.proposedBody || "",
           responsible: "",
         },
@@ -79,7 +95,7 @@ export function ProcedureEditor({
       const filtered = base.filter((s) => s.clientKey !== seedFromRequest.targetStageId);
       return filtered.length > 0
         ? filtered
-        : [{ clientKey: newKey(), title: "Etapa 1", body: "", responsible: "" }];
+        : [{ clientKey: newKey(), title: "1. Objetivo General", body: "", responsible: "" }];
     }
     if (seedFromRequest.targetStageId && seedFromRequest.type === "EDIT_STAGE") {
       return base.map((s) =>
@@ -136,7 +152,7 @@ export function ProcedureEditor({
       return;
     }
     if (!form.stages.some((s) => s.title.trim() && s.body.trim())) {
-      setError("Cada etapa necesita título y cuerpo");
+      setError("Cada sección necesita título y cuerpo");
       return;
     }
     try {
@@ -147,34 +163,20 @@ export function ProcedureEditor({
   };
 
   return (
-    <Card className="border-teal-200">
+    <Card className="border-red-200">
       <CardHeader>
-        <CardTitle className="text-base">Editar procedimiento</CardTitle>
+        <CardTitle className="text-base">Editar procedimiento (formato Alfa)</CardTitle>
+        <p className="text-xs text-muted-foreground font-normal">
+          Use títulos como «1. Objetivo General», «2. Alcance», «6.1 …» para mantener el formato
+          documental corporativo.
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        {(
-          [
-            ["objective", "Objetivo"],
-            ["scope", "Alcance"],
-            ["responsibilities", "Responsabilidades"],
-            ["definitions", "Definiciones"],
-          ] as const
-        ).map(([key, label]) => (
-          <div key={key}>
-            <Label className="text-xs">{label}</Label>
-            <Textarea
-              className="mt-1 min-h-20"
-              value={form[key]}
-              onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-            />
-          </div>
-        ))}
-
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <Label>Etapas</Label>
+            <Label>Secciones del documento</Label>
             <Button
               type="button"
               size="sm"
@@ -184,19 +186,24 @@ export function ProcedureEditor({
                   ...f,
                   stages: [
                     ...f.stages,
-                    { clientKey: newKey(), title: `Etapa ${f.stages.length + 1}`, body: "", responsible: "" },
+                    {
+                      clientKey: newKey(),
+                      title: `${f.stages.length + 1}. Nueva sección`,
+                      body: "",
+                      responsible: "",
+                    },
                   ],
                 }))
               }
             >
               <Plus className="h-4 w-4 mr-1" />
-              Agregar etapa
+              Agregar sección
             </Button>
           </div>
           {form.stages.map((s, idx) => (
             <div key={s.clientKey} className="rounded-md border p-3 space-y-2 bg-muted/20">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-muted-foreground">Etapa {idx + 1}</span>
+                <span className="text-xs font-medium text-muted-foreground">Sección {idx + 1}</span>
                 <div className="flex gap-1">
                   <Button type="button" size="icon" variant="ghost" onClick={() => moveStage(idx, -1)}>
                     <ArrowUp className="h-4 w-4" />
@@ -221,7 +228,7 @@ export function ProcedureEditor({
                 </div>
               </div>
               <Input
-                placeholder="Título"
+                placeholder="1. Objetivo General"
                 value={s.title}
                 onChange={(e) => updateStage(s.clientKey, { title: e.target.value })}
               />
@@ -231,8 +238,8 @@ export function ProcedureEditor({
                 onChange={(e) => updateStage(s.clientKey, { responsible: e.target.value })}
               />
               <Textarea
-                className="min-h-24"
-                placeholder="Descripción de la etapa"
+                className="min-h-28"
+                placeholder="Texto de la sección"
                 value={s.body}
                 onChange={(e) => updateStage(s.clientKey, { body: e.target.value })}
               />

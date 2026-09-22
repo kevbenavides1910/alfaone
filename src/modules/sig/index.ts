@@ -29,6 +29,7 @@ export {
   bootstrapProcedureFromExtractedText,
   publishProcedureContentVersion,
   parseExtractedTextToProcedure,
+  stagesToDisplaySections,
   isProcedureLikeType,
 } from "./services/procedure-content";
 export {

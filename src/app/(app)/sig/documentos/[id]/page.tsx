@@ -566,7 +566,17 @@ export default function SigDocumentoDetailPage() {
         {procedure && canRequestChange && (
           <ChangeRequestPanel
             documentId={id}
-            stages={procedure.stages}
+            stages={
+              procedure.sections?.length
+                ? procedure.sections.map((s, i) => ({
+                    id: s.id,
+                    sortOrder: i + 1,
+                    title: s.number ? `${s.number}. ${s.title}` : s.title,
+                    body: s.body,
+                    responsible: s.responsible,
+                  }))
+                : procedure.stages
+            }
             canEdit={canEditProcedure}
             requestOpen={requestOpen}
             onRequestOpenChange={setRequestOpen}
