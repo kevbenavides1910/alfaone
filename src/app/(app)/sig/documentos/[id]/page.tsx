@@ -192,22 +192,38 @@ export default function SigDocumentoDetailPage() {
   });
 
   const publishProcedure = async (form: ProcedureEditForm) => {
-    const r = await fetch(`/api/sig/documents/${id}/procedure`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({
-        objective: form.objective,
-        scope: form.scope,
-        responsibilities: form.responsibilities,
-        definitions: form.definitions,
-        stages: form.stages,
-        changeSummary: form.changeSummary,
-        assignedApproverId: form.assignedApproverId,
-        versionLabel: form.versionLabel || undefined,
-        changeRequestIds: form.changeRequestIds,
-      }),
-    });
+    const payload = {
+      objective: form.objective,
+      scope: form.scope,
+      responsibilities: form.responsibilities,
+      definitions: form.definitions,
+      stages: form.stages,
+      activities: form.activities,
+      changeSummary: form.changeSummary,
+      assignedApproverId: form.assignedApproverId,
+      versionLabel: form.versionLabel || undefined,
+      changeRequestIds: form.changeRequestIds,
+      clearFlowchart: form.clearFlowchart,
+    };
+
+    let r: Response;
+    if (form.flowchartFile) {
+      const fd = new FormData();
+      fd.append("payload", JSON.stringify(payload));
+      fd.append("flowchart", form.flowchartFile);
+      r = await fetch(`/api/sig/documents/${id}/procedure`, {
+        method: "PUT",
+        credentials: "same-origin",
+        body: fd,
+      });
+    } else {
+      r = await fetch(`/api/sig/documents/${id}/procedure`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      });
+    }
     const json = await r.json();
     if (!r.ok) throw new Error(json?.error?.message ?? "Error al publicar");
     setMsg("Cambios de procedimiento enviados a aprobación");

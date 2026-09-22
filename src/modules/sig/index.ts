@@ -29,9 +29,15 @@ export {
   bootstrapProcedureFromExtractedText,
   publishProcedureContentVersion,
   parseExtractedTextToProcedure,
-  stagesToDisplaySections,
+  parseActivitiesFromText,
+  getProcedureFlowchart,
   isProcedureLikeType,
 } from "./services/procedure-content";
+export {
+  ALFA_FIXED_SECTIONS,
+  ACTIVITY_TABLE_HEADERS,
+  displaySectionTitle,
+} from "./business/procedure-sections";
 export {
   listSigChangeRequests,
   createSigChangeRequest,

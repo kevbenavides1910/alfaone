@@ -1,13 +1,31 @@
-import type { SigDocumentType } from "@prisma/client";
+import type { Prisma, SigDocumentType } from "@prisma/client";
+import { mkdir, writeFile } from "fs/promises";
+import path from "path";
 import { prisma } from "@/modules/core/db/prisma";
 import { writeSigAuditLog } from "./audit-log";
 import { assertSigApproverUser } from "./approvers";
+import { sigDocumentDir, storagePathForSigFile } from "./document-uploads";
+import {
+  ALFA_FIXED_SECTIONS,
+  displaySectionTitle,
+  matchSectionKeyFromTitle,
+  sectionDef,
+  type AlfaSectionKey,
+} from "../business/procedure-sections";
+
+export type ProcedureActivityInput = {
+  code: string;
+  name: string;
+  description: string;
+  documents?: string | null;
+  responsible?: string | null;
+};
 
 export type ProcedureStageInput = {
   title: string;
   body: string;
   responsible?: string | null;
-  /** Client temp id when editing; ignored on create. */
+  sectionKey?: AlfaSectionKey | null;
   clientKey?: string;
 };
 
@@ -17,20 +35,41 @@ export type ProcedureBodyInput = {
   responsibilities?: string | null;
   definitions?: string | null;
   stages: ProcedureStageInput[];
+  activities: ProcedureActivityInput[];
   changeSummary: string;
   assignedApproverId: string;
   versionLabel?: string | null;
-  /** Optional change-request ids to mark IMPLEMENTED after publish. */
   changeRequestIds?: string[];
+  flowchart?: {
+    buffer: Buffer;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  } | null;
+  clearFlowchart?: boolean;
 };
 
 export type ProcedureSectionView = {
   id: string;
+  sectionKey: AlfaSectionKey | null;
   number: string | null;
   title: string;
+  /** Título fijo de catálogo; no editable en UI. */
+  titleLocked: boolean;
+  kind: "prose" | "flowchart" | "activities";
   body: string;
   responsible: string | null;
   level: number;
+};
+
+export type ProcedureActivityView = {
+  id: string;
+  sortOrder: number;
+  code: string;
+  name: string;
+  description: string;
+  documents: string | null;
+  responsible: string | null;
 };
 
 export type ProcedureContentView = {
@@ -43,10 +82,10 @@ export type ProcedureContentView = {
   versionStatus: string | null;
   hasStructuredContent: boolean;
   showAsProcedure: boolean;
-  /** Secciones formato corporativo Alfa (1., 2., 6.1…) — lectura unificada. */
   sections: ProcedureSectionView[];
-  /** true si sections vienen del texto indexado (aún no persistidas). */
   sectionsFromPreview: boolean;
+  activities: ProcedureActivityView[];
+  flowchartUrl: string | null;
   body: {
     objective: string | null;
     scope: string | null;
@@ -56,6 +95,7 @@ export type ProcedureContentView = {
   stages: {
     id: string;
     sortOrder: number;
+    sectionKey: string | null;
     title: string;
     body: string;
     responsible: string | null;
@@ -65,10 +105,8 @@ export type ProcedureContentView = {
 };
 
 const PROCEDURE_TYPE_RE = /procedimiento|manual|procedure|proc/i;
-
-/** Títulos típicos del formato documental Alfa (con o sin número). */
-const ALFA_SECTION_TITLES =
-  "objetivo\\s+general|objetivo|alcance|referencias?\\s+normativas?|definiciones?|responsabilidades?|documentos?\\s+relacionados?|diagrama\\s+de\\s+flujo|descripci[oó]n\\s+de\\s+(?:actividades|lineamientos)|procesos?\\s+que\\s+interact[uú]an|control\\s+de\\s+cambios|anexos?|finalidad";
+const FLOWCHART_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const MAX_FLOWCHART_BYTES = 15 * 1024 * 1024;
 
 export function isProcedureLikeType(type: Pick<SigDocumentType, "code" | "name">): boolean {
   return PROCEDURE_TYPE_RE.test(type.code) || PROCEDURE_TYPE_RE.test(type.name);
@@ -90,54 +128,93 @@ function isBoilerplateLine(line: string): boolean {
   if (/^Únicamente para efectos de consulta/i.test(t)) return true;
   if (/^Puede consultar la copia controlada/i.test(t)) return true;
   if (/^Grupo Corporativo/i.test(t) && t.length < 80) return true;
+  if (/^(Actividad|Descripci[oó]n|Documentos|Responsable)$/i.test(t)) return true;
   return false;
 }
 
-function sectionLevel(number: string | null): number {
-  if (!number) return 1;
-  return number.split(".").filter(Boolean).length;
-}
-
-function mapBodyFromStages(stages: ProcedureStageInput[]) {
-  const body = {
-    objective: null as string | null,
-    scope: null as string | null,
-    responsibilities: null as string | null,
-    definitions: null as string | null,
+function mapBodyFromKeyed(
+  byKey: Partial<Record<AlfaSectionKey, string>>
+): {
+  objective: string | null;
+  scope: string | null;
+  responsibilities: string | null;
+  definitions: string | null;
+} {
+  return {
+    objective: byKey.OBJETIVO_GENERAL ?? null,
+    scope: byKey.ALCANCE ?? null,
+    responsibilities: byKey.RESPONSABILIDADES ?? null,
+    definitions: byKey.DEFINICIONES ?? null,
   };
-  for (const s of stages) {
-    const t = s.title.replace(/^\d+(?:\.\d+)*\.?\s*/, "").trim();
-    if (/^objetivo/i.test(t) && !body.objective) body.objective = s.body;
-    else if (/^alcance/i.test(t) && !body.scope) body.scope = s.body;
-    else if (/^responsab/i.test(t) && !body.responsibilities) body.responsibilities = s.body;
-    else if (/^definici/i.test(t) && !body.definitions) body.definitions = s.body;
+}
+
+/** Parsea filas de la tabla Actividad | Descripción | Documentos | Responsable. */
+export function parseActivitiesFromText(text: string): ProcedureActivityInput[] {
+  const cleaned = text.replace(/\r\n/g, "\n").replace(/\u00a0/g, " ");
+  const start =
+    cleaned.search(/descripci[oó]n\s+de\s+actividades/i) >= 0
+      ? cleaned.search(/descripci[oó]n\s+de\s+actividades/i)
+      : 0;
+  const endCandidates = [
+    cleaned.search(/\n\s*procesos?\s+que\s+interact/i),
+    cleaned.search(/\n\s*control\s+de\s+cambios/i),
+    cleaned.search(/\n\s*anexos?\s*$/im),
+  ].filter((i) => i > start);
+  const end = endCandidates.length ? Math.min(...endCandidates) : cleaned.length;
+  const chunk = cleaned.slice(start, end);
+  const lines = chunk.split("\n");
+
+  const activityStart = /^(\d+\.\d+(?:\.\d+)*)\s+(.+)$/;
+  type Block = { code: string; name: string; lines: string[] };
+  const blocks: Block[] = [];
+  let cur: Block | null = null;
+
+  for (const raw of lines) {
+    const t = raw.trim();
+    if (isBoilerplateLine(t) && !activityStart.test(t)) continue;
+    const m = t.match(activityStart);
+    if (m) {
+      if (cur) blocks.push(cur);
+      cur = { code: m[1], name: m[2].trim().slice(0, 200), lines: [] };
+      continue;
+    }
+    if (cur && t) cur.lines.push(t);
   }
-  return body;
-}
+  if (cur) blocks.push(cur);
 
-function splitNumberedTitle(raw: string): { number: string | null; title: string } {
-  const m = raw.trim().match(/^(\d+(?:\.\d+)*)\s*[.)]?\s*(.+)$/);
-  if (m) return { number: m[1], title: m[2].trim() };
-  return { number: null, title: raw.trim() };
-}
-
-export function stagesToDisplaySections(
-  stages: { id?: string; sortOrder?: number; title: string; body: string; responsible?: string | null }[]
-): ProcedureSectionView[] {
-  return stages.map((s, i) => {
-    const { number, title } = splitNumberedTitle(s.title);
+  return blocks.map((b) => {
+    const ls = b.lines;
+    let description = ls.join("\n");
+    let documents: string | null = null;
+    let responsible: string | null = null;
+    if (ls.length >= 2) {
+      const last = ls[ls.length - 1];
+      const prev = ls[ls.length - 2];
+      const looksMeta = (s: string) =>
+        s.length <= 140 ||
+        /^(NA|N\/A)$/i.test(s) ||
+        /\b(F-[A-Z]{1,3}-\d+|Sistema|SICOP|APEX|Centro|correo|Oficio|formulario)\b/i.test(s) ||
+        /\b(Encargado|Director|Financiero|Comercial|Coordinador|Supervisor|Gerente)\b/i.test(s);
+      if (looksMeta(last)) {
+        responsible = last;
+        if (looksMeta(prev) || prev.length <= 160) {
+          documents = prev;
+          description = ls.slice(0, -2).join("\n").trim() || "—";
+        } else {
+          description = ls.slice(0, -1).join("\n").trim() || "—";
+        }
+      }
+    }
     return {
-      id: s.id ?? `preview-${i}`,
-      number,
-      title,
-      body: s.body,
-      responsible: s.responsible ?? null,
-      level: sectionLevel(number),
+      code: b.code,
+      name: b.name,
+      description: description || "—",
+      documents,
+      responsible,
     };
   });
 }
 
-/** Parsea texto Alfa (PDF indexado) a secciones numeradas del formato documental. */
 export function parseExtractedTextToProcedure(text: string): {
   body: {
     objective: string | null;
@@ -146,39 +223,26 @@ export function parseExtractedTextToProcedure(text: string): {
     definitions: string | null;
   };
   stages: ProcedureStageInput[];
+  activities: ProcedureActivityInput[];
 } {
   const cleaned = text.replace(/\r\n/g, "\n").replace(/\u00a0/g, " ").trim();
   const lines = cleaned.split("\n");
+  const numberedHeaderRe = /^\s*(\d+(?:\.\d+)*)\s*[.)]?\s*(.+?)\s*$/i;
 
-  const numberedHeaderRe = new RegExp(
-    `^\\s*(\\d+(?:\\.\\d+)*)\\s*[.)]?\\s*(.+?)\\s*$`,
-    "i"
-  );
-  const knownTitleRe = new RegExp(`^(?:${ALFA_SECTION_TITLES})$`, "i");
-  const namedHeaderRe = new RegExp(`^\\s*(${ALFA_SECTION_TITLES})\\s*:?\\s*$`, "i");
-
-  function isSectionHeader(number: string, titlePart: string): boolean {
+  function isTopSectionHeader(number: string, titlePart: string): boolean {
+    if (number.includes(".")) return false; // 6.1 = actividad, no sección
+    const key = matchSectionKeyFromTitle(titlePart);
+    if (key) return true;
     const t = titlePart.trim();
-    if (!t || t.length > 100) return false;
-    if (/^[./\\d]/.test(t)) return false; // fechas tipo "16. /08/2018"
-    if (/^\d{1,2}\s*[/-]/.test(t)) return false;
-    if (/[.!?]$/.test(t) && t.split(/\s+/).length > 6) return false;
+    if (!t || t.length > 80) return false;
+    if (/^[./\\d]/.test(t)) return false;
     const words = t.split(/\s+/).filter(Boolean);
-    if (words.length > 12) return false;
-    if (knownTitleRe.test(t)) return true;
-    // Subsecciones 6.1 / 6.1.1: título corto que empieza con letra
-    if (number.includes(".") && /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(t) && words.length <= 10) {
-      return true;
-    }
-    // Secciones top-level: número simple + título con letra inicial
-    if (!number.includes(".") && /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(t) && words.length <= 10) {
-      return true;
-    }
-    return false;
+    return words.length <= 8 && /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(t);
   }
 
-  const blocks: { number: string | null; title: string; lines: string[] }[] = [];
-  let current: { number: string | null; title: string; lines: string[] } | null = null;
+  type Block = { number: string | null; title: string; key: AlfaSectionKey | null; lines: string[] };
+  const blocks: Block[] = [];
+  let current: Block | null = null;
   let pastHeader = false;
 
   for (const raw of lines) {
@@ -187,51 +251,127 @@ export function parseExtractedTextToProcedure(text: string): {
       if (isBoilerplateLine(trimmed)) continue;
       pastHeader = true;
     }
-
     if (!trimmed) {
       if (current) current.lines.push("");
       continue;
     }
 
+    const namedKey = matchSectionKeyFromTitle(trimmed);
     const num = trimmed.match(numberedHeaderRe);
-    if (num && isSectionHeader(num[1], num[2])) {
-      if (current) blocks.push(current);
-      current = { number: num[1], title: num[2].trim(), lines: [] };
-      continue;
+
+    if (namedKey && !/^\d+\.\d+/.test(trimmed)) {
+      // "Objetivo General" or "6. Descripción..." handled below if numbered
+      if (!num || !num[1].includes(".")) {
+        if (current) blocks.push(current);
+        const def = sectionDef(namedKey);
+        current = {
+          number: num && !num[1].includes(".") ? num[1] : def.number,
+          title: def.title,
+          key: namedKey,
+          lines: [],
+        };
+        continue;
+      }
     }
 
-    const named = trimmed.match(namedHeaderRe);
-    if (named) {
+    if (num && isTopSectionHeader(num[1], num[2])) {
+      const key = matchSectionKeyFromTitle(num[2]);
       if (current) blocks.push(current);
       current = {
-        number: null,
-        title: named[1].replace(/\s+/g, " ").trim(),
+        number: num[1],
+        title: key ? sectionDef(key).title : num[2].trim(),
+        key,
         lines: [],
       };
       continue;
     }
 
     if (current) current.lines.push(raw.trimEnd());
-    else current = { number: null, title: "Introducción", lines: [raw.trimEnd()] };
   }
   if (current) blocks.push(current);
 
-  let stages: ProcedureStageInput[] = blocks
-    .filter((b) => !(b.title === "Introducción" && blocks.some((x) => x.number)))
-    .map((b) => {
-      const displayTitle = b.number ? `${b.number}. ${b.title}` : b.title;
-      return {
-        title: displayTitle.slice(0, 300),
-        body: b.lines.join("\n").trim() || "—",
-        responsible: null,
-      };
-    });
+  const activities = parseActivitiesFromText(cleaned);
+  const byKey: Partial<Record<AlfaSectionKey, string>> = {};
+  const stages: ProcedureStageInput[] = [];
 
-  if (stages.length === 0) {
-    stages = [{ title: "Contenido", body: cleaned.slice(0, 50000), responsible: null }];
+  for (const b of blocks) {
+    if (!b.key) continue;
+    const def = sectionDef(b.key);
+    if (def.kind === "activities") {
+      stages.push({
+        sectionKey: b.key,
+        title: displaySectionTitle(b.key),
+        body: "",
+      });
+      continue;
+    }
+    if (def.kind === "flowchart") {
+      stages.push({
+        sectionKey: b.key,
+        title: displaySectionTitle(b.key),
+        body: b.lines.join("\n").trim() || "",
+      });
+      continue;
+    }
+    const body = b.lines.join("\n").trim();
+    byKey[b.key] = body || null!;
+    stages.push({
+      sectionKey: b.key,
+      title: displaySectionTitle(b.key),
+      body: body || "—",
+    });
   }
 
-  return { body: mapBodyFromStages(stages), stages };
+  // Ensure fixed skeleton always present (empty bodies ok)
+  const present = new Set(stages.map((s) => s.sectionKey).filter(Boolean));
+  for (const def of ALFA_FIXED_SECTIONS) {
+    if (present.has(def.key)) continue;
+    // Skip optional empty middle sections that rarely appear? Keep all for consistency.
+    stages.push({
+      sectionKey: def.key,
+      title: displaySectionTitle(def.key),
+      body: def.kind === "prose" ? "" : "",
+    });
+  }
+
+  // Order by catalog
+  stages.sort((a, b) => {
+    const ia = ALFA_FIXED_SECTIONS.findIndex((s) => s.key === a.sectionKey);
+    const ib = ALFA_FIXED_SECTIONS.findIndex((s) => s.key === b.sectionKey);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+
+  return { body: mapBodyFromKeyed(byKey), stages, activities };
+}
+
+function buildSectionsView(input: {
+  stages: { id: string; sectionKey: string | null; title: string; body: string; responsible: string | null }[];
+  fromPreview?: boolean;
+}): ProcedureSectionView[] {
+  const byKey = new Map(
+    input.stages.filter((s) => s.sectionKey).map((s) => [s.sectionKey as AlfaSectionKey, s])
+  );
+
+  return ALFA_FIXED_SECTIONS.map((def) => {
+    const row = byKey.get(def.key);
+    return {
+      id: row?.id ?? `fixed-${def.key}`,
+      sectionKey: def.key,
+      number: def.number,
+      title: def.title,
+      titleLocked: true,
+      kind: def.kind,
+      body: row?.body ?? "",
+      responsible: row?.responsible ?? null,
+      level: 1,
+    };
+  }).filter((s) => {
+    // En preview/persistido: ocultar secciones vacías salvo diagrama y actividades (siempre visibles)
+    if (s.kind === "flowchart" || s.kind === "activities") return true;
+    if (s.body.trim()) return true;
+    // Mantener Objetivo/Alcance siempre visibles
+    return s.sectionKey === "OBJETIVO_GENERAL" || s.sectionKey === "ALCANCE";
+  });
 }
 
 export async function getSigProcedureContent(documentId: string): Promise<ProcedureContentView | null> {
@@ -243,6 +383,7 @@ export async function getSigProcedureContent(documentId: string): Promise<Proced
         include: {
           procedureBody: true,
           procedureStages: { orderBy: { sortOrder: "asc" } },
+          procedureActivities: { orderBy: { sortOrder: "asc" } },
         },
       },
     },
@@ -253,32 +394,58 @@ export async function getSigProcedureContent(documentId: string): Promise<Proced
   const stages = (v?.procedureStages ?? []).map((s) => ({
     id: s.id,
     sortOrder: s.sortOrder,
+    sectionKey: s.sectionKey,
     title: s.title,
     body: s.body,
     responsible: s.responsible,
   }));
-  const hasStructuredContent = Boolean(v?.procedureBody || stages.length > 0);
+  const activitiesDb = (v?.procedureActivities ?? []).map((a) => ({
+    id: a.id,
+    sortOrder: a.sortOrder,
+    code: a.code,
+    name: a.name,
+    description: a.description,
+    documents: a.documents,
+    responsible: a.responsible,
+  }));
+
+  const hasStructuredContent = Boolean(
+    v?.procedureBody || stages.length > 0 || activitiesDb.length > 0
+  );
   const showAsProcedure = hasStructuredContent || isProcedureLikeType(doc.documentType);
 
   let sections: ProcedureSectionView[] = [];
+  let activities = activitiesDb;
   let sectionsFromPreview = false;
 
-  if (stages.length > 0) {
-    sections = stagesToDisplaySections(stages);
+  if (stages.length > 0 || activitiesDb.length > 0) {
+    sections = buildSectionsView({ stages });
   } else if (v?.extractedText?.trim()) {
     const parsed = parseExtractedTextToProcedure(v.extractedText);
-    sections = stagesToDisplaySections(parsed.stages);
     sectionsFromPreview = true;
-  } else if (v?.procedureBody) {
-    const synth: ProcedureStageInput[] = [];
-    if (v.procedureBody.objective) synth.push({ title: "1. Objetivo General", body: v.procedureBody.objective });
-    if (v.procedureBody.scope) synth.push({ title: "2. Alcance", body: v.procedureBody.scope });
-    if (v.procedureBody.definitions) synth.push({ title: "3. Definiciones", body: v.procedureBody.definitions });
-    if (v.procedureBody.responsibilities) {
-      synth.push({ title: "4. Responsabilidades", body: v.procedureBody.responsibilities });
-    }
-    sections = stagesToDisplaySections(synth);
+    sections = buildSectionsView({
+      stages: parsed.stages.map((s, i) => ({
+        id: `preview-${s.sectionKey ?? i}`,
+        sectionKey: s.sectionKey ?? null,
+        title: s.title,
+        body: s.body,
+        responsible: null,
+      })),
+      fromPreview: true,
+    });
+    activities = parsed.activities.map((a, i) => ({
+      id: `preview-act-${i}`,
+      sortOrder: i + 1,
+      ...a,
+      documents: a.documents ?? null,
+      responsible: a.responsible ?? null,
+    }));
   }
+
+  const flowchartUrl =
+    v?.procedureBody?.flowchartStoragePath
+      ? `/api/sig/documents/${doc.id}/procedure/flowchart`
+      : null;
 
   return {
     documentId: doc.id,
@@ -292,6 +459,8 @@ export async function getSigProcedureContent(documentId: string): Promise<Proced
     showAsProcedure,
     sections,
     sectionsFromPreview,
+    activities,
+    flowchartUrl,
     body: v?.procedureBody
       ? {
           objective: v.procedureBody.objective,
@@ -306,17 +475,112 @@ export async function getSigProcedureContent(documentId: string): Promise<Proced
   };
 }
 
-/** Bootstrap estructura desde extractedText sobre la versión vigente (sin nueva versión). */
+async function persistStructuredContent(
+  tx: Prisma.TransactionClient,
+  versionId: string,
+  parsed: {
+    body: {
+      objective: string | null;
+      scope: string | null;
+      responsibilities: string | null;
+      definitions: string | null;
+    };
+    stages: ProcedureStageInput[];
+    activities: ProcedureActivityInput[];
+  },
+  flowchart?: {
+    fileName: string;
+    mimeType: string;
+    storagePath: string;
+    fileSizeBytes: number;
+  } | null,
+  clearFlowchart?: boolean,
+  baseFlowchart?: {
+    flowchartFileName: string | null;
+    flowchartMimeType: string | null;
+    flowchartStoragePath: string | null;
+    flowchartFileSizeBytes: number | null;
+  } | null
+) {
+  const flowchartData = clearFlowchart
+    ? {
+        flowchartFileName: null,
+        flowchartMimeType: null,
+        flowchartStoragePath: null,
+        flowchartFileSizeBytes: null,
+      }
+    : flowchart
+      ? {
+          flowchartFileName: flowchart.fileName,
+          flowchartMimeType: flowchart.mimeType,
+          flowchartStoragePath: flowchart.storagePath,
+          flowchartFileSizeBytes: flowchart.fileSizeBytes,
+        }
+      : baseFlowchart
+        ? {
+            flowchartFileName: baseFlowchart.flowchartFileName,
+            flowchartMimeType: baseFlowchart.flowchartMimeType,
+            flowchartStoragePath: baseFlowchart.flowchartStoragePath,
+            flowchartFileSizeBytes: baseFlowchart.flowchartFileSizeBytes,
+          }
+        : {};
+
+  await tx.sigProcedureBody.upsert({
+    where: { versionId },
+    create: {
+      versionId,
+      objective: parsed.body.objective,
+      scope: parsed.body.scope,
+      responsibilities: parsed.body.responsibilities,
+      definitions: parsed.body.definitions,
+      ...flowchartData,
+    },
+    update: {
+      objective: parsed.body.objective,
+      scope: parsed.body.scope,
+      responsibilities: parsed.body.responsibilities,
+      definitions: parsed.body.definitions,
+      ...flowchartData,
+    },
+  });
+
+  await tx.sigProcedureStage.deleteMany({ where: { versionId } });
+  await tx.sigProcedureStage.createMany({
+    data: ALFA_FIXED_SECTIONS.map((def, i) => {
+      const found = parsed.stages.find((s) => s.sectionKey === def.key);
+      return {
+        versionId,
+        sortOrder: i + 1,
+        sectionKey: def.key,
+        title: displaySectionTitle(def.key),
+        body: (found?.body ?? "").slice(0, 50000) || (def.kind === "prose" ? "" : ""),
+        responsible: trimText(found?.responsible, 200),
+      };
+    }),
+  });
+
+  await tx.sigProcedureActivity.deleteMany({ where: { versionId } });
+  if (parsed.activities.length) {
+    await tx.sigProcedureActivity.createMany({
+      data: parsed.activities.map((a, i) => ({
+        versionId,
+        sortOrder: i + 1,
+        code: a.code.trim().slice(0, 40) || `${i + 1}`,
+        name: a.name.trim().slice(0, 300) || `Actividad ${i + 1}`,
+        description: (a.description?.trim() || "—").slice(0, 50000),
+        documents: trimText(a.documents, 4000),
+        responsible: trimText(a.responsible, 200),
+      })),
+    });
+  }
+}
+
 export async function bootstrapProcedureFromExtractedText(documentId: string, actorId: string) {
   const doc = await prisma.sigDocument.findUnique({
     where: { id: documentId },
     include: {
-      documentType: true,
       currentVersion: {
-        include: {
-          procedureBody: true,
-          procedureStages: true,
-        },
+        include: { procedureBody: true, procedureStages: true, procedureActivities: true },
       },
     },
   });
@@ -324,47 +588,25 @@ export async function bootstrapProcedureFromExtractedText(documentId: string, ac
   if (doc.status === "OBSOLETE") throw new Error("El documento está obsoleto");
   const version = doc.currentVersion;
   if (!version) throw new Error("El documento no tiene versión");
-  if (!version.extractedText?.trim()) {
-    throw new Error("No hay texto indexado del archivo para convertir");
-  }
-  if (version.procedureBody || version.procedureStages.length > 0) {
+  if (!version.extractedText?.trim()) throw new Error("No hay texto indexado del archivo para convertir");
+  if (version.procedureStages.length > 0 || version.procedureActivities.length > 0) {
     throw new Error("Ya existe contenido estructurado; edítelo o publique una nueva versión");
   }
 
   const parsed = parseExtractedTextToProcedure(version.extractedText);
-
   await prisma.$transaction(async (tx) => {
-    await tx.sigProcedureBody.create({
-      data: {
-        versionId: version.id,
-        objective: parsed.body.objective,
-        scope: parsed.body.scope,
-        responsibilities: parsed.body.responsibilities,
-        definitions: parsed.body.definitions,
-      },
-    });
-    await tx.sigProcedureStage.createMany({
-      data: parsed.stages.map((s, i) => ({
-        versionId: version.id,
-        sortOrder: i + 1,
-        title: s.title.trim().slice(0, 300) || `Sección ${i + 1}`,
-        body: s.body.trim().slice(0, 50000) || "—",
-        responsible: trimText(s.responsible, 200),
-      })),
-    });
+    await persistStructuredContent(tx, version.id, parsed);
     await writeSigAuditLog(tx, {
       documentId,
       versionId: version.id,
       action: "CONTENT_UPDATED",
       actorId,
-      notes: "Contenido estructurado generado desde texto del archivo (formato Alfa)",
+      notes: "Estructura Alfa (secciones fijas + tabla de actividades) desde archivo",
     });
   });
-
   return getSigProcedureContent(documentId);
 }
 
-/** Publica body+etapas como nueva versión (reutiliza archivo de la versión base). */
 export async function publishProcedureContentVersion(
   documentId: string,
   actorId: string,
@@ -372,26 +614,37 @@ export async function publishProcedureContentVersion(
 ) {
   const changeSummary = input.changeSummary?.trim();
   if (!changeSummary) throw new Error("Indique el resumen de cambios");
-  if (!input.stages?.length) throw new Error("Agregue al menos una sección");
+  if (!input.stages?.length && !input.activities?.length) {
+    throw new Error("Agregue contenido de secciones o actividades");
+  }
 
   const assignedApprover = await assertSigApproverUser(input.assignedApproverId);
-  const mappedBody = mapBodyFromStages(input.stages);
+
+  let flowchartMeta: {
+    fileName: string;
+    mimeType: string;
+    storagePath: string;
+    fileSizeBytes: number;
+  } | null = null;
+
+  if (input.flowchart) {
+    if (!FLOWCHART_MIMES.has(input.flowchart.mimeType)) {
+      throw new Error("El diagrama debe ser PNG, JPEG, WebP o GIF");
+    }
+    if (input.flowchart.size > MAX_FLOWCHART_BYTES) {
+      throw new Error("Diagrama demasiado grande (máx. 15 MB)");
+    }
+  }
 
   const doc = await prisma.sigDocument.findUnique({
     where: { id: documentId },
     include: {
       versions: { orderBy: { versionNumber: "desc" }, take: 1 },
-      currentVersion: {
-        include: {
-          procedureBody: true,
-          procedureStages: { orderBy: { sortOrder: "asc" } },
-        },
-      },
+      currentVersion: { include: { procedureBody: true } },
     },
   });
   if (!doc) throw new Error("Documento no encontrado");
   if (doc.status === "OBSOLETE") throw new Error("El documento está obsoleto");
-
   const base = doc.currentVersion ?? doc.versions[0];
   if (!base) throw new Error("El documento no tiene versión base (suba un archivo primero)");
 
@@ -399,6 +652,34 @@ export async function publishProcedureContentVersion(
   const nextNumber = lastNumber + 1;
   const versionLabel = (input.versionLabel?.trim() || String(nextNumber)).slice(0, 40);
   const today = new Date();
+
+  // Normalize stages to fixed keys
+  const keyedStages: ProcedureStageInput[] = ALFA_FIXED_SECTIONS.map((def) => {
+    const found = input.stages.find(
+      (s) => s.sectionKey === def.key || matchSectionKeyFromTitle(s.title) === def.key
+    );
+    return {
+      sectionKey: def.key,
+      title: displaySectionTitle(def.key),
+      body: found?.body ?? "",
+      responsible: found?.responsible ?? null,
+    };
+  });
+
+  const byKey = Object.fromEntries(
+    keyedStages.filter((s) => s.sectionKey).map((s) => [s.sectionKey!, s.body])
+  ) as Partial<Record<AlfaSectionKey, string>>;
+
+  const parsed = {
+    body: {
+      objective: trimText(input.objective) ?? byKey.OBJETIVO_GENERAL ?? null,
+      scope: trimText(input.scope) ?? byKey.ALCANCE ?? null,
+      responsibilities: trimText(input.responsibilities) ?? byKey.RESPONSABILIDADES ?? null,
+      definitions: trimText(input.definitions) ?? byKey.DEFINICIONES ?? null,
+    },
+    stages: keyedStages,
+    activities: input.activities ?? [],
+  };
 
   const version = await prisma.$transaction(async (tx) => {
     const created = await tx.sigDocumentVersion.create({
@@ -424,25 +705,37 @@ export async function publishProcedureContentVersion(
       },
     });
 
-    await tx.sigProcedureBody.create({
-      data: {
-        versionId: created.id,
-        objective: trimText(input.objective) ?? mappedBody.objective,
-        scope: trimText(input.scope) ?? mappedBody.scope,
-        responsibilities: trimText(input.responsibilities) ?? mappedBody.responsibilities,
-        definitions: trimText(input.definitions) ?? mappedBody.definitions,
-      },
-    });
+    if (input.flowchart) {
+      const dir = sigDocumentDir(documentId);
+      await mkdir(dir, { recursive: true });
+      const safe = input.flowchart.fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+      const storedName = `flowchart_v${nextNumber}_${Date.now()}_${safe}`;
+      const rel = storagePathForSigFile(documentId, storedName);
+      await writeFile(path.join(dir, path.basename(storedName)), input.flowchart.buffer);
+      flowchartMeta = {
+        fileName: input.flowchart.fileName.slice(0, 255),
+        mimeType: input.flowchart.mimeType,
+        storagePath: rel,
+        fileSizeBytes: input.flowchart.size,
+      };
+    }
 
-    await tx.sigProcedureStage.createMany({
-      data: input.stages.map((s, i) => ({
-        versionId: created.id,
-        sortOrder: i + 1,
-        title: s.title.trim().slice(0, 300) || `Sección ${i + 1}`,
-        body: (s.body?.trim() || "—").slice(0, 50000),
-        responsible: trimText(s.responsible, 200),
-      })),
-    });
+    const baseBody = base.procedureBody;
+    await persistStructuredContent(
+      tx,
+      created.id,
+      parsed,
+      flowchartMeta,
+      input.clearFlowchart === true,
+      baseBody
+        ? {
+            flowchartFileName: baseBody.flowchartFileName,
+            flowchartMimeType: baseBody.flowchartMimeType,
+            flowchartStoragePath: baseBody.flowchartStoragePath,
+            flowchartFileSizeBytes: baseBody.flowchartFileSizeBytes,
+          }
+        : null
+    );
 
     await tx.sigDocument.update({
       where: { id: documentId },
@@ -455,18 +748,20 @@ export async function publishProcedureContentVersion(
       action: "CONTENT_UPDATED",
       actorId,
       notes: changeSummary,
-      metadata: { versionNumber: nextNumber, versionLabel, stages: input.stages.length },
+      metadata: {
+        versionNumber: nextNumber,
+        activities: parsed.activities.length,
+        flowchart: Boolean(flowchartMeta),
+      },
     });
-
     await writeSigAuditLog(tx, {
       documentId,
       versionId: created.id,
       action: "NEW_VERSION",
       actorId,
       notes: `Contenido procedimiento v${versionLabel}`,
-      metadata: { versionNumber: nextNumber, versionLabel, contentOnly: true },
+      metadata: { versionNumber: nextNumber, contentOnly: true },
     });
-
     await writeSigAuditLog(tx, {
       documentId,
       versionId: created.id,
@@ -482,11 +777,7 @@ export async function publishProcedureContentVersion(
     if (ids.length) {
       await tx.sigChangeRequest.updateMany({
         where: { id: { in: ids }, documentId, status: { in: ["OPEN", "ACCEPTED"] } },
-        data: {
-          status: "IMPLEMENTED",
-          reviewerId: actorId,
-          reviewedAt: new Date(),
-        },
+        data: { status: "IMPLEMENTED", reviewerId: actorId, reviewedAt: new Date() },
       });
     }
 
@@ -494,6 +785,20 @@ export async function publishProcedureContentVersion(
   });
 
   return { version, procedure: await getSigProcedureContent(documentId) };
+}
+
+export async function getProcedureFlowchart(documentId: string) {
+  const doc = await prisma.sigDocument.findUnique({
+    where: { id: documentId },
+    include: { currentVersion: { include: { procedureBody: true } } },
+  });
+  const body = doc?.currentVersion?.procedureBody;
+  if (!body?.flowchartStoragePath || !body.flowchartMimeType) return null;
+  return {
+    storagePath: body.flowchartStoragePath,
+    mimeType: body.flowchartMimeType,
+    fileName: body.flowchartFileName ?? "diagrama-flujo",
+  };
 }
 
 export async function getSigProcedureByCodeOrId(codeOrId: string): Promise<ProcedureContentView | null> {
@@ -506,3 +811,5 @@ export async function getSigProcedureByCodeOrId(codeOrId: string): Promise<Proce
   if (byCode) return getSigProcedureContent(byCode.id);
   return null;
 }
+
+export { ALFA_FIXED_SECTIONS, displaySectionTitle };

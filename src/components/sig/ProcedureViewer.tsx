@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ACTIVITY_TABLE_HEADERS } from "@/modules/sig/business/procedure-sections";
 
 export type ProcedureStageView = {
   id: string;
@@ -9,15 +10,29 @@ export type ProcedureStageView = {
   title: string;
   body: string;
   responsible: string | null;
+  sectionKey?: string | null;
 };
 
 export type ProcedureSectionView = {
   id: string;
+  sectionKey: string | null;
   number: string | null;
   title: string;
+  titleLocked: boolean;
+  kind: "prose" | "flowchart" | "activities";
   body: string;
   responsible: string | null;
   level: number;
+};
+
+export type ProcedureActivityView = {
+  id: string;
+  sortOrder: number;
+  code: string;
+  name: string;
+  description: string;
+  documents: string | null;
+  responsible: string | null;
 };
 
 export type ProcedureContentData = {
@@ -30,6 +45,8 @@ export type ProcedureContentData = {
   showAsProcedure: boolean;
   sections?: ProcedureSectionView[];
   sectionsFromPreview?: boolean;
+  activities?: ProcedureActivityView[];
+  flowchartUrl?: string | null;
   body: {
     objective: string | null;
     scope: string | null;
@@ -50,31 +67,50 @@ type Props = {
   bootstrapping?: boolean;
 };
 
-function SectionBlock({ section }: { section: ProcedureSectionView }) {
-  const heading =
-    section.number != null && section.number !== ""
-      ? `${section.number}. ${section.title}`
-      : section.title;
-  const pad = Math.min(Math.max(section.level - 1, 0), 3) * 12;
-
+function ActivitiesTable({ rows }: { rows: ProcedureActivityView[] }) {
+  if (!rows.length) {
+    return (
+      <p className="text-sm text-muted-foreground italic">
+        Sin actividades registradas en la tabla.
+      </p>
+    );
+  }
   return (
-    <section className="scroll-mt-4" style={{ paddingLeft: pad }}>
-      <h3
-        className={
-          section.level <= 1
-            ? "text-base font-semibold text-foreground border-b border-border/60 pb-1 mb-2"
-            : "text-sm font-semibold text-foreground mb-1.5"
-        }
-      >
-        {heading}
-      </h3>
-      {section.responsible && (
-        <p className="text-xs text-muted-foreground mb-1">Responsable: {section.responsible}</p>
-      )}
-      <div className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
-        {section.body}
-      </div>
-    </section>
+    <div className="overflow-x-auto border border-neutral-400">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="bg-neutral-200">
+            {ACTIVITY_TABLE_HEADERS.map((h) => (
+              <th
+                key={h}
+                className="border border-neutral-400 px-2 py-2 font-semibold text-center align-middle"
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className="align-top">
+              <td className="border border-neutral-400 px-2 py-2 text-center font-medium w-[18%]">
+                <span className="block">{r.code}</span>
+                <span className="block font-normal">{r.name}</span>
+              </td>
+              <td className="border border-neutral-400 px-2 py-2 whitespace-pre-wrap w-[42%]">
+                {r.description}
+              </td>
+              <td className="border border-neutral-400 px-2 py-2 whitespace-pre-wrap w-[22%]">
+                {r.documents || "—"}
+              </td>
+              <td className="border border-neutral-400 px-2 py-2 text-center w-[18%]">
+                {r.responsible || "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -91,9 +127,10 @@ export function ProcedureViewer({
   }
 
   const sections = data.sections ?? [];
-  const hasSections = sections.length > 0;
+  const activities = data.activities ?? [];
+  const hasContent = sections.length > 0 || activities.length > 0;
   const canPersist = canEdit && data.sectionsFromPreview && !!data.extractedText;
-  const canEditNow = canEdit && (data.hasStructuredContent || hasSections);
+  const canEditNow = canEdit && (data.hasStructuredContent || hasContent);
 
   return (
     <Card className="overflow-hidden">
@@ -101,7 +138,7 @@ export function ProcedureViewer({
         <CardTitle className="text-base flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {data.documentType?.name ?? "Documento"} · formato corporativo
+              {data.documentType?.name ?? "Documento"} · formato corporativo Alfa
             </p>
             <p className="font-semibold truncate">
               {data.code ? `${data.code} — ` : ""}
@@ -131,22 +168,59 @@ export function ProcedureViewer({
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        {hasSections ? (
-          <article className="px-5 py-5 space-y-6 max-w-3xl mx-auto">
+        {hasContent ? (
+          <article className="px-5 py-5 space-y-7 max-w-4xl mx-auto">
             {data.sectionsFromPreview && (
               <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded px-3 py-2">
-                Vista en prosa generada desde el archivo (mismo formato documental Alfa).
+                Vista generada desde el archivo con secciones fijas Alfa y tabla de actividades.
                 {canEdit
-                  ? " Use «Editar» para modificar o «Guardar estructura editable» para persistir las secciones."
+                  ? " «Editar» modifica el contenido (no los títulos). «Guardar estructura» la persiste."
                   : ""}
               </p>
             )}
+
+            <div className="text-center space-y-2">
+              <h2 className="text-lg font-semibold">{data.title}</h2>
+              <div className="h-0.5 w-full bg-gradient-to-r from-red-700 via-red-600 to-neutral-400" />
+            </div>
+
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground border-l-2 border-red-700/70 pl-3">
-              Copia no controlada — consulta y capacitación. La copia controlada está en la biblioteca
-              documental vigente.
+              Copia no controlada — consulta y capacitación.
             </p>
+
             {sections.map((s) => (
-              <SectionBlock key={s.id} section={s} />
+              <section key={s.id} className="space-y-3">
+                <h3 className="text-base font-semibold border-b border-neutral-300 pb-1">
+                  {s.number}. {s.title}
+                </h3>
+
+                {s.kind === "flowchart" && (
+                  <div className="rounded border border-dashed border-neutral-400 bg-neutral-50 min-h-[220px] flex items-center justify-center p-4">
+                    {data.flowchartUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={data.flowchartUrl}
+                        alt="Diagrama de flujo"
+                        className="max-h-[480px] max-w-full object-contain"
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center">
+                        Área del diagrama de flujo
+                        <br />
+                        <span className="text-xs">Aún no hay imagen cargada</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {s.kind === "activities" && <ActivitiesTable rows={activities} />}
+
+                {s.kind === "prose" && s.body.trim() && (
+                  <div className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
+                    {s.body}
+                  </div>
+                )}
+              </section>
             ))}
           </article>
         ) : (

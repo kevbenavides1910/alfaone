@@ -78,12 +78,20 @@ export function sigTools(): SyntraTool[] {
           alcance: proc.body?.scope ?? null,
           responsabilidades: proc.body?.responsibilities ?? null,
           definiciones: proc.body?.definitions ?? null,
-          etapas: proc.sections.map((s) => ({
-            orden: s.number ?? String(s.level),
-            titulo: s.number ? `${s.number}. ${s.title}` : s.title,
-            cuerpo: s.body.slice(0, 800),
-            responsable: s.responsible,
+          etapas: proc.activities.map((a) => ({
+            codigo: a.code,
+            nombre: a.name,
+            descripcion: a.description.slice(0, 500),
+            documentos: a.documents,
+            responsable: a.responsible,
           })),
+          secciones: proc.sections.map((s) => ({
+            clave: s.sectionKey,
+            titulo: s.number ? `${s.number}. ${s.title}` : s.title,
+            tipo: s.kind,
+            cuerpo: s.kind === "prose" ? s.body.slice(0, 600) : null,
+          })),
+          diagramaFlujo: Boolean(proc.flowchartUrl),
           extractoArchivo: null,
           fuente: "Procedimiento SIG (prosa)",
         };

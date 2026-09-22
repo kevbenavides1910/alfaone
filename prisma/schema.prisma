@@ -3268,6 +3268,7 @@ model SigDocumentVersion {
   auditLogs  SigDocumentAuditLog[]
   procedureBody SigProcedureBody?
   procedureStages SigProcedureStage[]
+  procedureActivities SigProcedureActivity[]
 
   @@unique([documentId, versionNumber])
   @@index([documentId])
@@ -3285,25 +3286,32 @@ enum SigTextIndexStatus {
 
 /// Contenido en prosa del procedimiento (por versión).
 model SigProcedureBody {
-  id              String             @id @default(cuid())
-  versionId       String             @unique
-  version         SigDocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  objective       String?            @db.Text
-  scope           String?            @db.Text
-  responsibilities String?           @db.Text
-  definitions     String?            @db.Text
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id                     String             @id @default(cuid())
+  versionId              String             @unique
+  version                SigDocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  objective              String?            @db.Text
+  scope                  String?            @db.Text
+  responsibilities       String?            @db.Text
+  definitions            String?            @db.Text
+  /// Imagen del diagrama de flujo (sección fija).
+  flowchartFileName      String?
+  flowchartMimeType      String?
+  flowchartStoragePath   String?
+  flowchartFileSizeBytes Int?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 
   @@map("sig_procedure_bodies")
 }
 
-/// Etapa / paso numerado del procedimiento (por versión).
+/// Sección fija del formato Alfa (título no editable; clave canónica).
 model SigProcedureStage {
   id          String             @id @default(cuid())
   versionId   String
   version     SigDocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   sortOrder   Int
+  /// Clave fija: OBJETIVO_GENERAL, ALCANCE, DIAGRAMA_FLUJO, DESCRIPCION_ACTIVIDADES, etc.
+  sectionKey  String?
   title       String
   body        String             @db.Text
   responsible String?
@@ -3313,7 +3321,28 @@ model SigProcedureStage {
   changeRequests SigChangeRequest[]
 
   @@index([versionId, sortOrder])
+  @@index([versionId, sectionKey])
   @@map("sig_procedure_stages")
+}
+
+/// Fila de la tabla «Descripción de Actividades» (Actividad | Descripción | Documentos | Responsable).
+model SigProcedureActivity {
+  id           String             @id @default(cuid())
+  versionId    String
+  version      SigDocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  sortOrder    Int
+  /// Código de actividad, ej. 6.1
+  code         String
+  /// Nombre corto de la actividad
+  name         String
+  description  String             @db.Text
+  documents    String?            @db.Text
+  responsible  String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([versionId, sortOrder])
+  @@map("sig_procedure_activities")
 }
 
 /// Solicitud de cambio sobre un procedimiento (lectura → edición).

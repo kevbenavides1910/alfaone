@@ -8,17 +8,38 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { ProcedureContentData } from "./ProcedureViewer";
+import {
+  ALFA_FIXED_SECTIONS,
+  displaySectionTitle,
+  type AlfaSectionKey,
+} from "@/modules/sig/business/procedure-sections";
 
 export type ProcedureEditForm = {
   objective: string;
   scope: string;
   responsibilities: string;
   definitions: string;
-  stages: { clientKey: string; title: string; body: string; responsible: string }[];
+  stages: {
+    clientKey: string;
+    sectionKey: AlfaSectionKey | null;
+    title: string;
+    body: string;
+    responsible: string;
+  }[];
+  activities: {
+    clientKey: string;
+    code: string;
+    name: string;
+    description: string;
+    documents: string;
+    responsible: string;
+  }[];
   changeSummary: string;
   assignedApproverId: string;
   versionLabel: string;
   changeRequestIds: string[];
+  flowchartFile: File | null;
+  clearFlowchart: boolean;
 };
 
 type Approver = { id: string; name: string; email: string };
@@ -43,11 +64,6 @@ function newKey() {
   return `s_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function sectionTitle(number: string | null | undefined, title: string) {
-  if (number) return `${number}. ${title}`;
-  return title;
-}
-
 export function ProcedureEditor({
   initial,
   approvers,
@@ -57,72 +73,43 @@ export function ProcedureEditor({
   onSave,
   saving,
 }: Props) {
-  const seededStages = (() => {
-    const fromSections =
-      initial.sections && initial.sections.length > 0
-        ? initial.sections.map((s) => ({
-            clientKey: s.id.startsWith("preview-") ? newKey() : s.id,
-            title: sectionTitle(s.number, s.title),
-            body: s.body,
-            responsible: s.responsible ?? "",
-          }))
-        : null;
-
-    const base =
-      fromSections ??
-      (initial.stages.length > 0
-        ? initial.stages.map((s) => ({
-            clientKey: s.id,
-            title: s.title,
-            body: s.body,
-            responsible: s.responsible ?? "",
-          }))
-        : [{ clientKey: newKey(), title: "1. Objetivo General", body: "", responsible: "" }]);
-
-    if (!seedFromRequest) return base;
-    if (seedFromRequest.type === "ADD_STAGE") {
-      return [
-        ...base,
-        {
-          clientKey: newKey(),
-          title: seedFromRequest.proposedTitle || "Nueva sección",
-          body: seedFromRequest.proposedBody || "",
-          responsible: "",
-        },
-      ];
-    }
-    if (seedFromRequest.type === "REMOVE_STAGE" && seedFromRequest.targetStageId) {
-      const filtered = base.filter((s) => s.clientKey !== seedFromRequest.targetStageId);
-      return filtered.length > 0
-        ? filtered
-        : [{ clientKey: newKey(), title: "1. Objetivo General", body: "", responsible: "" }];
-    }
-    if (seedFromRequest.targetStageId && seedFromRequest.type === "EDIT_STAGE") {
-      return base.map((s) =>
-        s.clientKey === seedFromRequest.targetStageId
-          ? {
-              ...s,
-              title: seedFromRequest.proposedTitle || s.title,
-              body: seedFromRequest.proposedBody || s.body,
-            }
-          : s
-      );
-    }
-    return base;
-  })();
+  const proseSections = ALFA_FIXED_SECTIONS.filter((d) => d.kind === "prose").map((def) => {
+    const found = (initial.sections ?? []).find((s) => s.sectionKey === def.key);
+    const stage = (initial.stages ?? []).find((s) => s.sectionKey === def.key);
+    return {
+      clientKey: found && !found.id.startsWith("preview-") && !found.id.startsWith("fixed-")
+        ? found.id
+        : newKey(),
+      sectionKey: def.key as AlfaSectionKey,
+      title: displaySectionTitle(def.key),
+      body: found?.body ?? stage?.body ?? "",
+      responsible: found?.responsible ?? stage?.responsible ?? "",
+    };
+  });
 
   const [form, setForm] = useState<ProcedureEditForm>({
     objective: initial.body?.objective ?? "",
     scope: initial.body?.scope ?? "",
     responsibilities: initial.body?.responsibilities ?? "",
     definitions: initial.body?.definitions ?? "",
-    stages: seededStages,
+    stages: proseSections,
+    activities: (initial.activities ?? []).map((a) => ({
+      clientKey: a.id.startsWith("preview-") ? newKey() : a.id,
+      code: a.code,
+      name: a.name,
+      description: a.description,
+      documents: a.documents ?? "",
+      responsible: a.responsible ?? "",
+    })),
     changeSummary: seedFromRequest?.description?.slice(0, 500) ?? "",
     assignedApproverId: "",
     versionLabel: "",
     changeRequestIds: implementingRequestIds,
+    flowchartFile: null,
+    clearFlowchart: false,
   });
   const [error, setError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(initial.flowchartUrl ?? null);
 
   const updateStage = (key: string, patch: Partial<(typeof form.stages)[0]>) => {
     setForm((f) => ({
@@ -131,13 +118,20 @@ export function ProcedureEditor({
     }));
   };
 
-  const moveStage = (index: number, dir: -1 | 1) => {
+  const updateActivity = (key: string, patch: Partial<(typeof form.activities)[0]>) => {
+    setForm((f) => ({
+      ...f,
+      activities: f.activities.map((a) => (a.clientKey === key ? { ...a, ...patch } : a)),
+    }));
+  };
+
+  const moveActivity = (index: number, dir: -1 | 1) => {
     setForm((f) => {
-      const next = [...f.stages];
+      const next = [...f.activities];
       const j = index + dir;
       if (j < 0 || j >= next.length) return f;
       [next[index], next[j]] = [next[j], next[index]];
-      return { ...f, stages: next };
+      return { ...f, activities: next };
     });
   };
 
@@ -149,10 +143,6 @@ export function ProcedureEditor({
     }
     if (!form.changeSummary.trim()) {
       setError("Indique el resumen de cambios");
-      return;
-    }
-    if (!form.stages.some((s) => s.title.trim() && s.body.trim())) {
-      setError("Cada sección necesita título y cuerpo");
       return;
     }
     try {
@@ -167,16 +157,70 @@ export function ProcedureEditor({
       <CardHeader>
         <CardTitle className="text-base">Editar procedimiento (formato Alfa)</CardTitle>
         <p className="text-xs text-muted-foreground font-normal">
-          Use títulos como «1. Objetivo General», «2. Alcance», «6.1 …» para mantener el formato
-          documental corporativo.
+          Los títulos de sección son fijos. Edite solo el contenido, la tabla de actividades y el
+          diagrama de flujo.
         </p>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <div className="space-y-4">
+          <Label>Secciones (títulos bloqueados)</Label>
+          {form.stages.map((s) => (
+            <div key={s.clientKey} className="rounded-md border p-3 space-y-2 bg-muted/20">
+              <Input value={s.title} readOnly disabled className="font-semibold bg-muted/50" />
+              <Textarea
+                className="min-h-24"
+                placeholder="Texto de la sección"
+                value={s.body}
+                onChange={(e) => updateStage(s.clientKey, { body: e.target.value })}
+              />
+            </div>
+          ))}
+        </div>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <Label>Secciones del documento</Label>
+            <div>
+              <Label>7. Diagrama de Flujo</Label>
+              <p className="text-xs text-muted-foreground">Imagen PNG/JPEG/WebP</p>
+            </div>
+          </div>
+          <div className="rounded border border-dashed p-4 space-y-3 bg-neutral-50">
+            {previewUrl && !form.clearFlowchart ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={previewUrl} alt="Diagrama" className="max-h-56 mx-auto object-contain" />
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-8">Sin diagrama cargado</p>
+            )}
+            <Input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setForm((f) => ({ ...f, flowchartFile: file, clearFlowchart: false }));
+                if (file) setPreviewUrl(URL.createObjectURL(file));
+              }}
+            />
+            {(previewUrl || initial.flowchartUrl) && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setForm((f) => ({ ...f, flowchartFile: null, clearFlowchart: true }));
+                  setPreviewUrl(null);
+                }}
+              >
+                Quitar diagrama
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label>8. Descripción de Actividades</Label>
             <Button
               type="button"
               size="sm"
@@ -184,12 +228,14 @@ export function ProcedureEditor({
               onClick={() =>
                 setForm((f) => ({
                   ...f,
-                  stages: [
-                    ...f.stages,
+                  activities: [
+                    ...f.activities,
                     {
                       clientKey: newKey(),
-                      title: `${f.stages.length + 1}. Nueva sección`,
-                      body: "",
+                      code: `8.${f.activities.length + 1}`,
+                      name: "Nueva actividad",
+                      description: "",
+                      documents: "",
                       responsible: "",
                     },
                   ],
@@ -197,54 +243,98 @@ export function ProcedureEditor({
               }
             >
               <Plus className="h-4 w-4 mr-1" />
-              Agregar sección
+              Agregar fila
             </Button>
           </div>
-          {form.stages.map((s, idx) => (
-            <div key={s.clientKey} className="rounded-md border p-3 space-y-2 bg-muted/20">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-muted-foreground">Sección {idx + 1}</span>
-                <div className="flex gap-1">
-                  <Button type="button" size="icon" variant="ghost" onClick={() => moveStage(idx, -1)}>
-                    <ArrowUp className="h-4 w-4" />
-                  </Button>
-                  <Button type="button" size="icon" variant="ghost" onClick={() => moveStage(idx, 1)}>
-                    <ArrowDown className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    onClick={() =>
-                      setForm((f) => ({
-                        ...f,
-                        stages: f.stages.filter((x) => x.clientKey !== s.clientKey),
-                      }))
-                    }
-                    disabled={form.stages.length <= 1}
-                  >
-                    <Trash2 className="h-4 w-4 text-red-600" />
-                  </Button>
-                </div>
-              </div>
-              <Input
-                placeholder="1. Objetivo General"
-                value={s.title}
-                onChange={(e) => updateStage(s.clientKey, { title: e.target.value })}
-              />
-              <Input
-                placeholder="Responsable (opcional)"
-                value={s.responsible}
-                onChange={(e) => updateStage(s.clientKey, { responsible: e.target.value })}
-              />
-              <Textarea
-                className="min-h-28"
-                placeholder="Texto de la sección"
-                value={s.body}
-                onChange={(e) => updateStage(s.clientKey, { body: e.target.value })}
-              />
-            </div>
-          ))}
+
+          <div className="overflow-x-auto border border-neutral-400">
+            <table className="w-full text-sm border-collapse min-w-[720px]">
+              <thead>
+                <tr className="bg-neutral-200">
+                  <th className="border border-neutral-400 px-2 py-2">Actividad</th>
+                  <th className="border border-neutral-400 px-2 py-2">Descripción</th>
+                  <th className="border border-neutral-400 px-2 py-2">Documentos</th>
+                  <th className="border border-neutral-400 px-2 py-2">Responsable</th>
+                  <th className="border border-neutral-400 px-2 py-2 w-24"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {form.activities.map((a, idx) => (
+                  <tr key={a.clientKey} className="align-top">
+                    <td className="border border-neutral-400 p-2 space-y-1 w-[18%]">
+                      <Input
+                        className="h-8 text-center"
+                        value={a.code}
+                        onChange={(e) => updateActivity(a.clientKey, { code: e.target.value })}
+                        placeholder="8.1"
+                      />
+                      <Input
+                        className="h-8"
+                        value={a.name}
+                        onChange={(e) => updateActivity(a.clientKey, { name: e.target.value })}
+                        placeholder="Nombre"
+                      />
+                    </td>
+                    <td className="border border-neutral-400 p-2 w-[40%]">
+                      <Textarea
+                        className="min-h-24 text-sm"
+                        value={a.description}
+                        onChange={(e) =>
+                          updateActivity(a.clientKey, { description: e.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="border border-neutral-400 p-2 w-[20%]">
+                      <Textarea
+                        className="min-h-24 text-sm"
+                        value={a.documents}
+                        onChange={(e) => updateActivity(a.clientKey, { documents: e.target.value })}
+                      />
+                    </td>
+                    <td className="border border-neutral-400 p-2 w-[16%]">
+                      <Textarea
+                        className="min-h-24 text-sm text-center"
+                        value={a.responsible}
+                        onChange={(e) =>
+                          updateActivity(a.clientKey, { responsible: e.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="border border-neutral-400 p-1">
+                      <div className="flex flex-col gap-0.5">
+                        <Button type="button" size="icon" variant="ghost" onClick={() => moveActivity(idx, -1)}>
+                          <ArrowUp className="h-4 w-4" />
+                        </Button>
+                        <Button type="button" size="icon" variant="ghost" onClick={() => moveActivity(idx, 1)}>
+                          <ArrowDown className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() =>
+                            setForm((f) => ({
+                              ...f,
+                              activities: f.activities.filter((x) => x.clientKey !== a.clientKey),
+                            }))
+                          }
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {form.activities.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="border border-neutral-400 px-3 py-6 text-center text-muted-foreground">
+                      Sin filas — agregue actividades
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
