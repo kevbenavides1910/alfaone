@@ -44,16 +44,6 @@ const TABS: Tab[] = [
     isActive: (p) => p.startsWith("/sig/calidad-conversion"),
   },
   {
-    href: "/sig/documentos/nuevo",
-    label: "Nuevo documento",
-    permission: "sig.documentos",
-  },
-  {
-    href: "/sig/documentos/importar",
-    label: "Carga masiva",
-    permission: "sig.documentos",
-  },
-  {
     href: "/sig/bitacora",
     label: "Bitácora",
     permission: "sig.bitacora",
