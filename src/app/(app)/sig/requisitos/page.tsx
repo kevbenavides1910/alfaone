@@ -216,7 +216,7 @@ function coverageLabel(row: MatrixRow) {
 }
 
 const TH =
-  "sticky top-14 z-20 border-b border-slate-200 bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 shadow-[0_1px_0_0_rgb(226_232_240)]";
+  "sticky top-0 z-20 border-b border-slate-200 bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 shadow-[0_1px_0_0_rgb(226_232_240)]";
 
 export default function SigRequisitosPage() {
   const qc = useQueryClient();
@@ -601,10 +601,10 @@ export default function SigRequisitosPage() {
           </div>
         )}
 
-        <Card className="overflow-visible">
-          <CardContent className="overflow-visible p-0">
+        <Card className="sticky top-14 z-10 flex max-h-[calc(100vh-3.5rem)] flex-col overflow-hidden shadow-md">
+          <CardContent className="min-h-0 flex-1 overflow-auto p-0">
             <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-sm">
-              <thead>
+              <thead className="sticky top-0 z-20">
                 <tr>
                   <th className={TH}>Estado</th>
                   <th className={TH}>Código</th>
