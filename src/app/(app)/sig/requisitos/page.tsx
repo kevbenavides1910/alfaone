@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils/cn";
+import { isStructuralRequirement } from "@/modules/sig/business/requirement-structure";
 
 type Standard = {
   id: string;
@@ -267,15 +268,15 @@ export default function SigRequisitosPage() {
   );
 
   const stats = useMemo(() => {
-    const applicable = rows.filter((r) => r.isApplicable);
+    const applicable = rows.filter((r) => r.isApplicable && !isStructuralRequirement(r));
     return {
       total: rows.length,
       applicable: applicable.length,
       green: applicable.filter((r) => r.trafficLight === "GREEN").length,
       yellow: applicable.filter((r) => r.trafficLight === "YELLOW").length,
       red: applicable.filter((r) => r.trafficLight === "RED").length,
-      excluded: rows.filter((r) => !r.isApplicable).length,
-      docGaps: rows.filter(hasDocGap).length,
+      excluded: rows.filter((r) => !r.isApplicable || isStructuralRequirement(r)).length,
+      docGaps: rows.filter((r) => r.isApplicable && !isStructuralRequirement(r) && hasDocGap(r)).length,
       noReview: applicable.filter((r) => !r.lastRevisionAt).length,
     };
   }, [rows]);
@@ -283,18 +284,20 @@ export default function SigRequisitosPage() {
   const matrixRows = useMemo(() => {
     let list = rows;
     if (applicableOnly && attention !== "excluded") {
-      list = list.filter((r) => r.isApplicable);
+      list = list.filter((r) => r.isApplicable && !isStructuralRequirement(r));
     }
     if (attention === "noEvidence") {
-      list = list.filter((r) => r.isApplicable && r.trafficLight === "YELLOW");
+      list = list.filter((r) => r.isApplicable && !isStructuralRequirement(r) && r.trafficLight === "YELLOW");
     } else if (attention === "openNc") {
-      list = list.filter((r) => r.openNcCount > 0 || r.trafficLight === "RED");
+      list = list.filter(
+        (r) => (r.openNcCount > 0 || r.trafficLight === "RED") && !isStructuralRequirement(r)
+      );
     } else if (attention === "noReview") {
-      list = list.filter((r) => r.isApplicable && !r.lastRevisionAt);
+      list = list.filter((r) => r.isApplicable && !isStructuralRequirement(r) && !r.lastRevisionAt);
     } else if (attention === "excluded") {
-      list = list.filter((r) => !r.isApplicable);
+      list = list.filter((r) => !r.isApplicable || isStructuralRequirement(r));
     } else if (attention === "docGap") {
-      list = list.filter(hasDocGap);
+      list = list.filter((r) => !isStructuralRequirement(r) && hasDocGap(r));
     }
 
     const built = buildMatrixRows(list);
@@ -302,7 +305,6 @@ export default function SigRequisitosPage() {
 
     return built.filter((row) => {
       if (row.depth <= maxDepth) return true;
-      // show deeper rows only if an ancestor chapter/prefix is expanded
       for (const prefix of expanded) {
         if (row.code === prefix || row.code.startsWith(`${prefix}.`)) return true;
       }
@@ -404,9 +406,9 @@ export default function SigRequisitosPage() {
           <span className="rounded-full bg-red-50 px-2.5 py-1 text-red-800 ring-1 ring-red-100">
             {stats.red} NC
           </span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 ring-1 ring-slate-200">
-            {stats.excluded} excluidos
-          </span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 ring-1 ring-slate-200">
+              {stats.excluded} excl. / estructura
+            </span>
           <span className="rounded-full bg-orange-50 px-2.5 py-1 text-orange-900 ring-1 ring-orange-100">
             {stats.docGaps} con brecha doc.
           </span>
@@ -447,26 +449,26 @@ export default function SigRequisitosPage() {
                   setExpanded(new Set());
                 }}
               >
-                <option value="chapters">Solo capítulos (4, 5…)</option>
-                <option value="level2">Hasta 2.º nivel (4.1)</option>
-                <option value="all">Todo el detalle</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <Label>Atención</Label>
-              <select
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={attention}
-                onChange={(e) => setAttention(e.target.value as AttentionFilter)}
-              >
-                <option value="">Todas</option>
-                <option value="noEvidence">Sin evidencias</option>
-                <option value="openNc">NC abiertas</option>
-                <option value="noReview">Sin fecha de revisión</option>
-                <option value="docGap">Brecha de documento</option>
-                <option value="excluded">Exclusiones de alcance</option>
-              </select>
-            </div>
+                  <option value="chapters">Solo títulos de capítulo (estructura)</option>
+                  <option value="level2">Hasta 2.º nivel (4.1)</option>
+                  <option value="all">Todo el detalle</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label>Atención</Label>
+                <select
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={attention}
+                  onChange={(e) => setAttention(e.target.value as AttentionFilter)}
+                >
+                  <option value="">Todas</option>
+                  <option value="noEvidence">Sin evidencias</option>
+                  <option value="openNc">NC abiertas</option>
+                  <option value="noReview">Sin fecha de revisión</option>
+                  <option value="docGap">Brecha de documento</option>
+                  <option value="excluded">Exclusiones y estructura</option>
+                </select>
+              </div>
             <div className="flex items-end">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -586,7 +588,10 @@ export default function SigRequisitosPage() {
                 )}
                 {!isLoading &&
                   matrixRows.map((group) => {
-                    const light = LIGHT[group.trafficLight];
+                    const structural = group.items.every((i) => isStructuralRequirement(i));
+                    const light = structural
+                      ? { label: "Estructura", className: "bg-slate-100 text-slate-600" }
+                      : LIGHT[group.trafficLight];
                     const primary = group.items[0];
                     const showExpand =
                       canExpandMore &&
@@ -609,7 +614,10 @@ export default function SigRequisitosPage() {
                             <div className="mt-1 space-y-0.5">
                               {group.items.map((item) => (
                                 <div key={item.id} className="text-[11px] text-slate-500">
-                                  {shortNorma(item.standard.code)}: {LIGHT[item.trafficLight].label}
+                                  {shortNorma(item.standard.code)}:{" "}
+                                  {isStructuralRequirement(item)
+                                    ? "Estructura"
+                                    : LIGHT[item.trafficLight].label}
                                 </div>
                               ))}
                             </div>
