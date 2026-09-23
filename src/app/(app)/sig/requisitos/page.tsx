@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Download } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { exportRowsToExcel, exportWorkbookToExcel } from "@/lib/utils/excel-export";
 
 type Standard = { id: string; code: string; name: string; year: number | null };
 type RequirementRow = {
@@ -34,7 +37,6 @@ type IntegratedClause = {
   evidenceLinks: number;
   openNcCount: number;
   lastRevisionAt: string | null;
-  description: string | null;
   observations: string | null;
 };
 
@@ -59,10 +61,14 @@ function formatDate(iso: string | null) {
   return d.toLocaleDateString("es-CR", { year: "numeric", month: "short", day: "2-digit" });
 }
 
-function clip(text: string | null | undefined, max = 120) {
+function clip(text: string | null | undefined, max = 160) {
   const t = text?.trim();
   if (!t) return "—";
   return t.length > max ? `${t.slice(0, max)}…` : t;
+}
+
+function shortNorma(code: string) {
+  return code.replace(/^ISO_/, "");
 }
 
 function pickLongestText(items: RequirementRow[], field: "description" | "observations") {
@@ -86,7 +92,6 @@ function maxIso(dates: Array<string | null>) {
   return best == null ? null : new Date(best).toISOString();
 }
 
-/** Agrupa por código de cláusula (Anexo SL): ISO 9001 + 18788 en la misma fila. */
 function integrateByClause(rows: RequirementRow[]): IntegratedClause[] {
   const map = new Map<string, RequirementRow[]>();
   for (const row of rows) {
@@ -112,11 +117,32 @@ function integrateByClause(rows: RequirementRow[]): IntegratedClause[] {
       evidenceLinks: sorted.reduce((n, i) => n + i._count.evidenceLinks, 0),
       openNcCount: sorted.reduce((n, i) => n + i.openNcCount, 0),
       lastRevisionAt: maxIso(sorted.map((i) => i.lastRevisionAt)),
-      description: pickLongestText(sorted, "description"),
       observations: pickLongestText(sorted, "observations"),
     };
   });
 }
+
+function toExportRows(list: RequirementRow[]) {
+  return list.map((r) => ({
+    Norma: r.standard.code,
+    Código: r.code,
+    Título: r.title,
+    "Requisito esperado": r.description ?? "",
+    Observaciones: r.observations ?? "",
+    Aplicable: r.isApplicable ? "Sí" : "No",
+    Estado: LIGHT[r.trafficLight].label,
+    Procesos: r._count.processLinks,
+    Docs: r._count.documentLinks,
+    Evidencias: r._count.evidenceLinks,
+    NC: r.openNcCount,
+    "Últ. revisión": r.lastRevisionAt ? formatDate(r.lastRevisionAt) : "",
+  }));
+}
+
+const COL_WIDTHS = [12, 10, 36, 48, 40, 10, 14, 10, 8, 10, 8, 14];
+
+const TH =
+  "sticky top-0 z-20 border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold shadow-[0_1px_0_0_rgb(226_232_240)]";
 
 export default function SigRequisitosPage() {
   const [q, setQ] = useState("");
@@ -129,7 +155,7 @@ export default function SigRequisitosPage() {
       const r = await fetch("/api/sig/requirements?standards=1", { credentials: "same-origin" });
       if (!r.ok) throw new Error("Error cargando normas");
       const json = await r.json();
-      return json.data as Standard[];
+      return (Array.isArray(json.data) ? json.data : []) as Standard[];
     },
   });
 
@@ -148,12 +174,65 @@ export default function SigRequisitosPage() {
       const r = await fetch(`/api/sig/requirements?${params}`, { credentials: "same-origin" });
       if (!r.ok) throw new Error("Error cargando requisitos");
       const json = await r.json();
-      return json.data as RequirementRow[];
+      return (Array.isArray(json.data) ? json.data : []) as RequirementRow[];
+    },
+  });
+
+  /** Todas las normas (sin filtro de norma) para poder descargar ambas aunque el filtro esté activo. */
+  const { data: allRows = [] } = useQuery({
+    queryKey: ["sig-requirements-export-all", q, applicableOnly],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (q.trim()) params.set("q", q.trim());
+      if (applicableOnly) params.set("applicable", "1");
+      const r = await fetch(`/api/sig/requirements?${params}`, { credentials: "same-origin" });
+      if (!r.ok) throw new Error("Error cargando requisitos");
+      const json = await r.json();
+      return (Array.isArray(json.data) ? json.data : []) as RequirementRow[];
     },
   });
 
   const integrated = useMemo(() => integrateByClause(rows), [rows]);
   const showIntegrated = !standardId;
+
+  const downloadableStandards = useMemo(() => {
+    const ids = new Set(allRows.map((r) => r.standard.id));
+    return standards.filter((s) => ids.has(s.id) || !allRows.length);
+  }, [standards, allRows]);
+
+  function downloadStandard(std: Standard) {
+    const list = allRows.filter((r) => r.standard.id === std.id);
+    if (!list.length) return;
+    exportRowsToExcel({
+      filename: `matriz-requisitos-${shortNorma(std.code)}`,
+      sheetName: shortNorma(std.code),
+      rows: toExportRows(list),
+      columnWidths: COL_WIDTHS,
+    });
+  }
+
+  function downloadBoth() {
+    const byStd = new Map<string, RequirementRow[]>();
+    for (const row of allRows) {
+      const key = row.standard.id;
+      const list = byStd.get(key);
+      if (list) list.push(row);
+      else byStd.set(key, [row]);
+    }
+    const sheets = Array.from(byStd.entries()).map(([id, list]) => {
+      const std = list[0]?.standard;
+      return {
+        sheetName: shortNorma(std?.code ?? id),
+        rows: toExportRows(list),
+        columnWidths: COL_WIDTHS,
+      };
+    });
+    if (!sheets.length) return;
+    exportWorkbookToExcel({
+      filename: "matriz-requisitos-SIG-normas",
+      sheets,
+    });
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f5f5]">
@@ -197,10 +276,43 @@ export default function SigRequisitosPage() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 p-4">
+            <span className="mr-1 text-sm font-medium text-slate-700">Descargar normas</span>
+            {downloadableStandards.map((s) => (
+              <Button
+                key={s.id}
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!allRows.some((r) => r.standard.id === s.id)}
+                onClick={() => downloadStandard(s)}
+                title={s.name}
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                {shortNorma(s.code)}
+              </Button>
+            ))}
+            <Button
+              type="button"
+              size="sm"
+              disabled={allRows.length === 0}
+              onClick={() => downloadBoth()}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Ambas (Excel)
+            </Button>
+            <p className="w-full text-xs text-slate-500">
+              Exporta la matriz de requisitos de cada norma (catálogo del SIG). No sustituye el texto
+              oficial ISO.
+            </p>
+          </CardContent>
+        </Card>
+
         {showIntegrated && !isLoading && (
           <p className="text-sm text-slate-600">
-            Vista integrada Anexo SL: misma cláusula (ej. 4.1) junta ISO 9001 e ISO 18788. Filtre por norma
-            si necesita verlas por separado.
+            Vista integrada Anexo SL: en cada cláusula se muestra el requisito de cada norma. Filtre por
+            norma si necesita verlas por separado.
           </p>
         )}
 
@@ -211,27 +323,26 @@ export default function SigRequisitosPage() {
         )}
 
         <Card>
-          <CardContent className="overflow-auto p-0">
-            <table className="w-full min-w-[1200px] text-sm">
-              <thead className="bg-slate-100 text-left text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-3 py-2">Estado</th>
-                  <th className="px-3 py-2">Normas</th>
-                  <th className="px-3 py-2">Código</th>
-                  <th className="px-3 py-2">Requisito</th>
-                  <th className="px-3 py-2 min-w-[220px]">Requisito esperado</th>
-                  <th className="px-3 py-2 min-w-[200px]">Observaciones</th>
-                  <th className="px-3 py-2">Procesos</th>
-                  <th className="px-3 py-2">Docs</th>
-                  <th className="px-3 py-2">Evidencias</th>
-                  <th className="px-3 py-2">NC</th>
-                  <th className="px-3 py-2 whitespace-nowrap">Últ. revisión</th>
+          <CardContent className="max-h-[calc(100vh-16rem)] overflow-auto p-0">
+            <table className="w-full min-w-[1280px] border-separate border-spacing-0 text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className={TH}>Estado</th>
+                  <th className={TH}>Normas</th>
+                  <th className={TH}>Código</th>
+                  <th className={`${TH} min-w-[280px]`}>Requisito por norma</th>
+                  <th className={`${TH} min-w-[200px]`}>Observaciones</th>
+                  <th className={TH}>Procesos</th>
+                  <th className={TH}>Docs</th>
+                  <th className={TH}>Evidencias</th>
+                  <th className={TH}>NC</th>
+                  <th className={`${TH} whitespace-nowrap`}>Últ. revisión</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={11} className="px-3 py-8 text-center text-slate-500">
+                    <td colSpan={10} className="px-3 py-8 text-center text-slate-500">
                       Cargando matriz...
                     </td>
                   </tr>
@@ -242,8 +353,8 @@ export default function SigRequisitosPage() {
                     const light = LIGHT[group.trafficLight];
                     const primary = group.items[0];
                     return (
-                      <tr key={group.code} className="border-t hover:bg-slate-50 align-top">
-                        <td className="px-3 py-2">
+                      <tr key={group.code} className="align-top hover:bg-slate-50">
+                        <td className="border-t px-3 py-2">
                           <span className={`rounded px-2 py-0.5 text-xs font-medium ${light.className}`}>
                             {light.label}
                           </span>
@@ -251,13 +362,13 @@ export default function SigRequisitosPage() {
                             <div className="mt-1 space-y-0.5">
                               {group.items.map((item) => (
                                 <div key={item.id} className="text-[11px] text-slate-500">
-                                  {item.standard.code.replace(/^ISO_/, "")}: {LIGHT[item.trafficLight].label}
+                                  {shortNorma(item.standard.code)}: {LIGHT[item.trafficLight].label}
                                 </div>
                               ))}
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="border-t px-3 py-2">
                           <div className="flex flex-wrap gap-1">
                             {group.items.map((item) => (
                               <Link
@@ -266,43 +377,43 @@ export default function SigRequisitosPage() {
                                 className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700 hover:bg-red-50 hover:text-red-800"
                                 title={item.standard.name}
                               >
-                                {item.standard.code.replace(/^ISO_/, "")}
+                                {shortNorma(item.standard.code)}
                               </Link>
                             ))}
                           </div>
                         </td>
-                        <td className="px-3 py-2 font-medium">
-                          <Link
-                            href={`/sig/requisitos/${primary.id}`}
-                            className="text-red-700 hover:underline"
-                          >
-                            {group.code}
-                          </Link>
+                        <td className="border-t px-3 py-2 font-medium">
+                          <span className="text-red-700">{group.code}</span>
                         </td>
-                        <td className="px-3 py-2">
-                          <div className="font-medium text-slate-800">{group.title}</div>
-                          {group.items.length > 1 && (
-                            <div className="mt-1 flex flex-col gap-0.5 text-xs">
-                              {group.items.map((item) => (
-                                <Link
-                                  key={item.id}
-                                  href={`/sig/requisitos/${item.id}`}
-                                  className="text-red-700 hover:underline"
+                        <td className="border-t px-3 py-2">
+                          <div className="space-y-2">
+                            {group.items.map((item) => (
+                              <Link
+                                key={item.id}
+                                href={`/sig/requisitos/${item.id}`}
+                                className="block rounded-md border border-slate-200 bg-white px-2.5 py-2 hover:border-red-200 hover:bg-red-50/40"
+                              >
+                                <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
+                                  <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                                    {shortNorma(item.standard.code)}
+                                  </span>
+                                  <span className="text-sm font-medium text-slate-900">{item.title}</span>
+                                </div>
+                                <p
+                                  className="text-xs leading-relaxed text-slate-600"
+                                  title={item.description ?? undefined}
                                 >
-                                  Abrir {item.standard.code.replace(/^ISO_/, "")}
-                                </Link>
-                              ))}
-                            </div>
-                          )}
+                                  {clip(item.description, 220)}
+                                </p>
+                              </Link>
+                            ))}
+                          </div>
                         </td>
-                        <td className="px-3 py-2 text-slate-600" title={group.description ?? undefined}>
-                          {clip(group.description, 140)}
+                        <td className="border-t px-3 py-2 text-slate-600" title={group.observations ?? undefined}>
+                          {clip(group.observations, 140)}
                         </td>
-                        <td className="px-3 py-2 text-slate-600" title={group.observations ?? undefined}>
-                          {clip(group.observations, 120)}
-                        </td>
-                        <td className="px-3 py-2">{group.processLinks}</td>
-                        <td className="px-3 py-2">
+                        <td className="border-t px-3 py-2">{group.processLinks}</td>
+                        <td className="border-t px-3 py-2">
                           <Link
                             href={`/sig/requisitos/${primary.id}#documentos`}
                             className="text-red-700 hover:underline"
@@ -310,7 +421,7 @@ export default function SigRequisitosPage() {
                             {group.documentLinks}
                           </Link>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="border-t px-3 py-2">
                           <Link
                             href={`/sig/requisitos/${primary.id}#evidencias`}
                             className="text-red-700 hover:underline"
@@ -318,14 +429,14 @@ export default function SigRequisitosPage() {
                             {group.evidenceLinks}
                           </Link>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="border-t px-3 py-2">
                           {group.openNcCount > 0 ? (
                             <Badge variant="danger">{group.openNcCount}</Badge>
                           ) : (
                             "0"
                           )}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-slate-600">
+                        <td className="border-t px-3 py-2 whitespace-nowrap text-slate-600">
                           {formatDate(group.lastRevisionAt)}
                         </td>
                       </tr>
@@ -336,31 +447,34 @@ export default function SigRequisitosPage() {
                   rows.map((row) => {
                     const light = LIGHT[row.trafficLight];
                     return (
-                      <tr key={row.id} className="border-t hover:bg-slate-50 align-top">
-                        <td className="px-3 py-2">
+                      <tr key={row.id} className="align-top hover:bg-slate-50">
+                        <td className="border-t px-3 py-2">
                           <span className={`rounded px-2 py-0.5 text-xs font-medium ${light.className}`}>
                             {light.label}
                           </span>
                         </td>
-                        <td className="px-3 py-2">{row.standard.code}</td>
-                        <td className="px-3 py-2 font-medium">
+                        <td className="border-t px-3 py-2">{row.standard.code}</td>
+                        <td className="border-t px-3 py-2 font-medium">
                           <Link href={`/sig/requisitos/${row.id}`} className="text-red-700 hover:underline">
                             {row.code}
                           </Link>
                         </td>
-                        <td className="px-3 py-2">
-                          <Link href={`/sig/requisitos/${row.id}`} className="hover:underline">
-                            {row.title}
+                        <td className="border-t px-3 py-2">
+                          <Link
+                            href={`/sig/requisitos/${row.id}`}
+                            className="block rounded-md border border-slate-200 bg-white px-2.5 py-2 hover:border-red-200 hover:bg-red-50/40"
+                          >
+                            <div className="mb-0.5 text-sm font-medium text-slate-900">{row.title}</div>
+                            <p className="text-xs leading-relaxed text-slate-600" title={row.description ?? undefined}>
+                              {clip(row.description, 220)}
+                            </p>
                           </Link>
                         </td>
-                        <td className="px-3 py-2 text-slate-600" title={row.description ?? undefined}>
-                          {clip(row.description, 140)}
+                        <td className="border-t px-3 py-2 text-slate-600" title={row.observations ?? undefined}>
+                          {clip(row.observations, 140)}
                         </td>
-                        <td className="px-3 py-2 text-slate-600" title={row.observations ?? undefined}>
-                          {clip(row.observations, 120)}
-                        </td>
-                        <td className="px-3 py-2">{row._count.processLinks}</td>
-                        <td className="px-3 py-2">
+                        <td className="border-t px-3 py-2">{row._count.processLinks}</td>
+                        <td className="border-t px-3 py-2">
                           <Link
                             href={`/sig/requisitos/${row.id}#documentos`}
                             className="text-red-700 hover:underline"
@@ -368,7 +482,7 @@ export default function SigRequisitosPage() {
                             {row._count.documentLinks}
                           </Link>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="border-t px-3 py-2">
                           <Link
                             href={`/sig/requisitos/${row.id}#evidencias`}
                             className="text-red-700 hover:underline"
@@ -376,14 +490,14 @@ export default function SigRequisitosPage() {
                             {row._count.evidenceLinks}
                           </Link>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="border-t px-3 py-2">
                           {row.openNcCount > 0 ? (
                             <Badge variant="danger">{row.openNcCount}</Badge>
                           ) : (
                             "0"
                           )}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-slate-600">
+                        <td className="border-t px-3 py-2 whitespace-nowrap text-slate-600">
                           {formatDate(row.lastRevisionAt)}
                         </td>
                       </tr>
