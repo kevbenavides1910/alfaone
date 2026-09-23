@@ -117,6 +117,7 @@ export {
   getSigStandardPdf,
   uploadSigStandardPdf,
 } from "./services/standards";
+export { locateStandardClausePage } from "./services/standard-pdf-locator";
 export {
   listSigRequirements,
   getSigRequirementDetail,

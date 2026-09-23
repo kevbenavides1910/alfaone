@@ -228,7 +228,14 @@ export default function SigRequisitosPage() {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
-  const [pdfViewer, setPdfViewer] = useState<{ standardId: string; label: string } | null>(null);
+  const [pdfViewer, setPdfViewer] = useState<{
+    standardId: string;
+    label: string;
+    clause?: string;
+    titleHint?: string;
+    page?: number | null;
+    locating?: boolean;
+  } | null>(null);
   const [editRow, setEditRow] = useState<RequirementRow | null>(null);
   const [editForm, setEditForm] = useState({
     description: "",
@@ -321,13 +328,50 @@ export default function SigRequisitosPage() {
     });
   }
 
-  function openPdfViewer(std: Standard) {
+  async function openPdfViewer(
+    std: Standard,
+    opts?: { clause?: string; titleHint?: string }
+  ) {
     setPdfError(null);
     if (!std.hasPdf) {
       setPdfError(`Primero suba el PDF oficial de ${shortNorma(std.code)}.`);
       return;
     }
-    setPdfViewer({ standardId: std.id, label: shortNorma(std.code) });
+    const clause = opts?.clause?.trim();
+    setPdfViewer({
+      standardId: std.id,
+      label: shortNorma(std.code),
+      clause: clause || undefined,
+      titleHint: opts?.titleHint,
+      page: null,
+      locating: Boolean(clause),
+    });
+    if (!clause) return;
+    try {
+      const params = new URLSearchParams({ clause });
+      if (opts?.titleHint?.trim()) params.set("title", opts.titleHint.trim());
+      const r = await fetch(`/api/sig/standards/${std.id}/pdf-page?${params}`, {
+        credentials: "same-origin",
+      });
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(json.error?.message ?? "No se pudo ubicar la cláusula");
+      const page = typeof json.data?.page === "number" ? json.data.page : null;
+      setPdfViewer((prev) =>
+        prev && prev.standardId === std.id && prev.clause === clause
+          ? { ...prev, page, locating: false }
+          : prev
+      );
+      if (page == null) {
+        setPdfError(
+          `No se encontró el apartado ${clause} en el PDF de ${shortNorma(std.code)}; se abre al inicio.`
+        );
+      }
+    } catch (e) {
+      setPdfViewer((prev) =>
+        prev && prev.standardId === std.id ? { ...prev, locating: false, page: null } : prev
+      );
+      setPdfError(e instanceof Error ? e.message : "Error ubicando la cláusula en el PDF");
+    }
   }
 
   async function onUploadPdf(std: Standard, file: File | null) {
@@ -689,7 +733,12 @@ export default function SigRequisitosPage() {
                                       <button
                                         type="button"
                                         className="inline-flex items-center gap-1 text-slate-600 hover:underline"
-                                        onClick={() => openPdfViewer(std)}
+                                        onClick={() =>
+                                          void openPdfViewer(std, {
+                                            clause: item.code,
+                                            titleHint: item.title,
+                                          })
+                                        }
                                       >
                                         <FileText className="h-3 w-3" /> Ver en la norma
                                       </button>
@@ -805,6 +854,16 @@ export default function SigRequisitosPage() {
           <DialogHeader>
             <DialogTitle className="flex flex-wrap items-center gap-2">
               Norma PDF
+              {pdfViewer?.clause && (
+                <span className="text-sm font-normal text-slate-600">
+                  · cláusula {pdfViewer.clause}
+                  {pdfViewer.locating
+                    ? " (ubicando…)"
+                    : pdfViewer.page
+                      ? ` · pág. ${pdfViewer.page}`
+                      : ""}
+                </span>
+              )}
               <div className="flex gap-1">
                 {normaStandards
                   .filter((s) => s.hasPdf)
@@ -814,7 +873,12 @@ export default function SigRequisitosPage() {
                       type="button"
                       size="sm"
                       variant={pdfViewer?.standardId === s.id ? "default" : "outline"}
-                      onClick={() => setPdfViewer({ standardId: s.id, label: shortNorma(s.code) })}
+                      onClick={() =>
+                        void openPdfViewer(s, {
+                          clause: pdfViewer?.clause,
+                          titleHint: pdfViewer?.titleHint,
+                        })
+                      }
                     >
                       {shortNorma(s.code)}
                     </Button>
@@ -822,12 +886,22 @@ export default function SigRequisitosPage() {
               </div>
             </DialogTitle>
           </DialogHeader>
-          {pdfViewer && (
+          {pdfViewer && !pdfViewer.locating && (
             <iframe
-              title={`PDF ${pdfViewer.label}`}
-              src={`/api/sig/standards/${pdfViewer.standardId}/pdf?inline=1`}
+              key={`${pdfViewer.standardId}-${pdfViewer.clause ?? ""}-${pdfViewer.page ?? 0}`}
+              title={`PDF ${pdfViewer.label}${pdfViewer.clause ? ` ${pdfViewer.clause}` : ""}`}
+              src={
+                pdfViewer.page
+                  ? `/api/sig/standards/${pdfViewer.standardId}/pdf?inline=1#page=${pdfViewer.page}`
+                  : `/api/sig/standards/${pdfViewer.standardId}/pdf?inline=1`
+              }
               className="min-h-0 w-full flex-1 rounded-md border border-slate-200 bg-slate-50"
             />
+          )}
+          {pdfViewer?.locating && (
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-600">
+              Buscando el apartado {pdfViewer.clause} en el PDF…
+            </div>
           )}
           <DialogFooter>
             {pdfViewer && (
