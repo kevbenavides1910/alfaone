@@ -158,7 +158,8 @@ export async function listSigRequirements(input: {
 
   const rows = await prisma.sigRequirement.findMany({
     where,
-    orderBy: [{ standard: { sortOrder: "asc" } }, { sortOrder: "asc" }, { code: "asc" }],
+    // Orden por cláusula (HLS), no por norma: la matriz integrada mezcla normas.
+    orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
     include: requirementListInclude,
   });
 
@@ -176,7 +177,7 @@ export async function listSigRequirements(input: {
         });
   const openNcMap = new Map(openNcGroups.map((g) => [g.requirementId, g._count._all]));
 
-  return rows.map((row): SigRequirementListItem => {
+  const mapped = rows.map((row): SigRequirementListItem => {
     const openNcCount = openNcMap.get(row.id) ?? 0;
     let trafficLight: SigRequirementListItem["trafficLight"] = "GRAY";
     if (!row.isApplicable) trafficLight = "GRAY";
@@ -192,6 +193,31 @@ export async function listSigRequirements(input: {
 
     return { ...row, openNcCount, trafficLight, lastRevisionAt };
   });
+
+  return mapped.sort((a, b) => {
+    const byClause = compareClauseCodes(a.code, b.code);
+    if (byClause !== 0) return byClause;
+    return a.standard.code.localeCompare(b.standard.code, "es");
+  });
+}
+
+/** Orden numérico de cláusulas tipo 4, 4.1, 7.1.5.2 (Anexo SL / HLS). */
+export function compareClauseCodes(a: string, b: string): number {
+  const pa = a.split(/[.\-_/]/).map((p) => {
+    const n = Number.parseInt(p, 10);
+    return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+  });
+  const pb = b.split(/[.\-_/]/).map((p) => {
+    const n = Number.parseInt(p, 10);
+    return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+  });
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const da = pa[i] ?? -1;
+    const db = pb[i] ?? -1;
+    if (da !== db) return da - db;
+  }
+  return a.localeCompare(b, "es");
 }
 
 export async function getSigRequirementDetail(id: string) {
