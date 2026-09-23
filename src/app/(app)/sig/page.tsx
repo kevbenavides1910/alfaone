@@ -74,26 +74,29 @@ export default function SigBibliotecaPage() {
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
 
-  const { data: typesData } = useQuery({
+  const { data: types = [] } = useQuery({
     queryKey: ["sig-tipos-filter"],
     queryFn: async () => {
       const r = await fetch("/api/sig/tipos-documento", { credentials: "same-origin" });
       if (!r.ok) throw new Error("Error al cargar tipos");
-      return r.json() as Promise<{ data: { id: string; name: string }[] }>;
+      const json = await r.json();
+      return (Array.isArray(json.data) ? json.data : []) as Array<{ id: string; name: string }>;
     },
   });
 
-  const { data: processesData } = useQuery({
-    queryKey: ["sig-procesos-filter"],
+  const { data: processes = [] } = useQuery({
+    queryKey: ["sig-procesos-options"],
     queryFn: async () => {
       const r = await fetch("/api/sig/procesos", { credentials: "same-origin" });
       if (!r.ok) throw new Error("Error al cargar procesos");
-      return r.json() as Promise<{ data: { id: string; name: string }[] }>;
+      const json = await r.json();
+      return (Array.isArray(json.data) ? json.data : []) as Array<{
+        id: string;
+        code?: string;
+        name: string;
+      }>;
     },
   });
-
-  const types = typesData?.data ?? [];
-  const processes = processesData?.data ?? [];
 
   const listUrl = useMemo(() => {
     const sp = new URLSearchParams();

@@ -58,7 +58,7 @@ export default function SigEvidenciasPage() {
   const [file, setFile] = useState<File | null>(null);
 
   const { data: processesRaw } = useQuery({
-    queryKey: ["sig-procesos-filter"],
+    queryKey: ["sig-procesos-options"],
     queryFn: async () => {
       const r = await fetch("/api/sig/procesos", { credentials: "same-origin" });
       if (!r.ok) return [] as Array<{ id: string; code: string; name: string }>;

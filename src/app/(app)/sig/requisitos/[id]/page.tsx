@@ -80,44 +80,50 @@ export default function SigRequisitoDetailPage() {
   const [suggesting, setSuggesting] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const { data: processes = [] } = useQuery({
-    queryKey: ["sig-procesos-filter"],
+  const { data: processesRaw } = useQuery({
+    queryKey: ["sig-procesos-options"],
     queryFn: async () => {
       const r = await fetch("/api/sig/procesos", { credentials: "same-origin" });
-      if (!r.ok) throw new Error("Error procesos");
+      if (!r.ok) return [] as Array<{ id: string; code: string; name: string }>;
       const json = await r.json();
-      return json.data as Array<{ id: string; code: string; name: string }>;
+      // Compat: caché vieja de Biblioteca guardaba `{ data: [...] }` completo.
+      if (Array.isArray(json.data)) return json.data as Array<{ id: string; code: string; name: string }>;
+      if (Array.isArray(json)) return json as Array<{ id: string; code: string; name: string }>;
+      return [] as Array<{ id: string; code: string; name: string }>;
     },
   });
+  const processes = Array.isArray(processesRaw)
+    ? processesRaw
+    : Array.isArray((processesRaw as { data?: unknown } | undefined)?.data)
+      ? ((processesRaw as { data: Array<{ id: string; code: string; name: string }> }).data)
+      : [];
 
-  const { data: documents = [] } = useQuery({
+  const { data: documentsRaw } = useQuery({
     queryKey: ["sig-docs-link"],
     queryFn: async () => {
       const r = await fetch("/api/sig/documents?pageSize=200", { credentials: "same-origin" });
-      if (!r.ok) throw new Error("Error documentos");
+      if (!r.ok) return [] as Array<{ id: string; code: string; title: string }>;
       const json = await r.json();
-      return (json.data?.rows ?? json.data?.items ?? json.data ?? []) as Array<{
-        id: string;
-        code: string;
-        title: string;
-      }>;
+      const rows = json.data?.rows ?? json.data?.items;
+      return (Array.isArray(rows) ? rows : []) as Array<{ id: string; code: string; title: string }>;
     },
   });
+  const documents = Array.isArray(documentsRaw) ? documentsRaw : [];
 
-  const { data: evidences = [] } = useQuery({
+  const { data: evidencesRaw } = useQuery({
     queryKey: ["sig-evidences-link"],
     queryFn: async () => {
       const r = await fetch("/api/sig/evidences", { credentials: "same-origin" });
-      if (!r.ok) throw new Error("Error evidencias");
+      if (!r.ok) return [] as Array<{ id: string; code: string; description: string }>;
       const json = await r.json();
-      const rows = (json.data?.rows ?? json.data?.items ?? json.data ?? []) as Array<{
+      return (Array.isArray(json.data) ? json.data : []) as Array<{
         id: string;
         code: string;
         description: string;
       }>;
-      return Array.isArray(rows) ? rows : [];
     },
   });
+  const evidences = Array.isArray(evidencesRaw) ? evidencesRaw : [];
 
   const { data, isLoading } = useQuery({
     queryKey: ["sig-requirement", id],
@@ -354,7 +360,7 @@ export default function SigRequisitoDetailPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <ul className="space-y-1 text-sm">
-              {data.processLinks.map((l) => (
+              {(data.processLinks ?? []).map((l) => (
                 <li key={l.id} className="flex items-center justify-between gap-2">
                   <span>
                     {l.process.code} — {l.process.name}
@@ -369,7 +375,7 @@ export default function SigRequisitoDetailPage() {
                   </Button>
                 </li>
               ))}
-              {data.processLinks.length === 0 && <li className="text-slate-500">Sin procesos vinculados</li>}
+              {(data.processLinks ?? []).length === 0 && <li className="text-slate-500">Sin procesos vinculados</li>}
             </ul>
             <form onSubmit={onLinkProcess} className="flex gap-2">
               <select
@@ -395,7 +401,7 @@ export default function SigRequisitoDetailPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <ul className="space-y-1 text-sm">
-              {data.documentLinks.map((l) => (
+              {(data.documentLinks ?? []).map((l) => (
                 <li key={l.id} className="flex items-center justify-between gap-2">
                   <div>
                     <Link href={`/sig/documentos/${l.document.id}`} className="text-red-700 hover:underline">
@@ -418,7 +424,7 @@ export default function SigRequisitoDetailPage() {
                   </Button>
                 </li>
               ))}
-              {data.documentLinks.length === 0 && (
+              {(data.documentLinks ?? []).length === 0 && (
                 <li className="text-slate-500">Sin documentos vinculados</li>
               )}
             </ul>
@@ -453,7 +459,7 @@ export default function SigRequisitoDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <ul className="space-y-2 text-sm">
-              {data.evidenceLinks.map((l) => (
+              {(data.evidenceLinks ?? []).map((l) => (
                 <li key={l.id} className="flex items-start justify-between gap-2">
                   <div>
                     <Link href="/sig/evidencias" className="font-medium text-red-700 hover:underline">
@@ -475,7 +481,7 @@ export default function SigRequisitoDetailPage() {
                   </Button>
                 </li>
               ))}
-              {data.evidenceLinks.length === 0 && <li className="text-slate-500">Sin evidencias</li>}
+              {(data.evidenceLinks ?? []).length === 0 && <li className="text-slate-500">Sin evidencias</li>}
             </ul>
 
             <form onSubmit={onLinkEvidence} className="flex gap-2">
@@ -551,7 +557,7 @@ export default function SigRequisitoDetailPage() {
           </CardHeader>
           <CardContent>
             <ul className="space-y-2 text-sm">
-              {data.findingLinks.map((l) => (
+              {(data.findingLinks ?? []).map((l) => (
                 <li key={l.id}>
                   <Link href={`/audits/${l.finding.auditId}`} className="text-red-700 hover:underline">
                     {l.finding.title}
@@ -562,7 +568,7 @@ export default function SigRequisitoDetailPage() {
                   </Badge>
                 </li>
               ))}
-              {data.findingLinks.length === 0 && <li className="text-slate-500">Sin hallazgos</li>}
+              {(data.findingLinks ?? []).length === 0 && <li className="text-slate-500">Sin hallazgos</li>}
             </ul>
           </CardContent>
         </Card>

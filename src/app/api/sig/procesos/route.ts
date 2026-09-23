@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
     !hasPermission(session, "sig.biblioteca", "view") &&
     !hasPermission(session, "sig.evidencias", "view") &&
     !hasPermission(session, "sig.controles", "view") &&
-    !hasPermission(session, "sig.riesgos", "view")
+    !hasPermission(session, "sig.riesgos", "view") &&
+    !hasPermission(session, "sig.requisitos", "view")
   ) {
     return forbidden();
   }

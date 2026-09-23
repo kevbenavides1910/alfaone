@@ -50,7 +50,7 @@ export default function SigControlesPage() {
   });
 
   const { data: processes = [] } = useQuery({
-    queryKey: ["sig-procesos-filter"],
+    queryKey: ["sig-procesos-options"],
     queryFn: async () => {
       const r = await fetch("/api/sig/procesos", { credentials: "same-origin" });
       if (!r.ok) throw new Error("Error procesos");
