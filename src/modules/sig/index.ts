@@ -34,6 +34,18 @@ export {
   markSigDocumentObsolete,
 } from "./services/document-approval";
 export {
+  supersedeSigDocument,
+  createSigReadCampaign,
+  listPendingSigReadAcks,
+  acknowledgeSigDocumentRead,
+  listCampaignAcks,
+} from "./services/document-lifecycle";
+export { getCapaEfficacyDashboard } from "./services/capa-dashboard";
+export {
+  getManagementReviewLiveInputs,
+  refreshManagementReviewInputsFromLive,
+} from "./services/management-review-live";
+export {
   getSigProcedureContent,
   getSigProcedureByCodeOrId,
   bootstrapProcedureFromExtractedText,

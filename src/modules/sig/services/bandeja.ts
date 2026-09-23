@@ -2,6 +2,9 @@ import type { SigChangeRequestStatus } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
 import { listPendingSigApprovals } from "./documents-list";
 import { listSigRevisionReminders } from "./revision-reminders";
+import { listSigIndicators } from "./indicators";
+import { listPendingSigReadAcks } from "./document-lifecycle";
+import { getCapaEfficacyDashboard } from "./capa-dashboard";
 
 const changeRequestInclude = {
   document: {
@@ -57,13 +60,36 @@ export async function listSigChangeRequestsInbox(opts?: {
   };
 }
 
-/** Bandeja unificada: aprobaciones + solicitudes + vigencias. */
+/** Bandeja unificada: aprobaciones + solicitudes + vigencias + indicadores + lecturas + CAPA. */
 export async function getSigBandeja(userId: string, withinDays = 30) {
-  const [approvals, changeRequests, revisions] = await Promise.all([
-    listPendingSigApprovals(userId, 1, 50),
-    listSigChangeRequestsInbox({ status: "OPEN", pageSize: 50 }),
-    listSigRevisionReminders(withinDays),
-  ]);
+  const [approvals, changeRequests, revisions, indicators, pendingReads, capa] =
+    await Promise.all([
+      listPendingSigApprovals(userId, 1, 50),
+      listSigChangeRequestsInbox({ status: "OPEN", pageSize: 50 }),
+      listSigRevisionReminders(withinDays),
+      listSigIndicators({ status: "ACTIVE" }),
+      listPendingSigReadAcks(userId),
+      getCapaEfficacyDashboard({ year: new Date().getFullYear() }),
+    ]);
+
+  const alertIndicators = indicators
+    .filter(
+      (i) =>
+        i.trafficLight === "RED" ||
+        i.trafficLight === "YELLOW" ||
+        i.measurementOverdue
+    )
+    .slice(0, 20)
+    .map((i) => ({
+      id: i.id,
+      code: i.code,
+      title: i.title,
+      trafficLight: i.trafficLight,
+      measurementOverdue: i.measurementOverdue,
+      latestValue: i.latestValue,
+      targetValue: i.targetValue,
+      process: i.process,
+    }));
 
   return {
     approvals,
@@ -72,6 +98,22 @@ export async function getSigBandeja(userId: string, withinDays = 30) {
       total: revisions.length,
       overdue: revisions.filter((r) => r.isOverdue).length,
       rows: revisions.slice(0, 50),
+    },
+    indicators: {
+      red: alertIndicators.filter((i) => i.trafficLight === "RED").length,
+      yellow: alertIndicators.filter((i) => i.trafficLight === "YELLOW").length,
+      overdueMeasurements: alertIndicators.filter((i) => i.measurementOverdue).length,
+      rows: alertIndicators,
+    },
+    pendingReads: {
+      total: pendingReads.length,
+      rows: pendingReads,
+    },
+    capa: {
+      openFindings: capa.findings.open,
+      overdueActions: capa.actions.overdue,
+      closurePct: capa.findings.closurePct,
+      efficacyPending: capa.efficacy.pending,
     },
   };
 }

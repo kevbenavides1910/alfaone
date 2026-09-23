@@ -42,6 +42,7 @@ export const createEvidenceSchema = z.object({
   findingId: z.string().optional().nullable(),
   actionPlanId: z.string().optional().nullable(),
   actionPlanRole: sigEvidenceLinkRoleSchema.optional(),
+  controlId: z.string().optional().nullable(),
 });
 
 export const updateEvidenceSchema = z.object({
@@ -60,6 +61,7 @@ export const linkEvidenceSchema = z.object({
   findingId: z.string().optional(),
   actionPlanId: z.string().optional(),
   actionPlanRole: sigEvidenceLinkRoleSchema.optional(),
+  controlId: z.string().optional(),
 });
 
 export type CreateEvidenceInput = z.infer<typeof createEvidenceSchema>;

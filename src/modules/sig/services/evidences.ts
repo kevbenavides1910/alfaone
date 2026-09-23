@@ -30,6 +30,11 @@ const evidenceInclude = {
   checklistLinks: { select: { id: true, checklistItemId: true } },
   findingLinks: { select: { id: true, findingId: true } },
   actionPlanLinks: { select: { id: true, actionPlanId: true, role: true } },
+  controlLinks: {
+    include: {
+      control: { select: { id: true, code: true, title: true } },
+    },
+  },
 } satisfies Prisma.SigEvidenceInclude;
 
 function trimText(value: string | null | undefined, max = 4000) {
@@ -107,6 +112,7 @@ export async function createSigEvidence(input: {
   findingId?: string | null;
   actionPlanId?: string | null;
   actionPlanRole?: SigEvidenceLinkRole;
+  controlId?: string | null;
   file?: {
     buffer: Buffer;
     fileName: string;
@@ -192,6 +198,13 @@ export async function createSigEvidence(input: {
       })
     );
   }
+  if (input.controlId) {
+    links.push(
+      prisma.sigControlEvidence.create({
+        data: { evidenceId: evidence.id, controlId: input.controlId },
+      })
+    );
+  }
   if (links.length) await prisma.$transaction(links);
 
   return getSigEvidenceDetail(evidence.id);
@@ -234,6 +247,7 @@ export async function linkSigEvidence(
     findingId?: string;
     actionPlanId?: string;
     actionPlanRole?: SigEvidenceLinkRole;
+    controlId?: string;
   }
 ) {
   if (input.requirementId) {
@@ -282,6 +296,15 @@ export async function linkSigEvidence(
         },
       },
       create: { evidenceId, actionPlanId: input.actionPlanId, role },
+      update: {},
+    });
+  }
+  if (input.controlId) {
+    await prisma.sigControlEvidence.upsert({
+      where: {
+        controlId_evidenceId: { controlId: input.controlId, evidenceId },
+      },
+      create: { controlId: input.controlId, evidenceId },
       update: {},
     });
   }

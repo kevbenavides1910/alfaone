@@ -141,6 +141,9 @@ export function SigAuditsDashboard() {
           <Button variant="outline" asChild>
             <Link href="/sig/auditorias/programa">Programa anual (F-SIG-21)</Link>
           </Button>
+          <Button variant="outline" asChild>
+            <Link href="/sig/auditorias/capa">Tablero CAPA</Link>
+          </Button>
           <Input
             className="w-28"
             type="number"

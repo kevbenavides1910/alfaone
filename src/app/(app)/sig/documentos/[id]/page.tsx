@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -33,6 +34,10 @@ interface DocDetail {
   title: string;
   status: string;
   revisionIntervalDays: number | null;
+  obsoleteAt: string | null;
+  obsoleteReason: string | null;
+  supersededBy: { id: string; code: string; title: string; status: string } | null;
+  supersedes: { id: string; code: string; title: string; status: string }[];
   documentType: { id: string; name: string };
   process: { id: string; name: string } | null;
   currentVersion: {
@@ -72,6 +77,7 @@ export default function SigDocumentoDetailPage() {
   const { data: session } = useSession();
   const canUpload = hasPermission(session, "sig.documentos", "edit");
   const canSameVersion = hasPermission(session, "sig.documentos", "admin");
+  const canObsolete = hasPermission(session, "sig.documentos", "admin");
   const canEditMetadata =
     hasPermission(session, "sig.biblioteca", "edit") ||
     hasPermission(session, "sig.documentos", "edit");
@@ -153,6 +159,8 @@ export default function SigDocumentoDetailPage() {
   });
   const [approveNotes, setApproveNotes] = useState("");
   const [rejectNote, setRejectNote] = useState("");
+  const [obsoleteNotes, setObsoleteNotes] = useState("");
+  const [supersededById, setSupersededById] = useState("");
   const [msg, setMsg] = useState("");
   const [editingProcedure, setEditingProcedure] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
@@ -385,6 +393,34 @@ export default function SigDocumentoDetailPage() {
     onError: (e: Error) => setMsg(e.message),
   });
 
+  const obsoleteMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/sig/documents/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "obsolete",
+          notes: obsoleteNotes || undefined,
+          supersededById: supersededById.trim() || undefined,
+        }),
+        credentials: "same-origin",
+      });
+      const json = await r.json();
+      if (!r.ok) throw new Error(json?.error?.message ?? "Error al obsoleter");
+    },
+    onSuccess: () => {
+      setMsg(
+        supersededById.trim()
+          ? "Documento sustituido; se creó campaña de lectura si hubo destinatarios"
+          : "Documento marcado como obsoleto"
+      );
+      setObsoleteNotes("");
+      setSupersededById("");
+      invalidate();
+    },
+    onError: (e: Error) => setMsg(e.message),
+  });
+
   if (isLoading) {
     return (
       <>
@@ -570,6 +606,95 @@ export default function SigDocumentoDetailPage() {
             )}
           </CardContent>
         </Card>
+
+        {(doc.supersededBy || (doc.supersedes?.length ?? 0) > 0 || doc.status === "OBSOLETE") && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Sustitución / obsolescencia</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {doc.supersededBy && (
+                <p>
+                  Sustituido por{" "}
+                  <Link href={`/sig/documentos/${doc.supersededBy.id}`} className="text-teal-800 hover:underline font-mono">
+                    {doc.supersededBy.code}
+                  </Link>{" "}
+                  — {doc.supersededBy.title}
+                </p>
+              )}
+              {doc.obsoleteReason && (
+                <p className="text-muted-foreground">{doc.obsoleteReason}</p>
+              )}
+              {doc.obsoleteAt && (
+                <p className="text-xs text-muted-foreground">Desde {formatDate(doc.obsoleteAt)}</p>
+              )}
+              {(doc.supersedes?.length ?? 0) > 0 && (
+                <div>
+                  <p className="font-medium mb-1">Sustituye a:</p>
+                  <ul className="space-y-1">
+                    {doc.supersedes.map((s) => (
+                      <li key={s.id}>
+                        <Link href={`/sig/documentos/${s.id}`} className="text-teal-800 hover:underline font-mono">
+                          {s.code}
+                        </Link>{" "}
+                        — {s.title}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {canObsolete && doc.status !== "OBSOLETE" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Marcar obsoleto / sustituir</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div>
+                <Label className="text-xs">Motivo</Label>
+                <Input
+                  value={obsoleteNotes}
+                  onChange={(e) => setObsoleteNotes(e.target.value)}
+                  placeholder="Razón de obsolescencia"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">ID del documento sustituto (opcional)</Label>
+                <Input
+                  value={supersededById}
+                  onChange={(e) => setSupersededById(e.target.value)}
+                  placeholder="cuid del documento B vigente"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Si indica sustituto, A queda obsoleto enlazado a B. Agregue lecturas desde bandeja o API
+                  `/api/sig/readings` con destinatarios.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      supersededById.trim()
+                        ? "¿Sustituir este documento por el indicado y marcarlo obsoleto?"
+                        : "¿Marcar este documento como obsoleto?"
+                    )
+                  ) {
+                    return;
+                  }
+                  obsoleteMutation.mutate();
+                }}
+                disabled={obsoleteMutation.isPending}
+              >
+                {obsoleteMutation.isPending ? "Procesando…" : "Obsoleter"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {procedureLoading && (
           <p className="text-sm text-muted-foreground">Cargando procedimiento…</p>

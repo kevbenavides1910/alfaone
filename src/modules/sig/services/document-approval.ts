@@ -129,18 +129,7 @@ export async function rejectSigDocument(
   });
 }
 
-export async function markSigDocumentObsolete(documentId: string, actorId: string, notes?: string) {
-  return prisma.$transaction(async (tx) => {
-    await tx.sigDocument.update({
-      where: { id: documentId },
-      data: { status: "OBSOLETE" },
-    });
-
-    await writeSigAuditLog(tx, {
-      documentId,
-      action: "OBSOLETED",
-      actorId,
-      notes: notes?.trim().slice(0, 4000) ?? "Documento marcado como obsoleto",
-    });
-  });
-}
+export {
+  markSigDocumentObsolete,
+  supersedeSigDocument,
+} from "./document-lifecycle";

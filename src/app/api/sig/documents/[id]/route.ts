@@ -22,6 +22,7 @@ function serializeDetail(doc: NonNullable<Awaited<ReturnType<typeof getSigDocume
     ...doc,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
+    obsoleteAt: doc.obsoleteAt?.toISOString() ?? null,
     currentVersion: doc.currentVersion
       ? {
           ...doc.currentVersion,
@@ -70,7 +71,13 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const body = await req.json();
     if (body.action === "obsolete") {
       if (!hasPermission(session, "sig.documentos", "admin")) return forbidden();
-      await markSigDocumentObsolete(id, session.user.id, body.notes);
+      await markSigDocumentObsolete(id, session.user.id, body.notes, {
+        supersededById:
+          typeof body.supersededById === "string" ? body.supersededById : null,
+        assigneeUserIds: Array.isArray(body.assigneeUserIds)
+          ? body.assigneeUserIds.filter((x: unknown) => typeof x === "string")
+          : undefined,
+      });
       const doc = await getSigDocumentDetail(id);
       if (!doc) return notFound();
       return ok(serializeDetail(doc));

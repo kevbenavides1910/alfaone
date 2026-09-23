@@ -50,6 +50,15 @@ export async function GET(req: NextRequest) {
         })),
       },
       revisions: data.revisions,
+      indicators: data.indicators,
+      pendingReads: {
+        ...data.pendingReads,
+        rows: data.pendingReads.rows.map((r) => ({
+          ...r,
+          dueDate: r.dueDate?.toISOString?.() ?? r.dueDate ?? null,
+        })),
+      },
+      capa: data.capa,
     });
   } catch (e) {
     return serverError("Error al cargar bandeja SIG", e);

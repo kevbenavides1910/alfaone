@@ -283,6 +283,9 @@ model User {
   disciplinaryBatches                    DisciplinaryImportBatch[]     @relation("DisciplinaryBatchUploader")
   employeeImportBatches                  EmployeeImportBatch[]         @relation("EmployeeBatchUploader")
   sigDocumentsCreated                    SigDocument[]                 @relation("SigDocumentCreator")
+  sigReadCampaignsCreated                SigDocumentReadCampaign[]     @relation("SigReadCampaignCreator")
+  sigReadAssignees                       SigDocumentReadAssignee[]     @relation("SigReadAssigneeUser")
+  sigDocumentAcknowledgments             SigDocumentAcknowledgment[]   @relation("SigDocumentAckUser")
   sigVersionsUploaded                    SigDocumentVersion[]          @relation("SigVersionUploader")
   sigVersionsApproved                    SigDocumentVersion[]          @relation("SigVersionApprover")
   sigVersionsAssigned                    SigDocumentVersion[]          @relation("SigVersionAssignedApprover")
@@ -2059,6 +2062,12 @@ model SigDocument {
   currentVersion       SigDocumentVersion? @relation("SigCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
   /// Días entre revisiones esperadas (recordatorio).
   revisionIntervalDays Int?
+  /// Documento B que sustituye a este (A obsoleto → B vigente).
+  supersededById       String?
+  supersededBy         SigDocument?  @relation("SigDocSupersede", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes           SigDocument[] @relation("SigDocSupersede")
+  obsoleteAt           DateTime?
+  obsoleteReason       String?       @db.Text
   createdById          String
   createdBy            User                @relation("SigDocumentCreator", fields: [createdById], references: [id], onDelete: Restrict)
   createdAt            DateTime            @default(now())
@@ -2072,12 +2081,72 @@ model SigDocument {
   controlLinks     SigControlDocument[]
   programItems     AuditProgramItem[]
   legalLinks       SigLegalDocument[]
+  readCampaigns    SigDocumentReadCampaign[] @relation("SigReadCampaignDocument")
+  readCampaignsAsSuperseded SigDocumentReadCampaign[] @relation("SigReadCampaignSupersedes")
+  acknowledgments  SigDocumentAcknowledgment[]
 
   @@index([documentTypeId])
   @@index([processId])
   @@index([status])
   @@index([company])
+  @@index([supersededById])
   @@map("sig_documents")
+}
+
+/// Campaña de lectura obligatoria (p. ej. tras sustituir un procedimiento).
+model SigDocumentReadCampaign {
+  id                   String    @id @default(cuid())
+  documentId           String
+  document             SigDocument @relation("SigReadCampaignDocument", fields: [documentId], references: [id], onDelete: Cascade)
+  versionId            String?
+  version              SigDocumentVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  supersedesDocumentId String?
+  supersedesDocument   SigDocument? @relation("SigReadCampaignSupersedes", fields: [supersedesDocumentId], references: [id], onDelete: SetNull)
+  title                String
+  dueDate              DateTime?
+  createdById          String
+  createdBy            User      @relation("SigReadCampaignCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  assignees        SigDocumentReadAssignee[]
+  acknowledgments  SigDocumentAcknowledgment[]
+
+  @@index([documentId])
+  @@index([dueDate])
+  @@map("sig_document_read_campaigns")
+}
+
+model SigDocumentReadAssignee {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   SigDocumentReadCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation("SigReadAssigneeUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([campaignId, userId])
+  @@index([userId])
+  @@map("sig_document_read_assignees")
+}
+
+model SigDocumentAcknowledgment {
+  id             String   @id @default(cuid())
+  campaignId     String
+  campaign       SigDocumentReadCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation("SigDocumentAckUser", fields: [userId], references: [id], onDelete: Cascade)
+  versionId      String?
+  version        SigDocumentVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  documentId     String?
+  document       SigDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  acknowledgedAt DateTime @default(now())
+  note           String?  @db.Text
+
+  @@unique([campaignId, userId])
+  @@index([userId])
+  @@index([documentId])
+  @@map("sig_document_acknowledgments")
 }
 
 enum AuditStatus {
@@ -3269,6 +3338,8 @@ model SigDocumentVersion {
   procedureBody SigProcedureBody?
   procedureStages SigProcedureStage[]
   procedureActivities SigProcedureActivity[]
+  readCampaigns SigDocumentReadCampaign[]
+  acknowledgments SigDocumentAcknowledgment[]
 
   @@unique([documentId, versionNumber])
   @@index([documentId])

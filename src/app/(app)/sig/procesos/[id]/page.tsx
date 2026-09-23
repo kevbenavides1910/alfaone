@@ -48,7 +48,16 @@ type Dossier = {
     standard: { code: string };
     _count: { evidenceLinks: number; findingLinks: number };
   }>;
-  evidences: Array<{ id: string; code: string; description: string; evidenceDate: string; type: string }>;
+  evidences: Array<{
+    id: string;
+    code: string;
+    description: string;
+    evidenceDate: string;
+    type: string;
+    controls?: Array<{ id: string; code: string; title: string }>;
+    requirements?: Array<{ id: string; code: string; title: string }>;
+    findingIds?: string[];
+  }>;
   controls: Array<{
     id: string;
     code: string;
@@ -384,9 +393,31 @@ export default function SigProcessDossierPage() {
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               {data.evidences.slice(0, 20).map((e) => (
-                <div key={e.id}>
-                  <span className="font-medium">{e.code}</span> — {e.description.slice(0, 80)}{" "}
-                  <span className="text-xs text-slate-500">{formatDate(e.evidenceDate)}</span>
+                <div key={e.id} className="space-y-0.5">
+                  <div>
+                    <Link href={`/sig/evidencias/${e.id}`} className="font-medium text-red-700 hover:underline">
+                      {e.code}
+                    </Link>{" "}
+                    — {e.description.slice(0, 80)}{" "}
+                    <span className="text-xs text-slate-500">{formatDate(e.evidenceDate)}</span>
+                  </div>
+                  {(e.controls?.length || e.requirements?.length || e.findingIds?.length) ? (
+                    <div className="flex flex-wrap gap-1 text-xs text-slate-500">
+                      {e.controls?.map((c) => (
+                        <Link key={c.id} href={`/sig/controles/${c.id}`} className="hover:underline">
+                          Ctrl {c.code}
+                        </Link>
+                      ))}
+                      {e.requirements?.map((r) => (
+                        <Link key={r.id} href={`/sig/requisitos/${r.id}`} className="hover:underline">
+                          Req {r.code}
+                        </Link>
+                      ))}
+                      {(e.findingIds?.length ?? 0) > 0 && (
+                        <span>{e.findingIds!.length} hallazgo(s)</span>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               ))}
               {data.evidences.length === 0 && <p className="text-slate-500">Sin evidencias</p>}

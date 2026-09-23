@@ -11,6 +11,10 @@ import {
   updateSigManagementReviewInput,
 } from "@/modules/sig";
 import {
+  getManagementReviewLiveInputs,
+  refreshManagementReviewInputsFromLive,
+} from "@/modules/sig/services/management-review-live";
+import {
   createManagementReviewActionSchema,
   linkManagementReviewSchema,
   updateManagementReviewActionSchema,
@@ -25,8 +29,12 @@ function paramId(params: Record<string, string | string[]>) {
 
 export const GET = apiHandler(
   { permission: ["sig.revisionDireccion", "view"], errorLabel: "Error consultando revisión por la dirección" },
-  async ({ params }) => {
-    const row = await getSigManagementReviewDetail(paramId(await params));
+  async ({ req, params }) => {
+    const id = paramId(await params);
+    if (req.nextUrl.searchParams.get("live") === "1") {
+      return ok(await getManagementReviewLiveInputs(id));
+    }
+    const row = await getSigManagementReviewDetail(id);
     if (!row) return notFound("Revisión no encontrada");
     return ok(row);
   }
@@ -57,6 +65,11 @@ export const POST = apiHandler(
     const action = body?.action as string | undefined;
 
     try {
+      if (action === "refresh-inputs") {
+        const live = await refreshManagementReviewInputsFromLive(id, "");
+        const detail = await getSigManagementReviewDetail(id);
+        return ok({ detail, live });
+      }
       if (action === "update-input") {
         const parsed = updateManagementReviewInputSchema.safeParse(body);
         if (!parsed.success) return badRequest("Datos de entrada inválidos", parsed.error.flatten());

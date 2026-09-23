@@ -146,6 +146,26 @@ export default function SigRevisionDireccionDetailPage() {
     },
   });
 
+  const { data: liveData } = useQuery({
+    queryKey: ["sig-management-review-live", id],
+    queryFn: async () => {
+      const r = await fetch(`/api/sig/management-reviews/${id}?live=1`, {
+        credentials: "same-origin",
+      });
+      if (!r.ok) throw new Error("Error al cargar entradas vivas");
+      const json = await r.json();
+      return json.data as {
+        blocks: Array<{
+          key: string;
+          label: string;
+          summary: string;
+          counts: Record<string, number>;
+          links: Array<{ href: string; label: string }>;
+        }>;
+      };
+    },
+  });
+
   useEffect(() => {
     if (!data) return;
     setEdit({
@@ -174,6 +194,7 @@ export default function SigRevisionDireccionDetailPage() {
       const json = await r.json();
       if (!r.ok) throw new Error(json.error?.message ?? "Operación fallida");
       await qc.invalidateQueries({ queryKey: ["sig-management-review", id] });
+      await qc.invalidateQueries({ queryKey: ["sig-management-review-live", id] });
       await qc.invalidateQueries({ queryKey: ["sig-management-reviews"] });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
@@ -372,10 +393,40 @@ export default function SigRevisionDireccionDetailPage() {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-base">Entradas ISO 9.3.2</CardTitle>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={saving}
+              onClick={() => void postAction({ action: "refresh-inputs" })}
+            >
+              Rellenar desde datos vivos
+            </Button>
           </CardHeader>
           <CardContent className="space-y-3">
+            {liveData?.blocks && liveData.blocks.length > 0 && (
+              <div className="rounded-md border border-teal-100 bg-teal-50/50 p-3 space-y-2 text-sm">
+                <p className="font-medium text-teal-900">Resumen vivo del SGC</p>
+                {liveData.blocks.map((b) => (
+                  <div key={b.key} className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{b.label}</span>
+                      <span className="text-muted-foreground">{b.summary}</span>
+                    </div>
+                    {b.links.length > 0 && (
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        {b.links.map((l) => (
+                          <Link key={l.href + l.label} href={l.href} className="text-teal-800 hover:underline">
+                            {l.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             {data.inputs.map((input) => (
               <div key={input.id} className="rounded-md border bg-white p-3">
                 <label className="flex items-start gap-2 text-sm font-medium">

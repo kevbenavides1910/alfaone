@@ -254,6 +254,8 @@ export async function getSigDocumentDetail(documentId: string) {
       process: true,
       companyEntity: { select: { code: true, name: true } },
       createdBy: { select: { id: true, name: true, email: true } },
+      supersededBy: { select: { id: true, code: true, title: true, status: true } },
+      supersedes: { select: { id: true, code: true, title: true, status: true } },
       currentVersion: {
         include: {
           uploadedBy: { select: { id: true, name: true } },

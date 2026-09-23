@@ -64,9 +64,25 @@ export async function getSigProcessDossier(processId: string) {
       },
     }),
     prisma.sigEvidence.findMany({
-      where: { processId, status: "ACTIVE" },
+      where: {
+        status: "ACTIVE",
+        OR: [
+          { processId },
+          { controlLinks: { some: { control: { OR: [{ processId }, { processLinks: { some: { processId } } }] } } } },
+          {
+            requirementLinks: {
+              some: { requirement: { processLinks: { some: { processId } } } },
+            },
+          },
+          {
+            findingLinks: {
+              some: { finding: { audit: { procedure: { processId } } } },
+            },
+          },
+        ],
+      },
       orderBy: [{ evidenceDate: "desc" }],
-      take: 100,
+      take: 120,
       select: {
         id: true,
         code: true,
@@ -75,6 +91,14 @@ export async function getSigProcessDossier(processId: string) {
         evidenceDate: true,
         validUntil: true,
         status: true,
+        processId: true,
+        controlLinks: {
+          select: { control: { select: { id: true, code: true, title: true } } },
+        },
+        requirementLinks: {
+          select: { requirement: { select: { id: true, code: true, title: true } } },
+        },
+        findingLinks: { select: { findingId: true } },
       },
     }),
     prisma.sigControl.findMany({
@@ -374,7 +398,19 @@ export async function getSigProcessDossier(processId: string) {
     procedures,
     documents,
     requirements,
-    evidences,
+    evidences: evidences.map((e) => ({
+      id: e.id,
+      code: e.code,
+      type: e.type,
+      description: e.description,
+      evidenceDate: e.evidenceDate,
+      validUntil: e.validUntil,
+      status: e.status,
+      processId: e.processId,
+      controls: e.controlLinks.map((l) => l.control),
+      requirements: e.requirementLinks.map((l) => l.requirement),
+      findingIds: e.findingLinks.map((l) => l.findingId),
+    })),
     controls,
     risks,
     legalRequirements,
