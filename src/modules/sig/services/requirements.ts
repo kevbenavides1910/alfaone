@@ -1,25 +1,34 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
+import {
+  COMPLIANCE_LABEL,
+  computeRequirementTraffic,
+  type RequirementComplianceReason,
+  type RequirementTrafficLight,
+} from "../business/requirement-traffic";
 
 const requirementListInclude = {
   standard: { select: { id: true, code: true, name: true, year: true } },
   parent: { select: { id: true, code: true, title: true } },
   documentLinks: {
-    take: 5,
+    take: 8,
     include: {
       document: {
         select: {
           id: true,
           code: true,
-          currentVersion: { select: { revisionDate: true } },
+          status: true,
+          currentVersion: { select: { revisionDate: true, effectiveUntil: true } },
         },
       },
     },
   },
   evidenceLinks: {
-    take: 5,
+    take: 8,
     include: {
-      evidence: { select: { id: true, evidenceDate: true } },
+      evidence: {
+        select: { id: true, evidenceDate: true, validUntil: true, status: true },
+      },
     },
   },
   _count: {
@@ -103,7 +112,9 @@ export type SigRequirementListItem = Prisma.SigRequirementGetPayload<{
   include: typeof requirementListInclude;
 }> & {
   openNcCount: number;
-  trafficLight: "RED" | "YELLOW" | "GREEN" | "GRAY";
+  trafficLight: RequirementTrafficLight;
+  complianceReason: RequirementComplianceReason;
+  complianceLabel: string;
   /** Máx(lastReviewedAt, docs.revisionDate, evidencias.evidenceDate) */
   lastRevisionAt: string | null;
 };
@@ -170,21 +181,50 @@ export async function listSigRequirements(input: {
         });
   const openNcMap = new Map(openNcGroups.map((g) => [g.requirementId, g._count._all]));
 
+  const now = new Date();
   const mapped = rows.map((row): SigRequirementListItem => {
     const openNcCount = openNcMap.get(row.id) ?? 0;
-    let trafficLight: SigRequirementListItem["trafficLight"] = "GRAY";
-    if (!row.isApplicable) trafficLight = "GRAY";
-    else if (openNcCount > 0) trafficLight = "RED";
-    else if (row._count.evidenceLinks > 0 || row._count.documentLinks > 0) trafficLight = "GREEN";
-    else trafficLight = "YELLOW";
 
-    const lastRevisionAt = maxIsoDate([
-      row.lastReviewedAt,
-      ...row.documentLinks.map((l) => l.document.currentVersion?.revisionDate ?? null),
-      ...row.evidenceLinks.map((l) => l.evidence.evidenceDate),
-    ]);
+    const activeDocs = row.documentLinks.filter((l) => l.document.status === "APPROVED");
+    const activeEvidences = row.evidenceLinks.filter((l) => l.evidence.status === "ACTIVE");
+    const hasProofLinks = activeDocs.length > 0 || activeEvidences.length > 0;
 
-    return { ...row, openNcCount, trafficLight, lastRevisionAt };
+    const hasExpiredProof =
+      activeEvidences.some(
+        (l) => l.evidence.validUntil && l.evidence.validUntil.getTime() < now.getTime()
+      ) ||
+      activeEvidences.some((l) => l.evidence.status === "EXPIRED") ||
+      row.evidenceLinks.some((l) => l.evidence.status === "EXPIRED");
+
+    const { trafficLight, complianceReason, lastProofAt } = computeRequirementTraffic({
+      isApplicable: row.isApplicable,
+      openNcCount,
+      hasProofLinks,
+      hasExpiredProof,
+      proofDates: [
+        row.lastReviewedAt,
+        ...activeDocs.map((l) => l.document.currentVersion?.revisionDate ?? null),
+        ...activeEvidences.map((l) => l.evidence.evidenceDate),
+      ],
+      now,
+    });
+
+    const lastRevisionAt =
+      lastProofAt ??
+      maxIsoDate([
+        row.lastReviewedAt,
+        ...row.documentLinks.map((l) => l.document.currentVersion?.revisionDate ?? null),
+        ...row.evidenceLinks.map((l) => l.evidence.evidenceDate),
+      ]);
+
+    return {
+      ...row,
+      openNcCount,
+      trafficLight,
+      complianceReason,
+      complianceLabel: COMPLIANCE_LABEL[complianceReason],
+      lastRevisionAt,
+    };
   });
 
   return mapped.sort((a, b) => {

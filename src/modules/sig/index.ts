@@ -118,6 +118,7 @@ export {
   uploadSigStandardPdf,
 } from "./services/standards";
 export { locateStandardClausePage } from "./services/standard-pdf-locator";
+export { getSigSgcDashboard } from "./services/sgc-dashboard";
 export {
   listSigRequirements,
   getSigRequirementDetail,

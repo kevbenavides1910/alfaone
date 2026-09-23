@@ -59,6 +59,8 @@ export async function GET(req: NextRequest) {
         })),
       },
       capa: data.capa,
+      controls: data.controls,
+      requirementGaps: data.requirementGaps,
     });
   } catch (e) {
     return serverError("Error al cargar bandeja SIG", e);

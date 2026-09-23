@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, ExternalLink, FileText, Pencil, Upload, X } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
@@ -38,6 +39,8 @@ type RequirementRow = {
   observations: string | null;
   isApplicable: boolean;
   trafficLight: "RED" | "YELLOW" | "GREEN" | "GRAY";
+  complianceReason?: "N_A" | "OPEN_NC" | "NO_EVIDENCE" | "STALE" | "COMPLIANT";
+  complianceLabel?: string;
   openNcCount: number;
   lastRevisionAt: string | null;
   standard: Standard;
@@ -60,7 +63,22 @@ type MatrixRow = {
 };
 
 type DepthMode = "chapters" | "level2" | "all";
-type AttentionFilter = "" | "noEvidence" | "openNc" | "noReview" | "excluded" | "docGap";
+type AttentionFilter = "" | "noEvidence" | "openNc" | "noReview" | "excluded" | "docGap" | "stale";
+
+function statusLabel(item: RequirementRow): string {
+  if (item.complianceLabel) return item.complianceLabel;
+  if (item.complianceReason === "STALE") return "Evidencia vencida";
+  if (item.complianceReason === "NO_EVIDENCE") return "Sin evidencias";
+  if (item.complianceReason === "OPEN_NC") return "NC abiertas";
+  if (item.complianceReason === "COMPLIANT") return "Con evidencias";
+  if (item.complianceReason === "N_A") return "No aplicable";
+  return LIGHT[item.trafficLight].label;
+}
+
+function statusClass(item: RequirementRow): string {
+  if (item.complianceReason === "STALE") return "bg-orange-100 text-orange-900";
+  return LIGHT[item.trafficLight].className;
+}
 
 const LIGHT: Record<RequirementRow["trafficLight"], { label: string; className: string }> = {
   GREEN: { label: "Con evidencias", className: "bg-emerald-100 text-emerald-800" },
@@ -219,7 +237,20 @@ const TH =
   "sticky top-0 z-20 border-b border-slate-200 bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 shadow-[0_1px_0_0_rgb(226_232_240)]";
 
 export default function SigRequisitosPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#f5f5f5] p-6 text-sm text-slate-500">Cargando matriz…</div>
+      }
+    >
+      <SigRequisitosPageInner />
+    </Suspense>
+  );
+}
+
+function SigRequisitosPageInner() {
   const qc = useQueryClient();
+  const searchParams = useSearchParams();
   const [q, setQ] = useState("");
   const [standardId, setStandardId] = useState("");
   const [applicableOnly, setApplicableOnly] = useState(true);
@@ -245,6 +276,22 @@ export default function SigRequisitosPage() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const uploadRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+    const a = searchParams.get("attention");
+    const allowed: AttentionFilter[] = [
+      "",
+      "noEvidence",
+      "openNc",
+      "noReview",
+      "excluded",
+      "docGap",
+      "stale",
+    ];
+    if (a && allowed.includes(a as AttentionFilter)) {
+      setAttention(a as AttentionFilter);
+    }
+  }, [searchParams]);
 
   const { data: standards = [] } = useQuery({
     queryKey: ["sig-standards"],
@@ -279,12 +326,20 @@ export default function SigRequisitosPage() {
     return {
       total: rows.length,
       applicable: applicable.length,
-      green: applicable.filter((r) => r.trafficLight === "GREEN").length,
-      yellow: applicable.filter((r) => r.trafficLight === "YELLOW").length,
-      red: applicable.filter((r) => r.trafficLight === "RED").length,
+      green: applicable.filter((r) => r.complianceReason === "COMPLIANT" || r.trafficLight === "GREEN").length,
+      yellow: applicable.filter((r) => r.complianceReason === "NO_EVIDENCE").length,
+      stale: applicable.filter((r) => r.complianceReason === "STALE").length,
+      red: applicable.filter((r) => r.complianceReason === "OPEN_NC" || r.trafficLight === "RED").length,
       excluded: rows.filter((r) => !r.isApplicable || isStructuralRequirement(r)).length,
       docGaps: rows.filter((r) => r.isApplicable && !isStructuralRequirement(r) && hasDocGap(r)).length,
       noReview: applicable.filter((r) => !r.lastRevisionAt).length,
+      coveragePct:
+        applicable.length === 0
+          ? 0
+          : Math.round(
+              (applicable.filter((r) => r.complianceReason === "COMPLIANT").length / applicable.length) *
+                100
+            ),
     };
   }, [rows]);
 
@@ -294,7 +349,15 @@ export default function SigRequisitosPage() {
       list = list.filter((r) => r.isApplicable && !isStructuralRequirement(r));
     }
     if (attention === "noEvidence") {
-      list = list.filter((r) => r.isApplicable && !isStructuralRequirement(r) && r.trafficLight === "YELLOW");
+      list = list.filter(
+        (r) =>
+          r.isApplicable &&
+          !isStructuralRequirement(r) &&
+          (r.complianceReason === "NO_EVIDENCE" ||
+            (!r.complianceReason && r.trafficLight === "YELLOW"))
+      );
+    } else if (attention === "stale") {
+      list = list.filter((r) => r.isApplicable && r.complianceReason === "STALE");
     } else if (attention === "openNc") {
       list = list.filter(
         (r) => (r.openNcCount > 0 || r.trafficLight === "RED") && !isStructuralRequirement(r)
@@ -318,6 +381,48 @@ export default function SigRequisitosPage() {
       return false;
     });
   }, [rows, applicableOnly, attention, depthMode, expanded]);
+
+  function exportMatrixCsv() {
+    const header = [
+      "codigo",
+      "norma",
+      "titulo",
+      "estado",
+      "razon",
+      "procesos",
+      "documentos",
+      "evidencias",
+      "nc_abiertas",
+      "ult_revision",
+      "observaciones",
+    ];
+    const lines = [header.join(",")];
+    for (const group of matrixRows) {
+      for (const item of group.items) {
+        const cells = [
+          item.code,
+          item.standard.code,
+          item.title,
+          statusLabel(item),
+          item.complianceReason ?? "",
+          String(item._count.processLinks),
+          String(item._count.documentLinks),
+          String(item._count.evidenceLinks),
+          String(item.openNcCount),
+          item.lastRevisionAt ?? "",
+          (item.observations ?? "").replace(/\s+/g, " ").slice(0, 500),
+        ].map((c) => `"${String(c).replace(/"/g, '""')}"`);
+        lines.push(cells.join(","));
+      }
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `matriz-requisitos-sig-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   function toggleExpand(code: string) {
     setExpanded((prev) => {
@@ -437,25 +542,63 @@ export default function SigRequisitosPage() {
       <Topbar title="Matriz de requisitos SIG" />
 
       <div className="mx-auto max-w-[1400px] space-y-4 p-4 md:p-6">
-        <div className="flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-slate-200">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="rounded-full bg-slate-900 px-2.5 py-1 font-medium text-white">
+            {stats.coveragePct}% cobertura
+          </span>
+          <button
+            type="button"
+            onClick={() => setAttention("")}
+            className="rounded-full bg-white px-2.5 py-1 ring-1 ring-slate-200 hover:bg-slate-50"
+          >
             {stats.applicable} aplicables
-          </span>
-          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-800 ring-1 ring-emerald-100">
-            {stats.green} con evidencias
-          </span>
-          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-900 ring-1 ring-amber-100">
+          </button>
+          <button
+            type="button"
+            onClick={() => setAttention("noEvidence")}
+            className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-900 ring-1 ring-amber-100 hover:bg-amber-100"
+          >
             {stats.yellow} sin evidencias
-          </span>
-          <span className="rounded-full bg-red-50 px-2.5 py-1 text-red-800 ring-1 ring-red-100">
+          </button>
+          <button
+            type="button"
+            onClick={() => setAttention("stale")}
+            className="rounded-full bg-orange-50 px-2.5 py-1 text-orange-900 ring-1 ring-orange-100 hover:bg-orange-100"
+          >
+            {stats.stale} evidencia vencida
+          </button>
+          <button
+            type="button"
+            onClick={() => setAttention("")}
+            className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-800 ring-1 ring-emerald-100 hover:bg-emerald-100"
+          >
+            {stats.green} vigentes
+          </button>
+          <button
+            type="button"
+            onClick={() => setAttention("openNc")}
+            className="rounded-full bg-red-50 px-2.5 py-1 text-red-800 ring-1 ring-red-100 hover:bg-red-100"
+          >
             {stats.red} NC
-          </span>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 ring-1 ring-slate-200">
-              {stats.excluded} excl. / estructura
-            </span>
-          <span className="rounded-full bg-orange-50 px-2.5 py-1 text-orange-900 ring-1 ring-orange-100">
+          </button>
+          <button
+            type="button"
+            onClick={() => setAttention("docGap")}
+            className="rounded-full bg-orange-50 px-2.5 py-1 text-orange-900 ring-1 ring-orange-100 hover:bg-orange-100"
+          >
             {stats.docGaps} con brecha doc.
-          </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAttention("excluded")}
+            className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200"
+          >
+            {stats.excluded} excl. / estructura
+          </button>
+          <Button type="button" size="sm" variant="outline" className="ml-auto h-7 text-xs" onClick={exportMatrixCsv}>
+            <Download className="mr-1 h-3.5 w-3.5" />
+            Exportar CSV
+          </Button>
         </div>
 
         <Card>
@@ -507,6 +650,7 @@ export default function SigRequisitosPage() {
                 >
                   <option value="">Todas</option>
                   <option value="noEvidence">Sin evidencias</option>
+                  <option value="stale">Evidencia vencida</option>
                   <option value="openNc">NC abiertas</option>
                   <option value="noReview">Sin fecha de revisión</option>
                   <option value="docGap">Brecha de documento</option>
@@ -633,10 +777,13 @@ export default function SigRequisitosPage() {
                 {!isLoading &&
                   matrixRows.map((group) => {
                     const structural = group.items.every((i) => isStructuralRequirement(i));
+                    const primary = group.items[0];
                     const light = structural
                       ? { label: "Estructura", className: "bg-slate-100 text-slate-600" }
-                      : LIGHT[group.trafficLight];
-                    const primary = group.items[0];
+                      : {
+                          label: statusLabel(primary),
+                          className: statusClass(primary),
+                        };
                     const showExpand =
                       canExpandMore &&
                       group.depth === (depthMode === "chapters" ? 1 : 2) &&
@@ -659,9 +806,7 @@ export default function SigRequisitosPage() {
                               {group.items.map((item) => (
                                 <div key={item.id} className="text-[11px] text-slate-500">
                                   {shortNorma(item.standard.code)}:{" "}
-                                  {isStructuralRequirement(item)
-                                    ? "Estructura"
-                                    : LIGHT[item.trafficLight].label}
+                                  {isStructuralRequirement(item) ? "Estructura" : statusLabel(item)}
                                 </div>
                               ))}
                             </div>

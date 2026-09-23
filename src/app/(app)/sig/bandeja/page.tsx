@@ -85,6 +85,32 @@ type BandejaData = {
     closurePct: number;
     efficacyPending: number;
   };
+  controls?: {
+    mine: number;
+    totalAlerts: number;
+    rows: {
+      id: string;
+      code: string;
+      title: string;
+      freshness: string;
+      mine: boolean;
+      process: { code: string; name: string } | null;
+    }[];
+  };
+  requirementGaps?: {
+    total: number;
+    noEvidence: number;
+    stale: number;
+    openNc: number;
+    rows: {
+      id: string;
+      code: string;
+      title: string;
+      complianceReason: string;
+      complianceLabel: string;
+      standardCode: string;
+    }[];
+  };
 };
 
 export default function SigBandejaPage() {
@@ -156,7 +182,75 @@ export default function SigBandejaPage() {
           <Badge variant={d?.capa.overdueActions ? "destructive" : "outline"}>
             CAPA: {d?.capa.overdueActions ?? 0} acciones vencidas
           </Badge>
+          <Badge variant={(d?.controls?.totalAlerts ?? 0) > 0 ? "destructive" : "outline"}>
+            {d?.controls?.totalAlerts ?? 0} controles
+          </Badge>
+          <Badge variant={(d?.requirementGaps?.total ?? 0) > 0 ? "secondary" : "outline"}>
+            {d?.requirementGaps?.total ?? 0} brechas requisitos
+          </Badge>
         </div>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">
+              Controles {d?.controls?.mine ? "tuyos / " : ""}por evidencia
+            </CardTitle>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/sig/controles">Ver controles</Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {(d?.controls?.rows?.length ?? 0) === 0 && (
+              <p className="text-sm text-muted-foreground">Sin controles vencidos o sin evidencia.</p>
+            )}
+            {(d?.controls?.rows ?? []).map((c) => (
+              <div key={c.id} className="flex flex-wrap items-center gap-2 text-sm">
+                <Link href={`/sig/controles/${c.id}`} className="font-mono text-teal-800 hover:underline">
+                  {c.code}
+                </Link>
+                <span className="truncate max-w-xs">{c.title}</span>
+                <Badge variant={c.freshness === "OVERDUE" ? "destructive" : "secondary"}>
+                  {c.freshness === "NO_EVIDENCE"
+                    ? "Sin evidencia"
+                    : c.freshness === "OVERDUE"
+                      ? "Vencido"
+                      : c.freshness === "DUE_SOON"
+                        ? "Por vencer"
+                        : c.freshness}
+                </Badge>
+                {c.mine && <Badge variant="outline">Mío</Badge>}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Brechas de requisitos</CardTitle>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/sig/requisitos?attention=noEvidence">Abrir matriz</Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex flex-wrap gap-2 text-xs mb-2">
+              <Badge variant="secondary">Sin evidencia: {d?.requirementGaps?.noEvidence ?? 0}</Badge>
+              <Badge variant="secondary">Vencida: {d?.requirementGaps?.stale ?? 0}</Badge>
+              <Badge variant="destructive">NC: {d?.requirementGaps?.openNc ?? 0}</Badge>
+            </div>
+            {(d?.requirementGaps?.rows?.length ?? 0) === 0 && (
+              <p className="text-sm text-muted-foreground">Sin brechas en requisitos aplicables.</p>
+            )}
+            {(d?.requirementGaps?.rows ?? []).map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center gap-2 text-sm">
+                <Link href={`/sig/requisitos/${r.id}`} className="font-mono text-red-700 hover:underline">
+                  {r.code}
+                </Link>
+                <span className="truncate max-w-xs">{r.title}</span>
+                <Badge variant="outline">{r.complianceLabel}</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">

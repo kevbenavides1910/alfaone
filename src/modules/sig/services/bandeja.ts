@@ -5,6 +5,8 @@ import { listSigRevisionReminders } from "./revision-reminders";
 import { listSigIndicators } from "./indicators";
 import { listPendingSigReadAcks } from "./document-lifecycle";
 import { getCapaEfficacyDashboard } from "./capa-dashboard";
+import { listSigControls } from "./controls";
+import { listSigRequirements } from "./requirements";
 
 const changeRequestInclude = {
   document: {
@@ -60,9 +62,9 @@ export async function listSigChangeRequestsInbox(opts?: {
   };
 }
 
-/** Bandeja unificada: aprobaciones + solicitudes + vigencias + indicadores + lecturas + CAPA. */
+/** Bandeja unificada: aprobaciones + solicitudes + vigencias + indicadores + lecturas + CAPA + brechas SGC. */
 export async function getSigBandeja(userId: string, withinDays = 30) {
-  const [approvals, changeRequests, revisions, indicators, pendingReads, capa] =
+  const [approvals, changeRequests, revisions, indicators, pendingReads, capa, controls, requirements] =
     await Promise.all([
       listPendingSigApprovals(userId, 1, 50),
       listSigChangeRequestsInbox({ status: "OPEN", pageSize: 50 }),
@@ -70,6 +72,8 @@ export async function getSigBandeja(userId: string, withinDays = 30) {
       listSigIndicators({ status: "ACTIVE" }),
       listPendingSigReadAcks(userId),
       getCapaEfficacyDashboard({ year: new Date().getFullYear() }),
+      listSigControls({ status: "ACTIVE" }),
+      listSigRequirements({ applicableOnly: true }),
     ]);
 
   const alertIndicators = indicators
@@ -89,6 +93,32 @@ export async function getSigBandeja(userId: string, withinDays = 30) {
       latestValue: i.latestValue,
       targetValue: i.targetValue,
       process: i.process,
+    }));
+
+  const myControls = controls.filter(
+    (c) =>
+      c.ownerUserId === userId &&
+      (c.freshness === "OVERDUE" || c.freshness === "NO_EVIDENCE" || c.freshness === "DUE_SOON")
+  );
+  const allControlAlerts = controls.filter(
+    (c) => c.freshness === "OVERDUE" || c.freshness === "NO_EVIDENCE" || c.freshness === "DUE_SOON"
+  );
+
+  const requirementGaps = requirements
+    .filter(
+      (r) =>
+        r.complianceReason === "NO_EVIDENCE" ||
+        r.complianceReason === "STALE" ||
+        r.complianceReason === "OPEN_NC"
+    )
+    .slice(0, 25)
+    .map((r) => ({
+      id: r.id,
+      code: r.code,
+      title: r.title,
+      complianceReason: r.complianceReason,
+      complianceLabel: r.complianceLabel,
+      standardCode: r.standard.code,
     }));
 
   return {
@@ -114,6 +144,27 @@ export async function getSigBandeja(userId: string, withinDays = 30) {
       overdueActions: capa.actions.overdue,
       closurePct: capa.findings.closurePct,
       efficacyPending: capa.efficacy.pending,
+    },
+    controls: {
+      mine: myControls.length,
+      totalAlerts: allControlAlerts.length,
+      rows: (myControls.length > 0 ? myControls : allControlAlerts).slice(0, 20).map((c) => ({
+        id: c.id,
+        code: c.code,
+        title: c.title,
+        freshness: c.freshness,
+        mine: c.ownerUserId === userId,
+        process: c.process
+          ? { id: c.process.id, code: c.process.code, name: c.process.name }
+          : null,
+      })),
+    },
+    requirementGaps: {
+      total: requirementGaps.length,
+      noEvidence: requirements.filter((r) => r.complianceReason === "NO_EVIDENCE").length,
+      stale: requirements.filter((r) => r.complianceReason === "STALE").length,
+      openNc: requirements.filter((r) => r.complianceReason === "OPEN_NC").length,
+      rows: requirementGaps,
     },
   };
 }

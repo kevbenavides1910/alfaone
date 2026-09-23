@@ -16,6 +16,12 @@ type Tab = {
 
 const TABS: Tab[] = [
   {
+    href: "/sig/tablero",
+    label: "Tablero",
+    permission: "sig.requisitos",
+    isActive: (p) => p.startsWith("/sig/tablero"),
+  },
+  {
     href: "/sig",
     label: "Biblioteca",
     permission: "sig.biblioteca",
