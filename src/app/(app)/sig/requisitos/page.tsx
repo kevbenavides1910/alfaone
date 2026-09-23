@@ -215,7 +215,7 @@ function coverageLabel(row: MatrixRow) {
 }
 
 const TH =
-  "sticky top-0 z-20 border-b border-slate-200 bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 shadow-[0_1px_0_0_rgb(226_232_240)]";
+  "border-b border-slate-200 bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500";
 
 export default function SigRequisitosPage() {
   const qc = useQueryClient();
@@ -556,9 +556,8 @@ export default function SigRequisitosPage() {
         )}
 
         <Card>
-          <CardContent className="p-0">
-            <div className="max-h-[min(70vh,calc(100vh-14rem))] overflow-auto">
-            <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-sm">
+          <CardContent className="overflow-x-auto p-0">
+            <table className="w-full min-w-[1100px] border-collapse text-sm">
               <thead>
                 <tr>
                   <th className={TH}>Estado</th>
@@ -741,7 +740,6 @@ export default function SigRequisitosPage() {
                   })}
               </tbody>
             </table>
-            </div>
           </CardContent>
         </Card>
       </div>
