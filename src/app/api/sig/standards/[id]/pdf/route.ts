@@ -51,6 +51,9 @@ export async function GET(req: NextRequest, { params }: Ctx) {
         "Content-Disposition": `${disposition}; filename="${encodeURIComponent(pdf.fileName)}"`,
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, max-age=0, must-revalidate",
+        // Permite iframe same-origin (el DENY global de next.config lo anula vía headers() de esta ruta).
+        "X-Frame-Options": "SAMEORIGIN",
+        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'",
       },
     });
   } catch (e) {

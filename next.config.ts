@@ -15,7 +15,7 @@ const securityHeaders = [
   },
 ];
 
-/** PDFs inline del expediente: deben poder embeberse en iframe same-origin. */
+/** PDFs inline del expediente / normas SIG: deben poder embeberse en iframe same-origin. */
 const pdfEmbedHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -49,9 +49,11 @@ const nextConfig: NextConfig = {
       // Next fusiona TODAS las reglas que coinciden: hay que excluir el PDF del DENY global.
       { source: "/api/expediente-digital/:cedula/file", headers: pdfEmbedHeaders },
       { source: "/api/empleados/contratos/photorec/file", headers: pdfEmbedHeaders },
+      { source: "/api/empleados/contratos/reconstruccion/file", headers: pdfEmbedHeaders },
+      { source: "/api/sig/standards/:id/pdf", headers: pdfEmbedHeaders },
       {
         source:
-          "/:path((?!api/expediente-digital/.+/file$)(?!api/empleados/contratos/photorec/file$).*)*",
+          "/:path((?!api/expediente-digital/.+/file$)(?!api/empleados/contratos/photorec/file$)(?!api/empleados/contratos/reconstruccion/file$)(?!api/sig/standards/.+/pdf$).*)*",
         headers: securityHeaders,
       },
     ];
