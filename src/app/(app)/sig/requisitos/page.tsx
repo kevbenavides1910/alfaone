@@ -390,101 +390,97 @@ export default function SigRequisitosPage() {
     <div className="min-h-screen bg-[#f5f5f5]">
       <Topbar title="Matriz de requisitos SIG" />
 
-      <div className="sticky top-14 z-40 border-b border-slate-200 bg-[#f5f5f5]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f5f5f5]/80">
-        <div className="mx-auto max-w-[1400px] space-y-3 p-4 pb-3 md:px-6">
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-slate-200">
-              {stats.applicable} aplicables
-            </span>
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-800 ring-1 ring-emerald-100">
-              {stats.green} con evidencias
-            </span>
-            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-900 ring-1 ring-amber-100">
-              {stats.yellow} sin evidencias
-            </span>
-            <span className="rounded-full bg-red-50 px-2.5 py-1 text-red-800 ring-1 ring-red-100">
-              {stats.red} NC
-            </span>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 ring-1 ring-slate-200">
-              {stats.excluded} excluidos
-            </span>
-            <span className="rounded-full bg-orange-50 px-2.5 py-1 text-orange-900 ring-1 ring-orange-100">
-              {stats.docGaps} con brecha doc.
-            </span>
-          </div>
-
-          <Card>
-            <CardContent className="grid gap-3 p-3 md:grid-cols-6">
-              <div className="space-y-1 md:col-span-2">
-                <Label>Buscar</Label>
-                <Input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Código, título u observación"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Norma</Label>
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={standardId}
-                  onChange={(e) => setStandardId(e.target.value)}
-                >
-                  <option value="">Todas (integradas)</option>
-                  {standards.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.code}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label>Nivel</Label>
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={depthMode}
-                  onChange={(e) => {
-                    setDepthMode(e.target.value as DepthMode);
-                    setExpanded(new Set());
-                  }}
-                >
-                  <option value="chapters">Solo capítulos (4, 5…)</option>
-                  <option value="level2">Hasta 2.º nivel (4.1)</option>
-                  <option value="all">Todo el detalle</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label>Atención</Label>
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={attention}
-                  onChange={(e) => setAttention(e.target.value as AttentionFilter)}
-                >
-                  <option value="">Todas</option>
-                  <option value="noEvidence">Sin evidencias</option>
-                  <option value="openNc">NC abiertas</option>
-                  <option value="noReview">Sin fecha de revisión</option>
-                  <option value="docGap">Brecha de documento</option>
-                  <option value="excluded">Exclusiones de alcance</option>
-                </select>
-              </div>
-              <div className="flex items-end">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={applicableOnly}
-                    disabled={attention === "excluded"}
-                    onChange={(e) => setApplicableOnly(e.target.checked)}
-                  />
-                  Solo aplicables
-                </label>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
       <div className="mx-auto max-w-[1400px] space-y-4 p-4 md:p-6">
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-slate-200">
+            {stats.applicable} aplicables
+          </span>
+          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-800 ring-1 ring-emerald-100">
+            {stats.green} con evidencias
+          </span>
+          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-900 ring-1 ring-amber-100">
+            {stats.yellow} sin evidencias
+          </span>
+          <span className="rounded-full bg-red-50 px-2.5 py-1 text-red-800 ring-1 ring-red-100">
+            {stats.red} NC
+          </span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 ring-1 ring-slate-200">
+            {stats.excluded} excluidos
+          </span>
+          <span className="rounded-full bg-orange-50 px-2.5 py-1 text-orange-900 ring-1 ring-orange-100">
+            {stats.docGaps} con brecha doc.
+          </span>
+        </div>
+
+        <Card>
+          <CardContent className="grid gap-3 p-3 md:grid-cols-6">
+            <div className="space-y-1 md:col-span-2">
+              <Label>Buscar</Label>
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Código, título u observación"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Norma</Label>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={standardId}
+                onChange={(e) => setStandardId(e.target.value)}
+              >
+                <option value="">Todas (integradas)</option>
+                {standards.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label>Nivel</Label>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={depthMode}
+                onChange={(e) => {
+                  setDepthMode(e.target.value as DepthMode);
+                  setExpanded(new Set());
+                }}
+              >
+                <option value="chapters">Solo capítulos (4, 5…)</option>
+                <option value="level2">Hasta 2.º nivel (4.1)</option>
+                <option value="all">Todo el detalle</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label>Atención</Label>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={attention}
+                onChange={(e) => setAttention(e.target.value as AttentionFilter)}
+              >
+                <option value="">Todas</option>
+                <option value="noEvidence">Sin evidencias</option>
+                <option value="openNc">NC abiertas</option>
+                <option value="noReview">Sin fecha de revisión</option>
+                <option value="docGap">Brecha de documento</option>
+                <option value="excluded">Exclusiones de alcance</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={applicableOnly}
+                  disabled={attention === "excluded"}
+                  onChange={(e) => setApplicableOnly(e.target.checked)}
+                />
+                Solo aplicables
+              </label>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-center gap-2">
