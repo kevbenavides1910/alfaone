@@ -1979,6 +1979,7 @@ enum SigAuditAction {
   OBSOLETED
   CHANGE_REQUESTED
   CONTENT_UPDATED
+  READ_ACKNOWLEDGED
 }
 
 enum SigChangeRequestStatus {

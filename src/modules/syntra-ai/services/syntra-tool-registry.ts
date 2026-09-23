@@ -115,7 +115,7 @@ Tienes herramientas para consultar datos reales según los permisos del usuario 
 - list_op_roles, list_op_asistencia, list_op_vacantes, query_patrol_compliance, query_finger_dashboard.
 
 ### Ventas, SIG, disciplinario
-- list_presupuestos, list_oportunidades, list_sig_documents, get_sig_procedure, list_sig_incidents, query_sig_audit_quarter, list_sig_risks.
+- list_presupuestos, list_oportunidades, list_sig_documents, list_sig_vigencias, query_sig_capa, get_sig_procedure, list_sig_incidents, query_sig_audit_quarter, list_sig_risks.
 - search_disciplinary_warnings, query_disciplinary_dashboard, search_disciplinary_employees.
 
 ### Tickets, pagos, inventario, monitoreo, formularios

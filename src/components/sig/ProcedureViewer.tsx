@@ -153,6 +153,17 @@ export function ProcedureViewer({
             </p>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
+            {data.documentId ? (
+              <Button size="sm" variant="outline" asChild>
+                <a
+                  href={`/api/sig/documents/${data.documentId}/procedure/export`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Exportar PDF
+                </a>
+              </Button>
+            ) : null}
             <Button size="sm" variant="outline" onClick={onRequestChange}>
               Solicitar cambio
             </Button>

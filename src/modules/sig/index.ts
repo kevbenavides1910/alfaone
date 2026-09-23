@@ -38,6 +38,8 @@ export {
   createSigReadCampaign,
   listPendingSigReadAcks,
   acknowledgeSigDocumentRead,
+  acknowledgeSigVersionRead,
+  getMySigVersionReadAck,
   listCampaignAcks,
 } from "./services/document-lifecycle";
 export { getCapaEfficacyDashboard } from "./services/capa-dashboard";
@@ -45,6 +47,7 @@ export {
   getManagementReviewLiveInputs,
   refreshManagementReviewInputsFromLive,
 } from "./services/management-review-live";
+export { buildProcedureAlfaPdf } from "./services/procedure-export-pdf";
 export {
   getSigProcedureContent,
   getSigProcedureByCodeOrId,

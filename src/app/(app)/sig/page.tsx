@@ -33,6 +33,11 @@ interface DocumentRow {
   revisionIntervalDays: number | null;
   documentType: { id: string; code: string; name: string };
   process: { id: string; code: string; name: string } | null;
+  searchMatch?: {
+    snippet: string;
+    matchedIn: "code" | "title" | "content";
+    matchedVersionId: string | null;
+  } | null;
   currentVersion: {
     id: string;
     versionLabel: string;
@@ -66,6 +71,7 @@ export default function SigBibliotecaPage() {
   const [q, setQ] = useState("");
   const [documentTypeId, setDocumentTypeId] = useState("");
   const [processId, setProcessId] = useState("");
+  const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
 
   const { data: typesData } = useQuery({
@@ -96,8 +102,9 @@ export default function SigBibliotecaPage() {
     if (q.trim()) sp.set("q", q.trim());
     if (documentTypeId) sp.set("documentTypeId", documentTypeId);
     if (processId) sp.set("processId", processId);
+    if (status) sp.set("status", status);
     return `/api/sig/documents?${sp}`;
-  }, [q, page, documentTypeId, processId]);
+  }, [q, page, documentTypeId, processId, status]);
 
   const { data: listData, isLoading } = useQuery({
     queryKey: ["sig-documents", listUrl],
@@ -141,11 +148,12 @@ export default function SigBibliotecaPage() {
   const resetFilters = () => {
     setDocumentTypeId("");
     setProcessId("");
+    setStatus("");
     setQ("");
     setPage(1);
   };
 
-  const hasActiveFilters = Boolean(documentTypeId || processId || q.trim());
+  const hasActiveFilters = Boolean(documentTypeId || processId || status || q.trim());
 
   return (
     <>
@@ -239,6 +247,24 @@ export default function SigBibliotecaPage() {
               ))}
             </select>
           </div>
+          <div className="min-w-[140px]">
+            <Label className="text-xs mb-1 block">Estado</Label>
+            <select
+              className="w-full h-10 rounded-md border px-3 text-sm bg-background"
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Todos</option>
+              {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
           {hasActiveFilters && (
             <Button variant="outline" size="sm" onClick={resetFilters}>
               Limpiar filtros
@@ -313,6 +339,12 @@ export default function SigBibliotecaPage() {
                         <Link href={detailHref} className="text-teal-800 hover:underline font-medium">
                           {row.title}
                         </Link>
+                        {row.searchMatch?.matchedIn === "content" && row.searchMatch.snippet && (
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                            <span className="font-medium text-slate-600">Contenido: </span>
+                            {row.searchMatch.snippet}
+                          </p>
+                        )}
                       </td>
                       <td className="px-3 py-2">{row.documentType.name}</td>
                       <td className="px-3 py-2">{row.process?.name ?? "—"}</td>

@@ -393,6 +393,48 @@ export default function SigDocumentoDetailPage() {
     onError: (e: Error) => setMsg(e.message),
   });
 
+  const canAckRead = hasPermission(session, "sig.biblioteca", "view");
+  const versionIdForAck = data?.data?.currentVersion?.id as string | undefined;
+  const { data: myAckData } = useQuery({
+    queryKey: ["sig-read-ack", id, versionIdForAck],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/sig/readings?documentId=${encodeURIComponent(id)}&versionId=${encodeURIComponent(versionIdForAck!)}`,
+        { credentials: "same-origin" }
+      );
+      if (!r.ok) throw new Error("Error al consultar acuse");
+      return r.json() as Promise<{
+        data: { acknowledged: boolean; acknowledgedAt: string | null };
+      }>;
+    },
+    enabled: Boolean(canAckRead && versionIdForAck),
+  });
+
+  const readAckMutation = useMutation({
+    mutationFn: async () => {
+      if (!versionIdForAck) throw new Error("Sin versión vigente");
+      const r = await fetch("/api/sig/readings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "acknowledge-version",
+          documentId: id,
+          versionId: versionIdForAck,
+        }),
+        credentials: "same-origin",
+      });
+      const json = await r.json();
+      if (!r.ok) throw new Error(json?.error?.message ?? "Error al acusar lectura");
+      return json;
+    },
+    onSuccess: () => {
+      setMsg("Lectura registrada en bitácora");
+      queryClient.invalidateQueries({ queryKey: ["sig-read-ack", id, versionIdForAck] });
+      queryClient.invalidateQueries({ queryKey: ["sig-document-bitacora", id] });
+    },
+    onError: (e: Error) => setMsg(e.message),
+  });
+
   const obsoleteMutation = useMutation({
     mutationFn: async () => {
       const r = await fetch(`/api/sig/documents/${id}`, {
@@ -602,6 +644,29 @@ export default function SigDocumentoDetailPage() {
                     Descargar archivo
                   </a>
                 </Button>
+                {canAckRead && (
+                  <div className="pt-1">
+                    {myAckData?.data.acknowledged ? (
+                      <p className="text-xs text-teal-800">
+                        Ya acusó lectura de v{doc.currentVersion.versionLabel}
+                        {myAckData.data.acknowledgedAt
+                          ? ` · ${formatDate(myAckData.data.acknowledgedAt)}`
+                          : ""}
+                      </p>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => readAckMutation.mutate()}
+                        disabled={readAckMutation.isPending}
+                      >
+                        {readAckMutation.isPending
+                          ? "Registrando…"
+                          : `He leído la v${doc.currentVersion.versionLabel}`}
+                      </Button>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </CardContent>

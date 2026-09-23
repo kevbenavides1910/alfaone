@@ -11,17 +11,34 @@ import {
 } from "@/lib/api/response";
 import {
   acknowledgeSigDocumentRead,
+  acknowledgeSigVersionRead,
   createSigReadCampaign,
+  getMySigVersionReadAck,
   listPendingSigReadAcks,
   supersedeSigDocument,
 } from "@/modules/sig/services/document-lifecycle";
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return unauthorized();
   if (!hasPermission(session, "sig.biblioteca", "view")) return forbidden();
 
   try {
+    const documentId = req.nextUrl.searchParams.get("documentId");
+    const versionId = req.nextUrl.searchParams.get("versionId");
+    if (documentId && versionId) {
+      const ack = await getMySigVersionReadAck({
+        documentId,
+        versionId,
+        userId: session.user.id,
+      });
+      return ok({
+        acknowledged: Boolean(ack),
+        acknowledgedAt: ack?.createdAt.toISOString() ?? null,
+        notes: ack?.notes ?? null,
+      });
+    }
+
     const rows = await listPendingSigReadAcks(session.user.id);
     return ok({
       rows: rows.map((r) => ({
@@ -53,6 +70,25 @@ export async function POST(req: NextRequest) {
       return ok({
         ...ack,
         acknowledgedAt: ack.acknowledgedAt.toISOString(),
+      });
+    }
+
+    if (body?.action === "acknowledge-version") {
+      if (!hasPermission(session, "sig.biblioteca", "view")) return forbidden();
+      const documentId = typeof body.documentId === "string" ? body.documentId : "";
+      const versionId = typeof body.versionId === "string" ? body.versionId : "";
+      if (!documentId || !versionId) {
+        return badRequest("documentId y versionId requeridos");
+      }
+      const result = await acknowledgeSigVersionRead({
+        documentId,
+        versionId,
+        userId: session.user.id,
+        note: typeof body.note === "string" ? body.note : null,
+      });
+      return ok({
+        ...result,
+        acknowledgedAt: result.acknowledgedAt.toISOString(),
       });
     }
 

@@ -236,23 +236,114 @@ export async function acknowledgeSigDocumentRead(input: {
     throw new Error("No está asignado a esta lectura");
   }
 
-  return prisma.sigDocumentAcknowledgment.upsert({
-    where: {
-      campaignId_userId: { campaignId: input.campaignId, userId: input.userId },
-    },
-    create: {
-      campaignId: input.campaignId,
-      userId: input.userId,
-      versionId: campaign.versionId,
+  return prisma.$transaction(async (tx) => {
+    const ack = await tx.sigDocumentAcknowledgment.upsert({
+      where: {
+        campaignId_userId: { campaignId: input.campaignId, userId: input.userId },
+      },
+      create: {
+        campaignId: input.campaignId,
+        userId: input.userId,
+        versionId: campaign.versionId,
+        documentId: campaign.documentId,
+        note: input.note?.trim().slice(0, 2000) || null,
+      },
+      update: {
+        acknowledgedAt: new Date(),
+        note: input.note?.trim().slice(0, 2000) || null,
+        versionId: campaign.versionId,
+      },
+    });
+
+    await writeSigAuditLog(tx, {
       documentId: campaign.documentId,
-      note: input.note?.trim().slice(0, 2000) || null,
-    },
-    update: {
-      acknowledgedAt: new Date(),
-      note: input.note?.trim().slice(0, 2000) || null,
       versionId: campaign.versionId,
+      action: "READ_ACKNOWLEDGED",
+      actorId: input.userId,
+      notes:
+        input.note?.trim().slice(0, 4000) ||
+        "Acusó lectura obligatoria (campaña)",
+      metadata: { campaignId: input.campaignId },
+    });
+
+    return ack;
+  });
+}
+
+/** Acuse voluntario «He leído vX» (capacitación) — queda en bitácora. */
+export async function acknowledgeSigVersionRead(input: {
+  documentId: string;
+  versionId: string;
+  userId: string;
+  note?: string | null;
+}) {
+  const version = await prisma.sigDocumentVersion.findFirst({
+    where: { id: input.versionId, documentId: input.documentId },
+    select: {
+      id: true,
+      versionLabel: true,
+      documentId: true,
+      document: { select: { code: true, title: true } },
     },
   });
+  if (!version) throw new Error("Versión no encontrada");
+
+  const existing = await prisma.sigDocumentAuditLog.findFirst({
+    where: {
+      documentId: input.documentId,
+      versionId: input.versionId,
+      actorId: input.userId,
+      action: "READ_ACKNOWLEDGED",
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  if (existing) {
+    return {
+      alreadyAcknowledged: true as const,
+      acknowledgedAt: existing.createdAt,
+      versionLabel: version.versionLabel,
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await writeSigAuditLog(tx, {
+      documentId: input.documentId,
+      versionId: input.versionId,
+      action: "READ_ACKNOWLEDGED",
+      actorId: input.userId,
+      notes:
+        input.note?.trim().slice(0, 4000) ||
+        `He leído la versión ${version.versionLabel} de ${version.document.code}`,
+      metadata: {
+        versionLabel: version.versionLabel,
+        voluntary: true,
+      },
+    });
+  });
+
+  return {
+    alreadyAcknowledged: false as const,
+    acknowledgedAt: new Date(),
+    versionLabel: version.versionLabel,
+  };
+}
+
+export async function getMySigVersionReadAck(input: {
+  documentId: string;
+  versionId: string;
+  userId: string;
+}) {
+  const row = await prisma.sigDocumentAuditLog.findFirst({
+    where: {
+      documentId: input.documentId,
+      versionId: input.versionId,
+      actorId: input.userId,
+      action: "READ_ACKNOWLEDGED",
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, createdAt: true, notes: true },
+  });
+  return row;
 }
 
 export async function listCampaignAcks(campaignId: string) {

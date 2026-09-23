@@ -11,6 +11,7 @@ export const SIG_AUDIT_ACTION_LABELS: Record<string, string> = {
   OBSOLETED: "Marcado obsoleto",
   CHANGE_REQUESTED: "Solicitud de cambio",
   CONTENT_UPDATED: "Contenido del procedimiento actualizado",
+  READ_ACKNOWLEDGED: "Lectura / capacitación acusada",
 };
 
 export function sigAuditActionLabel(action: string): string {

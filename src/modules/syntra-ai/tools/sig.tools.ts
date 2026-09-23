@@ -1,8 +1,10 @@
 import { listAuditQuarterDashboard } from "@/modules/sig/services/audits";
+import { getCapaEfficacyDashboard } from "@/modules/sig/services/capa-dashboard";
 import { listSigDocuments } from "@/modules/sig/services/documents-list";
 import { listSigIncidents } from "@/modules/sig/services/incidents";
 import { listSigRisks } from "@/modules/sig/services/risks";
 import { getSigProcedureByCodeOrId } from "@/modules/sig/services/procedure-content";
+import { listSigRevisionReminders } from "@/modules/sig/services/revision-reminders";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
 import { intArg, strArg } from "./shared";
@@ -13,12 +15,17 @@ export function sigTools(): SyntraTool[] {
       permission: { key: "sig.biblioteca", level: "view" },
       definition: toolDef(
         "list_sig_documents",
-        "Busca documentos del SIG por código, título o texto.",
+        "Busca documentos del SIG por código, título o texto indexado (OCR). Devuelve snippet del hallazgo.",
         {
           type: "object",
           properties: {
             q: { type: "string" },
-            status: { type: "string", enum: ["DRAFT", "IN_REVIEW", "APPROVED", "OBSOLETE"] },
+            status: {
+              type: "string",
+              enum: ["DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED", "SUPERSEDED", "OBSOLETE"],
+            },
+            process_id: { type: "string" },
+            document_type_id: { type: "string" },
             limit: { type: "integer" },
           },
           additionalProperties: false,
@@ -28,16 +35,28 @@ export function sigTools(): SyntraTool[] {
       handler: async (_session, args) => {
         const result = await listSigDocuments({
           q: strArg(args, "q") || undefined,
-          status: (strArg(args, "status") || undefined) as "DRAFT" | "IN_REVIEW" | "APPROVED" | "OBSOLETE" | undefined,
+          status: (strArg(args, "status") || undefined) as
+            | "DRAFT"
+            | "PENDING_APPROVAL"
+            | "APPROVED"
+            | "REJECTED"
+            | "SUPERSEDED"
+            | "OBSOLETE"
+            | undefined,
+          processId: strArg(args, "process_id") || undefined,
+          documentTypeId: strArg(args, "document_type_id") || undefined,
           pageSize: intArg(args, "limit", 15, 25),
         });
         return {
           documentos: result.rows.map((d) => ({
+            id: d.id,
             code: d.code,
             title: d.title,
             status: d.status,
-            version: d.currentVersion?.versionNumber ?? null,
+            version: d.currentVersion?.versionLabel ?? null,
             process: d.process?.name ?? null,
+            snippet: d.searchMatch?.snippet ?? null,
+            matchedIn: d.searchMatch?.matchedIn ?? null,
           })),
           total: result.total,
           fuente: "Biblioteca SIG",
@@ -47,8 +66,91 @@ export function sigTools(): SyntraTool[] {
     {
       permission: { key: "sig.biblioteca", level: "view" },
       definition: toolDef(
+        "list_sig_vigencias",
+        "Lista procedimientos/documentos SIG por renovar o con vigencia vencida (días hasta revisión).",
+        {
+          type: "object",
+          properties: {
+            within_days: {
+              type: "integer",
+              description: "Ventana en días (default 30).",
+            },
+            limit: { type: "integer" },
+          },
+          additionalProperties: false,
+        },
+      ),
+      describeCall: () => "Consultando vigencias SIG…",
+      handler: async (_session, args) => {
+        const withinDays = intArg(args, "within_days", 30, 365);
+        const limit = intArg(args, "limit", 25, 50);
+        const rows = await listSigRevisionReminders(withinDays);
+        return {
+          withinDays,
+          total: rows.length,
+          overdue: rows.filter((r) => r.isOverdue).length,
+          documentos: rows.slice(0, limit).map((r) => ({
+            id: r.documentId,
+            code: r.code,
+            title: r.title,
+            daysUntilDue: r.daysUntilDue,
+            isOverdue: r.isOverdue,
+            nextRevisionDue: r.nextRevisionDue,
+            lastRevisionDate: r.lastRevisionDate,
+          })),
+          fuente: "Vigencias SIG",
+        };
+      },
+    },
+    {
+      permission: { key: "sig.auditorias", level: "view" },
+      definition: toolDef(
+        "query_sig_capa",
+        "Tablero CAPA: hallazgos abiertos, acciones vencidas, % cierre y eficacia. Filtra por año y proceso.",
+        {
+          type: "object",
+          properties: {
+            year: { type: "integer" },
+            process_id: { type: "string" },
+          },
+          additionalProperties: false,
+        },
+      ),
+      describeCall: () => "Consultando tablero CAPA SIG…",
+      handler: async (_session, args) => {
+        const data = await getCapaEfficacyDashboard({
+          year: typeof args.year === "number" ? args.year : undefined,
+          processId: strArg(args, "process_id") || undefined,
+        });
+        return {
+          year: data.year,
+          findings: {
+            open: data.findings.open,
+            closed: data.findings.closed,
+            closurePct: data.findings.closurePct,
+            bySeverity: data.findings.bySeverity,
+          },
+          actions: {
+            open: data.actions.open,
+            overdue: data.actions.overdue,
+            completionPct: data.actions.completionPct,
+            overdueTitles: data.actions.overdueRows.slice(0, 10).map((a) => ({
+              title: a.title,
+              dueDate: a.dueDate,
+              procedure: a.finding.audit.procedure.code,
+              responsible: a.responsibleUser?.name ?? null,
+            })),
+          },
+          efficacy: data.efficacy,
+          fuente: "Tablero CAPA SIG",
+        };
+      },
+    },
+    {
+      permission: { key: "sig.biblioteca", level: "view" },
+      definition: toolDef(
         "get_sig_procedure",
-        "Obtiene el procedimiento SIG en prosa: objetivo, alcance, responsabilidades, definiciones y etapas numeradas. Buscar por código (ej. PROC-01) o id del documento.",
+        "Obtiene el procedimiento SIG en prosa: objetivo, alcance, responsabilidades, definiciones y etapas numeradas. Buscar por código (ej. P-FI-04) o id del documento. Útil para resúmenes.",
         {
           type: "object",
           properties: {
