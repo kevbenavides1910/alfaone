@@ -131,13 +131,6 @@ async function touchRequirementReviewed(requirementId: string) {
   });
 }
 
-export async function listSigStandards() {
-  return prisma.sigStandard.findMany({
-    where: { isActive: true },
-    orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
-  });
-}
-
 export async function listSigRequirements(input: {
   standardId?: string;
   q?: string;

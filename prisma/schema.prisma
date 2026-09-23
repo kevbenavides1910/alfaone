@@ -2261,6 +2261,12 @@ model SigStandard {
   year      Int?
   isActive  Boolean  @default(true)
   sortOrder Int      @default(0)
+  /// PDF oficial de la norma (copia licenciada de la organización).
+  pdfFileName    String?
+  pdfMimeType    String?
+  pdfStoragePath String?
+  pdfSizeBytes   Int?
+  pdfUploadedAt  DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

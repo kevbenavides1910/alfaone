@@ -1,18 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Download } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, Upload } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { exportRowsToExcel, exportWorkbookToExcel } from "@/lib/utils/excel-export";
 
-type Standard = { id: string; code: string; name: string; year: number | null };
+type Standard = {
+  id: string;
+  code: string;
+  name: string;
+  year: number | null;
+  hasPdf?: boolean;
+  pdfFileName?: string | null;
+};
 type RequirementRow = {
   id: string;
   code: string;
@@ -122,32 +128,17 @@ function integrateByClause(rows: RequirementRow[]): IntegratedClause[] {
   });
 }
 
-function toExportRows(list: RequirementRow[]) {
-  return list.map((r) => ({
-    Norma: r.standard.code,
-    Código: r.code,
-    Título: r.title,
-    "Requisito esperado": r.description ?? "",
-    Observaciones: r.observations ?? "",
-    Aplicable: r.isApplicable ? "Sí" : "No",
-    Estado: LIGHT[r.trafficLight].label,
-    Procesos: r._count.processLinks,
-    Docs: r._count.documentLinks,
-    Evidencias: r._count.evidenceLinks,
-    NC: r.openNcCount,
-    "Últ. revisión": r.lastRevisionAt ? formatDate(r.lastRevisionAt) : "",
-  }));
-}
-
-const COL_WIDTHS = [12, 10, 36, 48, 40, 10, 14, 10, 8, 10, 8, 14];
-
 const TH =
   "sticky top-0 z-20 border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold shadow-[0_1px_0_0_rgb(226_232_240)]";
 
 export default function SigRequisitosPage() {
+  const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [standardId, setStandardId] = useState("");
   const [applicableOnly, setApplicableOnly] = useState(true);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const uploadRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const { data: standards = [] } = useQuery({
     queryKey: ["sig-standards"],
@@ -178,60 +169,62 @@ export default function SigRequisitosPage() {
     },
   });
 
-  /** Todas las normas (sin filtro de norma) para poder descargar ambas aunque el filtro esté activo. */
-  const { data: allRows = [] } = useQuery({
-    queryKey: ["sig-requirements-export-all", q, applicableOnly],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (q.trim()) params.set("q", q.trim());
-      if (applicableOnly) params.set("applicable", "1");
-      const r = await fetch(`/api/sig/requirements?${params}`, { credentials: "same-origin" });
-      if (!r.ok) throw new Error("Error cargando requisitos");
-      const json = await r.json();
-      return (Array.isArray(json.data) ? json.data : []) as RequirementRow[];
-    },
-  });
-
   const integrated = useMemo(() => integrateByClause(rows), [rows]);
   const showIntegrated = !standardId;
 
-  const downloadableStandards = useMemo(() => {
-    const ids = new Set(allRows.map((r) => r.standard.id));
-    return standards.filter((s) => ids.has(s.id) || !allRows.length);
-  }, [standards, allRows]);
+  const normaStandards = useMemo(
+    () => standards.filter((s) => s.code === "ISO_9001" || s.code === "ISO_18788"),
+    [standards]
+  );
 
-  function downloadStandard(std: Standard) {
-    const list = allRows.filter((r) => r.standard.id === std.id);
-    if (!list.length) return;
-    exportRowsToExcel({
-      filename: `matriz-requisitos-${shortNorma(std.code)}`,
-      sheetName: shortNorma(std.code),
-      rows: toExportRows(list),
-      columnWidths: COL_WIDTHS,
-    });
+  function openPdf(std: Standard, download = false) {
+    setPdfError(null);
+    if (!std.hasPdf) {
+      setPdfError(`Primero suba el PDF oficial de ${shortNorma(std.code)} (copia licenciada).`);
+      return;
+    }
+    const url = `/api/sig/standards/${std.id}/pdf${download ? "?inline=0" : "?inline=1"}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  function downloadBoth() {
-    const byStd = new Map<string, RequirementRow[]>();
-    for (const row of allRows) {
-      const key = row.standard.id;
-      const list = byStd.get(key);
-      if (list) list.push(row);
-      else byStd.set(key, [row]);
+  function openBothPdfs() {
+    setPdfError(null);
+    const withPdf = normaStandards.filter((s) => s.hasPdf);
+    if (!withPdf.length) {
+      setPdfError("Aún no hay PDFs de norma. Suba ISO 9001 e ISO 18788 con «Subir PDF».");
+      return;
     }
-    const sheets = Array.from(byStd.entries()).map(([id, list]) => {
-      const std = list[0]?.standard;
-      return {
-        sheetName: shortNorma(std?.code ?? id),
-        rows: toExportRows(list),
-        columnWidths: COL_WIDTHS,
-      };
-    });
-    if (!sheets.length) return;
-    exportWorkbookToExcel({
-      filename: "matriz-requisitos-SIG-normas",
-      sheets,
-    });
+    for (const std of withPdf) {
+      window.open(`/api/sig/standards/${std.id}/pdf?inline=1`, "_blank", "noopener,noreferrer");
+    }
+    const missing = normaStandards.filter((s) => !s.hasPdf);
+    if (missing.length) {
+      setPdfError(
+        `Abiertas: ${withPdf.map((s) => shortNorma(s.code)).join(", ")}. Falta PDF: ${missing
+          .map((s) => shortNorma(s.code))
+          .join(", ")}.`
+      );
+    }
+  }
+
+  async function onUploadPdf(std: Standard, file: File | null) {
+    if (!file) return;
+    setUploadingId(std.id);
+    setPdfError(null);
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      const r = await fetch(`/api/sig/standards/${std.id}/pdf`, { method: "POST", body });
+      const json = await r.json();
+      if (!r.ok) throw new Error(json.error?.message ?? "No se pudo subir el PDF");
+      await qc.invalidateQueries({ queryKey: ["sig-standards"] });
+    } catch (e) {
+      setPdfError(e instanceof Error ? e.message : "Error subiendo PDF");
+    } finally {
+      setUploadingId(null);
+      const input = uploadRefs.current[std.id];
+      if (input) input.value = "";
+    }
   }
 
   return (
@@ -277,35 +270,65 @@ export default function SigRequisitosPage() {
         </Card>
 
         <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-4">
-            <span className="mr-1 text-sm font-medium text-slate-700">Descargar normas</span>
-            {downloadableStandards.map((s) => (
+          <CardContent className="space-y-3 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-sm font-medium text-slate-700">PDF de las normas</span>
+              {normaStandards.map((s) => (
+                <div key={s.id} className="flex flex-wrap items-center gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={s.hasPdf ? "default" : "outline"}
+                    disabled={!s.hasPdf}
+                    onClick={() => openPdf(s)}
+                    title={s.hasPdf ? s.pdfFileName ?? s.name : "Suba el PDF oficial primero"}
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    {shortNorma(s.code)}
+                    {s.hasPdf ? "" : " (sin PDF)"}
+                  </Button>
+                  <input
+                    ref={(el) => {
+                      uploadRefs.current[s.id] = el;
+                    }}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="hidden"
+                    onChange={(e) => void onUploadPdf(s, e.target.files?.[0] ?? null)}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={uploadingId === s.id}
+                    onClick={() => uploadRefs.current[s.id]?.click()}
+                  >
+                    <Upload className="mr-1.5 h-3.5 w-3.5" />
+                    {uploadingId === s.id ? "Subiendo…" : s.hasPdf ? "Reemplazar PDF" : "Subir PDF"}
+                  </Button>
+                </div>
+              ))}
               <Button
-                key={s.id}
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={!allRows.some((r) => r.standard.id === s.id)}
-                onClick={() => downloadStandard(s)}
-                title={s.name}
+                disabled={!normaStandards.some((s) => s.hasPdf)}
+                onClick={() => openBothPdfs()}
               >
                 <Download className="mr-1.5 h-3.5 w-3.5" />
-                {shortNorma(s.code)}
+                Abrir ambas
               </Button>
-            ))}
-            <Button
-              type="button"
-              size="sm"
-              disabled={allRows.length === 0}
-              onClick={() => downloadBoth()}
-            >
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              Ambas (Excel)
-            </Button>
-            <p className="w-full text-xs text-slate-500">
-              Exporta la matriz de requisitos de cada norma (catálogo del SIG). No sustituye el texto
-              oficial ISO.
+            </div>
+            <p className="text-xs text-slate-500">
+              Abre el PDF oficial de cada norma (copia licenciada de la organización). La primera vez
+              use «Subir PDF» con el archivo ISO que compraron; después «9001» / «18788» lo abren en
+              el navegador.
             </p>
+            {pdfError && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {pdfError}
+              </div>
+            )}
           </CardContent>
         </Card>
 

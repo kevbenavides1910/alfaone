@@ -114,6 +114,10 @@ export {
 } from "./services/audits";
 export {
   listSigStandards,
+  getSigStandardPdf,
+  uploadSigStandardPdf,
+} from "./services/standards";
+export {
   listSigRequirements,
   getSigRequirementDetail,
   createSigRequirement,

@@ -632,7 +632,7 @@ export const PERMISSION_REGISTRY = {
       requisitos: {
         label: "Matriz de requisitos",
         uiRoutes: ["/sig/requisitos"],
-        apiPrefixes: ["/api/sig/requirements"],
+        apiPrefixes: ["/api/sig/requirements", "/api/sig/standards"],
         actions: {
           view: "Consultar matriz de requisitos ISO",
           edit: "Crear y vincular requisitos",
