@@ -118,10 +118,13 @@ export {
   getSigRequirementDetail,
   createSigRequirement,
   updateSigRequirement,
+  suggestRequirementObservations,
   linkRequirementProcess,
   unlinkRequirementProcess,
   linkRequirementDocument,
   unlinkRequirementDocument,
+  linkRequirementEvidence,
+  unlinkRequirementEvidence,
 } from "./services/requirements";
 export {
   listSigEvidences,

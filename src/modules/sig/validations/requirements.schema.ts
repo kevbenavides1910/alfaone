@@ -3,7 +3,7 @@ import { z } from "zod";
 const optionalText = z
   .string()
   .trim()
-  .max(4000)
+  .max(8000)
   .optional()
   .nullable()
   .transform((value) => (value ? value : null));
@@ -15,12 +15,19 @@ export const createRequirementSchema = z.object({
   code: z.string().trim().min(1).max(50),
   title: z.string().trim().min(1).max(300),
   description: optionalText,
+  observations: optionalText,
   parentId: z.string().optional().nullable(),
   isApplicable: z.boolean().optional(),
   sortOrder: z.coerce.number().int().optional(),
+  lastReviewedAt: z.string().datetime().optional().nullable(),
 });
 
-export const updateRequirementSchema = createRequirementSchema.partial().omit({ standardId: true });
+export const updateRequirementSchema = createRequirementSchema
+  .partial()
+  .omit({ standardId: true })
+  .extend({
+    touchReviewed: z.boolean().optional(),
+  });
 
 export const linkRequirementProcessSchema = z.object({
   processId: idSchema,
@@ -28,6 +35,10 @@ export const linkRequirementProcessSchema = z.object({
 
 export const linkRequirementDocumentSchema = z.object({
   documentId: idSchema,
+});
+
+export const linkRequirementEvidenceSchema = z.object({
+  evidenceId: idSchema,
 });
 
 export type CreateRequirementInput = z.infer<typeof createRequirementSchema>;

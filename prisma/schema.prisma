@@ -2271,21 +2271,26 @@ model SigStandard {
 
 /// Requisito / cláusula de una norma (matriz maestra del SIG).
 model SigRequirement {
-  id           String           @id @default(cuid())
-  standardId   String
-  standard     SigStandard      @relation(fields: [standardId], references: [id], onDelete: Restrict)
-  code         String
-  title        String
-  description  String?          @db.Text
-  parentId     String?
-  parent       SigRequirement?  @relation("SigRequirementTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children     SigRequirement[] @relation("SigRequirementTree")
-  isApplicable Boolean          @default(true)
-  sortOrder    Int              @default(0)
-  createdById  String?
-  createdBy    User?            @relation("SigRequirementCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  id             String           @id @default(cuid())
+  standardId     String
+  standard       SigStandard      @relation(fields: [standardId], references: [id], onDelete: Restrict)
+  code           String
+  title          String
+  /// Texto esperado / interpretación del requisito (cumplimiento).
+  description    String?          @db.Text
+  /// Observaciones de cumplimiento (editables; pueden nacer de un borrador automático).
+  observations   String?          @db.Text
+  /// Última vez que se revisó el cumplimiento / vínculo de prueba.
+  lastReviewedAt DateTime?
+  parentId       String?
+  parent         SigRequirement?  @relation("SigRequirementTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children       SigRequirement[] @relation("SigRequirementTree")
+  isApplicable   Boolean          @default(true)
+  sortOrder      Int              @default(0)
+  createdById    String?
+  createdBy      User?            @relation("SigRequirementCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   processLinks   SigRequirementProcess[]
   documentLinks  SigRequirementDocument[]
@@ -2298,6 +2303,7 @@ model SigRequirement {
   @@unique([standardId, code])
   @@index([parentId])
   @@index([isApplicable])
+  @@index([lastReviewedAt])
   @@map("sig_requirements")
 }
 

@@ -3,13 +3,17 @@ import { badRequest, notFound, ok } from "@/lib/api/response";
 import {
   getSigRequirementDetail,
   linkRequirementDocument,
+  linkRequirementEvidence,
   linkRequirementProcess,
+  suggestRequirementObservations,
   unlinkRequirementDocument,
+  unlinkRequirementEvidence,
   unlinkRequirementProcess,
   updateSigRequirement,
 } from "@/modules/sig";
 import {
   linkRequirementDocumentSchema,
+  linkRequirementEvidenceSchema,
   linkRequirementProcessSchema,
   updateRequirementSchema,
 } from "@/modules/sig/validations/requirements.schema";
@@ -21,8 +25,17 @@ function paramId(params: Record<string, string | string[]>) {
 
 export const GET = apiHandler(
   { permission: ["sig.requisitos", "view"], errorLabel: "Error consultando requisito SIG" },
-  async ({ params }) => {
-    const row = await getSigRequirementDetail(paramId(await params));
+  async ({ params, req }) => {
+    const id = paramId(await params);
+    const suggest = new URL(req.url).searchParams.get("suggest");
+    if (suggest === "observations") {
+      try {
+        return ok(await suggestRequirementObservations(id));
+      } catch {
+        return notFound("Requisito no encontrado");
+      }
+    }
+    const row = await getSigRequirementDetail(id);
     if (!row) return notFound("Requisito no encontrado");
     return ok(row);
   }
@@ -64,6 +77,17 @@ export const POST = apiHandler(
       const parsed = linkRequirementDocumentSchema.safeParse(body);
       if (!parsed.success) return badRequest("Documento inválido", parsed.error.flatten());
       await unlinkRequirementDocument(id, parsed.data.documentId);
+      return ok({ unlinked: true });
+    }
+    if (action === "link-evidence") {
+      const parsed = linkRequirementEvidenceSchema.safeParse(body);
+      if (!parsed.success) return badRequest("Evidencia inválida", parsed.error.flatten());
+      return ok(await linkRequirementEvidence(id, parsed.data.evidenceId));
+    }
+    if (action === "unlink-evidence") {
+      const parsed = linkRequirementEvidenceSchema.safeParse(body);
+      if (!parsed.success) return badRequest("Evidencia inválida", parsed.error.flatten());
+      await unlinkRequirementEvidence(id, parsed.data.evidenceId);
       return ok({ unlinked: true });
     }
     return badRequest("Acción no reconocida");

@@ -207,6 +207,13 @@ export async function createSigEvidence(input: {
   }
   if (links.length) await prisma.$transaction(links);
 
+  if ((input.requirementIds ?? []).length) {
+    await prisma.sigRequirement.updateMany({
+      where: { id: { in: input.requirementIds } },
+      data: { lastReviewedAt: new Date() },
+    });
+  }
+
   return getSigEvidenceDetail(evidence.id);
 }
 
