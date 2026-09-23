@@ -53,6 +53,8 @@ export {
   getSigProcedureByCodeOrId,
   bootstrapProcedureFromExtractedText,
   tryAutoBootstrapProcedureVersion,
+  copyProcedureSnapshotToVersion,
+  ensureProcedureSnapshotFromPrevious,
   compareSigProcedureVersions,
   publishProcedureContentVersion,
   parseExtractedTextToProcedure,
@@ -60,6 +62,12 @@ export {
   getProcedureFlowchart,
   isProcedureLikeType,
 } from "./services/procedure-content";
+export {
+  canEditSigDocumentContent,
+  assertCanEditSigDocument,
+  listSigProcessEditors,
+  setSigProcessEditors,
+} from "./services/process-editors";
 export {
   ALFA_FIXED_SECTIONS,
   ACTIVITY_TABLE_HEADERS,

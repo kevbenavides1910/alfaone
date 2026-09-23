@@ -10,6 +10,8 @@ import {
   serverError,
 } from "@/lib/api/response";
 import { bootstrapProcedureFromExtractedText } from "@/modules/sig/services/procedure-content";
+import { assertCanEditSigDocument } from "@/modules/sig/services/process-editors";
+import { prisma } from "@/modules/core/db/prisma";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -28,6 +30,17 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
 
   try {
+    const docMeta = await prisma.sigDocument.findUnique({
+      where: { id },
+      select: { processId: true },
+    });
+    if (!docMeta) return notFound("Documento no encontrado");
+    try {
+      await assertCanEditSigDocument(session, docMeta.processId);
+    } catch (e) {
+      return forbidden(e instanceof Error ? e.message : "Sin permiso de edición");
+    }
+
     const data = await bootstrapProcedureFromExtractedText(id, session.user.id, { replace });
     if (!data) return notFound("Documento no encontrado");
     return ok(data);

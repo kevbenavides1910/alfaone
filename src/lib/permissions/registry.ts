@@ -587,7 +587,7 @@ export const PERMISSION_REGISTRY = {
         uiRoutes: ["/sig", "/sig/vigencias"],
         apiPrefixes: ["/api/sig/documents", "/api/sig/revision-reminders", "/api/sig/bandeja"],
         actions: {
-          view: "Consultar documentos y descargar",
+          view: "Consultar documentos y descargar; acusar lectura",
           edit: "Editar metadatos del documento",
         },
       },
@@ -601,8 +601,8 @@ export const PERMISSION_REGISTRY = {
         ],
         actions: {
           view: "Ver formularios de carga",
-          edit: "Subir documentos y nuevas versiones",
-          admin: "Actualizar vigencia sin cambiar versión",
+          edit: "Subir y editar contenido (global o como editor del proceso)",
+          admin: "Actualizar vigencia / obsoletar / editar cualquier proceso",
         },
       },
       aprobaciones: {
@@ -611,7 +611,7 @@ export const PERMISSION_REGISTRY = {
         apiPrefixes: ["/api/sig/documents", "/api/sig/bandeja"],
         actions: {
           view: "Ver pendientes de aprobación",
-          edit: "Aprobar o rechazar documentos",
+          edit: "Aprobar o rechazar documentos asignados",
         },
       },
       bitacora: {
@@ -714,7 +714,7 @@ export const PERMISSION_REGISTRY = {
         apiPrefixes: ["/api/sig/procesos", "/api/sig/tipos-documento"],
         actions: {
           view: "Ver catálogos y expediente de proceso",
-          edit: "Crear y editar procesos",
+          edit: "Crear/editar procesos y asignar editores de documentos",
           admin: "Administrar tipos documentales",
         },
       },

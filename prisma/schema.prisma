@@ -283,6 +283,7 @@ model User {
   disciplinaryBatches                    DisciplinaryImportBatch[]     @relation("DisciplinaryBatchUploader")
   employeeImportBatches                  EmployeeImportBatch[]         @relation("EmployeeBatchUploader")
   sigDocumentsCreated                    SigDocument[]                 @relation("SigDocumentCreator")
+  sigProcessEditors                      SigProcessEditor[]            @relation("SigProcessEditorUser")
   sigReadCampaignsCreated                SigDocumentReadCampaign[]     @relation("SigReadCampaignCreator")
   sigReadAssignees                       SigDocumentReadAssignee[]     @relation("SigReadAssigneeUser")
   sigDocumentAcknowledgments             SigDocumentAcknowledgment[]   @relation("SigDocumentAckUser")
@@ -2042,9 +2043,24 @@ model SigProcess {
   incidentsPrimary      SigIncident[]                @relation("SigIncidentPrimaryProcess")
   managementReviewLinks SigManagementReviewProcess[]
   auditProgramItems     AuditProgramItem[]
+  editors               SigProcessEditor[]
 
   @@index([parentId])
   @@map("sig_processes")
+}
+
+/// Usuarios autorizados a editar documentos del proceso (además de admin SIG).
+model SigProcessEditor {
+  id        String     @id @default(cuid())
+  processId String
+  process   SigProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation("SigProcessEditorUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([processId, userId])
+  @@index([userId])
+  @@map("sig_process_editors")
 }
 
 /// Documento lógico con control de versiones.

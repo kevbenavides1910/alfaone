@@ -662,7 +662,10 @@ export async function bootstrapProcedureFromExtractedText(
  * Tras indexar texto de un archivo: convierte a formato Alfa si el tipo es
  * procedimiento/manual y aún no hay estructura en esa versión.
  */
-export async function tryAutoBootstrapProcedureVersion(versionId: string): Promise<boolean> {
+export async function tryAutoBootstrapProcedureVersion(
+  versionId: string,
+  opts?: { replaceExisting?: boolean }
+): Promise<boolean> {
   const version = await prisma.sigDocumentVersion.findUnique({
     where: { id: versionId },
     include: {
@@ -681,13 +684,155 @@ export async function tryAutoBootstrapProcedureVersion(versionId: string): Promi
     version.procedureStages.length > 0 ||
     version.procedureActivities.length > 0 ||
     Boolean(version.procedureBody);
-  if (hasStructured) return false;
+
+  if (hasStructured && !opts?.replaceExisting) return false;
+
+  if (hasStructured && opts?.replaceExisting) {
+    await prisma.$transaction(async (tx) => {
+      await tx.sigProcedureActivity.deleteMany({ where: { versionId } });
+      await tx.sigProcedureStage.deleteMany({ where: { versionId } });
+      await tx.sigProcedureBody.deleteMany({ where: { versionId } });
+    });
+  }
 
   await bootstrapProcedureFromExtractedText(version.documentId, version.uploadedById, {
     versionId: version.id,
     auto: true,
   });
   return true;
+}
+
+/** Copia prosa/actividades/diagrama de una versión a otra (snapshot real). */
+export async function copyProcedureSnapshotToVersion(
+  fromVersionId: string,
+  toVersionId: string
+): Promise<boolean> {
+  if (fromVersionId === toVersionId) return false;
+
+  const [from, to] = await Promise.all([
+    prisma.sigDocumentVersion.findUnique({
+      where: { id: fromVersionId },
+      include: {
+        procedureBody: true,
+        procedureStages: { orderBy: { sortOrder: "asc" } },
+        procedureActivities: { orderBy: { sortOrder: "asc" } },
+      },
+    }),
+    prisma.sigDocumentVersion.findUnique({
+      where: { id: toVersionId },
+      select: {
+        id: true,
+        documentId: true,
+        procedureBody: { select: { id: true } },
+        procedureStages: { select: { id: true }, take: 1 },
+        procedureActivities: { select: { id: true }, take: 1 },
+      },
+    }),
+  ]);
+
+  if (!from || !to) return false;
+  if (from.documentId !== to.documentId) {
+    throw new Error("Las versiones deben pertenecer al mismo documento");
+  }
+
+  const hasFrom =
+    Boolean(from.procedureBody) ||
+    from.procedureStages.length > 0 ||
+    from.procedureActivities.length > 0;
+  if (!hasFrom) return false;
+
+  const hasTo =
+    Boolean(to.procedureBody) ||
+    to.procedureStages.length > 0 ||
+    to.procedureActivities.length > 0;
+  if (hasTo) return false;
+
+  await prisma.$transaction(async (tx) => {
+    if (from.procedureBody) {
+      const b = from.procedureBody;
+      await tx.sigProcedureBody.create({
+        data: {
+          versionId: toVersionId,
+          objective: b.objective,
+          scope: b.scope,
+          responsibilities: b.responsibilities,
+          definitions: b.definitions,
+          flowchartFileName: b.flowchartFileName,
+          flowchartMimeType: b.flowchartMimeType,
+          flowchartStoragePath: b.flowchartStoragePath,
+          flowchartFileSizeBytes: b.flowchartFileSizeBytes,
+        },
+      });
+    }
+
+    if (from.procedureStages.length) {
+      await tx.sigProcedureStage.createMany({
+        data: from.procedureStages.map((s) => ({
+          versionId: toVersionId,
+          sortOrder: s.sortOrder,
+          sectionKey: s.sectionKey,
+          title: s.title,
+          body: s.body,
+          responsible: s.responsible,
+        })),
+      });
+    }
+
+    if (from.procedureActivities.length) {
+      await tx.sigProcedureActivity.createMany({
+        data: from.procedureActivities.map((a) => ({
+          versionId: toVersionId,
+          sortOrder: a.sortOrder,
+          code: a.code,
+          name: a.name,
+          description: a.description,
+          documents: a.documents,
+          responsible: a.responsible,
+        })),
+      });
+    }
+  });
+
+  return true;
+}
+
+/** Si la versión quedó sin estructura, copia el snapshot de la versión anterior. */
+export async function ensureProcedureSnapshotFromPrevious(
+  versionId: string
+): Promise<boolean> {
+  const version = await prisma.sigDocumentVersion.findUnique({
+    where: { id: versionId },
+    include: {
+      document: { include: { documentType: true } },
+      procedureBody: { select: { id: true } },
+      procedureStages: { select: { id: true }, take: 1 },
+      procedureActivities: { select: { id: true }, take: 1 },
+    },
+  });
+  if (!version) return false;
+  if (!isProcedureLikeType(version.document.documentType)) return false;
+
+  const hasStructured =
+    Boolean(version.procedureBody) ||
+    version.procedureStages.length > 0 ||
+    version.procedureActivities.length > 0;
+  if (hasStructured) return false;
+
+  const prev = await prisma.sigDocumentVersion.findFirst({
+    where: {
+      documentId: version.documentId,
+      versionNumber: { lt: version.versionNumber },
+      OR: [
+        { procedureBody: { isNot: null } },
+        { procedureStages: { some: {} } },
+        { procedureActivities: { some: {} } },
+      ],
+    },
+    orderBy: { versionNumber: "desc" },
+    select: { id: true },
+  });
+  if (!prev) return false;
+  return copyProcedureSnapshotToVersion(prev.id, versionId);
 }
 
 export async function publishProcedureContentVersion(

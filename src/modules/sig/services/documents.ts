@@ -141,7 +141,10 @@ export async function createSigDocument(input: CreateSigDocumentInput, actorId: 
 export type CreateSigDocumentApprovedInput = Omit<
   CreateSigDocumentInput,
   "assignedApproverId"
->;
+> & {
+  /** Si false, el llamador indexa (carga masiva con reporte). Default true. */
+  scheduleTextIndex?: boolean;
+};
 
 export async function createSigDocumentApproved(
   input: CreateSigDocumentApprovedInput,
@@ -239,7 +242,7 @@ export async function createSigDocumentApproved(
       },
     });
   }).then((created) => {
-    if (created.currentVersion?.id) {
+    if (created.currentVersion?.id && input.scheduleTextIndex !== false) {
       scheduleSigVersionTextIndex(created.currentVersion.id);
     }
     return created;

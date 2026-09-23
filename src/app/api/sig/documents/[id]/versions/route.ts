@@ -3,6 +3,8 @@ import { getSession } from "@/lib/api/middleware";
 import { hasPermission } from "@/lib/permissions/check";
 import { badRequest, unauthorized, forbidden, serverError, created } from "@/lib/api/response";
 import { uploadSigNewVersion, updateSigSameVersion } from "@/modules/sig/services/document-versions";
+import { assertCanEditSigDocument } from "@/modules/sig/services/process-editors";
+import { prisma } from "@/modules/core/db/prisma";
 import {
   detectMimeFromBuffer,
   mimeMatchesDeclared,
@@ -57,6 +59,17 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     }
 
     if (!hasPermission(session, "sig.documentos", "edit")) return forbidden();
+
+    const docMeta = await prisma.sigDocument.findUnique({
+      where: { id },
+      select: { processId: true },
+    });
+    if (!docMeta) return badRequest("Documento no encontrado");
+    try {
+      await assertCanEditSigDocument(session, docMeta.processId);
+    } catch (e) {
+      return forbidden(e instanceof Error ? e.message : "Sin permiso de edición");
+    }
 
     const file = form.get("file");
     if (!file || typeof file === "string") return badRequest("Archivo requerido para nueva versión");

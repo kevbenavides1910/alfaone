@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSession } from "@/lib/auth/client-session";
+import { hasPermission } from "@/lib/permissions/check";
 import { formatDate } from "@/lib/utils/format";
 
 type Dossier = {
@@ -140,6 +144,10 @@ function Stat({ label, value, href }: { label: string; value: number; href?: str
 export default function SigProcessDossierPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const qc = useQueryClient();
+  const { data: session } = useSession();
+  const canManageEditors = hasPermission(session, "sig.procesos", "edit");
+  const [editorUserId, setEditorUserId] = useState("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["sig-process-dossier", id],
@@ -149,6 +157,64 @@ export default function SigProcessDossierPage() {
       const json = await r.json();
       return json.data as Dossier;
     },
+  });
+
+  const { data: editorsData } = useQuery({
+    queryKey: ["sig-process-editors", id],
+    queryFn: async () => {
+      const r = await fetch(`/api/sig/procesos/${id}/editors`, { credentials: "same-origin" });
+      if (!r.ok) throw new Error("Error editores");
+      const json = await r.json();
+      return json.data as {
+        editors: Array<{
+          userId: string;
+          user: { id: string; name: string; email: string };
+        }>;
+      };
+    },
+  });
+
+  const { data: usersData } = useQuery({
+    queryKey: ["sig-aprobadores-editors"],
+    queryFn: async () => {
+      const r = await fetch("/api/sig/aprobadores", { credentials: "same-origin" });
+      if (!r.ok) return { data: [] as Array<{ id: string; name: string; email: string }> };
+      return r.json() as Promise<{ data: Array<{ id: string; name: string; email: string }> }>;
+    },
+    enabled: canManageEditors,
+  });
+
+  const addEditorMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const r = await fetch(`/api/sig/procesos/${id}/editors`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+        credentials: "same-origin",
+      });
+      if (!r.ok) {
+        const json = await r.json();
+        throw new Error(json?.error?.message ?? "Error al agregar");
+      }
+    },
+    onSuccess: () => {
+      setEditorUserId("");
+      qc.invalidateQueries({ queryKey: ["sig-process-editors", id] });
+    },
+  });
+
+  const removeEditorMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const r = await fetch(`/api/sig/procesos/${id}/editors?userId=${encodeURIComponent(userId)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (!r.ok) {
+        const json = await r.json();
+        throw new Error(json?.error?.message ?? "Error al quitar");
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sig-process-editors", id] }),
   });
 
   const { data: matrixData } = useQuery({
@@ -211,6 +277,66 @@ export default function SigProcessDossierPage() {
             </CardTitle>
             {process.description && <p className="text-sm text-slate-600">{process.description}</p>}
           </CardHeader>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Editores de documentos del proceso</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p className="text-xs text-muted-foreground">
+              Si hay editores asignados, solo ellos (y admin SIG) pueden subir/editar contenido de
+              documentos de este proceso. Sin lista, cualquier usuario con permiso de carga SIG puede
+              editar.
+            </p>
+            {(editorsData?.editors ?? []).length === 0 && (
+              <p className="text-muted-foreground">Sin editores restringidos (edición global).</p>
+            )}
+            <ul className="space-y-1">
+              {(editorsData?.editors ?? []).map((e) => (
+                <li key={e.userId} className="flex flex-wrap items-center gap-2">
+                  <span>
+                    {e.user.name}{" "}
+                    <span className="text-xs text-muted-foreground">{e.user.email}</span>
+                  </span>
+                  {canManageEditors && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-red-700"
+                      onClick={() => removeEditorMutation.mutate(e.userId)}
+                      disabled={removeEditorMutation.isPending}
+                    >
+                      Quitar
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {canManageEditors && (
+              <div className="flex flex-wrap gap-2 items-end pt-1">
+                <select
+                  className="h-9 rounded-md border px-2 text-sm min-w-[220px]"
+                  value={editorUserId}
+                  onChange={(e) => setEditorUserId(e.target.value)}
+                >
+                  <option value="">Seleccionar usuario…</option>
+                  {(usersData?.data ?? []).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email})
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  size="sm"
+                  disabled={!editorUserId || addEditorMutation.isPending}
+                  onClick={() => addEditorMutation.mutate(editorUserId)}
+                >
+                  Agregar editor
+                </Button>
+              </div>
+            )}
+          </CardContent>
         </Card>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">

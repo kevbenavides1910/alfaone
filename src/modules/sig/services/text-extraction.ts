@@ -137,9 +137,17 @@ export async function extractDocumentText(
   return "";
 }
 
-export function scheduleSigVersionTextIndex(versionId: string) {
+export function scheduleSigVersionTextIndex(
+  versionId: string,
+  opts?: {
+    replaceProcedure?: boolean;
+    fallbackFromVersionId?: string | null;
+  }
+) {
   void import("./text-index")
-    .then(({ indexSigDocumentVersionText }) => indexSigDocumentVersionText(versionId))
+    .then(({ indexSigDocumentVersionText }) =>
+      indexSigDocumentVersionText(versionId, opts)
+    )
     .catch((err) => {
       console.error("[SIG] Error programando indexación de texto:", versionId, err);
     });

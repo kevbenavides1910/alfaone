@@ -25,6 +25,8 @@ type BulkImportResult = {
   total: number;
   created: number;
   failed: number;
+  conversionOk?: number;
+  conversionIssues?: number;
   results: {
     index: number;
     fileName: string;
@@ -32,7 +34,24 @@ type BulkImportResult = {
     success: boolean;
     documentId?: string;
     error?: string;
+    procedureLike?: boolean;
+    textIndexStatus?: string | null;
+    bootstrapped?: boolean;
+    copiedFromPrevious?: boolean;
+    activitiesCount?: number;
+    conversionStatus?: string;
   }[];
+};
+
+const CONVERSION_LABELS: Record<string, string> = {
+  OK: "Conversión OK",
+  PENDING: "Pendiente",
+  INDEX_FAILED: "OCR/index falló",
+  INDEX_SKIPPED: "Sin texto extraíble",
+  NOT_PROCEDURE: "No es procedimiento",
+  NO_ACTIVITIES: "Sin actividades",
+  EMPTY_STRUCTURE: "Sin estructura Alfa",
+  COPIED_PREVIOUS: "Snapshot de versión previa",
 };
 
 function newRow(file: File): BulkRow {
@@ -504,6 +523,15 @@ export default function SigCargaMasivaPage() {
               <CardTitle className="text-base">Resultado</CardTitle>
               <CardDescription>
                 {result.created} creado(s) · {result.failed} con error · {result.total} total
+                {typeof result.conversionOk === "number" && (
+                  <>
+                    {" "}
+                    · {result.conversionOk} conversión OK
+                    {(result.conversionIssues ?? 0) > 0
+                      ? ` · ${result.conversionIssues} con aviso de conversión`
+                      : ""}
+                  </>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -517,13 +545,35 @@ export default function SigCargaMasivaPage() {
                       {r.success ? "✓" : "✗"} {r.code}{" "}
                       <span className="font-normal text-muted-foreground">({r.fileName})</span>
                     </div>
+                    {r.success && r.conversionStatus && (
+                      <p className="text-xs mt-1">
+                        {CONVERSION_LABELS[r.conversionStatus] ?? r.conversionStatus}
+                        {r.textIndexStatus ? ` · índice ${r.textIndexStatus}` : ""}
+                        {typeof r.activitiesCount === "number"
+                          ? ` · ${r.activitiesCount} act.`
+                          : ""}
+                        {r.bootstrapped ? " · Alfa automático" : ""}
+                      </p>
+                    )}
                     {r.success && r.documentId ? (
-                      <Link
-                        href={`/sig/documentos/${r.documentId}`}
-                        className="text-teal-700 hover:underline text-xs"
-                      >
-                        Ver documento
-                      </Link>
+                      <div className="flex flex-wrap gap-3 mt-1">
+                        <Link
+                          href={`/sig/documentos/${r.documentId}`}
+                          className="text-teal-700 hover:underline text-xs"
+                        >
+                          Ver documento
+                        </Link>
+                        {r.conversionStatus &&
+                          r.conversionStatus !== "OK" &&
+                          r.conversionStatus !== "NOT_PROCEDURE" && (
+                            <Link
+                              href="/sig/calidad-conversion"
+                              className="text-amber-800 hover:underline text-xs"
+                            >
+                              Cola calidad
+                            </Link>
+                          )}
+                      </div>
                     ) : (
                       r.error && <p className="text-red-700 text-xs mt-1">{r.error}</p>
                     )}

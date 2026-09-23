@@ -54,6 +54,7 @@ export async function uploadSigNewVersion(
   if (!doc) throw new Error("Documento no encontrado");
   if (doc.status === "OBSOLETE") throw new Error("El documento está obsoleto");
 
+  const previousVersionId = doc.currentVersionId;
   const lastNumber = doc.versions[0]?.versionNumber ?? 0;
   const nextNumber = lastNumber + 1;
   const versionLabel = (input.versionLabel?.trim() || String(nextNumber)).slice(0, 40);
@@ -114,7 +115,11 @@ export async function uploadSigNewVersion(
 
     return version;
   }).then((version) => {
-    scheduleSigVersionTextIndex(version.id);
+    // Regenera prosa desde el archivo nuevo; si OCR falla, conserva snapshot de la versión previa.
+    scheduleSigVersionTextIndex(version.id, {
+      replaceProcedure: true,
+      fallbackFromVersionId: previousVersionId,
+    });
     return version;
   });
 }

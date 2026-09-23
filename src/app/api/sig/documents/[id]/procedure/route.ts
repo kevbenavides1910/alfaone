@@ -13,6 +13,8 @@ import {
   getSigProcedureContent,
   publishProcedureContentVersion,
 } from "@/modules/sig/services/procedure-content";
+import { assertCanEditSigDocument } from "@/modules/sig/services/process-editors";
+import { prisma } from "@/modules/core/db/prisma";
 import type { AlfaSectionKey } from "@/modules/sig/business/procedure-sections";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -73,6 +75,17 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
   const { id } = await params;
   try {
+    const docMeta = await prisma.sigDocument.findUnique({
+      where: { id },
+      select: { processId: true },
+    });
+    if (!docMeta) return notFound("Documento no encontrado");
+    try {
+      await assertCanEditSigDocument(session, docMeta.processId);
+    } catch (e) {
+      return forbidden(e instanceof Error ? e.message : "Sin permiso de edición");
+    }
+
     const { body, flowchart } = await parsePublishBody(req);
     if (!body?.changeSummary || typeof body.changeSummary !== "string") {
       return badRequest("changeSummary es requerido");

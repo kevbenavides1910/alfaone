@@ -4,6 +4,7 @@ import { getSession } from "@/lib/api/middleware";
 import { hasPermission } from "@/lib/permissions/check";
 import { ok, badRequest, unauthorized, forbidden, serverError } from "@/lib/api/response";
 import { bulkCreateSigDocuments } from "@/modules/sig/services/documents-bulk-import";
+import { assertCanEditSigDocument } from "@/modules/sig/services/process-editors";
 import {
   detectMimeFromBuffer,
   mimeMatchesDeclared,
@@ -78,6 +79,12 @@ export async function POST(req: NextRequest) {
       const flat = parsed.error.flatten();
       const msg = Object.values(flat.fieldErrors).flat()[0] ?? flat.formErrors[0] ?? "Datos inválidos";
       return badRequest(msg, flat);
+    }
+
+    try {
+      await assertCanEditSigDocument(session, parsed.data.processId ?? null);
+    } catch (e) {
+      return forbidden(e instanceof Error ? e.message : "Sin permiso de edición");
     }
 
     const files = form.getAll("files").filter((f): f is File => f instanceof File);

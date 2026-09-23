@@ -1,7 +1,6 @@
 import { prisma } from "@/modules/core/db/prisma";
 import { isProcedureLikeType } from "./procedure-content";
 import { indexSigDocumentVersionText } from "./text-index";
-import { tryAutoBootstrapProcedureVersion } from "./procedure-content";
 
 export type ConversionQualityItem = {
   documentId: string;
@@ -116,10 +115,11 @@ export async function listSigConversionQualityQueue(): Promise<ConversionQuality
   return items.sort((a, b) => order[a.issue] - order[b.issue]);
 }
 
-/** Reindexa texto de una versión y, si aplica, intenta conversión Alfa. */
+/** Reindexa texto de una versión y regenera prosa Alfa si aplica. */
 export async function reindexSigDocumentVersion(versionId: string) {
-  await indexSigDocumentVersionText(versionId);
-  const bootstrapped = await tryAutoBootstrapProcedureVersion(versionId);
+  const indexed = await indexSigDocumentVersionText(versionId, {
+    replaceProcedure: true,
+  });
   const version = await prisma.sigDocumentVersion.findUnique({
     where: { id: versionId },
     select: {
@@ -130,5 +130,5 @@ export async function reindexSigDocumentVersion(versionId: string) {
       _count: { select: { procedureActivities: true, procedureStages: true } },
     },
   });
-  return { version, bootstrapped };
+  return { version, bootstrapped: indexed.bootstrapped };
 }
