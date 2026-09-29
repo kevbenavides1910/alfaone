@@ -11,7 +11,7 @@ import {
   calendarioListQuerySchema,
 } from "@/modules/naf-operaciones/validations/calendario.schema";
 
-/** GET /api/naf-operaciones/calendario?from=YYYY-MM-DD&to=YYYY-MM-DD[&zoneId=&contractId=&type=] */
+/** GET /api/naf-operaciones/calendario?from=YYYY-MM-DD&to=YYYY-MM-DD[&zoneId=&contractId=&typeId=] */
 export const GET = withPermission(async (req: NextRequest) => {
   const sp = req.nextUrl.searchParams;
   const parsed = calendarioListQuerySchema.safeParse({
@@ -19,7 +19,7 @@ export const GET = withPermission(async (req: NextRequest) => {
     to: sp.get("to") ?? undefined,
     zoneId: sp.get("zoneId") || undefined,
     contractId: sp.get("contractId") || undefined,
-    type: sp.get("type") || undefined,
+    typeId: sp.get("typeId") || undefined,
   });
   if (!parsed.success) return badRequest("Parámetros inválidos", parsed.error.flatten());
   try {

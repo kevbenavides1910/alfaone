@@ -1167,13 +1167,19 @@ model Zone {
   @@map("zones")
 }
 
-enum OperationalEventType {
-  UNIFORM_CHANGE
-  SUPPLY_DELIVERY
-  INSPECTION
-  TRAINING
-  MEETING
-  OTHER
+/// Catálogo (Mantenimientos) de tipos de evento del calendario operativo.
+model OperationalEventTypeConfig {
+  id        String                     @id @default(cuid())
+  name      String                     @unique
+  /// Clave de paleta de la UI (blue, amber, purple…).
+  color     String                     @default("gray")
+  isActive  Boolean                    @default(true)
+  sortOrder Int                        @default(0)
+  createdAt DateTime                   @default(now())
+  updatedAt DateTime                   @updatedAt
+  events    OperationalCalendarEvent[]
+
+  @@map("operational_event_types")
 }
 
 enum OperationalEventStatus {
@@ -1187,7 +1193,8 @@ model OperationalCalendarEvent {
   id                    String                             @id @default(cuid())
   date                  DateTime                           @db.Date
   title                 String
-  type                  OperationalEventType               @default(OTHER)
+  typeId                String
+  type                  OperationalEventTypeConfig         @relation(fields: [typeId], references: [id], onDelete: Restrict)
   status                OperationalEventStatus             @default(SCHEDULED)
   description           String?                            @db.Text
   /// Zona operativa con la que se armó la selección; null = varias zonas / todas.
@@ -1204,7 +1211,7 @@ model OperationalCalendarEvent {
 
   @@index([date])
   @@index([zoneId])
-  @@index([type])
+  @@index([typeId])
   @@map("operational_calendar_events")
 }
 

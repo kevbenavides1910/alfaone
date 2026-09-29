@@ -200,7 +200,7 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
       "src/modules/naf-operaciones",
       "src/components/naf-operaciones",
     ],
-    prismaModels: ["OperationalCalendarEvent", "OperationalCalendarEventContract"],
+    prismaModels: ["OperationalCalendarEvent", "OperationalCalendarEventContract", "OperationalEventTypeConfig"],
   },
 
   empleadosNaf: {

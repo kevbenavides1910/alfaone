@@ -1,12 +1,15 @@
 import type {
   CalendarioContractOption,
+  CalendarioEventTypeOption,
   CalendarioZoneRef,
 } from "@/modules/naf-operaciones/business/calendario-types";
 
 export const CALENDARIO_API = "/api/naf-operaciones/calendario";
+export const CALENDARIO_TIPOS_ADMIN_HREF = "/admin/catalogs?tab=event-types";
 
 export type CalendarioOpciones = {
   zones: CalendarioZoneRef[];
+  types: CalendarioEventTypeOption[];
   contracts: CalendarioContractOption[];
 };
 

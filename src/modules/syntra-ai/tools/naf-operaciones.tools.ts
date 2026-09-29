@@ -1,15 +1,10 @@
 import { listOpAsistencia } from "@/modules/naf-operaciones/services/list-asistencia-rol";
 import { listOpRoles } from "@/modules/naf-operaciones/services/list-roles";
 import { listOpVacantes } from "@/modules/naf-operaciones/services/list-vacantes";
-import {
-  CALENDARIO_EVENT_TYPES,
-  CALENDARIO_STATUS_LABELS,
-  CALENDARIO_TYPE_LABELS,
-  toIsoDate,
-  type CalendarioEventType,
-} from "@/modules/naf-operaciones/business/calendario-types";
+import { CALENDARIO_STATUS_LABELS, toIsoDate } from "@/modules/naf-operaciones/business/calendario-types";
 import { listCalendarioEvents } from "@/modules/naf-operaciones/services/calendario-eventos";
 import { listCalendarioZones } from "@/modules/naf-operaciones/services/calendario-opciones";
+import { listCalendarioEventTypes } from "@/modules/naf-operaciones/services/calendario-tipos";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
 import { intArg, strArg } from "./shared";
@@ -123,7 +118,7 @@ export function nafOperacionesTools(): SyntraTool[] {
             desde: { type: "string", description: "YYYY-MM-DD (por defecto inicio del mes actual)." },
             hasta: { type: "string", description: "YYYY-MM-DD (por defecto fin del mes actual)." },
             zona: { type: "string", description: "Nombre (o parte) de la zona operativa." },
-            tipo: { type: "string", enum: [...CALENDARIO_EVENT_TYPES] },
+            tipo: { type: "string", description: "Nombre (o parte) del tipo de evento, ej. «uniformes»." },
             limit: { type: "integer" },
           },
           additionalProperties: false,
@@ -149,20 +144,22 @@ export function nafOperacionesTools(): SyntraTool[] {
           if (!zone) return { error: `No se encontró la zona «${zonaQ}».`, zonas: zones.map((z) => z.name) };
           zoneId = zone.id;
         }
-        const tipo = strArg(args, "tipo") as CalendarioEventType;
-        const events = await listCalendarioEvents({
-          from: desde,
-          to: hasta,
-          zoneId,
-          type: CALENDARIO_EVENT_TYPES.includes(tipo) ? tipo : undefined,
-        });
+        let typeId: string | undefined;
+        const tipoQ = strArg(args, "tipo").toLowerCase();
+        if (tipoQ) {
+          const types = await listCalendarioEventTypes();
+          const type = types.find((t) => t.name.toLowerCase().includes(tipoQ));
+          if (!type) return { error: `No se encontró el tipo «${tipoQ}».`, tipos: types.map((t) => t.name) };
+          typeId = type.id;
+        }
+        const events = await listCalendarioEvents({ from: desde, to: hasta, zoneId, typeId });
         return {
           rango: { desde, hasta },
           total: events.length,
           eventos: events.slice(0, limit).map((e) => ({
             fecha: e.date,
             titulo: e.title,
-            tipo: CALENDARIO_TYPE_LABELS[e.type],
+            tipo: e.type.name,
             estado: CALENDARIO_STATUS_LABELS[e.status],
             zona: e.zone?.name ?? "Varias / todas",
             contratos: e.contractsCount,

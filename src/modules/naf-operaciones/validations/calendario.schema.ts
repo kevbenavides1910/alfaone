@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
+  CALENDARIO_COLOR_KEYS,
   CALENDARIO_EVENT_STATUSES,
-  CALENDARIO_EVENT_TYPES,
 } from "@/modules/naf-operaciones/business/calendario-types";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida (YYYY-MM-DD)");
@@ -11,14 +11,14 @@ export const calendarioListQuerySchema = z.object({
   to: isoDate,
   zoneId: z.string().min(1).optional(),
   contractId: z.string().min(1).optional(),
-  type: z.enum(CALENDARIO_EVENT_TYPES).optional(),
+  typeId: z.string().min(1).optional(),
 });
 export type CalendarioListQuery = z.infer<typeof calendarioListQuerySchema>;
 
 const eventBase = z.object({
   date: isoDate,
   title: z.string().trim().min(1, "Título requerido").max(200),
-  type: z.enum(CALENDARIO_EVENT_TYPES),
+  typeId: z.string().min(1, "Tipo requerido"),
   status: z.enum(CALENDARIO_EVENT_STATUSES).optional(),
   description: z.string().trim().max(5000).nullish(),
   zoneId: z.string().min(1).nullish(),
@@ -42,3 +42,14 @@ export const calendarioCompletionSchema = z.object({
   completed: z.boolean(),
 });
 export type CalendarioCompletionInput = z.infer<typeof calendarioCompletionSchema>;
+
+export const calendarioTipoCreateSchema = z.object({
+  name: z.string().trim().min(1, "Nombre requerido").max(100),
+  color: z.enum(CALENDARIO_COLOR_KEYS).default("gray"),
+  isActive: z.boolean().default(true),
+  sortOrder: z.number().int().min(0).max(9999).default(0),
+});
+export type CalendarioTipoCreateInput = z.infer<typeof calendarioTipoCreateSchema>;
+
+export const calendarioTipoPatchSchema = calendarioTipoCreateSchema.partial();
+export type CalendarioTipoPatchInput = z.infer<typeof calendarioTipoPatchSchema>;

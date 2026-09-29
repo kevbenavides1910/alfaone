@@ -19,6 +19,7 @@ import { ExpenseTypesTab } from "./ExpenseTypesTab";
 import { OriginsTab } from "./OriginsTab";
 import { CompaniesTab } from "./CompaniesTab";
 import { SyntraAiSettingsTab } from "@/components/admin/SyntraAiSettingsTab";
+import { OperationalEventTypesTab } from "@/components/admin/OperationalEventTypesTab";
 
 type TabKey =
   | "types"
@@ -29,6 +30,7 @@ type TabKey =
   | "zones"
   | "positions"
   | "locations"
+  | "event-types"
   | "branding"
   | "notifications"
   | "syntra-ai";
@@ -42,6 +44,7 @@ const VALID_TABS: TabKey[] = [
   "zones",
   "positions",
   "locations",
+  "event-types",
   "branding",
   "notifications",
   "syntra-ai",
@@ -92,6 +95,7 @@ function CatalogsPageContent() {
             { key: "zones", label: "Zonas" },
             { key: "positions", label: "Puestos" },
             { key: "locations", label: "Ubicaciones" },
+            { key: "event-types", label: "Tipos de evento" },
             { key: "branding",       label: "Marca y colores" },
             { key: "notifications",   label: "Notificaciones" },
             { key: "syntra-ai",       label: "Syntra IA" },
@@ -131,6 +135,8 @@ function CatalogsPageContent() {
                             ? "Puestos"
                           : tab === "locations"
                             ? "Ubicaciones"
+                          : tab === "event-types"
+                            ? "Tipos de evento (calendario operativo)"
                             : tab === "notifications"
                               ? "Notificaciones"
                               : tab === "syntra-ai"
@@ -155,6 +161,8 @@ function CatalogsPageContent() {
               <PositionsCatalogTab readOnly={readOnly} />
             ) : tab === "locations" ? (
               <LocationsTab readOnly={readOnly} />
+            ) : tab === "event-types" ? (
+              <OperationalEventTypesTab readOnly={readOnly} />
             ) : tab === "notifications" ? (
               <PlatformNotificationsTab readOnly={readOnly} />
             ) : tab === "syntra-ai" ? (

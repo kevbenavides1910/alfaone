@@ -33,7 +33,7 @@ const summarySelect = {
   id: true,
   date: true,
   title: true,
-  type: true,
+  type: { select: { id: true, name: true, color: true } },
   status: true,
   appliesToAllContracts: true,
   zone: { select: { id: true, name: true } },
@@ -44,7 +44,7 @@ export async function listCalendarioEvents(q: CalendarioListQuery): Promise<Cale
   const and: Prisma.OperationalCalendarEventWhereInput[] = [
     { date: { gte: fromIsoDate(q.from), lte: fromIsoDate(q.to) } },
   ];
-  if (q.type) and.push({ type: q.type });
+  if (q.typeId) and.push({ typeId: q.typeId });
   if (q.contractId) and.push({ contracts: { some: { contractId: q.contractId } } });
   if (q.zoneId) {
     and.push({
@@ -88,6 +88,7 @@ export async function getCalendarioEvent(id: string): Promise<CalendarioEventDet
     where: { id },
     include: {
       zone: { select: { id: true, name: true } },
+      type: { select: { id: true, name: true, color: true } },
       contracts: {
         include: { contract: { select: contractZonesSelect } },
       },
@@ -148,18 +149,29 @@ async function assertZone(zoneId: string | null | undefined) {
   if (!zone) throw new CalendarioError("Zona no encontrada");
 }
 
+/** Un tipo inactivo solo se acepta si el evento ya lo tenía. */
+async function assertType(typeId: string, currentTypeId?: string) {
+  const type = await prisma.operationalEventTypeConfig.findUnique({
+    where: { id: typeId },
+    select: { isActive: true },
+  });
+  if (!type) throw new CalendarioError("Tipo de evento no encontrado");
+  if (!type.isActive && typeId !== currentTypeId) throw new CalendarioError("El tipo de evento está inactivo");
+}
+
 export async function createCalendarioEvent(
   input: CalendarioCreateInput,
   actor: CalendarioActor,
 ): Promise<CalendarioEventDetail> {
   await assertZone(input.zoneId);
+  await assertType(input.typeId);
   const contractIds = await resolveContractIds(input);
 
   const ev = await prisma.operationalCalendarEvent.create({
     data: {
       date: fromIsoDate(input.date),
       title: input.title,
-      type: input.type,
+      typeId: input.typeId,
       status: input.status ?? "SCHEDULED",
       description: input.description || null,
       zoneId: input.zoneId || null,
@@ -181,10 +193,11 @@ export async function updateCalendarioEvent(
 ): Promise<CalendarioEventDetail> {
   const current = await prisma.operationalCalendarEvent.findUnique({
     where: { id },
-    select: { id: true, zoneId: true },
+    select: { id: true, zoneId: true, typeId: true },
   });
   if (!current) throw new CalendarioError("Evento no encontrado", 404);
   if (input.zoneId !== undefined) await assertZone(input.zoneId);
+  if (input.typeId !== undefined) await assertType(input.typeId, current.typeId);
 
   const touchesContracts = input.allContracts !== undefined || input.contractIds !== undefined;
   const contractIds = touchesContracts
@@ -201,7 +214,7 @@ export async function updateCalendarioEvent(
       data: {
         ...(input.date !== undefined ? { date: fromIsoDate(input.date) } : {}),
         ...(input.title !== undefined ? { title: input.title } : {}),
-        ...(input.type !== undefined ? { type: input.type } : {}),
+        ...(input.typeId !== undefined ? { typeId: input.typeId } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
         ...(input.description !== undefined ? { description: input.description || null } : {}),
         ...(input.zoneId !== undefined ? { zoneId: input.zoneId || null } : {}),

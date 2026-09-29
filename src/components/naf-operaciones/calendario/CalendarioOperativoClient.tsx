@@ -10,10 +10,8 @@ import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import { cn } from "@/lib/utils/cn";
 import {
-  CALENDARIO_EVENT_TYPES,
   CALENDARIO_STATUS_LABELS,
-  CALENDARIO_TYPE_COLORS,
-  CALENDARIO_TYPE_LABELS,
+  calendarioColorClass,
   toIsoDate,
   type CalendarioEventSummary,
 } from "@/modules/naf-operaciones/business/calendario-types";
@@ -52,7 +50,7 @@ export function CalendarioOperativoClient() {
   const now = new Date();
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() });
   const [zoneId, setZoneId] = useState("");
-  const [type, setType] = useState("");
+  const [typeId, setTypeId] = useState("");
   const [formState, setFormState] = useState<{ open: boolean; date?: string; eventId?: string }>({
     open: false,
   });
@@ -70,11 +68,11 @@ export function CalendarioOperativoClient() {
   });
 
   const eventsQuery = useQuery({
-    queryKey: ["calendario-operativo", "eventos", from, to, zoneId, type],
+    queryKey: ["calendario-operativo", "eventos", from, to, zoneId, typeId],
     queryFn: () => {
       const sp = new URLSearchParams({ from, to });
       if (zoneId) sp.set("zoneId", zoneId);
-      if (type) sp.set("type", type);
+      if (typeId) sp.set("typeId", typeId);
       return calendarioFetch<CalendarioEventSummary[]>(`${CALENDARIO_API}?${sp}`);
     },
   });
@@ -145,11 +143,12 @@ export function CalendarioOperativoClient() {
               </option>
             ))}
           </select>
-          <select className={selectClass} value={type} onChange={(e) => setType(e.target.value)}>
+          <select className={selectClass} value={typeId} onChange={(e) => setTypeId(e.target.value)}>
             <option value="">Todos los tipos</option>
-            {CALENDARIO_EVENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {CALENDARIO_TYPE_LABELS[t]}
+            {(opciones.data?.types ?? []).map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+                {t.isActive ? "" : " (inactivo)"}
               </option>
             ))}
           </select>
@@ -226,8 +225,8 @@ export function CalendarioOperativoClient() {
                   className="flex w-full flex-wrap items-center gap-3 px-4 py-2 text-left text-sm hover:bg-gray-50"
                 >
                   <span className="w-24 font-mono text-xs text-gray-600">{ev.date}</span>
-                  <span className={cn("rounded border px-2 py-0.5 text-xs", CALENDARIO_TYPE_COLORS[ev.type])}>
-                    {CALENDARIO_TYPE_LABELS[ev.type]}
+                  <span className={cn("rounded border px-2 py-0.5 text-xs", calendarioColorClass(ev.type.color))}>
+                    {ev.type.name}
                   </span>
                   <span className="font-medium">{ev.title}</span>
                   <span className="text-xs text-gray-500">{ev.zone?.name ?? "Varias zonas"}</span>
@@ -248,6 +247,7 @@ export function CalendarioOperativoClient() {
           initialDate={formState.date}
           eventId={formState.eventId}
           zones={opciones.data?.zones ?? []}
+          types={opciones.data?.types ?? []}
           defaultZoneId={zoneId}
           onSaved={(id) => {
             setFormState({ open: false });
@@ -275,14 +275,14 @@ function EventChip({ ev, onClick }: { ev: CalendarioEventSummary; onClick: () =>
   return (
     <button
       type="button"
-      title={`${CALENDARIO_TYPE_LABELS[ev.type]} · ${ev.title} · ${ev.completedCount}/${ev.contractsCount} contratos`}
+      title={`${ev.type.name} · ${ev.title} · ${ev.completedCount}/${ev.contractsCount} contratos`}
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
       className={cn(
         "block w-full truncate rounded border px-1.5 py-0.5 text-left text-[11px] font-medium",
-        CALENDARIO_TYPE_COLORS[ev.type],
+        calendarioColorClass(ev.type.color),
         ev.status === "CANCELLED" && "line-through opacity-60",
         ev.status === "DONE" && "ring-1 ring-emerald-500",
       )}

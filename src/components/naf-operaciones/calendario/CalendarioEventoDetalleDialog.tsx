@@ -16,8 +16,7 @@ import { toast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils/cn";
 import {
   CALENDARIO_STATUS_LABELS,
-  CALENDARIO_TYPE_COLORS,
-  CALENDARIO_TYPE_LABELS,
+  calendarioColorClass,
   type CalendarioEventDetail,
   type CalendarioZoneRef,
 } from "@/modules/naf-operaciones/business/calendario-types";
@@ -117,8 +116,8 @@ export function CalendarioEventoDetalleDialog({ eventId, canEdit, onClose, onEdi
               <DialogTitle className={cn(ev.status === "CANCELLED" && "line-through")}>{ev.title}</DialogTitle>
               <DialogDescription className="flex flex-wrap items-center gap-2">
                 <span className="font-mono">{ev.date}</span>
-                <span className={cn("rounded border px-2 py-0.5 text-xs", CALENDARIO_TYPE_COLORS[ev.type])}>
-                  {CALENDARIO_TYPE_LABELS[ev.type]}
+                <span className={cn("rounded border px-2 py-0.5 text-xs", calendarioColorClass(ev.type.color))}>
+                  {ev.type.name}
                 </span>
                 <span>{CALENDARIO_STATUS_LABELS[ev.status]}</span>
                 <span>· {ev.zone?.name ?? "Varias zonas"}</span>

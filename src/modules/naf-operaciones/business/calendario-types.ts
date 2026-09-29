@@ -1,33 +1,35 @@
-export const CALENDARIO_EVENT_TYPES = [
-  "UNIFORM_CHANGE",
-  "SUPPLY_DELIVERY",
-  "INSPECTION",
-  "TRAINING",
-  "MEETING",
-  "OTHER",
-] as const;
-export type CalendarioEventType = (typeof CALENDARIO_EVENT_TYPES)[number];
-
 export const CALENDARIO_EVENT_STATUSES = ["SCHEDULED", "DONE", "CANCELLED"] as const;
 export type CalendarioEventStatus = (typeof CALENDARIO_EVENT_STATUSES)[number];
 
-export const CALENDARIO_TYPE_LABELS: Record<CalendarioEventType, string> = {
-  UNIFORM_CHANGE: "Cambio de uniformes",
-  SUPPLY_DELIVERY: "Entrega de insumos",
-  INSPECTION: "Inspección / supervisión",
-  TRAINING: "Capacitación",
-  MEETING: "Reunión con cliente",
-  OTHER: "Otro",
-};
+/** Paleta para los tipos de evento (clave guardada en el catálogo → clases Tailwind del chip). */
+export const CALENDARIO_COLORS = {
+  blue: { label: "Azul", className: "bg-blue-100 text-blue-800 border-blue-200" },
+  sky: { label: "Celeste", className: "bg-sky-100 text-sky-800 border-sky-200" },
+  indigo: { label: "Índigo", className: "bg-indigo-100 text-indigo-800 border-indigo-200" },
+  purple: { label: "Morado", className: "bg-purple-100 text-purple-800 border-purple-200" },
+  pink: { label: "Rosado", className: "bg-pink-100 text-pink-800 border-pink-200" },
+  red: { label: "Rojo", className: "bg-red-100 text-red-800 border-red-200" },
+  orange: { label: "Naranja", className: "bg-orange-100 text-orange-800 border-orange-200" },
+  amber: { label: "Ámbar", className: "bg-amber-100 text-amber-800 border-amber-200" },
+  lime: { label: "Lima", className: "bg-lime-100 text-lime-800 border-lime-200" },
+  emerald: { label: "Verde", className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  teal: { label: "Turquesa", className: "bg-teal-100 text-teal-800 border-teal-200" },
+  gray: { label: "Gris", className: "bg-gray-100 text-gray-800 border-gray-200" },
+} as const;
+export type CalendarioColor = keyof typeof CALENDARIO_COLORS;
+export const CALENDARIO_COLOR_KEYS = Object.keys(CALENDARIO_COLORS) as [CalendarioColor, ...CalendarioColor[]];
 
-/** Clases Tailwind del chip del evento en el calendario. */
-export const CALENDARIO_TYPE_COLORS: Record<CalendarioEventType, string> = {
-  UNIFORM_CHANGE: "bg-blue-100 text-blue-800 border-blue-200",
-  SUPPLY_DELIVERY: "bg-amber-100 text-amber-800 border-amber-200",
-  INSPECTION: "bg-purple-100 text-purple-800 border-purple-200",
-  TRAINING: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  MEETING: "bg-pink-100 text-pink-800 border-pink-200",
-  OTHER: "bg-gray-100 text-gray-800 border-gray-200",
+export function calendarioColorClass(color: string): string {
+  return (CALENDARIO_COLORS as Record<string, { className: string }>)[color]?.className ?? CALENDARIO_COLORS.gray.className;
+}
+
+export type CalendarioEventTypeRef = { id: string; name: string; color: string };
+
+export type CalendarioEventTypeOption = CalendarioEventTypeRef & { isActive: boolean };
+
+export type CalendarioEventTypeRow = CalendarioEventTypeOption & {
+  sortOrder: number;
+  eventsCount: number;
 };
 
 export const CALENDARIO_STATUS_LABELS: Record<CalendarioEventStatus, string> = {
@@ -57,7 +59,7 @@ export type CalendarioEventSummary = {
   id: string;
   date: string;
   title: string;
-  type: CalendarioEventType;
+  type: CalendarioEventTypeRef;
   status: CalendarioEventStatus;
   zone: CalendarioZoneRef | null;
   appliesToAllContracts: boolean;

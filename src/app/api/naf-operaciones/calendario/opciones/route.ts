@@ -5,17 +5,19 @@ import {
   listCalendarioContracts,
   listCalendarioZones,
 } from "@/modules/naf-operaciones/services/calendario-opciones";
+import { listCalendarioEventTypes } from "@/modules/naf-operaciones/services/calendario-tipos";
 
-/** GET /api/naf-operaciones/calendario/opciones[?zoneId=] → zonas operativas + contratos vigentes (de la zona). */
+/** GET /api/naf-operaciones/calendario/opciones[?zoneId=] → zonas, tipos de evento y contratos vigentes (de la zona). */
 export const GET = withPermission(async (req: NextRequest) => {
   try {
     const zoneId = req.nextUrl.searchParams.get("zoneId") || null;
-    const [zones, contracts] = await Promise.all([
+    const [zones, types, contracts] = await Promise.all([
       listCalendarioZones(),
+      listCalendarioEventTypes(),
       listCalendarioContracts({ zoneId }),
     ]);
-    return ok({ zones, contracts });
+    return ok({ zones, types, contracts });
   } catch (e) {
-    return serverError("Error al cargar zonas y contratos", e);
+    return serverError("Error al cargar opciones del calendario", e);
   }
 }, "nafOperaciones.calendario", "view");

@@ -15,19 +15,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toaster";
+import Link from "next/link";
+import { useSession } from "@/lib/auth/client-session";
+import { hasPermission } from "@/lib/permissions/check";
 import {
   CALENDARIO_EVENT_STATUSES,
-  CALENDARIO_EVENT_TYPES,
   CALENDARIO_STATUS_LABELS,
-  CALENDARIO_TYPE_LABELS,
   type CalendarioContractOption,
   type CalendarioEventDetail,
   type CalendarioEventStatus,
-  type CalendarioEventType,
+  type CalendarioEventTypeOption,
   type CalendarioZoneRef,
 } from "@/modules/naf-operaciones/business/calendario-types";
 import {
   CALENDARIO_API,
+  CALENDARIO_TIPOS_ADMIN_HREF,
   calendarioFetch,
   selectClass,
   type CalendarioOpciones,
@@ -39,6 +41,7 @@ type Props = {
   initialDate?: string;
   eventId?: string;
   zones: CalendarioZoneRef[];
+  types: CalendarioEventTypeOption[];
   defaultZoneId?: string;
   onSaved: (eventId: string) => void;
 };
@@ -49,15 +52,19 @@ export function CalendarioEventoFormDialog({
   initialDate,
   eventId,
   zones,
+  types,
   defaultZoneId,
   onSaved,
 }: Props) {
   const qc = useQueryClient();
+  const { data: session } = useSession();
+  const canManageTypes = hasPermission(session, "plataforma.catalogs", "edit");
   const isEdit = Boolean(eventId);
 
   const [date, setDate] = useState(initialDate ?? "");
   const [title, setTitle] = useState("");
-  const [type, setType] = useState<CalendarioEventType>("UNIFORM_CHANGE");
+  const [typeId, setTypeId] = useState("");
+  const [originalTypeId, setOriginalTypeId] = useState("");
   const [status, setStatus] = useState<CalendarioEventStatus>("SCHEDULED");
   const [description, setDescription] = useState("");
   const [zoneId, setZoneId] = useState(defaultZoneId ?? "");
@@ -78,13 +85,23 @@ export function CalendarioEventoFormDialog({
     if (!ev) return;
     setDate(ev.date);
     setTitle(ev.title);
-    setType(ev.type);
+    setTypeId(ev.type.id);
+    setOriginalTypeId(ev.type.id);
     setStatus(ev.status);
     setDescription(ev.description ?? "");
     setZoneId(ev.zone?.id ?? "");
     for (const c of ev.contracts) known.current.set(c.id, c);
     setSelected(new Set(ev.contracts.map((c) => c.id)));
   }, [existing.data]);
+
+  const typeOptions = useMemo(
+    () => types.filter((t) => t.isActive || t.id === originalTypeId),
+    [types, originalTypeId],
+  );
+
+  useEffect(() => {
+    if (!isEdit && !typeId && typeOptions.length > 0) setTypeId(typeOptions[0].id);
+  }, [isEdit, typeId, typeOptions]);
 
   const contractsQuery = useQuery({
     queryKey: ["calendario-operativo", "opciones", zoneId],
@@ -146,7 +163,7 @@ export function CalendarioEventoFormDialog({
       const payload = {
         date,
         title: title.trim(),
-        type,
+        typeId,
         status,
         description: description.trim() || null,
         zoneId: everyInZone || allContracts ? zoneId || null : null,
@@ -172,7 +189,7 @@ export function CalendarioEventoFormDialog({
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error al guardar"),
   });
 
-  const canSave = date && title.trim() && selected.size > 0 && !save.isPending;
+  const canSave = date && title.trim() && typeId && selected.size > 0 && !save.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -202,16 +219,25 @@ export function CalendarioEventoFormDialog({
             <Input id="cal-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="cal-type">Tipo</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="cal-type">Tipo</Label>
+              {canManageTypes ? (
+                <Link href={CALENDARIO_TIPOS_ADMIN_HREF} className="text-xs text-blue-600 hover:underline">
+                  Administrar tipos
+                </Link>
+              ) : null}
+            </div>
             <select
               id="cal-type"
               className={`${selectClass} w-full`}
-              value={type}
-              onChange={(e) => setType(e.target.value as CalendarioEventType)}
+              value={typeId}
+              onChange={(e) => setTypeId(e.target.value)}
             >
-              {CALENDARIO_EVENT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {CALENDARIO_TYPE_LABELS[t]}
+              {typeOptions.length === 0 ? <option value="">Sin tipos activos</option> : null}
+              {typeOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                  {t.isActive ? "" : " (inactivo)"}
                 </option>
               ))}
             </select>
