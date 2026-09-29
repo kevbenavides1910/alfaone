@@ -32,7 +32,7 @@ const NAV_GROUPS: GroupDef[] = [
   {
     id: "operaciones",
     label: "Operaciones",
-    hrefs: ["/inventory", "/disciplinario/importar", "/empleados", "/finger-system", "/solicitudes-rrhh/ajustes", "/sig", "/ventas"],
+    hrefs: ["/naf-operaciones/calendario", "/inventory", "/disciplinario/importar", "/empleados", "/finger-system", "/solicitudes-rrhh/ajustes", "/sig", "/ventas"],
   },
   {
     id: "digital",
@@ -104,6 +104,7 @@ export function Sidebar({ collapsed, onToggle, onClose, isMobile }: Props) {
     if (item.adminOnly && !isPlatformAdmin(session)) return false;
     if (item.href === "/facturacion") return canAccessModule(session, "facturacion");
     if (item.href === "/contracts") return hasPermission(session, "presupuestos.contracts", "view");
+    if (item.href === "/naf-operaciones/calendario") return hasPermission(session, "nafOperaciones.calendario", "view");
     return canAccessModule(session, item.moduleId);
   });
 

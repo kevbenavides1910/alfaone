@@ -20,6 +20,7 @@ import {
   Fingerprint,
   Wallet,
   CreditCard,
+  CalendarDays,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
 import type { PermissionKey } from "@/lib/permissions/registry";
@@ -134,6 +135,17 @@ export const HOME_MODULE_TILES: HomeModuleTile[] = [
     icon: ClipboardCheck,
     permissionTileId: "naf_operaciones",
     moduleId: "nafOperaciones",
+    accent: "bg-white",
+    tile: "",
+  },
+  {
+    id: "calendario_operativo",
+    label: "Calendario operativo",
+    description: "Cambios de uniformes y eventos por contrato y zona",
+    href: "/naf-operaciones/calendario",
+    icon: CalendarDays,
+    permissionTileId: "naf_operaciones",
+    requiredPermission: "nafOperaciones.calendario",
     accent: "bg-white",
     tile: "",
   },
