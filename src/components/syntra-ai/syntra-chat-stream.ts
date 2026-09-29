@@ -22,13 +22,16 @@ export async function consumeSyntraChatStream(
 ): Promise<SyntraChatStreamResult> {
   const res = await fetch("/api/syntra-ai/chat/stream", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
     body: JSON.stringify(payload),
   });
 
-  if (!res.body) {
+  if (!res.ok || !res.body) {
     const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-    throw new Error(json.error?.message || "Sin respuesta del asistente");
+    throw new Error(json.error?.message || `Sin respuesta del asistente (${res.status})`);
   }
 
   const reader = res.body.getReader();
@@ -46,7 +49,12 @@ export async function consumeSyntraChatStream(
     for (const block of blocks) {
       const parsed = parseSseBlock(block);
       if (!parsed) continue;
-      const json = JSON.parse(parsed.data) as Record<string, unknown>;
+      let json: Record<string, unknown>;
+      try {
+        json = JSON.parse(parsed.data) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
       if (parsed.event === "progress" && typeof json.text === "string") {
         onProgress(json.text);
       } else if (parsed.event === "done") {

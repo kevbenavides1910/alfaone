@@ -70,6 +70,8 @@ export async function POST(req: NextRequest) {
       };
 
       try {
+        // Primer evento inmediato: confirma SSE vivo (antes de memoria/uploads/LLM).
+        send("progress", { text: "Iniciando…" });
         const result: SyntraAiChatResult = await syntraAiChat({
           userId: session.user.id,
           session,
@@ -92,9 +94,11 @@ export async function POST(req: NextRequest) {
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/event-stream",
+      "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      // Nginx: no bufferizar el stream de progreso.
+      "X-Accel-Buffering": "no",
     },
   });
 }

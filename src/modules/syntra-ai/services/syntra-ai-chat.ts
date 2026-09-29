@@ -108,6 +108,9 @@ async function appendTurn(
 }
 
 export async function syntraAiChat(input: SyntraAiChatInput): Promise<SyntraAiChatResult> {
+  const progress = (text: string) => input.onProgress?.(text);
+  progress("Preparando el asistente…");
+
   let cfg = await getSyntraAiConfig();
   if (!cfg.enabled) {
     throw new Error("El asistente IA está deshabilitado. Actívelo en Mantenimiento → Syntra IA.");
@@ -133,6 +136,7 @@ export async function syntraAiChat(input: SyntraAiChatInput): Promise<SyntraAiCh
 
   const historyLabel = msg || `[Adjuntos: ${uploadCtx.labels.join(", ")}]`;
 
+  progress("Revisando comandos de memoria…");
   const memoryReply = msg ? await tryHandleMemoryCommands(input.userId, msg) : null;
   if (memoryReply) {
     const saved = await appendTurn(
@@ -145,6 +149,7 @@ export async function syntraAiChat(input: SyntraAiChatInput): Promise<SyntraAiCh
     return { reply: memoryReply, ...saved, uploadErrors: uploadCtx.errors };
   }
 
+  progress("Cargando contexto y memoria…");
   const [knowledge, memoryPrompt] = await Promise.all([
     Promise.resolve(loadSyntraAiKnowledge()),
     buildMemoryAndSkillsPrompt(input.userId),
@@ -177,15 +182,16 @@ export async function syntraAiChat(input: SyntraAiChatInput): Promise<SyntraAiCh
       session: input.session,
       messages,
       maxRounds: cfg.agentMaxRounds,
-      onProgress: input.onProgress,
+      onProgress: progress,
     });
     reply = agentResult.reply;
     modelUsed = agentResult.modelUsed;
   } else {
-    input.onProgress?.(describeAgentProgress("model"));
+    progress(describeAgentProgress("model"));
     reply = await callSyntraAiLlm(cfg, messages);
   }
 
+  progress("Guardando conversación…");
   const saved = await appendTurn(input.userId, input.sessionId, historyLabel, reply, input.pageContext?.path);
   return {
     reply,
