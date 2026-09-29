@@ -27,6 +27,7 @@ const PATH_LABELS: Array<{ prefix: string; label: string; toolHint?: string }> =
   { prefix: "/sig/documentos", label: "SIG / Documento", toolHint: "get_sig_procedure, list_sig_documents" },
   { prefix: "/sig", label: "SIG", toolHint: "list_sig_documents, list_sig_vigencias, query_sig_capa, get_sig_procedure, list_sig_incidents, list_sig_risks" },
   { prefix: "/ventas", label: "Ventas", toolHint: "list_presupuestos, list_oportunidades" },
+  { prefix: "/naf-operaciones/calendario", label: "Calendario operativo", toolHint: "list_operational_calendar_events" },
   { prefix: "/naf-operaciones", label: "NAF Operaciones", toolHint: "list_op_roles, list_op_asistencia, list_op_vacantes" },
   { prefix: "/recorridos", label: "Recorridos", toolHint: "query_patrol_compliance" },
   { prefix: "/monitoreo", label: "Monitoreo", toolHint: "list_monitoreo_activaciones, lookup_monitoreo_alarm" },

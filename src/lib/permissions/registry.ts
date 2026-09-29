@@ -477,6 +477,15 @@ export const PERMISSION_REGISTRY = {
           edit: "Crear, programar y reasignar roles OP en Oracle",
         },
       },
+      calendario: {
+        label: "Calendario operativo",
+        uiRoutes: ["/naf-operaciones/calendario"],
+        apiPrefixes: ["/api/naf-operaciones/calendario"],
+        actions: {
+          view: "Ver eventos del calendario operativo",
+          edit: "Crear, editar y marcar eventos por contrato y zona",
+        },
+      },
     },
   },
 

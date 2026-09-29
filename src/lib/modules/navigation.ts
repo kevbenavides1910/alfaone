@@ -26,6 +26,7 @@ import {
   Wallet,
   CreditCard,
   Fingerprint,
+  CalendarDays,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
 
@@ -142,7 +143,14 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     label: "Operaciones NAF",
     icon: ClipboardCheck,
     moduleId: "nafOperaciones",
-    isActive: (p) => p.startsWith("/naf-operaciones"),
+    isActive: (p) => p.startsWith("/naf-operaciones") && !p.startsWith("/naf-operaciones/calendario"),
+  },
+  {
+    href: "/naf-operaciones/calendario",
+    label: "Calendario operativo",
+    icon: CalendarDays,
+    moduleId: "nafOperaciones",
+    isActive: (p) => p.startsWith("/naf-operaciones/calendario"),
   },
   {
     href: "/expediente-digital",

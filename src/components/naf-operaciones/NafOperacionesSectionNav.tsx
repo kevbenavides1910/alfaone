@@ -24,7 +24,14 @@ const TABS: Tab[] = [
       (p.startsWith("/naf-operaciones/") &&
         !p.startsWith("/naf-operaciones/programacion") &&
         !p.startsWith("/naf-operaciones/asistencia") &&
-        !p.startsWith("/naf-operaciones/vacantes")),
+        !p.startsWith("/naf-operaciones/vacantes") &&
+        !p.startsWith("/naf-operaciones/calendario")),
+  },
+  {
+    href: "/naf-operaciones/calendario",
+    label: "Calendario operativo",
+    permission: "nafOperaciones.calendario",
+    isActive: (p) => p.startsWith("/naf-operaciones/calendario"),
   },
   {
     href: "/naf-operaciones/programacion",

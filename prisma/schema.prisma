@@ -463,6 +463,7 @@ model Contract {
   cxcDocumentos              CxcDocumento[]
   billingLines               ContractBillingLine[]
   administrations            ContractAdministration[]
+  operationalEvents          OperationalCalendarEventContract[]
 
   @@index([company])
   @@index([status])
@@ -1160,9 +1161,66 @@ model Zone {
   locations                      ContractLocation[]
   administrations                ContractAdministration[]
   positions                      Position[]
+  operationalEvents              OperationalCalendarEvent[]
 
   @@index([nafZonaCode])
   @@map("zones")
+}
+
+enum OperationalEventType {
+  UNIFORM_CHANGE
+  SUPPLY_DELIVERY
+  INSPECTION
+  TRAINING
+  MEETING
+  OTHER
+}
+
+enum OperationalEventStatus {
+  SCHEDULED
+  DONE
+  CANCELLED
+}
+
+/// Evento del calendario operativo (ej. cambio de uniformes) en una fecha, aplicado a uno o varios contratos.
+model OperationalCalendarEvent {
+  id                    String                             @id @default(cuid())
+  date                  DateTime                           @db.Date
+  title                 String
+  type                  OperationalEventType               @default(OTHER)
+  status                OperationalEventStatus             @default(SCHEDULED)
+  description           String?                            @db.Text
+  /// Zona operativa con la que se armó la selección; null = varias zonas / todas.
+  zoneId                String?
+  zone                  Zone?                              @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  /// Se marcaron todos los contratos vigentes (de la zona, si hay zona) al guardar.
+  appliesToAllContracts Boolean                            @default(false)
+  createdById           String?
+  createdByName         String?
+  updatedById           String?
+  createdAt             DateTime                           @default(now())
+  updatedAt             DateTime                           @updatedAt
+  contracts             OperationalCalendarEventContract[]
+
+  @@index([date])
+  @@index([zoneId])
+  @@index([type])
+  @@map("operational_calendar_events")
+}
+
+model OperationalCalendarEventContract {
+  id          String                   @id @default(cuid())
+  eventId     String
+  event       OperationalCalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  contractId  String
+  contract    Contract                 @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  /// Fecha en que se completó el evento para este contrato (ej. uniformes entregados).
+  completedAt DateTime?
+  createdAt   DateTime                 @default(now())
+
+  @@unique([eventId, contractId])
+  @@index([contractId])
+  @@map("operational_calendar_event_contracts")
 }
 
 /// Ubicación física u operativa del contrato (contiene uno o más puestos).

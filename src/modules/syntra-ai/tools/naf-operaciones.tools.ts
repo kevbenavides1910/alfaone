@@ -1,6 +1,15 @@
 import { listOpAsistencia } from "@/modules/naf-operaciones/services/list-asistencia-rol";
 import { listOpRoles } from "@/modules/naf-operaciones/services/list-roles";
 import { listOpVacantes } from "@/modules/naf-operaciones/services/list-vacantes";
+import {
+  CALENDARIO_EVENT_TYPES,
+  CALENDARIO_STATUS_LABELS,
+  CALENDARIO_TYPE_LABELS,
+  toIsoDate,
+  type CalendarioEventType,
+} from "@/modules/naf-operaciones/business/calendario-types";
+import { listCalendarioEvents } from "@/modules/naf-operaciones/services/calendario-eventos";
+import { listCalendarioZones } from "@/modules/naf-operaciones/services/calendario-opciones";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
 import { intArg, strArg } from "./shared";
@@ -100,6 +109,66 @@ export function nafOperacionesTools(): SyntraTool[] {
           vacantes: result.rows.slice(0, limit),
           meta: { total: result.total, page: result.page, pageSize: result.pageSize },
           fuente: "NAF Operaciones — vacantes",
+        };
+      },
+    },
+    {
+      permission: { key: "nafOperaciones.calendario", level: "view" },
+      definition: toolDef(
+        "list_operational_calendar_events",
+        "Eventos del calendario operativo (cambio de uniformes, entregas, inspecciones…) por rango de fechas, zona o tipo, con avance por contrato.",
+        {
+          type: "object",
+          properties: {
+            desde: { type: "string", description: "YYYY-MM-DD (por defecto inicio del mes actual)." },
+            hasta: { type: "string", description: "YYYY-MM-DD (por defecto fin del mes actual)." },
+            zona: { type: "string", description: "Nombre (o parte) de la zona operativa." },
+            tipo: { type: "string", enum: [...CALENDARIO_EVENT_TYPES] },
+            limit: { type: "integer" },
+          },
+          additionalProperties: false,
+        },
+      ),
+      describeCall: () => "Consultando calendario operativo…",
+      handler: async (_session, args) => {
+        const limit = intArg(args, "limit", 30, 100);
+        const now = new Date();
+        const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+        const desde = strArg(args, "desde") || toIsoDate(monthStart);
+        const hasta = strArg(args, "hasta") || toIsoDate(monthEnd);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta)) {
+          return { error: "Fechas deben ser YYYY-MM-DD." };
+        }
+
+        let zoneId: string | undefined;
+        const zonaQ = strArg(args, "zona").toLowerCase();
+        if (zonaQ) {
+          const zones = await listCalendarioZones();
+          const zone = zones.find((z) => z.name.toLowerCase().includes(zonaQ));
+          if (!zone) return { error: `No se encontró la zona «${zonaQ}».`, zonas: zones.map((z) => z.name) };
+          zoneId = zone.id;
+        }
+        const tipo = strArg(args, "tipo") as CalendarioEventType;
+        const events = await listCalendarioEvents({
+          from: desde,
+          to: hasta,
+          zoneId,
+          type: CALENDARIO_EVENT_TYPES.includes(tipo) ? tipo : undefined,
+        });
+        return {
+          rango: { desde, hasta },
+          total: events.length,
+          eventos: events.slice(0, limit).map((e) => ({
+            fecha: e.date,
+            titulo: e.title,
+            tipo: CALENDARIO_TYPE_LABELS[e.type],
+            estado: CALENDARIO_STATUS_LABELS[e.status],
+            zona: e.zone?.name ?? "Varias / todas",
+            contratos: e.contractsCount,
+            completados: e.completedCount,
+          })),
+          fuente: "Alfa One — calendario operativo",
         };
       },
     },
