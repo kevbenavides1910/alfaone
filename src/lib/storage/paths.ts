@@ -28,6 +28,7 @@ export const STORAGE_DIRS = {
   disciplinaryEvidence: "disciplinary-evidence",
   ticketsTi: "tickets-ti",
   monitoreo: "monitoreo-uploads",
+  calendarioOperativo: "calendario-operativo",
   /** Exportaciones / temporales generados (futuro) */
   exports: "exports",
 } as const;
@@ -78,6 +79,10 @@ export function monitoreoUploadRoot(): string {
   const explicit = process.env.MONITOREO_UPLOAD_DIR?.trim();
   if (explicit) return path.resolve(explicit);
   return path.join(appDataRoot(), STORAGE_DIRS.monitoreo);
+}
+
+export function calendarioOperativoUploadRoot(): string {
+  return path.join(appDataRoot(), STORAGE_DIRS.calendarioOperativo);
 }
 
 /** Ruta dentro del contenedor cuando se monta APP_DATA_HOST → /data */

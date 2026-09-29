@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ import {
   type CalendarioEventDetail,
   type CalendarioEventStatus,
   type CalendarioEventTypeOption,
+  type CalendarioUserRef,
   type CalendarioZoneRef,
 } from "@/modules/naf-operaciones/business/calendario-types";
 import {
@@ -42,6 +44,7 @@ type Props = {
   eventId?: string;
   zones: CalendarioZoneRef[];
   types: CalendarioEventTypeOption[];
+  admins: CalendarioUserRef[];
   defaultZoneId?: string;
   onSaved: (eventId: string) => void;
 };
@@ -53,6 +56,7 @@ export function CalendarioEventoFormDialog({
   eventId,
   zones,
   types,
+  admins,
   defaultZoneId,
   onSaved,
 }: Props) {
@@ -67,6 +71,7 @@ export function CalendarioEventoFormDialog({
   const [originalTypeId, setOriginalTypeId] = useState("");
   const [status, setStatus] = useState<CalendarioEventStatus>("SCHEDULED");
   const [description, setDescription] = useState("");
+  const [adminIds, setAdminIds] = useState<string[]>([]);
   const [zoneId, setZoneId] = useState(defaultZoneId ?? "");
   const [search, setSearch] = useState("");
   const [onlySelected, setOnlySelected] = useState(false);
@@ -89,6 +94,7 @@ export function CalendarioEventoFormDialog({
     setOriginalTypeId(ev.type.id);
     setStatus(ev.status);
     setDescription(ev.description ?? "");
+    setAdminIds(ev.admins.map((a) => a.id));
     setZoneId(ev.zone?.id ?? "");
     for (const c of ev.contracts) known.current.set(c.id, c);
     setSelected(new Set(ev.contracts.map((c) => c.id)));
@@ -169,6 +175,7 @@ export function CalendarioEventoFormDialog({
         zoneId: everyInZone || allContracts ? zoneId || null : null,
         allContracts,
         contractIds: ids,
+        adminUserIds: adminIds,
       };
       return isEdit
         ? calendarioFetch<CalendarioEventDetail>(`${CALENDARIO_API}/${eventId}`, {
@@ -259,6 +266,27 @@ export function CalendarioEventoFormDialog({
               </select>
             </div>
           ) : null}
+          <div className="space-y-1 sm:col-span-2">
+            <Label>Administradores responsables</Label>
+            <MultiSelect
+              searchable
+              placeholder="Sin administradores asignados"
+              searchPlaceholder="Buscar usuario…"
+              clearLabel="Quitar todos"
+              options={(() => {
+                const opts = admins.map((u) => ({ value: u.id, label: u.name }));
+                for (const a of existing.data?.admins ?? []) {
+                  if (!opts.some((o) => o.value === a.id)) opts.push({ value: a.id, label: `${a.name} (inactivo)` });
+                }
+                return opts;
+              })()}
+              value={adminIds}
+              onChange={setAdminIds}
+            />
+            <p className="text-xs text-gray-500">
+              Los asignados pueden marcar la actividad como realizada y subir evidencia aunque solo tengan permiso de ver.
+            </p>
+          </div>
           <div className="space-y-1 sm:col-span-2">
             <Label htmlFor="cal-desc">Descripción / instrucciones</Label>
             <Textarea

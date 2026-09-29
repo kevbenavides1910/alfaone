@@ -3,8 +3,18 @@ import { prisma } from "@/modules/core/db/prisma";
 import {
   CALENDARIO_EXCLUDED_NAF_ZONES,
   type CalendarioContractOption,
+  type CalendarioUserRef,
   type CalendarioZoneRef,
 } from "@/modules/naf-operaciones/business/calendario-types";
+
+/** Usuarios activos que se pueden asignar como administradores de un evento. */
+export async function listCalendarioAdminCandidates(): Promise<CalendarioUserRef[]> {
+  return prisma.user.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+}
 
 const operativeZoneWhere: Prisma.ZoneWhereInput = {
   OR: [{ nafZonaCode: null }, { nafZonaCode: { notIn: CALENDARIO_EXCLUDED_NAF_ZONES } }],

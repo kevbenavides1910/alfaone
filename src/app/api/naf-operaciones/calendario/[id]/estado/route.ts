@@ -3,23 +3,23 @@ import { withPermission } from "@/lib/permissions/middleware";
 import { badRequest, ok } from "@/lib/api/response";
 import {
   assertCanActOnEvent,
-  setCalendarioCompletion,
+  setCalendarioStatus,
 } from "@/modules/naf-operaciones/services/calendario-eventos";
 import { calendarioErrorResponse } from "@/modules/naf-operaciones/services/calendario-http";
-import { calendarioCompletionSchema } from "@/modules/naf-operaciones/validations/calendario.schema";
+import { calendarioStatusSchema } from "@/modules/naf-operaciones/validations/calendario.schema";
 
-/** PATCH { contractIds?: string[], completed: boolean } — sin contractIds aplica a todos los del evento. */
+/** PATCH { status: "DONE" | "SCHEDULED" } — marca la actividad como realizada o pendiente. */
 export const PATCH = withPermission<{ id: string }>(async (req: NextRequest, { session, params }) => {
-  const parsed = calendarioCompletionSchema.safeParse(await req.json().catch(() => null));
+  const parsed = calendarioStatusSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest("Datos inválidos", parsed.error.flatten());
   try {
     await assertCanActOnEvent(session, params.id);
-    const event = await setCalendarioCompletion(params.id, parsed.data, {
+    const event = await setCalendarioStatus(params.id, parsed.data.status, {
       id: session.user.id,
       name: session.user.name,
     });
     return ok(event);
   } catch (e) {
-    return calendarioErrorResponse(e, "Error al actualizar el avance del evento");
+    return calendarioErrorResponse(e, "Error al cambiar el estado del evento");
   }
 }, "nafOperaciones.calendario", "view");

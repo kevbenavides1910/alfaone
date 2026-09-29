@@ -2,19 +2,15 @@ import { NextRequest } from "next/server";
 import { withPermission } from "@/lib/permissions/middleware";
 import { badRequest, noContent, notFound, ok, serverError } from "@/lib/api/response";
 import {
-  CalendarioError,
   deleteCalendarioEvent,
   getCalendarioEvent,
   updateCalendarioEvent,
 } from "@/modules/naf-operaciones/services/calendario-eventos";
+import { removeCalendarioEvidenceDir } from "@/modules/naf-operaciones/services/calendario-evidencias";
+import { calendarioErrorResponse } from "@/modules/naf-operaciones/services/calendario-http";
 import { calendarioUpdateSchema } from "@/modules/naf-operaciones/validations/calendario.schema";
 
 type Params = { id: string };
-
-function handleError(e: unknown, fallback: string) {
-  if (e instanceof CalendarioError) return e.status === 404 ? notFound(e.message) : badRequest(e.message);
-  return serverError(fallback, e);
-}
 
 export const GET = withPermission<Params>(async (_req, { params }) => {
   try {
@@ -35,15 +31,16 @@ export const PATCH = withPermission<Params>(async (req: NextRequest, { session, 
     });
     return ok(event);
   } catch (e) {
-    return handleError(e, "Error al actualizar el evento");
+    return calendarioErrorResponse(e, "Error al actualizar el evento");
   }
 }, "nafOperaciones.calendario", "edit");
 
 export const DELETE = withPermission<Params>(async (_req, { params }) => {
   try {
     await deleteCalendarioEvent(params.id);
+    await removeCalendarioEvidenceDir(params.id);
     return noContent();
   } catch (e) {
-    return handleError(e, "Error al eliminar el evento");
+    return calendarioErrorResponse(e, "Error al eliminar el evento");
   }
 }, "nafOperaciones.calendario", "edit");

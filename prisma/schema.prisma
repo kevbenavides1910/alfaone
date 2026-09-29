@@ -280,6 +280,7 @@ model User {
   expenseApprovals                       ExpenseApproval[]             @relation("ExpenseApprovalApprover")
   expenseAttachments                     ExpenseAttachment[]           @relation("ExpenseAttachmentUploader")
   paymentAttachments                     PaymentAttachment[]           @relation("PaymentAttachmentUploader")
+  operationalEventsAdministered          OperationalCalendarEventAdmin[]
   disciplinaryBatches                    DisciplinaryImportBatch[]     @relation("DisciplinaryBatchUploader")
   employeeImportBatches                  EmployeeImportBatch[]         @relation("EmployeeBatchUploader")
   sigDocumentsCreated                    SigDocument[]                 @relation("SigDocumentCreator")
@@ -464,6 +465,7 @@ model Contract {
   billingLines               ContractBillingLine[]
   administrations            ContractAdministration[]
   operationalEvents          OperationalCalendarEventContract[]
+  operationalEventEvidence   OperationalCalendarEventAttachment[]
 
   @@index([company])
   @@index([status])
@@ -1202,12 +1204,17 @@ model OperationalCalendarEvent {
   zone                  Zone?                              @relation(fields: [zoneId], references: [id], onDelete: SetNull)
   /// Se marcaron todos los contratos vigentes (de la zona, si hay zona) al guardar.
   appliesToAllContracts Boolean                            @default(false)
+  /// Cuándo y quién marcó el evento como realizado (null mientras esté pendiente).
+  completedAt           DateTime?
+  completedByName       String?
   createdById           String?
   createdByName         String?
   updatedById           String?
   createdAt             DateTime                           @default(now())
   updatedAt             DateTime                           @updatedAt
   contracts             OperationalCalendarEventContract[]
+  admins                OperationalCalendarEventAdmin[]
+  attachments           OperationalCalendarEventAttachment[]
 
   @@index([date])
   @@index([zoneId])
@@ -1228,6 +1235,42 @@ model OperationalCalendarEventContract {
   @@unique([eventId, contractId])
   @@index([contractId])
   @@map("operational_calendar_event_contracts")
+}
+
+/// Usuarios responsables (administradores) de un evento del calendario operativo.
+model OperationalCalendarEventAdmin {
+  id        String                   @id @default(cuid())
+  eventId   String
+  event     OperationalCalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime                 @default(now())
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@map("operational_calendar_event_admins")
+}
+
+/// Evidencia (foto, PDF…) de un evento; opcionalmente ligada a un contrato del evento.
+model OperationalCalendarEventAttachment {
+  id             String                   @id @default(cuid())
+  eventId        String
+  event          OperationalCalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  contractId     String?
+  contract       Contract?                @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  uploadedById   String?
+  uploadedByName String?
+  originalName   String
+  storedName     String
+  mimeType       String
+  fileSize       Int
+  /// Ruta relativa bajo calendarioOperativoUploadRoot().
+  path           String
+  createdAt      DateTime                 @default(now())
+
+  @@index([eventId])
+  @@index([contractId])
+  @@map("operational_calendar_event_attachments")
 }
 
 /// Ubicación física u operativa del contrato (contiene uno o más puestos).

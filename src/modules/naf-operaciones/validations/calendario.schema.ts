@@ -12,6 +12,9 @@ export const calendarioListQuerySchema = z.object({
   zoneId: z.string().min(1).optional(),
   contractId: z.string().min(1).optional(),
   typeId: z.string().min(1).optional(),
+  /** Eventos donde alguno de estos usuarios es administrador. */
+  adminUserIds: z.array(z.string().min(1)).max(50).optional(),
+  status: z.enum(CALENDARIO_EVENT_STATUSES).optional(),
 });
 export type CalendarioListQuery = z.infer<typeof calendarioListQuerySchema>;
 
@@ -25,6 +28,7 @@ const eventBase = z.object({
   /** Aplica a todos los contratos vigentes (de la zona si se indica); ignora `contractIds`. */
   allContracts: z.boolean().optional(),
   contractIds: z.array(z.string().min(1)).max(2000).optional(),
+  adminUserIds: z.array(z.string().min(1)).max(50).optional(),
 });
 
 export const calendarioCreateSchema = eventBase.refine(
@@ -42,6 +46,11 @@ export const calendarioCompletionSchema = z.object({
   completed: z.boolean(),
 });
 export type CalendarioCompletionInput = z.infer<typeof calendarioCompletionSchema>;
+
+export const calendarioStatusSchema = z.object({
+  status: z.enum(["SCHEDULED", "DONE"]),
+});
+export type CalendarioStatusInput = z.infer<typeof calendarioStatusSchema>;
 
 export const calendarioTipoCreateSchema = z.object({
   name: z.string().trim().min(1, "Nombre requerido").max(100),

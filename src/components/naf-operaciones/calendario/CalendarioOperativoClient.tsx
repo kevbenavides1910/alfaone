@@ -2,17 +2,21 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Paperclip, Plus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { ModulePage } from "@/components/layout/ModulePage";
 import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
 import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import { cn } from "@/lib/utils/cn";
 import {
+  CALENDARIO_EVENT_STATUSES,
+  CALENDARIO_STATUS_BADGE,
   CALENDARIO_STATUS_LABELS,
   calendarioColorClass,
   toIsoDate,
+  type CalendarioEventStatus,
   type CalendarioEventSummary,
 } from "@/modules/naf-operaciones/business/calendario-types";
 import {
@@ -51,6 +55,8 @@ export function CalendarioOperativoClient() {
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() });
   const [zoneId, setZoneId] = useState("");
   const [typeId, setTypeId] = useState("");
+  const [adminIds, setAdminIds] = useState<string[]>([]);
+  const [status, setStatus] = useState<CalendarioEventStatus | "">("");
   const [formState, setFormState] = useState<{ open: boolean; date?: string; eventId?: string }>({
     open: false,
   });
@@ -68,11 +74,13 @@ export function CalendarioOperativoClient() {
   });
 
   const eventsQuery = useQuery({
-    queryKey: ["calendario-operativo", "eventos", from, to, zoneId, typeId],
+    queryKey: ["calendario-operativo", "eventos", from, to, zoneId, typeId, adminIds.join(","), status],
     queryFn: () => {
       const sp = new URLSearchParams({ from, to });
       if (zoneId) sp.set("zoneId", zoneId);
       if (typeId) sp.set("typeId", typeId);
+      if (adminIds.length) sp.set("adminUserIds", adminIds.join(","));
+      if (status) sp.set("status", status);
       return calendarioFetch<CalendarioEventSummary[]>(`${CALENDARIO_API}?${sp}`);
     },
   });
@@ -152,6 +160,31 @@ export function CalendarioOperativoClient() {
               </option>
             ))}
           </select>
+          <select
+            className={selectClass}
+            value={status}
+            onChange={(e) => setStatus(e.target.value as CalendarioEventStatus | "")}
+          >
+            <option value="">Todos los estados</option>
+            {CALENDARIO_EVENT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {CALENDARIO_STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+          <MultiSelect
+            className="w-60"
+            searchable
+            placeholder="Todos los administradores"
+            searchPlaceholder="Buscar administrador…"
+            clearLabel="Limpiar (todos los administradores)"
+            options={(opciones.data?.admins ?? []).map((u) => ({ value: u.id, label: u.name }))}
+            value={adminIds}
+            onChange={setAdminIds}
+            quickActions={
+              session?.user?.id ? [{ id: "mine", label: "Mis eventos", values: [session.user.id] }] : undefined
+            }
+          />
         </div>
       </div>
 
@@ -230,8 +263,25 @@ export function CalendarioOperativoClient() {
                   </span>
                   <span className="font-medium">{ev.title}</span>
                   <span className="text-xs text-gray-500">{ev.zone?.name ?? "Varias zonas"}</span>
-                  <span className="ml-auto text-xs text-gray-600">
-                    {ev.completedCount}/{ev.contractsCount} contratos · {CALENDARIO_STATUS_LABELS[ev.status]}
+                  {ev.admins.length ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+                      <Users className="h-3.5 w-3.5" />
+                      {ev.admins.map((a) => a.name).join(", ")}
+                    </span>
+                  ) : null}
+                  <span className="ml-auto flex items-center gap-2 text-xs text-gray-600">
+                    {ev.attachmentsCount ? (
+                      <span className="inline-flex items-center gap-0.5" title="Evidencias">
+                        <Paperclip className="h-3.5 w-3.5" />
+                        {ev.attachmentsCount}
+                      </span>
+                    ) : null}
+                    <span>
+                      {ev.completedCount}/{ev.contractsCount} contratos
+                    </span>
+                    <span className={cn("rounded border px-2 py-0.5", CALENDARIO_STATUS_BADGE[ev.status])}>
+                      {CALENDARIO_STATUS_LABELS[ev.status]}
+                    </span>
                   </span>
                 </button>
               </li>
@@ -248,6 +298,7 @@ export function CalendarioOperativoClient() {
           eventId={formState.eventId}
           zones={opciones.data?.zones ?? []}
           types={opciones.data?.types ?? []}
+          admins={opciones.data?.admins ?? []}
           defaultZoneId={zoneId}
           onSaved={(id) => {
             setFormState({ open: false });
@@ -275,7 +326,15 @@ function EventChip({ ev, onClick }: { ev: CalendarioEventSummary; onClick: () =>
   return (
     <button
       type="button"
-      title={`${ev.type.name} · ${ev.title} · ${ev.completedCount}/${ev.contractsCount} contratos`}
+      title={[
+        ev.type.name,
+        ev.title,
+        CALENDARIO_STATUS_LABELS[ev.status],
+        `${ev.completedCount}/${ev.contractsCount} contratos`,
+        ev.admins.length ? `Adm.: ${ev.admins.map((a) => a.name).join(", ")}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")}
       onClick={(e) => {
         e.stopPropagation();
         onClick();

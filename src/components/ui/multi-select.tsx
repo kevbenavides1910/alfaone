@@ -30,6 +30,7 @@ interface MultiSelectProps {
     label: string;
     values: string[];
   }>;
+  clearLabel?: string;
 }
 
 export function MultiSelect({
@@ -41,6 +42,7 @@ export function MultiSelect({
   searchable = false,
   searchPlaceholder = "Buscar…",
   quickActions,
+  clearLabel = "Limpiar selección (todas las planillas)",
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -214,7 +216,7 @@ export function MultiSelect({
                 onClick={() => onChange([])}
                 className="text-xs text-slate-500 hover:text-slate-700"
               >
-                Limpiar selección (todas las planillas)
+                {clearLabel}
               </button>
             </div>
           )}

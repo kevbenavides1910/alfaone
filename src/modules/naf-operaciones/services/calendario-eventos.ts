@@ -1,9 +1,12 @@
 import type { Prisma } from "@prisma/client";
+import type { Session } from "next-auth";
 import { prisma } from "@/modules/core/db/prisma";
+import { hasPermission } from "@/lib/permissions/check";
 import {
   fromIsoDate,
   toIsoDate,
   type CalendarioEventDetail,
+  type CalendarioEventStatus,
   type CalendarioEventSummary,
 } from "@/modules/naf-operaciones/business/calendario-types";
 import {
@@ -23,11 +26,16 @@ export type CalendarioActor = { id: string; name?: string | null };
 export class CalendarioError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 404 = 400,
+    readonly status: 400 | 403 | 404 = 400,
   ) {
     super(message);
   }
 }
+
+const adminsSelect = {
+  orderBy: { user: { name: "asc" } },
+  select: { user: { select: { id: true, name: true } } },
+} satisfies Prisma.OperationalCalendarEvent$adminsArgs;
 
 const summarySelect = {
   id: true,
@@ -37,7 +45,8 @@ const summarySelect = {
   status: true,
   appliesToAllContracts: true,
   zone: { select: { id: true, name: true } },
-  _count: { select: { contracts: true } },
+  admins: adminsSelect,
+  _count: { select: { contracts: true, attachments: true } },
 } satisfies Prisma.OperationalCalendarEventSelect;
 
 export async function listCalendarioEvents(q: CalendarioListQuery): Promise<CalendarioEventSummary[]> {
@@ -45,6 +54,8 @@ export async function listCalendarioEvents(q: CalendarioListQuery): Promise<Cale
     { date: { gte: fromIsoDate(q.from), lte: fromIsoDate(q.to) } },
   ];
   if (q.typeId) and.push({ typeId: q.typeId });
+  if (q.status) and.push({ status: q.status });
+  if (q.adminUserIds?.length) and.push({ admins: { some: { userId: { in: q.adminUserIds } } } });
   if (q.contractId) and.push({ contracts: { some: { contractId: q.contractId } } });
   if (q.zoneId) {
     and.push({
@@ -80,7 +91,13 @@ export async function listCalendarioEvents(q: CalendarioListQuery): Promise<Cale
     appliesToAllContracts: r.appliesToAllContracts,
     contractsCount: r._count.contracts,
     completedCount: completedByEvent.get(r.id) ?? 0,
+    admins: r.admins.map((a) => a.user),
+    attachmentsCount: r._count.attachments,
   }));
+}
+
+export function calendarioAttachmentUrl(eventId: string, attachmentId: string): string {
+  return `/api/naf-operaciones/calendario/${eventId}/evidencias/${attachmentId}`;
 }
 
 export async function getCalendarioEvent(id: string): Promise<CalendarioEventDetail | null> {
@@ -89,8 +106,13 @@ export async function getCalendarioEvent(id: string): Promise<CalendarioEventDet
     include: {
       zone: { select: { id: true, name: true } },
       type: { select: { id: true, name: true, color: true } },
+      admins: adminsSelect,
       contracts: {
         include: { contract: { select: contractZonesSelect } },
+      },
+      attachments: {
+        orderBy: { createdAt: "desc" },
+        include: { contract: { select: { id: true, licitacionNo: true, client: true } } },
       },
     },
   });
@@ -113,11 +135,47 @@ export async function getCalendarioEvent(id: string): Promise<CalendarioEventDet
     appliesToAllContracts: ev.appliesToAllContracts,
     contractsCount: contracts.length,
     completedCount: contracts.filter((c) => c.completedAt).length,
+    admins: ev.admins.map((a) => a.user),
+    attachmentsCount: ev.attachments.length,
     description: ev.description,
     createdByName: ev.createdByName,
     createdAt: ev.createdAt.toISOString(),
+    completedAt: ev.completedAt ? ev.completedAt.toISOString() : null,
+    completedByName: ev.completedByName,
     contracts,
+    attachments: ev.attachments.map((a) => ({
+      id: a.id,
+      originalName: a.originalName,
+      mimeType: a.mimeType,
+      fileSize: a.fileSize,
+      contract: a.contract
+        ? { id: a.contract.id, label: `${a.contract.client} · ${a.contract.licitacionNo}` }
+        : null,
+      uploadedByName: a.uploadedByName,
+      createdAt: a.createdAt.toISOString(),
+      url: calendarioAttachmentUrl(ev.id, a.id),
+    })),
   };
+}
+
+/**
+ * Quien tiene «Editar» en el calendario actúa sobre cualquier evento;
+ * un administrador asignado puede marcar avance y subir evidencia en los suyos aunque solo tenga «Ver».
+ */
+export async function assertCanActOnEvent(session: Session, eventId: string): Promise<void> {
+  const exists = await prisma.operationalCalendarEvent.findUnique({
+    where: { id: eventId },
+    select: { id: true },
+  });
+  if (!exists) throw new CalendarioError("Evento no encontrado", 404);
+  if (hasPermission(session, "nafOperaciones.calendario", "edit")) return;
+  const assigned = await prisma.operationalCalendarEventAdmin.findUnique({
+    where: { eventId_userId: { eventId, userId: session.user.id } },
+    select: { id: true },
+  });
+  if (!assigned) {
+    throw new CalendarioError("Solo los administradores asignados o quien puede editar el calendario", 403);
+  }
 }
 
 async function resolveContractIds(input: {
@@ -143,6 +201,24 @@ async function resolveContractIds(input: {
   return found.map((r) => r.id);
 }
 
+/** Usuarios activos; uno inactivo solo se conserva si ya estaba asignado al evento. */
+async function resolveAdminIds(ids: string[] | undefined, eventId?: string): Promise<string[]> {
+  const requested = [...new Set(ids ?? [])];
+  if (requested.length === 0) return [];
+  const found = await prisma.user.findMany({
+    where: {
+      id: { in: requested },
+      OR: [
+        { isActive: true },
+        ...(eventId ? [{ operationalEventsAdministered: { some: { eventId } } }] : []),
+      ],
+    },
+    select: { id: true },
+  });
+  if (found.length !== requested.length) throw new CalendarioError("Uno o más administradores no existen o están inactivos");
+  return found.map((u) => u.id);
+}
+
 async function assertZone(zoneId: string | null | undefined) {
   if (!zoneId) return;
   const zone = await prisma.zone.findUnique({ where: { id: zoneId }, select: { id: true } });
@@ -159,6 +235,12 @@ async function assertType(typeId: string, currentTypeId?: string) {
   if (!type.isActive && typeId !== currentTypeId) throw new CalendarioError("El tipo de evento está inactivo");
 }
 
+function statusData(status: CalendarioEventStatus, actor: CalendarioActor) {
+  return status === "DONE"
+    ? { status, completedAt: new Date(), completedByName: actor.name ?? null }
+    : { status, completedAt: null, completedByName: null };
+}
+
 export async function createCalendarioEvent(
   input: CalendarioCreateInput,
   actor: CalendarioActor,
@@ -166,20 +248,30 @@ export async function createCalendarioEvent(
   await assertZone(input.zoneId);
   await assertType(input.typeId);
   const contractIds = await resolveContractIds(input);
+  const adminIds = await resolveAdminIds(input.adminUserIds);
+  const status = input.status ?? "SCHEDULED";
 
   const ev = await prisma.operationalCalendarEvent.create({
     data: {
       date: fromIsoDate(input.date),
       title: input.title,
       typeId: input.typeId,
-      status: input.status ?? "SCHEDULED",
+      ...statusData(status, actor),
       description: input.description || null,
       zoneId: input.zoneId || null,
       appliesToAllContracts: Boolean(input.allContracts),
       createdById: actor.id,
       createdByName: actor.name ?? null,
       updatedById: actor.id,
-      contracts: { createMany: { data: contractIds.map((contractId) => ({ contractId })) } },
+      contracts: {
+        createMany: {
+          data: contractIds.map((contractId) => ({
+            contractId,
+            completedAt: status === "DONE" ? new Date() : null,
+          })),
+        },
+      },
+      admins: { createMany: { data: adminIds.map((userId) => ({ userId })) } },
     },
     select: { id: true },
   });
@@ -193,7 +285,7 @@ export async function updateCalendarioEvent(
 ): Promise<CalendarioEventDetail> {
   const current = await prisma.operationalCalendarEvent.findUnique({
     where: { id },
-    select: { id: true, zoneId: true, typeId: true },
+    select: { id: true, zoneId: true, typeId: true, status: true },
   });
   if (!current) throw new CalendarioError("Evento no encontrado", 404);
   if (input.zoneId !== undefined) await assertZone(input.zoneId);
@@ -207,6 +299,8 @@ export async function updateCalendarioEvent(
         contractIds: input.contractIds,
       })
     : null;
+  const adminIds = input.adminUserIds !== undefined ? await resolveAdminIds(input.adminUserIds, id) : null;
+  const statusChanged = input.status !== undefined && input.status !== current.status;
 
   await prisma.$transaction(async (tx) => {
     await tx.operationalCalendarEvent.update({
@@ -215,7 +309,7 @@ export async function updateCalendarioEvent(
         ...(input.date !== undefined ? { date: fromIsoDate(input.date) } : {}),
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.typeId !== undefined ? { typeId: input.typeId } : {}),
-        ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(statusChanged ? statusData(input.status!, actor) : {}),
         ...(input.description !== undefined ? { description: input.description || null } : {}),
         ...(input.zoneId !== undefined ? { zoneId: input.zoneId || null } : {}),
         ...(touchesContracts ? { appliesToAllContracts: Boolean(input.allContracts) } : {}),
@@ -231,6 +325,50 @@ export async function updateCalendarioEvent(
         skipDuplicates: true,
       });
     }
+    if (adminIds) {
+      await tx.operationalCalendarEventAdmin.deleteMany({
+        where: { eventId: id, userId: { notIn: adminIds } },
+      });
+      await tx.operationalCalendarEventAdmin.createMany({
+        data: adminIds.map((userId) => ({ eventId: id, userId })),
+        skipDuplicates: true,
+      });
+    }
+    if (statusChanged && input.status === "DONE") {
+      await tx.operationalCalendarEventContract.updateMany({
+        where: { eventId: id, completedAt: null },
+        data: { completedAt: new Date() },
+      });
+    }
+  });
+  return (await getCalendarioEvent(id))!;
+}
+
+/** Realizada completa los contratos pendientes; Pendiente solo reabre el evento (conserva el avance por contrato). */
+export async function setCalendarioStatus(
+  id: string,
+  status: "SCHEDULED" | "DONE",
+  actor: CalendarioActor,
+): Promise<CalendarioEventDetail> {
+  const ev = await prisma.operationalCalendarEvent.findUnique({
+    where: { id },
+    select: { status: true },
+  });
+  if (!ev) throw new CalendarioError("Evento no encontrado", 404);
+  if (ev.status === "CANCELLED") throw new CalendarioError("El evento está cancelado; reactívelo primero");
+  if (ev.status === status) return (await getCalendarioEvent(id))!;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.operationalCalendarEvent.update({
+      where: { id },
+      data: { ...statusData(status, actor), updatedById: actor.id },
+    });
+    if (status === "DONE") {
+      await tx.operationalCalendarEventContract.updateMany({
+        where: { eventId: id, completedAt: null },
+        data: { completedAt: new Date() },
+      });
+    }
   });
   return (await getCalendarioEvent(id))!;
 }
@@ -240,7 +378,7 @@ export async function deleteCalendarioEvent(id: string): Promise<void> {
   if (deleted.count === 0) throw new CalendarioError("Evento no encontrado", 404);
 }
 
-/** Marca/desmarca contratos como completados; el evento pasa a Realizado cuando todos lo están. */
+/** Marca/desmarca contratos como completados; el evento pasa a Realizada cuando todos lo están. */
 export async function setCalendarioCompletion(
   id: string,
   input: CalendarioCompletionInput,
@@ -268,7 +406,7 @@ export async function setCalendarioCompletion(
     if (nextStatus !== ev.status) {
       await tx.operationalCalendarEvent.update({
         where: { id },
-        data: { status: nextStatus, updatedById: actor.id },
+        data: { ...statusData(nextStatus, actor), updatedById: actor.id },
       });
     }
   });

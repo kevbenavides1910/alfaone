@@ -33,9 +33,47 @@ export type CalendarioEventTypeRow = CalendarioEventTypeOption & {
 };
 
 export const CALENDARIO_STATUS_LABELS: Record<CalendarioEventStatus, string> = {
-  SCHEDULED: "Programado",
-  DONE: "Realizado",
-  CANCELLED: "Cancelado",
+  SCHEDULED: "Pendiente",
+  DONE: "Realizada",
+  CANCELLED: "Cancelada",
+};
+
+export const CALENDARIO_STATUS_BADGE: Record<CalendarioEventStatus, string> = {
+  SCHEDULED: "bg-amber-100 text-amber-800 border-amber-200",
+  DONE: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  CANCELLED: "bg-gray-100 text-gray-600 border-gray-200",
+};
+
+export type CalendarioUserRef = { id: string; name: string };
+
+/** Evidencias: fotos, PDF, Office y video corto. */
+export const CALENDARIO_EVIDENCE_EXTENSIONS = [
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "gif",
+  "heic",
+  "pdf",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "mp4",
+  "mov",
+] as const;
+export const CALENDARIO_EVIDENCE_MAX_BYTES = 25 * 1024 * 1024;
+export const CALENDARIO_EVIDENCE_MAX_FILES = 10;
+
+export type CalendarioAttachment = {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  fileSize: number;
+  contract: { id: string; label: string } | null;
+  uploadedByName: string | null;
+  createdAt: string;
+  url: string;
 };
 
 /** Zonas NAF que no son operativas (desuso / finalizado). */
@@ -65,13 +103,18 @@ export type CalendarioEventSummary = {
   appliesToAllContracts: boolean;
   contractsCount: number;
   completedCount: number;
+  admins: CalendarioUserRef[];
+  attachmentsCount: number;
 };
 
 export type CalendarioEventDetail = CalendarioEventSummary & {
   description: string | null;
   createdByName: string | null;
   createdAt: string;
+  completedAt: string | null;
+  completedByName: string | null;
   contracts: CalendarioEventContract[];
+  attachments: CalendarioAttachment[];
 };
 
 export function toIsoDate(d: Date): string {
