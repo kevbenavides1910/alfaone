@@ -14,20 +14,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  TableColumnFilterHead,
+  hasActiveColumnFilters,
+  clearColumnFilters,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
 import { exportRowsToExcel } from "@/lib/utils/excel-export";
 import { formatDate } from "@/lib/utils/format";
+import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
 import { hasPermission } from "@/lib/permissions/check";
 import {
   VENTAS_OPORTUNIDAD_ESTADO_LABELS,
   VENTAS_OPORTUNIDAD_ESTADO_OPTIONS,
   type VentasOportunidadEstado,
 } from "@/modules/ventas/client";
-import {
-  EMPTY_OPORTUNIDAD_FILTERS,
-  OportunidadesListFilters,
-  filterOportunidadRows,
-  useDebouncedOportunidadFilters,
-} from "@/components/ventas/OportunidadesListFilters";
 
 type OportunidadRow = {
   id: string;
@@ -61,6 +62,15 @@ type ListResponse = {
   };
 };
 
+const TABLE_ID = "ventas-oportunidades";
+
+function formatMonto(value: string | null, moneda: string | null) {
+  if (!value) return "—";
+  const n = parseFloat(value);
+  if (!Number.isFinite(n)) return value;
+  return `${n.toLocaleString("es-CR")} ${moneda ?? ""}`.trim();
+}
+
 function estadoBadge(estado: VentasOportunidadEstado) {
   if (estado === "PENDIENTE_DECIDIR") {
     return <Badge className="bg-amber-500 hover:bg-amber-500">Pendiente de decidir</Badge>;
@@ -76,9 +86,11 @@ export default function OportunidadesPage() {
   const queryClient = useQueryClient();
   const canEdit = hasPermission(session, "ventas.oportunidades", "edit");
 
-  const { draft, setDraft, applied, clearAll } = useDebouncedOportunidadFilters();
+  const [q, setQ] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState("");
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     licitacionNo: "",
     cliente: "",
@@ -91,14 +103,10 @@ export default function OportunidadesPage() {
     const sp = new URLSearchParams();
     sp.set("page", String(page));
     sp.set("pageSize", "25");
-    if (applied.q.trim()) sp.set("q", applied.q.trim());
-    if (applied.licitacionNo.trim()) sp.set("licitacionNo", applied.licitacionNo.trim());
-    if (applied.cliente.trim()) sp.set("cliente", applied.cliente.trim());
-    if (applied.estado) sp.set("estado", applied.estado);
-    if (applied.fechaDesde) sp.set("fechaDesde", applied.fechaDesde);
-    if (applied.fechaHasta) sp.set("fechaHasta", applied.fechaHasta);
+    if (q.trim()) sp.set("q", q.trim());
+    if (estadoFilter) sp.set("estado", estadoFilter);
     return sp.toString();
-  }, [applied, page]);
+  }, [q, estadoFilter, page]);
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["ventas-oportunidades", queryParams],
@@ -159,28 +167,103 @@ export default function OportunidadesPage() {
     },
   });
 
+  const rows = data?.data.rows ?? [];
   const payload = data?.data;
-  const filteredRows = useMemo(
-    () => filterOportunidadRows(payload?.rows ?? [], draft),
-    [payload?.rows, draft]
+  const resumen = payload?.resumenEstado ?? {};
+
+  const lastSicopSync = useMemo(() => {
+    let max: string | null = null;
+    for (const row of rows) {
+      if (row.sicopUpdatedAt && (!max || row.sicopUpdatedAt > max)) max = row.sicopUpdatedAt;
+    }
+    return max;
+  }, [rows]);
+
+  const onColumnFilterChange = (key: string, value: string) =>
+    setColumnFilters((prev) => ({ ...prev, [key]: value }));
+
+  const columnDefs = useMemo((): TableColumnFilterDef<OportunidadRow>[] => {
+    return [
+      { key: "licitacionNo", label: "Nº licitación", getValue: (r) => r.licitacionNo },
+      { key: "cliente", label: "Cliente", getValue: (r) => r.cliente },
+      { key: "descripcion", label: "Descripción", getValue: (r) => r.descripcion },
+      { key: "fechaPresentacion", label: "Fecha presentación", getValue: (r) => formatDate(r.fechaPresentacion) },
+      {
+        key: "inicioRecepcion",
+        label: "Inicio recepción",
+        getValue: (r) => (r.inicioRecepcion ? formatDate(r.inicioRecepcion) : ""),
+      },
+      {
+        key: "cierreRecepcion",
+        label: "Cierre recepción",
+        getValue: (r) => (r.cierreRecepcion ? formatDate(r.cierreRecepcion) : ""),
+      },
+      {
+        key: "montoContratacion",
+        label: "Monto contratación",
+        getValue: (r) => formatMonto(r.montoContratacion, r.monedaContratacion),
+      },
+      {
+        key: "fechaAclaracion",
+        label: "Fecha aclaración",
+        getValue: (r) => (r.fechaAclaracion ? formatDate(r.fechaAclaracion) : ""),
+      },
+      {
+        key: "fechaObjeciones",
+        label: "Fecha objeciones",
+        getValue: (r) => (r.fechaObjeciones ? formatDate(r.fechaObjeciones) : ""),
+      },
+      { key: "enlace", label: "Enlace", getValue: (r) => r.enlace ?? "", filterable: false },
+      {
+        key: "estado",
+        label: "Estado",
+        getValue: (r) => VENTAS_OPORTUNIDAD_ESTADO_LABELS[r.estado],
+      },
+      {
+        key: "sicopUpdatedAt",
+        label: "Sync SICOP",
+        getValue: (r) => (r.sicopUpdatedAt ? formatDate(r.sicopUpdatedAt) : ""),
+      },
+      {
+        key: "decision",
+        label: "Decisión",
+        getValue: (r) =>
+          r.decidedByName
+            ? `${r.decidedByName}${r.decidedAt ? ` · ${formatDate(r.decidedAt)}` : ""}`
+            : r.source
+              ? `Auto (${r.source})`
+              : "",
+      },
+    ];
+  }, []);
+
+  const displayedRows = useMemo(
+    () =>
+      filterRowsByColumnFilters(
+        rows,
+        columnFilters,
+        columnDefs.map((c) => ({ key: c.key, getValue: c.getValue, mode: c.mode, filterable: c.filterable }))
+      ),
+    [rows, columnDefs, columnFilters]
   );
 
-  const resumen = payload?.resumenEstado ?? {};
+  const columnFilterKeys = useMemo(() => columnDefs.map((c) => c.key), [columnDefs]);
 
   function handleExport() {
     exportRowsToExcel({
       filename: "oportunidades_licitaciones",
       sheetName: "Oportunidades",
-      rows: filteredRows.map((r) => ({
+      rows: displayedRows.map((r) => ({
         "Nº licitación": r.licitacionNo,
         Cliente: r.cliente,
         Descripción: r.descripcion,
         "Fecha presentación": formatDate(r.fechaPresentacion),
         "Inicio recepción": r.inicioRecepcion ? formatDate(r.inicioRecepcion) : "",
         "Cierre recepción": r.cierreRecepcion ? formatDate(r.cierreRecepcion) : "",
-        "Monto contratación": r.montoContratacion ? parseFloat(r.montoContratacion).toLocaleString("es-CR") + " " + (r.monedaContratacion || "") : "",
+        "Monto contratación": formatMonto(r.montoContratacion, r.monedaContratacion),
         "Fecha aclaración": r.fechaAclaracion ? formatDate(r.fechaAclaracion) : "",
         "Fecha objeciones": r.fechaObjeciones ? formatDate(r.fechaObjeciones) : "",
+        "Sync SICOP": r.sicopUpdatedAt ? formatDate(r.sicopUpdatedAt) : "",
         Estado: VENTAS_OPORTUNIDAD_ESTADO_LABELS[r.estado],
         Enlace: r.enlace ?? "",
         Origen: r.source ?? "",
@@ -188,12 +271,12 @@ export default function OportunidadesPage() {
         "Fecha decisión": r.decidedAt ? formatDate(r.decidedAt) : "",
         Registrado: formatDate(r.createdAt),
       })),
-      columnWidths: [18, 24, 40, 16, 16, 16, 18, 16, 16, 18, 30, 10, 18, 16, 14],
+      columnWidths: [18, 24, 40, 16, 16, 16, 18, 16, 16, 14, 18, 30, 10, 18, 16, 14],
     });
   }
 
   return (
-    <div className="p-4 md:p-3 sm:p-6 space-y-4 sm:space-y-4">
+    <div className="p-4 md:p-6 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-slate-800">
@@ -201,9 +284,14 @@ export default function OportunidadesPage() {
             <h1 className="text-xl font-semibold">Oportunidades de licitación</h1>
           </div>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            Pipeline de licitaciones: ingreso automático (n8n) o registro manual. Marque cada oportunidad
-            como participar o no participar antes de elaborar el presupuesto.
+            Pipeline de licitaciones: ingreso automático desde SICOP (n8n / cron diario) o registro manual.
+            Marque cada oportunidad como participar o no participar antes de elaborar el presupuesto.
           </p>
+          {lastSicopSync && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Última sync SICOP en esta página: {formatDate(lastSicopSync)}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {canEdit && (
@@ -215,10 +303,10 @@ export default function OportunidadesPage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={filteredRows.length === 0}
+            disabled={displayedRows.length === 0}
             onClick={handleExport}
           >
-            Exportar Excel ({filteredRows.length})
+            Exportar Excel ({displayedRows.length})
           </Button>
         </div>
       </div>
@@ -287,6 +375,36 @@ export default function OportunidadesPage() {
         </div>
       )}
 
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          className="max-w-sm"
+          placeholder="Buscar licitación, cliente o descripción…"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setPage(1);
+          }}
+        />
+        <select
+          className="h-9 text-sm border rounded-md px-2 bg-background"
+          value={estadoFilter}
+          onChange={(e) => {
+            setEstadoFilter(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">Todos los estados</option>
+          {VENTAS_OPORTUNIDAD_ESTADO_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        {isFetching && !isLoading && (
+          <span className="text-xs text-muted-foreground">Filtrando…</span>
+        )}
+      </div>
+
       <div className="flex flex-wrap gap-2 text-xs">
         <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200">
           Pendientes: {resumen.PENDIENTE_DECIDIR ?? 0}
@@ -294,12 +412,7 @@ export default function OportunidadesPage() {
         <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-200">
           Participar: {resumen.PARTICIPAR ?? 0}
         </Badge>
-        <Badge variant="outline">
-          No participar: {resumen.NO_PARTICIPAR ?? 0}
-        </Badge>
-        {isFetching && !isLoading && (
-          <span className="text-muted-foreground self-center">Filtrando…</span>
-        )}
+        <Badge variant="outline">No participar: {resumen.NO_PARTICIPAR ?? 0}</Badge>
       </div>
 
       <div
@@ -308,69 +421,115 @@ export default function OportunidadesPage() {
         }`}
       >
         <div className="max-h-[calc(100vh-13rem)] overflow-auto">
-          <table className="w-full text-sm">
-            <OportunidadesListFilters
-              draft={draft}
-              setDraft={(next) => {
-                setDraft(next);
-                setPage(1);
-              }}
-              clearAll={() => {
-                clearAll();
-                setPage(1);
-              }}
-            />
+          {hasActiveColumnFilters(columnFilters) && (
+            <div className="flex justify-end px-3 py-1.5 border-b bg-slate-50">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => setColumnFilters(clearColumnFilters(columnFilterKeys))}
+              >
+                Limpiar filtros de columnas
+              </Button>
+            </div>
+          )}
+          <table data-table-id={TABLE_ID} className="w-full text-sm table-fixed">
+            <thead>
+              <TableColumnFilterHead
+                tableId={TABLE_ID}
+                defaultColumnWidths={{
+                  licitacionNo: 150,
+                  cliente: 220,
+                  descripcion: 280,
+                  fechaPresentacion: 120,
+                  inicioRecepcion: 120,
+                  cierreRecepcion: 120,
+                  montoContratacion: 130,
+                  fechaAclaracion: 120,
+                  fechaObjeciones: 120,
+                  enlace: 80,
+                  estado: 150,
+                  sicopUpdatedAt: 110,
+                  decision: 180,
+                }}
+                columns={columnDefs}
+                rows={rows}
+                filters={columnFilters}
+                onFilterChange={onColumnFilterChange}
+                filterRowClassName="bg-slate-50"
+              />
+            </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={12} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={13} className="px-4 py-10 text-center text-muted-foreground">
                     Cargando oportunidades…
                   </td>
                 </tr>
               )}
-              {!isLoading && filteredRows.length === 0 && (
+              {!isLoading && displayedRows.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={13} className="px-4 py-10 text-center text-muted-foreground">
                     No hay oportunidades con los filtros actuales.
                   </td>
                 </tr>
               )}
-              {filteredRows.map((row) => (
+              {displayedRows.map((row) => (
                 <tr key={row.id} className="border-t border-border hover:bg-muted/40">
-                  <td className="px-3 py-2 font-medium whitespace-nowrap">{row.licitacionNo}</td>
-                  <td className="px-3 py-2">{row.cliente}</td>
-                  <td className="px-3 py-2 max-w-xs">
-                    <p className="line-clamp-2" title={row.descripcion}>
-                      {row.descripcion}
-                    </p>
+                  <td className="px-3 py-2 font-medium whitespace-nowrap align-top" title={row.licitacionNo}>
+                    {row.licitacionNo}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
+                  <td className="px-3 py-2 align-top whitespace-normal break-words" title={row.cliente}>
+                    {row.cliente}
+                  </td>
+                  <td className="px-3 py-2 align-top whitespace-normal break-words" title={row.descripcion}>
+                    {row.descripcion}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap align-top">
                     {formatDate(row.fechaPresentacion)}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs">
-                    {row.inicioRecepcion ? formatDate(row.inicioRecepcion) : <span className="text-muted-foreground">—</span>}
+                  <td className="px-3 py-2 whitespace-nowrap align-top text-xs">
+                    {row.inicioRecepcion ? (
+                      formatDate(row.inicioRecepcion)
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs">
-                    {row.cierreRecepcion ? formatDate(row.cierreRecepcion) : <span className="text-muted-foreground">—</span>}
+                  <td className="px-3 py-2 whitespace-nowrap align-top text-xs">
+                    {row.cierreRecepcion ? (
+                      formatDate(row.cierreRecepcion)
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs">
-                    {row.montoContratacion
-                      ? parseFloat(row.montoContratacion).toLocaleString("es-CR") + " " + (row.monedaContratacion || "")
-                      : <span className="text-muted-foreground">—</span>}
+                  <td className="px-3 py-2 whitespace-nowrap align-top text-xs">
+                    {row.montoContratacion ? (
+                      formatMonto(row.montoContratacion, row.monedaContratacion)
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs">
-                    {row.fechaAclaracion ? formatDate(row.fechaAclaracion) : <span className="text-muted-foreground">—</span>}
+                  <td className="px-3 py-2 whitespace-nowrap align-top text-xs">
+                    {row.fechaAclaracion ? (
+                      formatDate(row.fechaAclaracion)
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs">
-                    {row.fechaObjeciones ? formatDate(row.fechaObjeciones) : <span className="text-muted-foreground">—</span>}
+                  <td className="px-3 py-2 whitespace-nowrap align-top text-xs">
+                    {row.fechaObjeciones ? (
+                      formatDate(row.fechaObjeciones)
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 align-top">
                     {row.enlace ? (
                       <a
                         href={row.enlace}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+                        className="inline-flex items-center gap-1 text-blue-600 hover:underline whitespace-nowrap"
                       >
                         Ver <ExternalLink className="h-3.5 w-3.5" />
                       </a>
@@ -378,7 +537,7 @@ export default function OportunidadesPage() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 align-top">
                     {canEdit ? (
                       <Select
                         value={row.estado}
@@ -390,7 +549,7 @@ export default function OportunidadesPage() {
                           })
                         }
                       >
-                        <SelectTrigger className="h-8 w-[11.5rem] text-xs">
+                        <SelectTrigger className="h-8 w-full max-w-[11.5rem] text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -405,7 +564,10 @@ export default function OportunidadesPage() {
                       estadoBadge(row.estado)
                     )}
                   </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                  <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap align-top">
+                    {row.sicopUpdatedAt ? formatDate(row.sicopUpdatedAt) : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground align-top whitespace-normal break-words">
                     {row.decidedByName ? (
                       <>
                         {row.decidedByName}

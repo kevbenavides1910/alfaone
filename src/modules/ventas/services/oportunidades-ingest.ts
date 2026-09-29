@@ -39,6 +39,16 @@ function extractCurrency(value: unknown): string | null {
   return match ? match[1] : null;
 }
 
+function hasSicopDetail(item: Record<string, unknown>): boolean {
+  return Boolean(
+    item.inicioRecepcion ||
+      item.cierreRecepcion ||
+      item.montoContratacion ||
+      item.fechaAclaracion ||
+      item.fechaObjeciones
+  );
+}
+
 /** Registra o actualiza licitaciones (upsert por numero de licitacion). */
 export async function ingestOportunidades(input: OportunidadIngestInput): Promise<IngestResult> {
   const items = toItems(input);
@@ -61,7 +71,7 @@ export async function ingestOportunidades(input: OportunidadIngestInput): Promis
       if (created) {
         result.created += 1;
         result.createdIds.push(row.id);
-        if (item.inicioRecepcion || item.montoContratacion) {
+        if (hasSicopDetail(item)) {
           await prisma.ventasOportunidad.update({
             where: { id: row.id },
             data: {
@@ -79,29 +89,35 @@ export async function ingestOportunidades(input: OportunidadIngestInput): Promis
         result.skipped += 1;
         result.skippedLicitaciones.push(licitacionNo);
       }
-    } else {
-      const hasDetail = item.inicioRecepcion || item.cierreRecepcion || item.montoContratacion || item.fechaAclaracion || item.fechaObjeciones;
-      if (hasDetail) {
-        await prisma.ventasOportunidad.update({
-          where: { id: existing.id },
-          data: {
-            inicioRecepcion: parseOptionalDate(item.inicioRecepcion),
-            cierreRecepcion: parseOptionalDate(item.cierreRecepcion),
-            montoContratacion: parseOptionalDecimal(item.montoContratacion),
-            monedaContratacion: extractCurrency(item.montoContratacion),
-            fechaAclaracion: parseOptionalDate(item.fechaAclaracion),
-            fechaObjeciones: parseOptionalDate(item.fechaObjeciones),
-            enlace: item.enlace ? String(item.enlace).trim() : existing.enlace,
-            sicopUpdatedAt: new Date(),
-          },
-        });
-        result.updated += 1;
-        result.updatedLicitaciones.push(licitacionNo);
-      } else {
-        result.skipped += 1;
-        result.skippedLicitaciones.push(licitacionNo);
-      }
+      continue;
     }
+
+    const fechaPresentacion =
+      parseOptionalDate(item.fechaPresentacion) ?? existing.fechaPresentacion;
+    const updateData: Parameters<typeof prisma.ventasOportunidad.update>[0]["data"] = {
+      cliente: String(item.cliente).trim(),
+      descripcion: String(item.descripcion).trim(),
+      fechaPresentacion,
+      enlace: item.enlace ? String(item.enlace).trim() : existing.enlace,
+      source: existing.source ?? "n8n",
+    };
+
+    if (hasSicopDetail(item)) {
+      updateData.inicioRecepcion = parseOptionalDate(item.inicioRecepcion);
+      updateData.cierreRecepcion = parseOptionalDate(item.cierreRecepcion);
+      updateData.montoContratacion = parseOptionalDecimal(item.montoContratacion);
+      updateData.monedaContratacion = extractCurrency(item.montoContratacion);
+      updateData.fechaAclaracion = parseOptionalDate(item.fechaAclaracion);
+      updateData.fechaObjeciones = parseOptionalDate(item.fechaObjeciones);
+      updateData.sicopUpdatedAt = new Date();
+    }
+
+    await prisma.ventasOportunidad.update({
+      where: { id: existing.id },
+      data: updateData,
+    });
+    result.updated += 1;
+    result.updatedLicitaciones.push(licitacionNo);
   }
 
   return result;

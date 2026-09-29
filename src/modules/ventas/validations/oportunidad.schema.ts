@@ -17,6 +17,7 @@ export const oportunidadListSchema = z.object({
   q: z.string().optional(),
   licitacionNo: z.string().optional(),
   cliente: z.string().optional(),
+  descripcion: z.string().optional(),
   estado: z.enum(VENTAS_OPORTUNIDAD_ESTADOS).optional(),
   fechaDesde: z.string().optional(),
   fechaHasta: z.string().optional(),

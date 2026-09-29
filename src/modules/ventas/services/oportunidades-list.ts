@@ -81,6 +81,10 @@ export async function listOportunidades(input: OportunidadListInput) {
     where.cliente = { contains: input.cliente.trim(), mode: "insensitive" };
   }
 
+  if (input.descripcion?.trim()) {
+    where.descripcion = { contains: input.descripcion.trim(), mode: "insensitive" };
+  }
+
   if (input.q?.trim()) {
     const q = input.q.trim();
     where.OR = [
