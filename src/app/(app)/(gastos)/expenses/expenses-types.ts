@@ -45,6 +45,10 @@ export type ExpenseDistributionFilter = "all" | "single_contract" | "multi_month
 export interface Expense {
   id: string; sequentialNo?: number | null; type: ExpenseType; budgetLine?: ExpenseBudgetLine | null;
   description: string; amount: number;
+  /** Moneda origen OC (CRC/USD/EUR). */
+  monedaOrigen?: string | null;
+  montoOriginal?: number | null;
+  tipoCambio?: number | null;
   periodMonth: string; paymentDate?: string | null; isDeferred: boolean; isDistributed: boolean;
   deferredManualDistribution?: boolean;
   deferredIncludeContractIds?: string[];

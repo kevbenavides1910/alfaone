@@ -29,6 +29,13 @@ import { ExpenseEditDialog } from "@/components/expenses/ExpenseEditDialog";
 import { ExpenseOcPicker } from "@/components/expenses/ExpenseOcPicker";
 import { ExpensePreviewDialog } from "@/components/expenses/ExpensePreviewDialog";
 import { canManageExpenses as userCanManageExpenses } from "@/modules/core/permissions";
+import {
+  convertOcAmountToCrc,
+  isForeignOcCurrency,
+  normalizeOcCurrency,
+  ocCurrencySymbol,
+  type OcCurrencyCode,
+} from "@/modules/presupuestos/business/oc-currency";
 import type { ExpenseBudgetLine, ExpenseType } from "@prisma/client";
 import {
   TableColumnFilterHead,
@@ -115,6 +122,10 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
     notes: "",
     registroCxp: "",
     registroTr: "",
+    amount: "",
+    monedaOrigen: "" as "" | OcCurrencyCode,
+    montoOriginal: "",
+    tipoCambio: "",
   });
 
   // Form state
@@ -139,6 +150,9 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
     registroTr: "",
     /** Prorrateo del monto en N meses (solo contrato específico) */
     spreadMonths: 1,
+    monedaOrigen: "" as "" | OcCurrencyCode,
+    montoOriginal: "",
+    tipoCambio: "",
   });
   /** Reparto diferido al crear: "all" = todos los contratos activos; si no, solo los IDs listados. */
   const [createDeferredDraft, setCreateDeferredDraft] = useState<DeferredContractDraft>("all");
@@ -420,6 +434,9 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
       registroCxp: "",
       registroTr: "",
       spreadMonths: 1,
+      monedaOrigen: "",
+      montoOriginal: "",
+      tipoCambio: "",
     });
     setCreateDeferredDraft("all");
     setCustomDeferredRows([{ contractId: "", amount: "", contractQuery: "" }]);
@@ -449,6 +466,10 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
       notes: e.notes ?? "",
       registroCxp: e.registroCxp ?? "",
       registroTr: e.registroTr ?? "",
+      amount: String(e.amount ?? ""),
+      monedaOrigen: (normalizeOcCurrency(e.monedaOrigen) ?? "") as "" | OcCurrencyCode,
+      montoOriginal: e.montoOriginal != null ? String(e.montoOriginal) : "",
+      tipoCambio: e.tipoCambio != null ? String(e.tipoCambio) : "",
     });
   }
 
@@ -458,24 +479,47 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
       toast.error("Ingrese una descripción");
       return;
     }
+    const foreign = isForeignOcCurrency(editForm.monedaOrigen || null);
+    if (foreign) {
+      const mo = parseFloat(editForm.montoOriginal);
+      const tc = parseFloat(editForm.tipoCambio);
+      if (!Number.isFinite(mo) || mo <= 0 || !Number.isFinite(tc) || tc <= 0) {
+        toast.error("Indique monto original y tipo de cambio para convertir a colones");
+        return;
+      }
+    }
+    const body: Record<string, unknown> = {
+      type: editForm.type,
+      budgetLine: editForm.budgetLine,
+      periodMonth: editForm.periodMonth,
+      paymentDate: editForm.paymentDate.trim() || null,
+      company: editForm.company || null,
+      description: editForm.description.trim(),
+      originId: editForm.originId || null,
+      referenceNumber: editForm.referenceNumber.trim() || null,
+      nafOcNoCia: editForm.nafOcNoOrden ? editForm.nafOcNoCia || null : null,
+      nafOcNoOrden: editForm.nafOcNoOrden.trim() || null,
+      nafOcNoDocu: editForm.nafOcNoOrden ? editForm.nafOcNoDocu || null : null,
+      notes: editForm.notes.trim() || null,
+      registroCxp: editForm.registroCxp.trim() || null,
+      registroTr: editForm.registroTr.trim() || null,
+    };
+    if (foreign) {
+      body.monedaOrigen = editForm.monedaOrigen;
+      body.montoOriginal = parseFloat(editForm.montoOriginal);
+      body.tipoCambio = parseFloat(editForm.tipoCambio);
+    } else if (editForm.monedaOrigen === "CRC") {
+      body.monedaOrigen = "CRC";
+      body.montoOriginal = parseFloat(editForm.amount) || null;
+      body.tipoCambio = 1;
+      body.amount = parseFloat(editForm.amount);
+    } else if (editForm.amount.trim()) {
+      const a = parseFloat(editForm.amount);
+      if (Number.isFinite(a) && a > 0) body.amount = a;
+    }
     updateMutation.mutate({
       id: editExpense.id,
-      body: {
-        type: editForm.type,
-        budgetLine: editForm.budgetLine,
-        periodMonth: editForm.periodMonth,
-        paymentDate: editForm.paymentDate.trim() || null,
-        company: editForm.company || null,
-        description: editForm.description.trim(),
-        originId: editForm.originId || null,
-        referenceNumber: editForm.referenceNumber.trim() || null,
-        nafOcNoCia: editForm.nafOcNoOrden ? editForm.nafOcNoCia || null : null,
-        nafOcNoOrden: editForm.nafOcNoOrden.trim() || null,
-        nafOcNoDocu: editForm.nafOcNoOrden ? editForm.nafOcNoDocu || null : null,
-        notes: editForm.notes.trim() || null,
-        registroCxp: editForm.registroCxp.trim() || null,
-        registroTr: editForm.registroTr.trim() || null,
-      },
+      body,
     });
   }
 
@@ -485,6 +529,15 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
     if (!form.description.trim()) { toast.error("Ingrese una descripción"); return; }
     if (!form.amount || parseFloat(form.amount) <= 0) { toast.error("Ingrese un monto válido"); return; }
     if (form.mode === "contract" && !form.contractId) { toast.error("Seleccione un contrato"); return; }
+    const foreign = isForeignOcCurrency(form.monedaOrigen || null);
+    if (foreign) {
+      const mo = parseFloat(form.montoOriginal);
+      const tc = parseFloat(form.tipoCambio);
+      if (!Number.isFinite(mo) || mo <= 0 || !Number.isFinite(tc) || tc <= 0) {
+        toast.error("OC en dólares/euros: indique el tipo de cambio a colones");
+        return;
+      }
+    }
     const spreadMonths =
       form.mode === "contract"
         ? Math.min(60, Math.max(1, Math.floor(Number(form.spreadMonths)) || 1))
@@ -557,6 +610,19 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
         nafOcNoCia: form.nafOcNoOrden ? form.nafOcNoCia || undefined : undefined,
         nafOcNoOrden: form.nafOcNoOrden.trim() || undefined,
         nafOcNoDocu: form.nafOcNoOrden ? form.nafOcNoDocu || undefined : undefined,
+        ...(foreign
+          ? {
+              monedaOrigen: form.monedaOrigen,
+              montoOriginal: parseFloat(form.montoOriginal),
+              tipoCambio: parseFloat(form.tipoCambio),
+            }
+          : form.monedaOrigen === "CRC"
+            ? {
+                monedaOrigen: "CRC" as const,
+                montoOriginal: parseFloat(form.amount),
+                tipoCambio: 1,
+              }
+            : {}),
         isDeferred: form.mode === "deferred" || form.mode === "deferred_custom",
         notes: form.notes.trim() || undefined,
         registroCxp: form.registroCxp.trim() || undefined,
@@ -1152,6 +1218,12 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                           </td>
                           <td className="px-4 py-3 text-right font-semibold text-slate-800">
                             {formatCurrency(e.amount)}
+                            {e.monedaOrigen && e.monedaOrigen !== "CRC" && e.montoOriginal != null && (
+                              <span className="block text-[10px] font-normal text-slate-400">
+                                {e.monedaOrigen} {Number(e.montoOriginal).toLocaleString("es-CR", { maximumFractionDigits: 2 })}
+                                {e.tipoCambio != null ? ` × ${e.tipoCambio}` : ""}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3 space-y-1">
                             <div>{approvalBadge(e)}</div>
@@ -1324,6 +1396,34 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                           nafOcNoCia: "",
                           nafOcNoOrden: "",
                           nafOcNoDocu: "",
+                          monedaOrigen: "",
+                          montoOriginal: "",
+                          tipoCambio: "",
+                        };
+                      }
+                      const code = normalizeOcCurrency(row.moneda) ?? "CRC";
+                      const monto =
+                        row.monto != null && Number.isFinite(row.monto) ? row.monto : null;
+                      if (isForeignOcCurrency(code)) {
+                        const tc = parseFloat(f.tipoCambio);
+                        const amountCrc =
+                          monto != null && Number.isFinite(tc) && tc > 0
+                            ? String(convertOcAmountToCrc(monto, tc))
+                            : "";
+                        return {
+                          ...f,
+                          referenceNumber: noOrden,
+                          nafOcNoCia: row.noCia,
+                          nafOcNoOrden: row.noOrden,
+                          nafOcNoDocu: row.noDocu ?? "",
+                          company: row.companyCode || f.company,
+                          monedaOrigen: code,
+                          montoOriginal: monto != null ? String(monto) : "",
+                          amount: amountCrc || f.amount,
+                          description:
+                            row.observaciones && !f.description.trim()
+                              ? row.observaciones.slice(0, 200)
+                              : f.description,
                         };
                       }
                       return {
@@ -1333,10 +1433,10 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                         nafOcNoOrden: row.noOrden,
                         nafOcNoDocu: row.noDocu ?? "",
                         company: row.companyCode || f.company,
-                        amount:
-                          row.monto != null && Number.isFinite(row.monto)
-                            ? String(row.monto)
-                            : f.amount,
+                        monedaOrigen: "CRC",
+                        montoOriginal: monto != null ? String(monto) : "",
+                        tipoCambio: "1",
+                        amount: monto != null ? String(monto) : f.amount,
                         description:
                           row.observaciones && !f.description.trim()
                             ? row.observaciones.slice(0, 200)
@@ -1366,8 +1466,15 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                   type="number" min="0" step="100"
                   placeholder="0"
                   value={form.amount}
+                  readOnly={isForeignOcCurrency(form.monedaOrigen || null)}
                   onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
                 />
+                {isForeignOcCurrency(form.monedaOrigen || null) && (
+                  <p className="text-xs text-amber-700">
+                    Calculado: {ocCurrencySymbol(form.monedaOrigen)}
+                    {form.montoOriginal || "—"} × TC → colones
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">Período</label>
@@ -1389,6 +1496,61 @@ export default function ExpensesPageClient({ initialExpenses }: { initialExpense
                 </p>
               </div>
             </div>
+
+            {isForeignOcCurrency(form.monedaOrigen || null) && (
+              <div className="rounded-md border border-amber-200 bg-amber-50/80 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">
+                    Monto OC ({form.monedaOrigen})
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.montoOriginal}
+                    onChange={(e) => {
+                      const montoOriginal = e.target.value;
+                      setForm((f) => {
+                        const mo = parseFloat(montoOriginal);
+                        const tc = parseFloat(f.tipoCambio);
+                        const amount =
+                          Number.isFinite(mo) && mo > 0 && Number.isFinite(tc) && tc > 0
+                            ? String(convertOcAmountToCrc(mo, tc))
+                            : f.amount;
+                        return { ...f, montoOriginal, amount };
+                      });
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">
+                    Tipo de cambio {form.monedaOrigen}→CRC
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Ej: 520.50"
+                    value={form.tipoCambio}
+                    onChange={(e) => {
+                      const tipoCambio = e.target.value;
+                      setForm((f) => {
+                        const mo = parseFloat(f.montoOriginal);
+                        const tc = parseFloat(tipoCambio);
+                        const amount =
+                          Number.isFinite(mo) && mo > 0 && Number.isFinite(tc) && tc > 0
+                            ? String(convertOcAmountToCrc(mo, tc))
+                            : "";
+                        return { ...f, tipoCambio, amount };
+                      });
+                    }}
+                  />
+                  <p className="text-xs text-slate-500">
+                    Obligatorio: la OC está en {form.monedaOrigen}. El gasto y el pago quedan en colones.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Mode toggle */}
             <div className="space-y-1.5">

@@ -15,6 +15,11 @@ import {
 } from "@/modules/presupuestos/services/deferred-expense-distribution";
 import { assignableContractStatusWhereInput } from "@/modules/presupuestos/services/assignable-contract-where";
 import { parseCalendarDateInput } from "@/lib/utils/format";
+import {
+  convertOcAmountToCrc,
+  isForeignOcCurrency,
+  type OcCurrencyCode,
+} from "@/modules/presupuestos/business/oc-currency";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -35,6 +40,11 @@ const patchExpenseSchema = z
     company: companyCodeSchema.nullable().optional(),
     registroCxp: z.string().nullable().optional(),
     registroTr: z.string().nullable().optional(),
+    /** Corregir monto CRC y/o conversión desde OC en moneda extranjera. */
+    amount: z.number().positive().optional(),
+    monedaOrigen: z.enum(["CRC", "USD", "EUR"]).nullable().optional(),
+    montoOriginal: z.number().positive().nullable().optional(),
+    tipoCambio: z.number().positive().nullable().optional(),
     periodMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Periodo inválido (YYYY-MM)").optional(),
     paymentDate: z
       .union([
@@ -61,6 +71,10 @@ const patchExpenseSchema = z
       d.company !== undefined ||
       d.registroCxp !== undefined ||
       d.registroTr !== undefined ||
+      d.amount !== undefined ||
+      d.monedaOrigen !== undefined ||
+      d.montoOriginal !== undefined ||
+      d.tipoCambio !== undefined ||
       d.periodMonth !== undefined ||
       d.paymentDate !== undefined ||
       d.deferredIncludeContractIds !== undefined ||
@@ -113,6 +127,8 @@ function serializeExpense(e: ExpenseDetailRow) {
   return {
     ...e,
     amount: parseFloat(e.amount.toString()),
+    montoOriginal: e.montoOriginal != null ? parseFloat(e.montoOriginal.toString()) : null,
+    tipoCambio: e.tipoCambio != null ? parseFloat(e.tipoCambio.toString()) : null,
     periodMonth: e.periodMonth.toISOString(),
     paymentDate: e.paymentDate ? e.paymentDate.toISOString() : null,
     createdAt: e.createdAt.toISOString(),
@@ -191,8 +207,12 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         company?: string | null;
         registroCxp?: string | null;
         registroTr?: string | null;
+        amount?: number;
+        monedaOrigen?: string | null;
+        montoOriginal?: number | null;
+        tipoCambio?: number | null;
         periodMonth?: Date;
-        paymentDate?: Date;
+        paymentDate?: Date | null;
         deferredIncludeContractIds?: string[];
         deferredManualDistribution?: boolean;
         deferredManualAllocations?: Prisma.InputJsonValue;
@@ -222,6 +242,54 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       if (p.company !== undefined) data.company = p.company;
       if (p.registroCxp !== undefined) data.registroCxp = p.registroCxp;
       if (p.registroTr !== undefined) data.registroTr = p.registroTr;
+
+      const nextMoneda = (p.monedaOrigen !== undefined
+        ? p.monedaOrigen
+        : (existing.monedaOrigen as OcCurrencyCode | null)) as OcCurrencyCode | null;
+      const nextMontoOrig =
+        p.montoOriginal !== undefined
+          ? p.montoOriginal
+          : existing.montoOriginal != null
+            ? parseFloat(existing.montoOriginal.toString())
+            : null;
+      const nextTc =
+        p.tipoCambio !== undefined
+          ? p.tipoCambio
+          : existing.tipoCambio != null
+            ? parseFloat(existing.tipoCambio.toString())
+            : null;
+
+      if (
+        p.amount !== undefined ||
+        p.monedaOrigen !== undefined ||
+        p.montoOriginal !== undefined ||
+        p.tipoCambio !== undefined
+      ) {
+        if (isForeignOcCurrency(nextMoneda)) {
+          if (nextMontoOrig == null || nextMontoOrig <= 0 || nextTc == null || nextTc <= 0) {
+            return badRequest(
+              "OC en moneda extranjera: indique monto original y tipo de cambio a colones",
+            );
+          }
+          data.monedaOrigen = nextMoneda;
+          data.montoOriginal = nextMontoOrig;
+          data.tipoCambio = nextTc;
+          data.amount = convertOcAmountToCrc(nextMontoOrig, nextTc);
+        } else if (nextMoneda === "CRC") {
+          data.monedaOrigen = "CRC";
+          data.montoOriginal = nextMontoOrig ?? p.amount ?? parseFloat(existing.amount.toString());
+          data.tipoCambio = 1;
+          if (p.amount !== undefined) data.amount = p.amount;
+        } else if (p.monedaOrigen === null) {
+          data.monedaOrigen = null;
+          data.montoOriginal = null;
+          data.tipoCambio = null;
+          if (p.amount !== undefined) data.amount = p.amount;
+        } else if (p.amount !== undefined) {
+          data.amount = p.amount;
+        }
+      }
+
       if (p.periodMonth !== undefined) {
         const [yy, mm] = p.periodMonth.split("-").map(Number);
         data.periodMonth = new Date(yy, mm - 1, 1);

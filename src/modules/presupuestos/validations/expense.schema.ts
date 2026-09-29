@@ -31,7 +31,14 @@ export const expenseCreateSchema = z
       ...ExpenseBudgetLine[],
     ]),
     description: z.string().min(2, "Descripción requerida"),
+    /** Monto en CRC (presupuesto/pagos). Si hay moneda extranjera, el servidor lo recalcula. */
     amount: z.number().positive("El monto debe ser positivo"),
+    /** Moneda origen OC: CRC | USD | EUR. */
+    monedaOrigen: z.enum(["CRC", "USD", "EUR"]).nullable().optional(),
+    /** Monto en moneda origen (p. ej. dólares de la OC). */
+    montoOriginal: z.number().positive().nullable().optional(),
+    /** Tipo de cambio origen→CRC (obligatorio si USD/EUR). */
+    tipoCambio: z.number().positive().nullable().optional(),
     periodMonth: z.string(),
     paymentDate: z
       .union([
@@ -91,6 +98,21 @@ export const expenseCreateSchema = z
       return new Set(ids).size === ids.length;
     },
     { message: "No repita el mismo contrato en el reparto manual" }
+  )
+  .refine(
+    (d) => {
+      if (!d.monedaOrigen || d.monedaOrigen === "CRC") return true;
+      return (
+        d.montoOriginal != null &&
+        d.montoOriginal > 0 &&
+        d.tipoCambio != null &&
+        d.tipoCambio > 0
+      );
+    },
+    {
+      message: "OC en moneda extranjera: indique monto original y tipo de cambio a colones",
+      path: ["tipoCambio"],
+    }
   );
 
 export type ExpenseCreateInput = z.infer<typeof expenseCreateSchema>;

@@ -74,7 +74,24 @@ export function ExpensePreviewDialog({
             <div className="flex-1 min-h-0 overflow-y-auto px-6 space-y-4 pb-4">
               <div className="bg-muted/50 rounded-lg p-4 grid grid-cols-2 gap-3 text-sm">
                 <div><span className="text-slate-500">Descripción:</span> <span className="font-medium ml-1">{previewExpense.description}</span></div>
-                <div><span className="text-slate-500">Monto:</span> <span className="font-semibold ml-1">{formatCurrency(previewExpense.amount)}</span></div>
+                <div>
+                  <span className="text-slate-500">Monto:</span>{" "}
+                  <span className="font-semibold ml-1">{formatCurrency(previewExpense.amount)}</span>
+                  {previewExpense.monedaOrigen &&
+                    previewExpense.monedaOrigen !== "CRC" &&
+                    previewExpense.montoOriginal != null && (
+                      <span className="ml-2 text-xs text-slate-500">
+                        (origen {previewExpense.monedaOrigen}{" "}
+                        {Number(previewExpense.montoOriginal).toLocaleString("es-CR", {
+                          maximumFractionDigits: 2,
+                        })}
+                        {previewExpense.tipoCambio != null
+                          ? ` × ${previewExpense.tipoCambio}`
+                          : ""}
+                        )
+                      </span>
+                    )}
+                </div>
                 <div><span className="text-slate-500">Empresa:</span> <span className="font-medium ml-1">{previewExpense.company ? companyDisplayName(previewExpense.company, companyRows) : "—"}</span></div>
                 <div><span className="text-slate-500">Período:</span> <span className="font-medium ml-1">{formatMonthYear(previewExpense.periodMonth)}</span></div>
                 <div><span className="text-slate-500">Fecha de pago:</span> <span className="font-medium ml-1">{formatDate(previewExpense.paymentDate ?? previewExpense.createdAt)}</span></div>

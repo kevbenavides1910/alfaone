@@ -59,6 +59,8 @@ export async function listExpensesForSession(session: Session, opts: ListExpense
   const data = expenses.map((e) => ({
     ...e,
     amount: parseFloat(e.amount.toString()),
+    montoOriginal: e.montoOriginal != null ? parseFloat(e.montoOriginal.toString()) : null,
+    tipoCambio: e.tipoCambio != null ? parseFloat(e.tipoCambio.toString()) : null,
     distributions: e.distributions.map((d) => ({
       ...d,
       equivalencePct: parseFloat(d.equivalencePct.toString()),

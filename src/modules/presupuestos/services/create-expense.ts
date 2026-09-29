@@ -16,6 +16,11 @@ import { assignableContractStatusWhereInput } from "@/modules/presupuestos/servi
 import { splitAmountAcrossMonths, generateProrationMonths } from "@/modules/presupuestos/business/expense-proration";
 import type { ExpenseCreateInput } from "@/modules/presupuestos/validations/expense.schema";
 import { parseCalendarDateInput } from "@/lib/utils/format";
+import {
+  convertOcAmountToCrc,
+  isForeignOcCurrency,
+  type OcCurrencyCode,
+} from "@/modules/presupuestos/business/oc-currency";
 
 type CreateResult = {
   expenses: ExpenseWithIncludes[];
@@ -95,7 +100,10 @@ async function createExpenseCore(
   const {
     periodMonth,
     paymentDate: rawPaymentDate,
-    amount,
+    amount: rawAmount,
+    monedaOrigen: rawMonedaOrigen,
+    montoOriginal: rawMontoOriginal,
+    tipoCambio: rawTipoCambio,
     spreadMonths: rawSpread,
     description,
     type,
@@ -115,6 +123,27 @@ async function createExpenseCore(
     deferredIncludeContractIds: rawDeferredContractIds,
     deferredManualAllocations: rawManualAllocations,
   } = input;
+
+  let amount = rawAmount;
+  let monedaOrigen: OcCurrencyCode | null = rawMonedaOrigen ?? null;
+  let montoOriginal: number | null = rawMontoOriginal ?? null;
+  let tipoCambio: number | null = rawTipoCambio ?? null;
+
+  if (isForeignOcCurrency(monedaOrigen)) {
+    if (montoOriginal == null || montoOriginal <= 0 || tipoCambio == null || tipoCambio <= 0) {
+      throw new ValidationError(
+        "OC en moneda extranjera: indique monto original y tipo de cambio a colones",
+      );
+    }
+    amount = convertOcAmountToCrc(montoOriginal, tipoCambio);
+  } else if (monedaOrigen === "CRC") {
+    montoOriginal = montoOriginal ?? amount;
+    tipoCambio = 1;
+  } else {
+    monedaOrigen = null;
+    montoOriginal = null;
+    tipoCambio = null;
+  }
 
   if (tenantCompany && company !== tenantCompany) {
     throw new ValidationError("No puede crear gastos para otra empresa");
@@ -179,6 +208,9 @@ async function createExpenseCore(
     nafOcNoOrden: nafOcNoOrden?.trim() || null,
     nafOcNoDocu: nafOcNoOrden ? (nafOcNoDocu?.trim() || null) : null,
     nafOcLinkedAt: nafOcNoOrden ? new Date() : null,
+    monedaOrigen,
+    montoOriginal,
+    tipoCambio,
     company,
     isDeferred,
     notes: notes || null,
@@ -197,6 +229,15 @@ async function createExpenseCore(
 
   const desc = description.trim();
   const amounts = splitAmountAcrossMonths(amount, spreadMonths);
+
+  if (hasManualDeferred && rawManualAllocations) {
+    const sum = rawManualAllocations.reduce((s, r) => s + r.amount, 0);
+    if (Math.abs(sum - amount) > 0.02) {
+      throw new ValidationError(
+        "La suma de montos por contrato debe igualar el monto en colones (±¢2). Revise el tipo de cambio.",
+      );
+    }
+  }
 
   const createdRows: ExpenseWithIncludes[] = [];
 

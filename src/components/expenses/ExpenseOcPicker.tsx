@@ -8,6 +8,11 @@ import type {
   OrdenCompraLinea,
   OrdenCompraNafRow,
 } from "@/modules/presupuestos/services/list-ordenes-compra-naf";
+import {
+  formatOcMoney,
+  normalizeOcCurrency,
+  ocCurrencySymbol,
+} from "@/modules/presupuestos/business/oc-currency";
 
 type ExpenseOcPickerProps = {
   value: string;
@@ -32,12 +37,14 @@ function formatMonto(monto: number | null | undefined): string {
 
 function formatOcLabel(row: OrdenCompraNafRow): string {
   const estado = ESTADO_LABEL[row.estado] ?? row.estado;
-  const monto = row.monto != null ? `₡${formatMonto(row.monto)}` : null;
+  const monto = row.monto != null ? formatOcMoney(row.monto, row.moneda) : null;
+  const monLabel = normalizeOcCurrency(row.moneda);
   const parts = [
     `OC ${row.noOrden}`,
     row.companyCode || `cía ${row.noCia}`,
     row.proveedor || null,
     monto,
+    monLabel && monLabel !== "CRC" ? monLabel : null,
     row.fecha || null,
     estado || null,
   ].filter(Boolean);
@@ -85,7 +92,12 @@ export function ExpenseOcDetallePanel({
           {oc.proveedor ? ` · ${oc.proveedor}` : ""}
           {oc.estado ? ` · ${ESTADO_LABEL[oc.estado] ?? oc.estado}` : ""}
         </span>
-        <span className="font-mono">Total ₡{formatMonto(oc.monto)}</span>
+        <span className="font-mono">
+          Total {formatOcMoney(oc.monto, oc.moneda)}
+          {normalizeOcCurrency(oc.moneda) && normalizeOcCurrency(oc.moneda) !== "CRC"
+            ? ` (${normalizeOcCurrency(oc.moneda)})`
+            : ""}
+        </span>
       </div>
       {oc.observaciones && (
         <div className="px-3 py-2 text-xs text-slate-700 border-b bg-card">
@@ -106,7 +118,9 @@ export function ExpenseOcDetallePanel({
               </tr>
             </thead>
             <tbody>
-              {lineas.map((l) => (
+              {lineas.map((l) => {
+                const sym = ocCurrencySymbol(normalizeOcCurrency(oc.moneda));
+                return (
                 <tr key={l.noLinea} className="border-b last:border-0">
                   <td className="px-2 py-1 text-slate-400">{l.noLinea}</td>
                   <td className="px-2 py-1">
@@ -119,10 +133,11 @@ export function ExpenseOcDetallePanel({
                     {formatMonto(l.cantidad)}
                     {l.unidad ? ` ${l.unidad}` : ""}
                   </td>
-                  <td className="px-2 py-1 text-right font-mono">₡{formatMonto(l.precioUni)}</td>
-                  <td className="px-2 py-1 text-right font-mono">₡{formatMonto(l.subtotal)}</td>
+                  <td className="px-2 py-1 text-right font-mono">{sym}{formatMonto(l.precioUni)}</td>
+                  <td className="px-2 py-1 text-right font-mono">{sym}{formatMonto(l.subtotal)}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

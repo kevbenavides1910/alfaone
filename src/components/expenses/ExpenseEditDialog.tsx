@@ -9,6 +9,13 @@ import { companyDisplayName, EXPENSE_BUDGET_LINES, EXPENSE_BUDGET_LINE_LABELS } 
 import type { UseMutationResult } from "@tanstack/react-query";
 import type { ExpenseBudgetLine, ExpenseType } from "@prisma/client";
 import { EXPENSE_TYPES, type Expense, type ExpenseOrigin } from "@/app/(app)/(gastos)/expenses/expenses-types";
+import {
+  convertOcAmountToCrc,
+  isForeignOcCurrency,
+  normalizeOcCurrency,
+  ocCurrencySymbol,
+  type OcCurrencyCode,
+} from "@/modules/presupuestos/business/oc-currency";
 
 interface Company { code: string; name: string; isActive: boolean }
 
@@ -29,6 +36,10 @@ interface ExpenseEditDialogProps {
     notes: string;
     registroCxp: string;
     registroTr: string;
+    amount: string;
+    monedaOrigen: "" | OcCurrencyCode;
+    montoOriginal: string;
+    tipoCambio: string;
   };
   setEditForm: React.Dispatch<React.SetStateAction<ExpenseEditDialogProps["editForm"]>>;
   setEditExpense: (v: Expense | null) => void;
@@ -164,6 +175,31 @@ export function ExpenseEditDialog({
                           nafOcNoDocu: "",
                         };
                       }
+                      const code = normalizeOcCurrency(row.moneda) ?? "CRC";
+                      const monto =
+                        row.monto != null && Number.isFinite(row.monto) ? row.monto : null;
+                      if (isForeignOcCurrency(code)) {
+                        const tc = parseFloat(f.tipoCambio);
+                        const amountCrc =
+                          monto != null && Number.isFinite(tc) && tc > 0
+                            ? String(convertOcAmountToCrc(monto, tc))
+                            : f.amount;
+                        return {
+                          ...f,
+                          referenceNumber: noOrden,
+                          nafOcNoCia: row.noCia,
+                          nafOcNoOrden: row.noOrden,
+                          nafOcNoDocu: row.noDocu ?? "",
+                          company: row.companyCode || f.company,
+                          monedaOrigen: code,
+                          montoOriginal: monto != null ? String(monto) : f.montoOriginal,
+                          amount: amountCrc,
+                          description:
+                            row.observaciones && !f.description.trim()
+                              ? row.observaciones.slice(0, 200)
+                              : f.description,
+                        };
+                      }
                       return {
                         ...f,
                         referenceNumber: noOrden,
@@ -171,6 +207,10 @@ export function ExpenseEditDialog({
                         nafOcNoOrden: row.noOrden,
                         nafOcNoDocu: row.noDocu ?? "",
                         company: row.companyCode || f.company,
+                        monedaOrigen: "CRC",
+                        montoOriginal: monto != null ? String(monto) : f.montoOriginal,
+                        tipoCambio: "1",
+                        amount: monto != null ? String(monto) : f.amount,
                         description:
                           row.observaciones && !f.description.trim()
                             ? row.observaciones.slice(0, 200)
@@ -188,6 +228,72 @@ export function ExpenseEditDialog({
                 onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
               />
             </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Monto (₡)</label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={editForm.amount}
+                readOnly={isForeignOcCurrency(editForm.monedaOrigen || null)}
+                onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))}
+              />
+            </div>
+            {isForeignOcCurrency(editForm.monedaOrigen || null) && (
+              <div className="rounded-md border border-amber-200 bg-amber-50/80 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">
+                    Monto OC ({editForm.monedaOrigen})
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editForm.montoOriginal}
+                    onChange={(e) => {
+                      const montoOriginal = e.target.value;
+                      setEditForm((f) => {
+                        const mo = parseFloat(montoOriginal);
+                        const tc = parseFloat(f.tipoCambio);
+                        const amount =
+                          Number.isFinite(mo) && mo > 0 && Number.isFinite(tc) && tc > 0
+                            ? String(convertOcAmountToCrc(mo, tc))
+                            : f.amount;
+                        return { ...f, montoOriginal, amount };
+                      });
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">
+                    Tipo de cambio {editForm.monedaOrigen}→CRC
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Ej: 520.50"
+                    value={editForm.tipoCambio}
+                    onChange={(e) => {
+                      const tipoCambio = e.target.value;
+                      setEditForm((f) => {
+                        const mo = parseFloat(f.montoOriginal);
+                        const tc = parseFloat(tipoCambio);
+                        const amount =
+                          Number.isFinite(mo) && mo > 0 && Number.isFinite(tc) && tc > 0
+                            ? String(convertOcAmountToCrc(mo, tc))
+                            : f.amount;
+                        return { ...f, tipoCambio, amount };
+                      });
+                    }}
+                  />
+                  <p className="text-xs text-slate-500">
+                    {ocCurrencySymbol(editForm.monedaOrigen)}
+                    {editForm.montoOriginal || "—"} × TC = colones del gasto/pago
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">Registro 1 CXP</label>
