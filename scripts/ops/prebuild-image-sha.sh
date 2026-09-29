@@ -14,6 +14,11 @@
 #   ALFAONE_PREBUILD_LOG=path   → log en background
 set -Eeuo pipefail
 
+# Desde el hook post-commit git exporta GIT_INDEX_FILE=.git/index (relativo); heredado,
+# rompe `git worktree add` («.git/index: Not a directory») porque en el worktree .git es archivo.
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars 2>/dev/null) 2>/dev/null || true
+
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
@@ -53,8 +58,19 @@ if docker image inspect "$IMAGE_SHA" >/dev/null 2>&1; then
   exit 0
 fi
 
+# Prebuild de HEAD en background: si entran más commits, solo vale la pena el último.
+TRACK_HEAD=0
+if [ -z "$SHA_ARG" ] && [ "$BG" = "1" ]; then TRACK_HEAD=1; fi
+superseded() {
+  [ "$TRACK_HEAD" = "1" ] && [ "$(git -C "$ROOT" rev-parse HEAD)" != "$SHA" ]
+}
+
 run_build() {
   export DEPLOY_GHCR_PUSH="${DEPLOY_GHCR_PUSH:-0}"
+  if superseded; then
+    echo "SKIP: $SHORT_SHA ya no es HEAD (hay commits más nuevos)"
+    return 0
+  fi
   echo "== Prebuild imagen $SHORT_SHA (worktree limpio) =="
   echo "image=$IMAGE_SHA"
   echo "worktree=$WT_DIR"
@@ -101,10 +117,15 @@ run_build() {
         echo "OK: imagen lista tras ${waited}s"
         break
       fi
+      if superseded; then break; fi
       sleep 2
       waited=$((waited + 2))
     done
     flock 8
+    if superseded; then
+      echo "SKIP: $SHORT_SHA ya no es HEAD (hay commits más nuevos)"
+      return 0
+    fi
     if ! docker image inspect "$IMAGE_SHA" >/dev/null 2>&1; then
       _build_once
     fi
