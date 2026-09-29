@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSession } from "@/lib/auth/client-session";
@@ -7,6 +8,8 @@ import { AlertCircle, Plus, Settings } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { hasPermission } from "@/lib/permissions/check";
 import { formatDate } from "@/lib/utils/format";
 import { feApiUrl, useFeCompany } from "@/components/facturacion-electronica/fe-company-context";
@@ -28,9 +31,36 @@ type FeFacturaRow = {
   detalles?: Array<{ tarifaImpuesto: string | number }>;
 };
 
+type IvaResumen = {
+  cantidadFacturas: number;
+  cantidadNotasCredito: number;
+  cantidadNotasDebito: number;
+  ivaPorTarifa: Array<{
+    tarifaPercent: number;
+    codigoTarifaIVA: string;
+    montoBase: number;
+    montoImpuesto: number;
+  }>;
+};
+
+function monthRange() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+  return {
+    desde: `${y}-${m}-01`,
+    hasta: `${y}-${m}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
 function formatMonto(value: string | number | null | undefined) {
   if (value == null || value === "") return "—";
   return Number(value).toLocaleString("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtMoney(value: number, moneda = "CRC") {
+  return `${value.toLocaleString("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${moneda}`;
 }
 
 function formatTarifasIva(detalles?: Array<{ tarifaImpuesto: string | number }>) {
@@ -83,6 +113,9 @@ export default function FacturacionElectronicaPage() {
   const { data: session } = useSession();
   const { companyCode } = useFeCompany();
   const canEdit = hasPermission(session, "facturacionElectronica.facturas", "edit");
+  const initial = useMemo(() => monthRange(), []);
+  const [desde, setDesde] = useState(initial.desde);
+  const [hasta, setHasta] = useState(initial.hasta);
 
   const configQ = useQuery({
     queryKey: ["fe-config", companyCode],
@@ -102,6 +135,18 @@ export default function FacturacionElectronicaPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error?.message ?? "Error al listar facturas");
       return j.data as { items: FeFacturaRow[]; total: number };
+    },
+    enabled: Boolean(configQ.data?.configured) && hasPermission(session, "facturacionElectronica.facturas", "view") && Boolean(companyCode),
+  });
+
+  const ivaQ = useQuery({
+    queryKey: ["fe-facturas-iva", companyCode, desde, hasta],
+    queryFn: async (): Promise<IvaResumen> => {
+      const params = new URLSearchParams({ desde, hasta });
+      const r = await fetch(feApiUrl(`/api/fe/facturas/resumen-iva?${params.toString()}`, companyCode));
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error?.message ?? "Error al cargar IVA por tarifa");
+      return j.data as IvaResumen;
     },
     enabled: Boolean(configQ.data?.configured) && hasPermission(session, "facturacionElectronica.facturas", "view") && Boolean(companyCode),
   });
@@ -155,6 +200,60 @@ export default function FacturacionElectronicaPage() {
           </Button>
         )}
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">IVA por tarifa (ventas)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="ventas-iva-desde">Desde</Label>
+              <Input id="ventas-iva-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ventas-iva-hasta">Hasta</Label>
+              <Input id="ventas-iva-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+            </div>
+            {ivaQ.data && (
+              <p className="pb-2 text-xs text-muted-foreground">
+                {ivaQ.data.cantidadFacturas} FE aceptada(s)
+                {ivaQ.data.cantidadNotasCredito > 0 ? ` · ${ivaQ.data.cantidadNotasCredito} NC` : ""}
+                {ivaQ.data.cantidadNotasDebito > 0 ? ` · ${ivaQ.data.cantidadNotasDebito} ND` : ""}
+              </p>
+            )}
+          </div>
+          {ivaQ.isLoading && <p className="text-sm text-muted-foreground">Cargando resumen IVA…</p>}
+          {ivaQ.isError && <p className="text-sm text-red-600">{(ivaQ.error as Error).message}</p>}
+          {ivaQ.data &&
+            (ivaQ.data.ivaPorTarifa.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin ventas aceptadas en el período seleccionado.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-4">Tarifa</th>
+                      <th className="py-2 pr-4">Código tarifa</th>
+                      <th className="py-2 pr-4 text-right">Total ventas</th>
+                      <th className="py-2 text-right">Monto IVA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ivaQ.data.ivaPorTarifa.map((row) => (
+                      <tr key={`${row.codigoTarifaIVA}-${row.tarifaPercent}`} className="border-b">
+                        <td className="py-2 pr-4 font-medium">{row.tarifaPercent}%</td>
+                        <td className="py-2 pr-4 font-mono text-xs">{row.codigoTarifaIVA}</td>
+                        <td className="py-2 pr-4 text-right tabular-nums">{fmtMoney(row.montoBase)}</td>
+                        <td className="py-2 text-right tabular-nums">{fmtMoney(row.montoImpuesto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-0">

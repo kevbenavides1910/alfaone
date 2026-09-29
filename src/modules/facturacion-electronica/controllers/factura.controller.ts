@@ -23,6 +23,10 @@ export class FeFacturaController {
     return this.facturas.list(companyCode, query);
   }
 
+  resumenIva(companyCode: string, desde: Date, hasta: Date) {
+    return this.facturas.resumenIva(companyCode, desde, hasta);
+  }
+
   getById(companyCode: string, id: string) {
     return this.facturas.getById(companyCode, id);
   }

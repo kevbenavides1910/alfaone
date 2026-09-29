@@ -23,6 +23,7 @@ type GastoResumen = {
   ivaPorTarifa: Array<{
     tarifaPercent: number;
     codigoTarifaIVA: string;
+    montoBase: number;
     montoImpuesto: number;
   }>;
   items: Array<{
@@ -164,6 +165,7 @@ export default function FeGastosPage() {
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="py-2 pr-4">Tarifa</th>
                         <th className="py-2 pr-4">Código tarifa</th>
+                        <th className="py-2 pr-4 text-right">Total compras</th>
                         <th className="py-2 text-right">Monto IVA</th>
                       </tr>
                     </thead>
@@ -172,7 +174,8 @@ export default function FeGastosPage() {
                         <tr key={`${row.codigoTarifaIVA}-${row.tarifaPercent}`} className="border-b">
                           <td className="py-2 pr-4 font-medium">{row.tarifaPercent}%</td>
                           <td className="py-2 pr-4 font-mono text-xs">{row.codigoTarifaIVA}</td>
-                          <td className="py-2 text-right">{fmtMoney(row.montoImpuesto)}</td>
+                          <td className="py-2 pr-4 text-right tabular-nums">{fmtMoney(row.montoBase)}</td>
+                          <td className="py-2 text-right tabular-nums">{fmtMoney(row.montoImpuesto)}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -4,6 +4,7 @@ import { FeDomainError } from "../errors/fe-errors";
 import { FeEmpresaRepository } from "../repositories/fe-empresa.repository";
 import { FeGastoProveedorRepository } from "../repositories/fe-gasto-proveedor.repository";
 import { parseGastoFromRecibidoXml } from "./incoming/gasto-recibido.parser";
+import { baseImponibleDesdeIva } from "../utils/fe-base-imponible";
 import { feAbsolutePath } from "../utils/fe-storage";
 import { feLogger } from "../utils/logger";
 
@@ -139,11 +140,17 @@ export class FeGastoProveedorService {
         impuestos: Number(totales._sum.totalImpuestos ?? 0),
         total: Number(totales._sum.total ?? 0),
       },
-      ivaPorTarifa: impuestos.map((row) => ({
-        tarifaPercent: Number(row.tarifaPercent),
-        codigoTarifaIVA: row.codigoTarifaIVA,
-        montoImpuesto: Number(row._sum.montoImpuesto ?? 0),
-      })),
+      ivaPorTarifa: impuestos.map((row) => {
+        const tarifaPercent = Number(row.tarifaPercent);
+        const montoImpuesto = Number(row._sum.montoImpuesto ?? 0);
+        return {
+          tarifaPercent,
+          codigoTarifaIVA: row.codigoTarifaIVA,
+          /** Base / total compras gravadas a esa tarifa (declaración IVA). */
+          montoBase: baseImponibleDesdeIva(montoImpuesto, tarifaPercent),
+          montoImpuesto,
+        };
+      }),
       items: items.map((row) => ({
         id: row.id,
         clave: row.clave,
