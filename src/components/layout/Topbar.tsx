@@ -42,14 +42,15 @@ export function Topbar({
     <>
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 md:hidden"
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px] lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
       <div
-        className={`fixed left-0 top-0 z-50 h-full w-64 md:hidden transition-transform duration-300 ${
+        className={`fixed left-0 top-0 z-50 h-[100dvh] w-[17rem] max-w-[85vw] lg:hidden transition-transform duration-300 ease-out ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <Sidebar
           collapsed={false}
@@ -61,15 +62,15 @@ export function Topbar({
 
       <header
         className={cn(
-          "sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border px-4",
-          "bg-card/95 shadow-sm backdrop-blur-md",
+          "sticky top-0 z-30 flex h-[3.25rem] items-center gap-2 border-b border-border/70 px-2.5 sm:gap-3 sm:px-4",
+          "bg-card/90 shadow-[0_1px_0_rgb(0_0_0/0.02)] backdrop-blur-xl",
           onHome && "bg-[hsl(214_20%_97%)]/90 dark:bg-background/90"
         )}
       >
-        <div className="flex min-w-0 shrink-0 items-center gap-2">
+        <div className="flex min-w-0 shrink-0 items-center gap-1.5">
           <button
             type="button"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted active:bg-muted/70 hover:text-foreground lg:hidden"
             onClick={() => setMobileOpen(true)}
             aria-label="Abrir menú"
           >
@@ -104,34 +105,34 @@ export function Topbar({
             type="button"
             onClick={openCommandPalette}
             className={cn(
-              "flex h-9 w-full max-w-md items-center gap-2 rounded-xl border border-border/80 bg-muted/50 px-3 text-left text-sm text-muted-foreground",
-              "transition-colors hover:border-border hover:bg-muted hover:text-foreground",
+              "flex h-10 w-full max-w-md items-center gap-2 rounded-2xl border border-border/70 bg-muted/50 px-3 text-left text-[15px] sm:text-sm text-muted-foreground",
+              "transition-all hover:border-border hover:bg-muted hover:text-foreground active:scale-[0.99]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--app-primary)]",
               "dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:bg-white/[0.07]"
             )}
             aria-label="Buscar módulos"
           >
             <Search className="h-4 w-4 shrink-0 opacity-70" />
-            <span className="min-w-0 flex-1 truncate">Buscar módulos o datos…</span>
+            <span className="min-w-0 flex-1 truncate">Buscar…</span>
             <kbd className="hidden shrink-0 rounded-md border border-border/80 bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
               ⌘K
             </kbd>
           </button>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
           <button
             type="button"
             onClick={openSyntraAssistant}
             className={cn(
-              "hidden h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90 sm:inline-flex",
+              "flex h-10 w-10 items-center justify-center rounded-2xl text-white shadow-sm transition-all hover:opacity-90 active:scale-95 sm:h-9 sm:w-auto sm:px-3.5 sm:text-xs sm:font-semibold sm:gap-1.5 sm:inline-flex",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--app-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-background"
             )}
             style={{ backgroundColor: "var(--app-primary)" }}
             aria-label="Abrir asistente Syntra IA"
           >
-            <Sparkles className="h-3.5 w-3.5" />
-            Syntra IA
+            <Sparkles className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span className="hidden sm:inline">Syntra IA</span>
           </button>
 
           <ThemeToggle />
@@ -145,10 +146,10 @@ export function Topbar({
             variant="ghost"
             size="sm"
             onClick={() => signOut({ callbackUrl: loginCallbackUrl() })}
-            className="h-8 gap-1.5 px-2.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-red-500"
+            className="h-10 w-10 p-0 sm:h-8 sm:w-auto sm:px-2.5 gap-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-red-500 [&_span]:hidden sm:[&_span]:inline"
           >
             <LogOut className="h-4 w-4" />
-            <span className="hidden text-xs font-medium sm:inline">Salir</span>
+            <span className="text-xs font-medium">Salir</span>
           </Button>
         </div>
       </header>

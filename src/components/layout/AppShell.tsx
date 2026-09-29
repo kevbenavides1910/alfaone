@@ -85,12 +85,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {!isHome && mobileOpen && (
           <>
             <div
-              className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+              className="fixed inset-0 bg-black/60 backdrop-blur-[2px] z-40 lg:hidden"
               onClick={closeMobile}
             />
             <div
-              className="fixed left-0 top-0 z-50 lg:hidden h-screen w-64"
-              style={{ animation: "slideIn 0.2s ease-out" }}
+              className="fixed left-0 top-0 z-50 lg:hidden h-[100dvh] w-[17rem] max-w-[85vw]"
+              style={{ animation: "oc-slide-in 0.25s ease-out", paddingBottom: "env(safe-area-inset-bottom)" }}
             >
               <Sidebar
                 collapsed={false}

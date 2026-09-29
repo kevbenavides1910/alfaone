@@ -159,18 +159,20 @@ export function Sidebar({ collapsed, onToggle, onClose, isMobile }: Props) {
         href={item.href}
         onClick={handleNav}
         className={cn(
-          "flex items-center rounded-lg text-sm font-medium transition-all duration-150",
+          "flex items-center rounded-xl text-sm font-medium transition-all duration-150",
           collapsed && !isMobile
             ? "justify-center px-0 py-2.5 w-full"
-            : cn("gap-2.5 px-2.5 py-2", indent && "ml-2 pl-2.5 border-l border-white/8"),
+            : isMobile
+              ? "gap-3 px-3 py-3 min-h-[48px] text-[15px]"
+              : cn("gap-2.5 px-2.5 py-2", indent && "ml-2 pl-2.5 border-l border-white/8"),
           active
             ? "text-white shadow-sm"
-            : "text-white/55 hover:bg-white/[0.07] hover:text-white/95"
+            : "text-white/55 hover:bg-white/[0.07] active:bg-white/[0.12] hover:text-white/95"
         )}
         style={active ? { backgroundColor: primary } : undefined}
         title={collapsed && !isMobile ? item.label : undefined}
       >
-        <item.icon className="h-4 w-4 shrink-0" />
+        <item.icon className={cn("shrink-0", isMobile ? "h-5 w-5" : "h-4 w-4")} />
         {(!collapsed || isMobile) && (
           <span className="truncate leading-none">{item.label}</span>
         )}
@@ -181,7 +183,10 @@ export function Sidebar({ collapsed, onToggle, onClose, isMobile }: Props) {
   return (
     <aside
       className={cn(
-        "flex flex-col h-full text-white transition-all duration-300 ease-in-out overflow-hidden",
+        "flex flex-col h-full h-[100dvh] text-white transition-all duration-300 ease-in-out overflow-hidden",
+        isMobile
+          ? "rounded-r-2xl border-r border-white/10 shadow-2xl"
+          : "",
         !isMobile && (collapsed ? "w-14" : "w-60")
       )}
       style={{ backgroundColor: sidebarBg }}
@@ -248,7 +253,7 @@ export function Sidebar({ collapsed, onToggle, onClose, isMobile }: Props) {
       </div>
 
       {/* ── Navegación ── */}
-      <nav className="flex-1 overflow-y-auto scrollbar-none py-2 px-2 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto overscroll-contain scrollbar-none py-2 px-2 space-y-1 [webkit-tap-highlight-color:transparent]">
 
         {/* Ítems superiores sin grupo (Inicio, Dashboard) */}
         {topItems.map(item => <NavLink key={item.href} item={item} />)}

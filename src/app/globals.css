@@ -503,3 +503,72 @@
 .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: hsl(222 20% 50% / 0.6);
 }
+
+/* ── OpenCode web-mode · Mobile polish ─────────────────────────── */
+@keyframes oc-slide-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
+@layer components {
+  /* Canvas de contenido: respiro móvil + espacio para FAB Syntra */
+  .app-content-canvas {
+    @apply px-3 pt-3 sm:px-6 sm:pt-5;
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 640px) {
+    .app-content-canvas {
+      padding-bottom: 2rem;
+    }
+  }
+}
+
+@media (max-width: 1023px) {
+  /* Inputs a 16px en móvil: evita zoom automático en iOS (estilo OpenCode) */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  /* Tablas: scroll horizontal con momentum + filas táctiles 44px */
+  .carbon-table-viewport {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    border-radius: 1rem;
+    margin: 0 0.75rem;
+  }
+  .carbon-data-table {
+    min-width: 640px;
+  }
+  .carbon-data-table tbody td {
+    padding-top: 0.875rem;
+    padding-bottom: 0.875rem;
+  }
+  .carbon-toolbar {
+    position: sticky;
+    top: 3.25rem;
+    z-index: 10;
+    border-radius: 1rem;
+    margin: 0 0.75rem 0.75rem;
+  }
+  .carbon-form-panel {
+    margin-left: 0.75rem;
+    margin-right: 0.75rem;
+    border-radius: 1.25rem;
+    padding: 1.25rem;
+  }
+  .home-menu-canvas {
+    min-height: calc(100dvh - 3.25rem);
+  }
+}

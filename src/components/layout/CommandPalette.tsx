@@ -101,20 +101,28 @@ export function CommandPalette() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]">
-      {/* Overlay */}
+    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-start sm:justify-center sm:pt-[15vh]">
+      {/* Overlay — OpenCode style */}
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/60 backdrop-blur-[2px]"
         onClick={() => {
           setOpen(false);
           setQuery("");
         }}
       />
 
-      {/* Palette */}
-      <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-border bg-card shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+      {/* Palette — bottom-sheet en móvil, centrada en desktop */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Buscar módulos"
+        className="relative flex max-h-[85dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:max-w-lg sm:rounded-2xl animate-in fade-in slide-in-from-bottom-4 sm:zoom-in-95 sm:slide-in-from-bottom-0 duration-200"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {/* Handle móvil estilo OpenCode */}
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border sm:hidden" aria-hidden />
         {/* Search input */}
-        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+        <div className="flex items-center gap-3 border-b border-border px-4 py-3.5 sm:py-3">
           <Search className="h-5 w-5 shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
@@ -123,7 +131,9 @@ export function CommandPalette() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Buscar módulos o datos…"
-            className="flex-1 border-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground focus:outline-none focus:ring-0"
+            autoComplete="off"
+            enterKeyHint="go"
+            className="flex-1 border-none bg-transparent text-base sm:text-sm text-foreground outline-none placeholder:text-muted-foreground focus:outline-none focus:ring-0"
           />
           <kbd className="hidden items-center gap-0.5 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
             <Command className="h-3 w-3" />
@@ -132,7 +142,7 @@ export function CommandPalette() {
         </div>
 
         {/* Results */}
-        <div className="max-h-80 overflow-y-auto p-2">
+        <div className="max-h-[55dvh] sm:max-h-80 overflow-y-auto overscroll-contain p-2">
           {results.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">
               No se encontraron resultados para{" "}
@@ -144,30 +154,31 @@ export function CommandPalette() {
                 key={item.href}
                 onClick={() => navigate(item.href)}
                 onMouseEnter={() => setSelectedIndex(index)}
+                ref={index === selectedIndex ? (el) => { el?.scrollIntoView({ block: "nearest" }); } : undefined}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+                  "flex min-h-[52px] sm:min-h-0 w-full items-center gap-3 rounded-2xl sm:rounded-lg px-3 py-3 sm:py-2.5 text-left text-[15px] sm:text-sm transition-colors",
                   index === selectedIndex
                     ? "bg-[color:var(--app-primary)]/10 text-foreground"
-                    : "text-foreground/80 hover:bg-muted"
+                    : "text-foreground/80 hover:bg-muted active:bg-muted/70"
                 )}
               >
                 <item.icon
                   className={cn(
-                    "h-4 w-4 shrink-0",
+                    "h-5 w-5 sm:h-4 sm:w-4 shrink-0",
                     index === selectedIndex
                       ? "text-[color:var(--app-primary)]"
                       : "text-muted-foreground"
                   )}
                 />
                 <span className="flex-1 font-medium">{item.label}</span>
-                <span className="max-w-[120px] truncate text-xs text-muted-foreground">{item.href}</span>
+                <span className="hidden max-w-[120px] truncate text-xs text-muted-foreground sm:block">{item.href}</span>
               </button>
             ))
           )}
         </div>
 
-        {/* Footer tips */}
-        <div className="flex items-center gap-4 border-t border-border bg-muted/50 px-4 py-2">
+        {/* Footer tips — solo desktop */}
+        <div className="hidden sm:flex items-center gap-4 border-t border-border bg-muted/50 px-4 py-2">
           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
             <kbd className="rounded border border-border bg-card px-1 py-0.5 font-mono text-[10px]">↑↓</kbd>
             <span>Navegar</span>
