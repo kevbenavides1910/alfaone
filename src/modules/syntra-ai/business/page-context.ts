@@ -13,6 +13,7 @@ const PATH_LABELS: Array<{ prefix: string; label: string; toolHint?: string }> =
   { prefix: "/cuentas-por-pagar", label: "Cuentas por pagar", toolHint: "search_cxp_facturas" },
   { prefix: "/facturacion-electronica", label: "Facturación electrónica", toolHint: "list_fe_facturas, query_fe_iva_por_tarifa" },
   { prefix: "/pagos", label: "Pagos", toolHint: "query_payment_calendar, search_payments_by_oc, list_pago_proveedores, list_payment_attachments o unschedule_pago_diario" },
+  { prefix: "/documentos-legales", label: "Control de Documentos Legales", toolHint: "query_legal_document_calendar, search_legal_documents, list_legal_document_reminders" },
   { prefix: "/tickets-ti", label: "Tickets TI", toolHint: "search_tickets, query_tickets_dashboard" },
   { prefix: "/inventory", label: "Inventario", toolHint: "search_assets" },
   { prefix: "/finger-system/marcas", label: "Finger System / Marcas", toolHint: "list_finger_punches" },

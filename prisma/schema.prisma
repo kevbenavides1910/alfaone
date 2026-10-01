@@ -280,6 +280,11 @@ model User {
   expenseApprovals                       ExpenseApproval[]             @relation("ExpenseApprovalApprover")
   expenseAttachments                     ExpenseAttachment[]           @relation("ExpenseAttachmentUploader")
   paymentAttachments                     PaymentAttachment[]           @relation("PaymentAttachmentUploader")
+  legalDocumentsResponsible              LegalDocument[]               @relation("LegalDocumentResponsible")
+  legalDocumentsCreated                  LegalDocument[]               @relation("LegalDocumentCreatedBy")
+  legalDocumentsUpdated                  LegalDocument[]               @relation("LegalDocumentUpdatedBy")
+  legalDocumentAttachments               LegalDocumentAttachment[]     @relation("LegalDocumentAttachmentUploader")
+  legalDocumentChangeLogs                LegalDocumentChangeLog[]      @relation("LegalDocumentChangeLogActor")
   operationalEventsAdministered          OperationalCalendarEventAdmin[]
   disciplinaryBatches                    DisciplinaryImportBatch[]     @relation("DisciplinaryBatchUploader")
   employeeImportBatches                  EmployeeImportBatch[]         @relation("EmployeeBatchUploader")
@@ -6514,6 +6519,107 @@ model PaymentChangeLog {
   @@index([paymentId, createdAt])
   @@index([changedById])
   @@map("payment_change_logs")
+}
+
+// ─── Documentos legales (calendario propio; no usa Payment ni Oracle/NAF) ───
+
+enum LegalDocumentType {
+  GARANTIA
+  LICENCIA
+  PATENTE
+  CONSTANCIA
+  POLIZA
+  OTRO
+}
+
+enum LegalReminderOffsetUnit {
+  DAYS
+  MONTHS
+}
+
+model LegalDocument {
+  id                String            @id @default(cuid())
+  type              LegalDocumentType
+  /// Etiqueta libre cuando type = OTRO.
+  otherTypeLabel    String?
+  description       String
+  amount            Decimal           @db.Decimal(15, 2)
+  dueDate           DateTime          @db.Date
+  company           String?
+  referenceNumber   String?
+  notes             String?           @db.Text
+  paid              Boolean           @default(false)
+  paidAt            DateTime?
+  responsibleUserId String
+  responsibleUser   User              @relation("LegalDocumentResponsible", fields: [responsibleUserId], references: [id], onDelete: Restrict)
+  createdById       String?
+  createdBy         User?             @relation("LegalDocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById       String?
+  updatedBy         User?             @relation("LegalDocumentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  reminders         LegalDocumentReminder[]
+  attachments       LegalDocumentAttachment[]
+  changeLogs        LegalDocumentChangeLog[]
+
+  @@index([dueDate])
+  @@index([company])
+  @@index([paid])
+  @@index([type])
+  @@index([responsibleUserId])
+  @@map("legal_documents")
+}
+
+/// Aviso previo al vencimiento. Único por documento + anticipación. Cero = el mismo día.
+model LegalDocumentReminder {
+  id              String                  @id @default(cuid())
+  legalDocumentId String
+  legalDocument   LegalDocument           @relation(fields: [legalDocumentId], references: [id], onDelete: Cascade)
+  offsetValue     Int
+  offsetUnit      LegalReminderOffsetUnit
+  sendOn          DateTime                @db.Date
+  sentAt          DateTime?
+  lastError       String?                 @db.Text
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@unique([legalDocumentId, offsetValue, offsetUnit], map: "legal_doc_reminder_offset_key")
+  @@index([sendOn, sentAt])
+  @@index([legalDocumentId])
+  @@map("legal_document_reminders")
+}
+
+model LegalDocumentAttachment {
+  id              String        @id @default(cuid())
+  legalDocumentId String
+  legalDocument   LegalDocument @relation(fields: [legalDocumentId], references: [id], onDelete: Cascade)
+  uploadedById    String
+  uploadedBy      User          @relation("LegalDocumentAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  fileName        String
+  mimeType        String
+  storagePath     String
+  note            String?       @db.Text
+  createdAt       DateTime      @default(now())
+
+  @@index([legalDocumentId])
+  @@index([uploadedById])
+  @@map("legal_document_attachments")
+}
+
+model LegalDocumentChangeLog {
+  id              String        @id @default(cuid())
+  legalDocumentId String
+  legalDocument   LegalDocument @relation(fields: [legalDocumentId], references: [id], onDelete: Cascade)
+  field           String
+  previousValue   String?       @db.Text
+  newValue        String?       @db.Text
+  changedById     String?
+  changedBy       User?         @relation("LegalDocumentChangeLogActor", fields: [changedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+
+  @@index([legalDocumentId, createdAt])
+  @@index([changedById])
+  @@map("legal_document_change_logs")
 }
 
 // ─── Asistente Syntra IA (port desde Odoo syntra_ai_assistant) ───────────────

@@ -20,6 +20,7 @@ import {
   Fingerprint,
   Wallet,
   CreditCard,
+  Scale,
   CalendarDays,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
@@ -94,6 +95,18 @@ export const HOME_MODULE_TILES: HomeModuleTile[] = [
     permissionTileId: "pagos",
     requiredPermission: "pagos.calendario",
     moduleId: "pagos",
+    accent: "bg-white",
+    tile: "",
+  },
+  {
+    id: "documentos_legales",
+    label: "Control de Documentos Legales",
+    description: "Garantías, licencias, patentes, constancias y pólizas",
+    href: "/documentos-legales",
+    icon: Scale,
+    permissionTileId: "documentos_legales",
+    requiredPermission: "documentosLegales.calendario",
+    moduleId: "documentosLegales",
     accent: "bg-white",
     tile: "",
   },

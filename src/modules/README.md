@@ -13,6 +13,7 @@ Carpetas para **lógica de dominio** (servicios, reglas, validaciones). Las ruta
 | `facturacion` | [`facturacion/`](./facturacion/) | Facturación manual, cuentas por cobrar | Migrado |
 | `facturacionElectronica` | [`facturacion-electronica/`](./facturacion-electronica/) | FE Costa Rica (XML/XAdES), IMAP, emisión, notas de crédito | Migrado |
 | `cuentasPorPagar` | [`cuentas-por-pagar/`](./cuentas-por-pagar/) | Consulta CXP Codisa (NAF5.ARCP*) por proveedor y amarres | Migrado |
+| `documentosLegales` | [`documentos-legales/`](./documentos-legales/) | Control de documentos legales: calendario, responsable y recordatorios | Migrado |
 | `reportes` | — | Reportes consolidados (código en `src/app/api/reports/`) | Inline en rutas |
 | `inventario` | [`inventario/`](./inventario/) | Activos, movimientos, tipos de activo | Migrado |
 | `disciplinario` | [`disciplinario/`](./disciplinario/) | Marcas, apercibimientos, omisiones, importación XLSX | Migrado |

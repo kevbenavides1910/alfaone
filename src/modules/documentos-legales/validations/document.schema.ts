@@ -1,0 +1,61 @@
+import { z } from "zod";
+import { reminderKey } from "../business/reminders";
+
+export const reminderInputSchema = z.object({
+  offsetValue: z.number().int().min(0).max(3650),
+  offsetUnit: z.enum(["DAYS", "MONTHS"]),
+});
+
+export const legalDocumentBodySchema = z
+  .object({
+    type: z.enum(["GARANTIA", "LICENCIA", "PATENTE", "CONSTANCIA", "POLIZA", "OTRO"]),
+    otherTypeLabel: z.string().trim().max(80).optional().nullable(),
+    description: z.string().trim().min(1, "La descripción es obligatoria").max(500),
+    amount: z.number().finite().min(0, "El monto no puede ser negativo"),
+    dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha de pago es inválida"),
+    company: z.string().trim().max(40).optional().nullable(),
+    referenceNumber: z.string().trim().max(120).optional().nullable(),
+    notes: z.string().trim().max(4000).optional().nullable(),
+    responsibleUserId: z.string().trim().min(1, "El responsable es obligatorio"),
+    reminders: z.array(reminderInputSchema).min(1, "Agregá al menos un recordatorio"),
+  })
+  .superRefine((value, ctx) => {
+    if (value.type === "OTRO" && !value.otherTypeLabel?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["otherTypeLabel"],
+        message: "Indicá la etiqueta del tipo Otros",
+      });
+    }
+    const seen = new Set<string>();
+    value.reminders.forEach((reminder, index) => {
+      if (reminder.offsetUnit === "MONTHS" && reminder.offsetValue > 240) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["reminders", index, "offsetValue"],
+          message: "La anticipación en meses no puede superar 240",
+        });
+      }
+      const key = reminderKey(reminder);
+      if (seen.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["reminders", index],
+          message: "Hay dos recordatorios con la misma anticipación",
+        });
+      }
+      seen.add(key);
+    });
+  });
+
+export const markPaidSchema = z
+  .object({
+    paid: z.boolean(),
+  })
+  .strict();
+
+export type LegalDocumentBody = z.infer<typeof legalDocumentBodySchema>;
+
+export function zodErrorMessage(error: z.ZodError): string {
+  return error.issues[0]?.message ?? "Datos inválidos";
+}

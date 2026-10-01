@@ -117,6 +117,28 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     prismaModels: ["Payment", "PaymentChangeLog", "PaymentAttachment"],
   },
 
+  documentosLegales: {
+    id: "documentosLegales",
+    label: "Control de Documentos Legales",
+    description:
+      "Calendario de garantías, licencias, patentes, constancias, pólizas y otros vencimientos, con recordatorios al responsable.",
+    uiRoutePrefixes: ["/documentos-legales"],
+    apiRoutePrefixes: ["/api/documentos-legales", "/api/cron/documentos-legales-recordatorios"],
+    codePaths: [
+      "src/modules/documentos-legales",
+      "src/app/(app)/documentos-legales",
+      "src/app/api/documentos-legales",
+      "src/app/api/cron/documentos-legales-recordatorios",
+      "src/components/documentos-legales",
+    ],
+    prismaModels: [
+      "LegalDocument",
+      "LegalDocumentReminder",
+      "LegalDocumentAttachment",
+      "LegalDocumentChangeLog",
+    ],
+  },
+
   reportes: {
     id: "reportes",
     label: "Reportes",
@@ -494,6 +516,8 @@ export function resolveModuleFromPath(pathname: string): AppModuleId {
     "monitoreo",
     "facturacionElectronica",
     "cuentasPorPagar",
+    "documentosLegales",
+    "pagos",
     "ventas",
     "facturacion",
     "plataforma",

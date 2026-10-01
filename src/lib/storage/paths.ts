@@ -20,6 +20,7 @@ export function appDataRoot(): string {
 export const STORAGE_DIRS = {
   expenses: "expense-uploads",
   payments: "payment-uploads",
+  legalDocuments: "legal-document-uploads",
   branding: "branding",
   sigDocuments: "sig-documents",
   sigEvidence: "sig-evidence",
@@ -43,6 +44,12 @@ export function paymentUploadRoot(): string {
   const explicit = process.env.PAYMENT_UPLOAD_DIR?.trim();
   if (explicit) return path.resolve(explicit);
   return path.join(appDataRoot(), STORAGE_DIRS.payments);
+}
+
+export function legalDocumentUploadRoot(): string {
+  const explicit = process.env.LEGAL_DOCUMENT_UPLOAD_DIR?.trim();
+  if (explicit) return path.resolve(explicit);
+  return path.join(appDataRoot(), STORAGE_DIRS.legalDocuments);
 }
 
 export function brandingUploadRoot(): string {

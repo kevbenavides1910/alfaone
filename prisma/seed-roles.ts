@@ -20,6 +20,7 @@ const ALL_KEYS = [
   "facturacion.cxc",
   "cuentasPorPagar.facturas",
   "pagos.calendario",
+  "documentosLegales.calendario",
   "gastos.expenses",
   "gastos.expenses_deferred",
   "gastos.expenses_admin",

@@ -2,6 +2,7 @@ import type { Session } from "next-auth";
 import { hasPermission } from "@/lib/permissions/check";
 import { cxpTools } from "../tools/cxp.tools";
 import { disciplinarioTools } from "../tools/disciplinario.tools";
+import { documentosLegalesTools } from "../tools/documentos-legales.tools";
 import { empleadosNafTools } from "../tools/empleados-naf.tools";
 import { empleadosTools } from "../tools/empleados.tools";
 import { expedienteTools } from "../tools/expediente.tools";
@@ -28,6 +29,7 @@ const ALL_TOOL_REGISTRARS: Array<() => SyntraTool[]> = [
   cxpTools,
   ticketsTools,
   pagosTools,
+  documentosLegalesTools,
   inventarioTools,
   expedienteTools,
   fingerTools,

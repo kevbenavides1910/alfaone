@@ -331,6 +331,22 @@ export const PERMISSION_REGISTRY = {
       },
     },
   },
+  documentosLegales: {
+    label: "Control de Documentos Legales",
+    moduleId: "documentosLegales" as const,
+    screens: {
+      calendario: {
+        label: "Calendario de documentos legales",
+        uiRoutes: ["/documentos-legales"],
+        apiPrefixes: ["/api/documentos-legales"],
+        actions: {
+          view: "Ver calendario de documentos legales",
+          edit: "Agendar, editar y marcar pagado",
+          admin: "Administrar documentos legales y recordatorios",
+        },
+      },
+    },
+  },
   disciplinario: {
     label: "Disciplinario",
     moduleId: "disciplinario" as const,
@@ -1112,6 +1128,7 @@ export const HOME_MODULE_PERMISSION_GROUPS: {
   { tileId: "cuentas_por_pagar", label: "Cuentas por pagar", moduleKeys: ["cuentasPorPagar"] },
   { tileId: "gastos", label: "Gastos", moduleKeys: ["gastos"] },
   { tileId: "pagos", label: "Pagos", moduleKeys: ["pagos"] },
+  { tileId: "documentos_legales", label: "Control de Documentos Legales", moduleKeys: ["documentosLegales"] },
   { tileId: "disciplinario", label: "Disciplinario", moduleKeys: ["disciplinario"] },
   { tileId: "empleados", label: "Empleados", moduleKeys: ["empleados"] },
   { tileId: "solicitudes_rrhh", label: "Solicitudes RRHH", moduleKeys: ["solicitudesRrhh"] },

@@ -27,7 +27,7 @@ const NAV_GROUPS: GroupDef[] = [
   {
     id: "gestion",
     label: "Gestión",
-    hrefs: ["/contracts", "/facturacion", "/expenses", "/expenses/pending-approvals", "/expenses/approval-bitacora"],
+    hrefs: ["/contracts", "/facturacion", "/expenses", "/expenses/pending-approvals", "/expenses/approval-bitacora", "/documentos-legales"],
   },
   {
     id: "operaciones",

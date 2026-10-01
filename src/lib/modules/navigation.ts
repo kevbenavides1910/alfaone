@@ -25,6 +25,7 @@ import {
   ScrollText,
   Wallet,
   CreditCard,
+  Scale,
   Fingerprint,
   CalendarDays,
 } from "lucide-react";
@@ -68,6 +69,13 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     icon: CreditCard,
     moduleId: "pagos",
     isActive: (p) => p.startsWith("/pagos"),
+  },
+  {
+    href: "/documentos-legales",
+    label: "Control de Documentos Legales",
+    icon: Scale,
+    moduleId: "documentosLegales",
+    isActive: (p) => p.startsWith("/documentos-legales"),
   },
   {
     href: "/expenses/pending-approvals",
