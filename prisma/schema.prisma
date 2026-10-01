@@ -6546,6 +6546,8 @@ model LegalDocument {
   policyPercentage  String?
   /// Texto libre cuando type = POLIZA (puede ser número o texto).
   insuredAmountLabel String?
+  /// RT, RC o FID cuando type = POLIZA.
+  policyKind        String?
   /// Texto libre cuando type = GARANTIA (puede ser número o texto).
   tenderNumber      String?
   guaranteeEntity   String?

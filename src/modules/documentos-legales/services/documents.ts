@@ -56,6 +56,7 @@ export function serializeLegalDocument(row: DocumentRow): LegalDocumentDto {
     otherTypeLabel: row.otherTypeLabel,
     policyPercentage: row.policyPercentage,
     insuredAmountLabel: row.insuredAmountLabel,
+    policyKind: row.policyKind === "RT" || row.policyKind === "RC" || row.policyKind === "FID" ? row.policyKind : null,
     tenderNumber: row.tenderNumber,
     guaranteeEntity: row.guaranteeEntity,
     guaranteeNumber: row.guaranteeNumber,
@@ -166,6 +167,7 @@ function documentData(body: LegalDocumentBody, userId: string, responsibleName: 
       otherTypeLabel: body.type === "OTRO" ? clean(body.otherTypeLabel) : null,
       policyPercentage: body.type === "POLIZA" ? clean(body.policyPercentage) : null,
       insuredAmountLabel: body.type === "POLIZA" ? clean(body.insuredAmountLabel) : null,
+      policyKind: body.type === "POLIZA" ? body.policyKind ?? null : null,
       tenderNumber: body.type === "GARANTIA" ? clean(body.tenderNumber) : null,
       guaranteeEntity: body.type === "GARANTIA" ? clean(body.guaranteeEntity) : null,
       guaranteeNumber: body.type === "GARANTIA" ? clean(body.guaranteeNumber) : null,
@@ -254,6 +256,11 @@ function changeEntries(current: DocumentRow, body: LegalDocumentBody, responsibl
       field: "insuredAmountLabel",
       previousValue: current.insuredAmountLabel,
       newValue: body.type === "POLIZA" ? clean(body.insuredAmountLabel) : null,
+    },
+    {
+      field: "policyKind",
+      previousValue: current.policyKind,
+      newValue: body.type === "POLIZA" ? body.policyKind ?? null : null,
     },
     {
       field: "tenderNumber",

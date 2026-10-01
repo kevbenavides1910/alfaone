@@ -13,6 +13,7 @@ const FIELD_LABELS: Record<string, string> = {
   otherTypeLabel: "Etiqueta",
   policyPercentage: "Porcentaje",
   insuredAmountLabel: "Monto asegurado",
+  policyKind: "Tipo de póliza",
   tenderNumber: "Número de licitación",
   guaranteeEntity: "Banco o Entidad",
   guaranteeNumber: "Número de Garantía",

@@ -14,6 +14,7 @@ export type LegalDocumentDto = {
   otherTypeLabel: string | null;
   policyPercentage: string | null;
   insuredAmountLabel: string | null;
+  policyKind: "RT" | "RC" | "FID" | null;
   tenderNumber: string | null;
   guaranteeEntity: string | null;
   guaranteeNumber: string | null;

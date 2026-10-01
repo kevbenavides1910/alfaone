@@ -12,6 +12,7 @@ export const legalDocumentBodySchema = z
     otherTypeLabel: z.string().trim().max(80).optional().nullable(),
     policyPercentage: z.string().trim().max(80).optional().nullable(),
     insuredAmountLabel: z.string().trim().max(120).optional().nullable(),
+    policyKind: z.enum(["RT", "RC", "FID"]).optional().nullable(),
     tenderNumber: z.string().trim().max(120).optional().nullable(),
     guaranteeEntity: z.string().trim().max(160).optional().nullable(),
     guaranteeNumber: z.string().trim().max(120).optional().nullable(),
@@ -30,6 +31,13 @@ export const legalDocumentBodySchema = z
         code: z.ZodIssueCode.custom,
         path: ["otherTypeLabel"],
         message: "Indicá la etiqueta del tipo Otros",
+      });
+    }
+    if (value.type === "POLIZA" && value.policyKind !== "RT" && value.policyKind !== "RC" && value.policyKind !== "FID") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["policyKind"],
+        message: "Seleccioná el tipo de póliza: RT, RC o FID",
       });
     }
     const seen = new Set<string>();

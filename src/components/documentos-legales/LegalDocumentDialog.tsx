@@ -21,6 +21,7 @@ type Draft = {
   otherTypeLabel: string;
   policyPercentage: string;
   insuredAmountLabel: string;
+  policyKind: string;
   tenderNumber: string;
   guaranteeEntity: string;
   guaranteeNumber: string;
@@ -51,6 +52,7 @@ function draftFromDoc(doc: LegalDocumentDto | null, dueDate: string): Draft {
       otherTypeLabel: "",
       policyPercentage: "",
       insuredAmountLabel: "",
+      policyKind: "",
       tenderNumber: "",
       guaranteeEntity: "",
       guaranteeNumber: "",
@@ -69,6 +71,7 @@ function draftFromDoc(doc: LegalDocumentDto | null, dueDate: string): Draft {
     otherTypeLabel: doc.otherTypeLabel ?? "",
     policyPercentage: doc.policyPercentage ?? "",
     insuredAmountLabel: doc.insuredAmountLabel ?? "",
+    policyKind: doc.policyKind ?? "",
     tenderNumber: doc.tenderNumber ?? "",
     guaranteeEntity: doc.guaranteeEntity ?? "",
     guaranteeNumber: doc.guaranteeNumber ?? "",
@@ -133,6 +136,9 @@ export function LegalDocumentDialog({
       if (draft.type === "OTRO" && !draft.otherTypeLabel.trim()) {
         throw new Error("Indicá la etiqueta del tipo Otros");
       }
+      if (draft.type === "POLIZA" && draft.policyKind !== "RT" && draft.policyKind !== "RC" && draft.policyKind !== "FID") {
+        throw new Error("Seleccioná el tipo de póliza: RT, RC o FID");
+      }
       if (reminders.length < 1 || reminders.some((reminder) => !Number.isInteger(reminder.offsetValue) || reminder.offsetValue < 0)) {
         throw new Error("Agregá al menos un recordatorio válido");
       }
@@ -141,6 +147,7 @@ export function LegalDocumentDialog({
         otherTypeLabel: draft.type === "OTRO" ? draft.otherTypeLabel.trim() : null,
         policyPercentage: draft.type === "POLIZA" ? draft.policyPercentage.trim() || null : null,
         insuredAmountLabel: draft.type === "POLIZA" ? draft.insuredAmountLabel.trim() || null : null,
+        policyKind: draft.type === "POLIZA" ? draft.policyKind || null : null,
         tenderNumber: draft.type === "GARANTIA" ? draft.tenderNumber.trim() || null : null,
         guaranteeEntity: draft.type === "GARANTIA" ? draft.guaranteeEntity.trim() || null : null,
         guaranteeNumber: draft.type === "GARANTIA" ? draft.guaranteeNumber.trim() || null : null,
@@ -303,6 +310,20 @@ export function LegalDocumentDialog({
             )}
             {draft.type === "POLIZA" && (
               <>
+                <label className="space-y-1 text-sm">
+                  <Label>Tipo</Label>
+                  <select
+                    className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                    value={draft.policyKind}
+                    disabled={!canEdit}
+                    onChange={(event) => setDraft({ ...draft, policyKind: event.target.value })}
+                  >
+                    <option value="">Seleccionar…</option>
+                    <option value="RT">RT</option>
+                    <option value="RC">RC</option>
+                    <option value="FID">FID</option>
+                  </select>
+                </label>
                 <label className="space-y-1 text-sm">
                   <Label>Porcentaje</Label>
                   <Input
