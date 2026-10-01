@@ -122,7 +122,7 @@ export function LegalDocumentDialog({
 
   const save = useMutation({
     mutationFn: async () => {
-      const amount = Number(draft.amount);
+      const amount = draft.type === "POLIZA" ? 0 : Number(draft.amount);
       const reminders = draft.reminders.map((reminder) => ({
         offsetValue: Number(reminder.offsetValue),
         offsetUnit: reminder.offsetUnit,
@@ -329,17 +329,19 @@ export function LegalDocumentDialog({
                 onChange={(event) => setDraft({ ...draft, description: event.target.value })}
               />
             </label>
-            <label className="space-y-1 text-sm">
-              <Label>Monto</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={draft.amount}
-                disabled={!canEdit}
-                onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
-              />
-            </label>
+            {draft.type !== "POLIZA" && (
+              <label className="space-y-1 text-sm">
+                <Label>Monto</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={draft.amount}
+                  disabled={!canEdit}
+                  onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
+                />
+              </label>
+            )}
             <label className="space-y-1 text-sm">
               <Label>Vigencia</Label>
               <Input
@@ -374,7 +376,7 @@ export function LegalDocumentDialog({
               />
             </label>
             <label className="space-y-1 text-sm sm:col-span-2">
-              <Label>Responsable</Label>
+              <Label>Responsable*</Label>
               <select
                 className="h-9 w-full rounded-md border bg-background px-2 text-sm"
                 value={draft.responsibleUserId}

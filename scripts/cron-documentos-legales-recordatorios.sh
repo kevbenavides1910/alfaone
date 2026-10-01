@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Recordatorios de documentos legales (vencimientos del responsable).
-# Ejemplo crontab (días hábiles, 8:20 AM):
-#   20 8 * * 1-5 /mnt/data/projects/alfa-one/code/presupuestos-alfa/scripts/cron-documentos-legales-recordatorios.sh >> /var/log/alfa-one/documentos-legales-recordatorios.log 2>&1
+# Crontab (todos los días, 8:20 AM Costa Rica = 14:20 UTC):
+#   20 14 * * * /mnt/data/projects/alfa-one/code/presupuestos-alfa/scripts/cron-documentos-legales-recordatorios.sh >> /var/log/alfa-one/documentos-legales-recordatorios.log 2>&1
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:3000}"
