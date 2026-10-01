@@ -22,7 +22,7 @@ export function documentosLegalesTools(): SyntraTool[] {
       permission: { key: "documentosLegales.calendario", level: "view" },
       definition: toolDef(
         "query_legal_document_calendar",
-        "Calendario de Control de Documentos Legales del mes: garantías, licencias, patentes, constancias, pólizas y otros, con totales pagado y pendiente.",
+        "Calendario de Control de Documentos Legales del mes: garantías, personerías, licencias, permisos, frecuencias, patentes, constancias y pólizas, con totales pagado y pendiente.",
         {
           type: "object",
           properties: {
@@ -72,7 +72,7 @@ export function documentosLegalesTools(): SyntraTool[] {
             company: { type: "string", description: "Código de empresa (opcional)." },
             type: {
               type: "string",
-              description: "GARANTIA, LICENCIA, PATENTE, CONSTANCIA, POLIZA u OTRO.",
+              description: "GARANTIA, PERSONERIA, LICENCIA, PERMISO, FRECUENCIA, PATENTE, CONSTANCIA o POLIZA.",
             },
             paid: { type: "boolean", description: "true solo pagados, false solo pendientes." },
           },

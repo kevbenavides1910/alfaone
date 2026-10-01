@@ -5,7 +5,7 @@ import {
   paymentCompanyWhere,
   type PaymentCompanyFilter,
 } from "@/modules/pagos/services/payment-company-filter";
-import { legalDocumentTypeLabel } from "../business/catalog";
+import { legalDocumentTypeLabel, legalTypeOmitsReference } from "../business/catalog";
 import { daysOfMonth, monthBounds, parseIsoDay, toIsoDay } from "../business/dates";
 import type { LegalCalendarMonth, LegalDocumentDto, LegalReminderDto } from "../business/dto";
 import {
@@ -164,7 +164,7 @@ function documentData(body: LegalDocumentBody, userId: string, responsibleName: 
     dueDate,
     data: {
       type: body.type,
-      otherTypeLabel: body.type === "OTRO" ? clean(body.otherTypeLabel) : null,
+      otherTypeLabel: null,
       policyPercentage: body.type === "POLIZA" ? clean(body.policyPercentage) : null,
       insuredAmountLabel: body.type === "POLIZA" ? clean(body.insuredAmountLabel) : null,
       policyKind: body.type === "POLIZA" ? body.policyKind ?? null : null,
@@ -175,7 +175,7 @@ function documentData(body: LegalDocumentBody, userId: string, responsibleName: 
       amount: new Prisma.Decimal(body.amount.toFixed(2)),
       dueDate,
       company: clean(body.company),
-      referenceNumber: clean(body.referenceNumber),
+      referenceNumber: legalTypeOmitsReference(body.type) ? null : clean(body.referenceNumber),
       notes: clean(body.notes),
       responsibleUserId: body.responsibleUserId,
       updatedById: userId,
@@ -281,7 +281,7 @@ function changeEntries(current: DocumentRow, body: LegalDocumentBody, responsibl
     { field: "amount", previousValue: money(current.amount).toFixed(2), newValue: body.amount.toFixed(2) },
     { field: "dueDate", previousValue: toIsoDay(current.dueDate), newValue: body.dueDate },
     { field: "company", previousValue: current.company, newValue: clean(body.company) },
-    { field: "referenceNumber", previousValue: current.referenceNumber, newValue: clean(body.referenceNumber) },
+    { field: "referenceNumber", previousValue: current.referenceNumber, newValue: legalTypeOmitsReference(body.type) ? null : clean(body.referenceNumber) },
     { field: "notes", previousValue: current.notes, newValue: clean(body.notes) },
     {
       field: "responsibleUserId",

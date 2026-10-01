@@ -6530,6 +6530,9 @@ enum LegalDocumentType {
   CONSTANCIA
   POLIZA
   OTRO
+  PERSONERIA
+  PERMISO
+  FRECUENCIA
 }
 
 enum LegalReminderOffsetUnit {

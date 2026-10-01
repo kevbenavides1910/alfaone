@@ -8,7 +8,16 @@ export const reminderInputSchema = z.object({
 
 export const legalDocumentBodySchema = z
   .object({
-    type: z.enum(["GARANTIA", "LICENCIA", "PATENTE", "CONSTANCIA", "POLIZA", "OTRO"]),
+    type: z.enum([
+      "GARANTIA",
+      "PERSONERIA",
+      "LICENCIA",
+      "PERMISO",
+      "FRECUENCIA",
+      "PATENTE",
+      "CONSTANCIA",
+      "POLIZA",
+    ]),
     otherTypeLabel: z.string().trim().max(80).optional().nullable(),
     policyPercentage: z.string().trim().max(80).optional().nullable(),
     insuredAmountLabel: z.string().trim().max(120).optional().nullable(),
@@ -26,13 +35,6 @@ export const legalDocumentBodySchema = z
     reminders: z.array(reminderInputSchema).min(1, "Agregá al menos un recordatorio"),
   })
   .superRefine((value, ctx) => {
-    if (value.type === "OTRO" && !value.otherTypeLabel?.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["otherTypeLabel"],
-        message: "Indicá la etiqueta del tipo Otros",
-      });
-    }
     if (value.type === "POLIZA" && value.policyKind !== "RT" && value.policyKind !== "RC" && value.policyKind !== "FID") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

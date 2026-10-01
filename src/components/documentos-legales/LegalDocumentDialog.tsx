@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
-import { LEGAL_DOCUMENT_TYPES } from "@/modules/documentos-legales/business/catalog";
+import { LEGAL_DOCUMENT_TYPES, legalTypeOmitsReference } from "@/modules/documentos-legales/business/catalog";
 import type { LegalAttachmentDto, LegalDocumentDto, ResponsibleUserDto } from "@/modules/documentos-legales/business/dto";
 import { formatReminderOffset } from "@/modules/documentos-legales/business/reminders";
 import { Button } from "@/components/ui/button";
@@ -133,9 +133,6 @@ export function LegalDocumentDialog({
       if (!draft.description.trim()) throw new Error("La descripción es obligatoria");
       if (!Number.isFinite(amount) || amount < 0) throw new Error("El monto no puede ser negativo");
       if (!draft.responsibleUserId) throw new Error("El responsable es obligatorio");
-      if (draft.type === "OTRO" && !draft.otherTypeLabel.trim()) {
-        throw new Error("Indicá la etiqueta del tipo Otros");
-      }
       if (draft.type === "POLIZA" && draft.policyKind !== "RT" && draft.policyKind !== "RC" && draft.policyKind !== "FID") {
         throw new Error("Seleccioná el tipo de póliza: RT, RC o FID");
       }
@@ -144,7 +141,7 @@ export function LegalDocumentDialog({
       }
       const body = {
         type: draft.type,
-        otherTypeLabel: draft.type === "OTRO" ? draft.otherTypeLabel.trim() : null,
+        otherTypeLabel: null,
         policyPercentage: draft.type === "POLIZA" ? draft.policyPercentage.trim() || null : null,
         insuredAmountLabel: draft.type === "POLIZA" ? draft.insuredAmountLabel.trim() || null : null,
         policyKind: draft.type === "POLIZA" ? draft.policyKind || null : null,
@@ -155,7 +152,7 @@ export function LegalDocumentDialog({
         amount,
         dueDate: draft.dueDate,
         company: draft.company || null,
-        referenceNumber: draft.referenceNumber.trim() || null,
+        referenceNumber: legalTypeOmitsReference(draft.type) ? null : draft.referenceNumber.trim() || null,
         notes: draft.notes.trim() || null,
         responsibleUserId: draft.responsibleUserId,
         reminders,
@@ -270,16 +267,6 @@ export function LegalDocumentDialog({
                 ))}
               </select>
             </label>
-            {draft.type === "OTRO" && (
-              <label className="space-y-1 text-sm">
-                <Label>Etiqueta</Label>
-                <Input
-                  value={draft.otherTypeLabel}
-                  disabled={!canEdit}
-                  onChange={(event) => setDraft({ ...draft, otherTypeLabel: event.target.value })}
-                />
-              </label>
-            )}
             {draft.type === "GARANTIA" && (
               <>
                 <label className="space-y-1 text-sm">
@@ -388,14 +375,16 @@ export function LegalDocumentDialog({
                 ))}
               </select>
             </label>
-            <label className="space-y-1 text-sm">
-              <Label>Referencia</Label>
-              <Input
-                value={draft.referenceNumber}
-                disabled={!canEdit}
-                onChange={(event) => setDraft({ ...draft, referenceNumber: event.target.value })}
-              />
-            </label>
+            {!legalTypeOmitsReference(draft.type) && (
+              <label className="space-y-1 text-sm">
+                <Label>Referencia</Label>
+                <Input
+                  value={draft.referenceNumber}
+                  disabled={!canEdit}
+                  onChange={(event) => setDraft({ ...draft, referenceNumber: event.target.value })}
+                />
+              </label>
+            )}
             <label className="space-y-1 text-sm sm:col-span-2">
               <Label>Responsable*</Label>
               <select
