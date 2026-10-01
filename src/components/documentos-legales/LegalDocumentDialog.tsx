@@ -19,6 +19,11 @@ type ReminderDraft = { offsetValue: string; offsetUnit: "DAYS" | "MONTHS" };
 type Draft = {
   type: string;
   otherTypeLabel: string;
+  policyPercentage: string;
+  insuredAmountLabel: string;
+  tenderNumber: string;
+  guaranteeEntity: string;
+  guaranteeNumber: string;
   description: string;
   amount: string;
   dueDate: string;
@@ -44,6 +49,11 @@ function draftFromDoc(doc: LegalDocumentDto | null, dueDate: string): Draft {
     return {
       type: "GARANTIA",
       otherTypeLabel: "",
+      policyPercentage: "",
+      insuredAmountLabel: "",
+      tenderNumber: "",
+      guaranteeEntity: "",
+      guaranteeNumber: "",
       description: "",
       amount: "",
       dueDate,
@@ -57,6 +67,11 @@ function draftFromDoc(doc: LegalDocumentDto | null, dueDate: string): Draft {
   return {
     type: doc.type,
     otherTypeLabel: doc.otherTypeLabel ?? "",
+    policyPercentage: doc.policyPercentage ?? "",
+    insuredAmountLabel: doc.insuredAmountLabel ?? "",
+    tenderNumber: doc.tenderNumber ?? "",
+    guaranteeEntity: doc.guaranteeEntity ?? "",
+    guaranteeNumber: doc.guaranteeNumber ?? "",
     description: doc.description,
     amount: String(doc.amount),
     dueDate: doc.dueDate,
@@ -124,6 +139,11 @@ export function LegalDocumentDialog({
       const body = {
         type: draft.type,
         otherTypeLabel: draft.type === "OTRO" ? draft.otherTypeLabel.trim() : null,
+        policyPercentage: draft.type === "POLIZA" ? draft.policyPercentage.trim() || null : null,
+        insuredAmountLabel: draft.type === "POLIZA" ? draft.insuredAmountLabel.trim() || null : null,
+        tenderNumber: draft.type === "GARANTIA" ? draft.tenderNumber.trim() || null : null,
+        guaranteeEntity: draft.type === "GARANTIA" ? draft.guaranteeEntity.trim() || null : null,
+        guaranteeNumber: draft.type === "GARANTIA" ? draft.guaranteeNumber.trim() || null : null,
         description: draft.description.trim(),
         amount,
         dueDate: draft.dueDate,
@@ -253,6 +273,54 @@ export function LegalDocumentDialog({
                 />
               </label>
             )}
+            {draft.type === "GARANTIA" && (
+              <>
+                <label className="space-y-1 text-sm">
+                  <Label>Número de licitación</Label>
+                  <Input
+                    value={draft.tenderNumber}
+                    disabled={!canEdit}
+                    onChange={(event) => setDraft({ ...draft, tenderNumber: event.target.value })}
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <Label>Banco o Entidad</Label>
+                  <Input
+                    value={draft.guaranteeEntity}
+                    disabled={!canEdit}
+                    onChange={(event) => setDraft({ ...draft, guaranteeEntity: event.target.value })}
+                  />
+                </label>
+                <label className="space-y-1 text-sm sm:col-span-2">
+                  <Label>Número de Garantía</Label>
+                  <Input
+                    value={draft.guaranteeNumber}
+                    disabled={!canEdit}
+                    onChange={(event) => setDraft({ ...draft, guaranteeNumber: event.target.value })}
+                  />
+                </label>
+              </>
+            )}
+            {draft.type === "POLIZA" && (
+              <>
+                <label className="space-y-1 text-sm">
+                  <Label>Porcentaje</Label>
+                  <Input
+                    value={draft.policyPercentage}
+                    disabled={!canEdit}
+                    onChange={(event) => setDraft({ ...draft, policyPercentage: event.target.value })}
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <Label>Monto asegurado</Label>
+                  <Input
+                    value={draft.insuredAmountLabel}
+                    disabled={!canEdit}
+                    onChange={(event) => setDraft({ ...draft, insuredAmountLabel: event.target.value })}
+                  />
+                </label>
+              </>
+            )}
             <label className="space-y-1 text-sm sm:col-span-2">
               <Label>Descripción</Label>
               <Input
@@ -273,7 +341,7 @@ export function LegalDocumentDialog({
               />
             </label>
             <label className="space-y-1 text-sm">
-              <Label>Fecha de pago</Label>
+              <Label>Vigencia</Label>
               <Input
                 type="date"
                 value={draft.dueDate}

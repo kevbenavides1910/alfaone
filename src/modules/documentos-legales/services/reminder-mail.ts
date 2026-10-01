@@ -66,7 +66,7 @@ export async function sendLegalDocumentReminderEmails() {
 <p>Tenés un vencimiento de <strong>${escapeHtml(typeLabel)}</strong> (${escapeHtml(when)}).</p>
 <ul>
   <li>Descripción: ${escapeHtml(doc.description)}</li>
-  <li>Fecha de pago: ${escapeHtml(dueLabel)}</li>
+  <li>Vigencia: ${escapeHtml(dueLabel)}</li>
   <li>Monto: ${escapeHtml(Number(doc.amount.toString()).toFixed(2))}</li>
   ${doc.company ? `<li>Empresa: ${escapeHtml(doc.company)}</li>` : ""}
   ${doc.referenceNumber ? `<li>Referencia: ${escapeHtml(doc.referenceNumber)}</li>` : ""}

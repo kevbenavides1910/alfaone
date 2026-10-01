@@ -54,6 +54,11 @@ export function serializeLegalDocument(row: DocumentRow): LegalDocumentDto {
     type: row.type,
     typeLabel: legalDocumentTypeLabel(row.type, row.otherTypeLabel),
     otherTypeLabel: row.otherTypeLabel,
+    policyPercentage: row.policyPercentage,
+    insuredAmountLabel: row.insuredAmountLabel,
+    tenderNumber: row.tenderNumber,
+    guaranteeEntity: row.guaranteeEntity,
+    guaranteeNumber: row.guaranteeNumber,
     description: row.description,
     amount: money(row.amount),
     dueDate: toIsoDay(row.dueDate),
@@ -153,12 +158,17 @@ export async function searchLegalDocuments(opts: {
 
 function documentData(body: LegalDocumentBody, userId: string, responsibleName: string) {
   const dueDate = parseIsoDay(body.dueDate);
-  if (!dueDate) throw new LegalDocumentError("La fecha de pago es inválida", "BAD_REQUEST");
+  if (!dueDate) throw new LegalDocumentError("La vigencia es inválida", "BAD_REQUEST");
   return {
     dueDate,
     data: {
       type: body.type,
       otherTypeLabel: body.type === "OTRO" ? clean(body.otherTypeLabel) : null,
+      policyPercentage: body.type === "POLIZA" ? clean(body.policyPercentage) : null,
+      insuredAmountLabel: body.type === "POLIZA" ? clean(body.insuredAmountLabel) : null,
+      tenderNumber: body.type === "GARANTIA" ? clean(body.tenderNumber) : null,
+      guaranteeEntity: body.type === "GARANTIA" ? clean(body.guaranteeEntity) : null,
+      guaranteeNumber: body.type === "GARANTIA" ? clean(body.guaranteeNumber) : null,
       description: body.description.trim(),
       amount: new Prisma.Decimal(body.amount.toFixed(2)),
       dueDate,
@@ -235,6 +245,31 @@ function changeEntries(current: DocumentRow, body: LegalDocumentBody, responsibl
   const prevType = legalDocumentTypeLabel(current.type, current.otherTypeLabel);
   const entries: ChangeEntry[] = [
     { field: "type", previousValue: prevType, newValue: nextType },
+    {
+      field: "policyPercentage",
+      previousValue: current.policyPercentage,
+      newValue: body.type === "POLIZA" ? clean(body.policyPercentage) : null,
+    },
+    {
+      field: "insuredAmountLabel",
+      previousValue: current.insuredAmountLabel,
+      newValue: body.type === "POLIZA" ? clean(body.insuredAmountLabel) : null,
+    },
+    {
+      field: "tenderNumber",
+      previousValue: current.tenderNumber,
+      newValue: body.type === "GARANTIA" ? clean(body.tenderNumber) : null,
+    },
+    {
+      field: "guaranteeEntity",
+      previousValue: current.guaranteeEntity,
+      newValue: body.type === "GARANTIA" ? clean(body.guaranteeEntity) : null,
+    },
+    {
+      field: "guaranteeNumber",
+      previousValue: current.guaranteeNumber,
+      newValue: body.type === "GARANTIA" ? clean(body.guaranteeNumber) : null,
+    },
     { field: "description", previousValue: current.description, newValue: body.description.trim() },
     { field: "amount", previousValue: money(current.amount).toFixed(2), newValue: body.amount.toFixed(2) },
     { field: "dueDate", previousValue: toIsoDay(current.dueDate), newValue: body.dueDate },

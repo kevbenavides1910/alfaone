@@ -12,6 +12,11 @@ export type LegalDocumentDto = {
   type: string;
   typeLabel: string;
   otherTypeLabel: string | null;
+  policyPercentage: string | null;
+  insuredAmountLabel: string | null;
+  tenderNumber: string | null;
+  guaranteeEntity: string | null;
+  guaranteeNumber: string | null;
   description: string;
   amount: number;
   dueDate: string;

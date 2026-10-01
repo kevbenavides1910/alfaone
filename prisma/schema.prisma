@@ -6542,6 +6542,14 @@ model LegalDocument {
   type              LegalDocumentType
   /// Etiqueta libre cuando type = OTRO.
   otherTypeLabel    String?
+  /// Texto libre cuando type = POLIZA (puede ser número o texto).
+  policyPercentage  String?
+  /// Texto libre cuando type = POLIZA (puede ser número o texto).
+  insuredAmountLabel String?
+  /// Texto libre cuando type = GARANTIA (puede ser número o texto).
+  tenderNumber      String?
+  guaranteeEntity   String?
+  guaranteeNumber   String?
   description       String
   amount            Decimal           @db.Decimal(15, 2)
   dueDate           DateTime          @db.Date
