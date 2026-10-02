@@ -39,7 +39,7 @@ export const PAYMENT_CATEGORIES: PaymentCategoryDef[] = [
       { key: "COMBUSTIBLES", label: "Combustibles" },
       { key: "GASTOS_OPERATIVOS", label: "Gastos Operativos" },
       { key: "ACTIVOS", label: "Activos" },
-      { key: "PRESTAMO_DESARROLLOS", label: "Préstamo desarrollos" },
+      { key: "PRESTAMO_DESARROLLOS", label: "Préstamo" },
       { key: "MATERIALES_FINCA", label: "Materiales Finca" },
       { key: "ALQUILERES", label: "Alquileres" },
       { key: "INFRAESTRUCTURA", label: "Infraestructura" },
@@ -62,6 +62,7 @@ export const PAYMENT_CATEGORIES: PaymentCategoryDef[] = [
       { key: "IVA", label: "IVA" },
       { key: "POLIZAS", label: "Pólizas" },
       { key: "RENTA", label: "Renta" },
+      { key: "MULTAS", label: "Multas" },
     ],
   },
   {
