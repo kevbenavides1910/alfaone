@@ -12,6 +12,12 @@ export const LEGAL_DOCUMENT_TYPES = [
     dot: "bg-indigo-500",
   },
   {
+    value: "CERTIFICACION",
+    label: "Certificaciones",
+    chip: "bg-fuchsia-100 text-fuchsia-950 border-fuchsia-300",
+    dot: "bg-fuchsia-500",
+  },
+  {
     value: "LICENCIA",
     label: "Licencias",
     chip: "bg-sky-100 text-sky-950 border-sky-300",
@@ -28,6 +34,12 @@ export const LEGAL_DOCUMENT_TYPES = [
     label: "Frecuencias",
     chip: "bg-teal-100 text-teal-950 border-teal-300",
     dot: "bg-teal-500",
+  },
+  {
+    value: "CEDULA",
+    label: "Cédulas",
+    chip: "bg-cyan-100 text-cyan-950 border-cyan-300",
+    dot: "bg-cyan-500",
   },
   {
     value: "PATENTE",
@@ -50,7 +62,14 @@ export const LEGAL_DOCUMENT_TYPES = [
 ] as const;
 
 /** Mismos campos que el formulario general, sin Etiqueta ni Referencia. */
-const TYPES_WITHOUT_REFERENCE = new Set<string>(["PERSONERIA", "LICENCIA", "PERMISO", "FRECUENCIA"]);
+const TYPES_WITHOUT_REFERENCE = new Set<string>([
+  "PERSONERIA",
+  "CERTIFICACION",
+  "LICENCIA",
+  "PERMISO",
+  "FRECUENCIA",
+  "CEDULA",
+]);
 
 export function legalTypeOmitsReference(type: string): boolean {
   return TYPES_WITHOUT_REFERENCE.has(type);

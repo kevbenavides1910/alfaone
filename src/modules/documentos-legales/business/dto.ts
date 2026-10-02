@@ -18,6 +18,7 @@ export type LegalDocumentDto = {
   tenderNumber: string | null;
   guaranteeEntity: string | null;
   guaranteeNumber: string | null;
+  cedulaCondition: string | null;
   description: string;
   amount: number;
   dueDate: string;

@@ -17,6 +17,7 @@ const FIELD_LABELS: Record<string, string> = {
   tenderNumber: "Número de licitación",
   guaranteeEntity: "Banco o Entidad",
   guaranteeNumber: "Número de Garantía",
+  cedulaCondition: "Condición",
   description: "Descripción",
   amount: "Monto",
   dueDate: "Vigencia",

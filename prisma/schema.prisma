@@ -6533,6 +6533,8 @@ enum LegalDocumentType {
   PERSONERIA
   PERMISO
   FRECUENCIA
+  CERTIFICACION
+  CEDULA
 }
 
 enum LegalReminderOffsetUnit {
@@ -6555,6 +6557,8 @@ model LegalDocument {
   tenderNumber      String?
   guaranteeEntity   String?
   guaranteeNumber   String?
+  /// Texto libre cuando type = CEDULA.
+  cedulaCondition   String?
   description       String
   amount            Decimal           @db.Decimal(15, 2)
   dueDate           DateTime          @db.Date

@@ -25,6 +25,7 @@ type Draft = {
   tenderNumber: string;
   guaranteeEntity: string;
   guaranteeNumber: string;
+  cedulaCondition: string;
   description: string;
   amount: string;
   dueDate: string;
@@ -56,6 +57,7 @@ function draftFromDoc(doc: LegalDocumentDto | null, dueDate: string): Draft {
       tenderNumber: "",
       guaranteeEntity: "",
       guaranteeNumber: "",
+      cedulaCondition: "",
       description: "",
       amount: "",
       dueDate,
@@ -75,6 +77,7 @@ function draftFromDoc(doc: LegalDocumentDto | null, dueDate: string): Draft {
     tenderNumber: doc.tenderNumber ?? "",
     guaranteeEntity: doc.guaranteeEntity ?? "",
     guaranteeNumber: doc.guaranteeNumber ?? "",
+    cedulaCondition: doc.cedulaCondition ?? "",
     description: doc.description,
     amount: String(doc.amount),
     dueDate: doc.dueDate,
@@ -130,7 +133,9 @@ export function LegalDocumentDialog({
         offsetValue: Number(reminder.offsetValue),
         offsetUnit: reminder.offsetUnit,
       }));
-      if (!draft.description.trim()) throw new Error("La descripción es obligatoria");
+      if (!draft.description.trim()) {
+        throw new Error(draft.type === "CEDULA" ? "El nombre es obligatorio" : "La descripción es obligatoria");
+      }
       if (!Number.isFinite(amount) || amount < 0) throw new Error("El monto no puede ser negativo");
       if (!draft.responsibleUserId) throw new Error("El responsable es obligatorio");
       if (draft.type === "POLIZA" && draft.policyKind !== "RT" && draft.policyKind !== "RC" && draft.policyKind !== "FID") {
@@ -148,6 +153,7 @@ export function LegalDocumentDialog({
         tenderNumber: draft.type === "GARANTIA" ? draft.tenderNumber.trim() || null : null,
         guaranteeEntity: draft.type === "GARANTIA" ? draft.guaranteeEntity.trim() || null : null,
         guaranteeNumber: draft.type === "GARANTIA" ? draft.guaranteeNumber.trim() || null : null,
+        cedulaCondition: draft.type === "CEDULA" ? draft.cedulaCondition.trim() || null : null,
         description: draft.description.trim(),
         amount,
         dueDate: draft.dueDate,
@@ -330,13 +336,23 @@ export function LegalDocumentDialog({
               </>
             )}
             <label className="space-y-1 text-sm sm:col-span-2">
-              <Label>Descripción</Label>
+              <Label>{draft.type === "CEDULA" ? "Nombre" : "Descripción"}</Label>
               <Input
                 value={draft.description}
                 disabled={!canEdit}
                 onChange={(event) => setDraft({ ...draft, description: event.target.value })}
               />
             </label>
+            {draft.type === "CEDULA" && (
+              <label className="space-y-1 text-sm sm:col-span-2">
+                <Label>Condición</Label>
+                <Input
+                  value={draft.cedulaCondition}
+                  disabled={!canEdit}
+                  onChange={(event) => setDraft({ ...draft, cedulaCondition: event.target.value })}
+                />
+              </label>
+            )}
             {draft.type !== "POLIZA" && (
               <label className="space-y-1 text-sm">
                 <Label>Monto</Label>
