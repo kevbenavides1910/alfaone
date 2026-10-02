@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { LEGAL_DOCUMENT_TYPES, legalTypeOmitsReference } from "@/modules/documentos-legales/business/catalog";
@@ -35,6 +35,27 @@ type Draft = {
   responsibleUserId: string;
   reminders: ReminderDraft[];
 };
+
+function descriptionLabel(type: string): string {
+  if (type === "CEDULA") return "Nombre";
+  if (type === "POLIZA") return "Número de Póliza";
+  return "Descripción";
+}
+
+function descriptionRequiredMessage(type: string): string {
+  if (type === "CEDULA") return "El nombre es obligatorio";
+  if (type === "POLIZA") return "El número de póliza es obligatorio";
+  return "La descripción es obligatoria";
+}
+
+async function postAttachment(documentId: string, file: File): Promise<LegalAttachmentDto> {
+  const form = new FormData();
+  form.set("file", file);
+  return apiJson<LegalAttachmentDto>(`/api/documentos-legales/${documentId}/attachments`, {
+    method: "POST",
+    body: form,
+  });
+}
 
 const PRESETS: ReminderDraft[] = [
   { offsetValue: "0", offsetUnit: "DAYS" },
@@ -117,8 +138,14 @@ export function LegalDocumentDialog({
 }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Draft>(() => draftFromDoc(document, dueDate));
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<LegalAttachmentDto | null>(null);
   const documentId = document?.id;
+
+  useEffect(() => {
+    if (!open) setPendingFiles([]);
+  }, [open]);
 
   const attachments = useQuery({
     queryKey: ["documentos-legales-adjuntos", documentId],
@@ -133,8 +160,9 @@ export function LegalDocumentDialog({
         offsetValue: Number(reminder.offsetValue),
         offsetUnit: reminder.offsetUnit,
       }));
-      if (!draft.description.trim()) {
-        throw new Error(draft.type === "CEDULA" ? "El nombre es obligatorio" : "La descripción es obligatoria");
+      if (!draft.description.trim()) throw new Error(descriptionRequiredMessage(draft.type));
+      if (pendingFiles.some((file) => file.size > 15 * 1024 * 1024)) {
+        throw new Error("Cada adjunto puede pesar hasta 15 MB");
       }
       if (!Number.isFinite(amount) || amount < 0) throw new Error("El monto no puede ser negativo");
       if (!draft.responsibleUserId) throw new Error("El responsable es obligatorio");
@@ -163,39 +191,35 @@ export function LegalDocumentDialog({
         responsibleUserId: draft.responsibleUserId,
         reminders,
       };
-      if (documentId) {
-        return apiJson<LegalDocumentDto>(`/api/documentos-legales/${documentId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
+      const saved = documentId
+        ? await apiJson<LegalDocumentDto>(`/api/documentos-legales/${documentId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        : await apiJson<LegalDocumentDto>("/api/documentos-legales", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+      const failed: string[] = [];
+      if (!documentId) {
+        for (const file of pendingFiles) {
+          try {
+            await postAttachment(saved.id, file);
+          } catch (error) {
+            failed.push(`${file.name}: ${error instanceof Error ? error.message : "No se pudo adjuntar"}`);
+          }
+        }
       }
-      return apiJson<LegalDocumentDto>("/api/documentos-legales", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      return { saved, failed };
     },
-    onSuccess: (saved) => {
+    onSuccess: ({ saved, failed }) => {
       toast.success(documentId ? "Documento actualizado" : "Documento agendado");
+      if (failed.length > 0) toast.error(failed.join(" · "));
+      setPendingFiles([]);
       void queryClient.invalidateQueries({ queryKey: ["documentos-legales"] });
       onSaved(saved);
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
-  const upload = useMutation({
-    mutationFn: async (file: File) => {
-      const form = new FormData();
-      form.set("file", file);
-      return apiJson<LegalAttachmentDto>(`/api/documentos-legales/${documentId}/attachments`, {
-        method: "POST",
-        body: form,
-      });
-    },
-    onSuccess: () => {
-      toast.success("Adjunto cargado");
-      void attachments.refetch();
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -336,7 +360,7 @@ export function LegalDocumentDialog({
               </>
             )}
             <label className="space-y-1 text-sm sm:col-span-2">
-              <Label>{draft.type === "CEDULA" ? "Nombre" : "Descripción"}</Label>
+              <Label>{descriptionLabel(draft.type)}</Label>
               <Input
                 value={draft.description}
                 disabled={!canEdit}
@@ -491,37 +515,75 @@ export function LegalDocumentDialog({
 
           <div className="space-y-2">
             <p className="text-sm font-medium">Adjuntos</p>
-            {!documentId ? (
-              <p className="text-xs text-muted-foreground">Guardá el documento para adjuntar archivos.</p>
+            {documentId ? (
+              <ul className="space-y-1 text-sm">
+                {(attachments.data ?? []).map((file) => (
+                  <li key={file.id} className="flex items-center justify-between gap-2">
+                    <button type="button" className="truncate text-left hover:underline" onClick={() => setPreview(file)}>
+                      {file.fileName}
+                    </button>
+                    {canEdit && (
+                      <Button type="button" variant="outline" size="sm" onClick={() => removeAttachment.mutate(file.id)}>
+                        Quitar
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
             ) : (
-              <>
-                <ul className="space-y-1 text-sm">
-                  {(attachments.data ?? []).map((file) => (
-                    <li key={file.id} className="flex items-center justify-between gap-2">
-                      <button type="button" className="truncate text-left hover:underline" onClick={() => setPreview(file)}>
-                        {file.fileName}
-                      </button>
-                      {canEdit && (
-                        <Button type="button" variant="outline" size="sm" onClick={() => removeAttachment.mutate(file.id)}>
-                          Quitar
-                        </Button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                {canEdit && (
-                  <Input
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.xls,.xlsx,.csv"
-                    disabled={upload.isPending}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      event.target.value = "";
-                      if (file) upload.mutate(file);
-                    }}
-                  />
-                )}
-              </>
+              <ul className="space-y-1 text-sm">
+                {pendingFiles.map((file, index) => (
+                  <li key={`${file.name}-${file.size}-${index}`} className="flex items-center justify-between gap-2">
+                    <span className="truncate">{file.name}</span>
+                    {canEdit && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPendingFiles((current) => current.filter((_, i) => i !== index))}
+                      >
+                        Quitar
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!documentId && (
+              <p className="text-xs text-muted-foreground">Se cargan al guardar. Cada archivo puede pesar hasta 15 MB.</p>
+            )}
+            {canEdit && (
+              <Input
+                type="file"
+                multiple
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.xls,.xlsx,.csv"
+                disabled={uploading || save.isPending}
+                onChange={(event) => {
+                  const selected = Array.from(event.target.files ?? []);
+                  event.target.value = "";
+                  if (selected.length === 0) return;
+                  if (!documentId) {
+                    setPendingFiles((current) => [...current, ...selected]);
+                    return;
+                  }
+                  setUploading(true);
+                  void (async () => {
+                    try {
+                      for (const file of selected) {
+                        try {
+                          await postAttachment(documentId, file);
+                          toast.success("Adjunto cargado");
+                        } catch (error) {
+                          toast.error(error instanceof Error ? error.message : "No se pudo adjuntar");
+                        }
+                      }
+                      void attachments.refetch();
+                    } finally {
+                      setUploading(false);
+                    }
+                  })();
+                }}
+              />
             )}
           </div>
 
