@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, ChevronLeft, ChevronRight, Paperclip, Plus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,16 @@ export function CalendarioOperativoClient() {
     open: false,
   });
   const [detailId, setDetailId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const openedFromUrl = useRef(false);
+
+  useEffect(() => {
+    if (openedFromUrl.current) return;
+    const evento = searchParams.get("evento")?.trim();
+    if (!evento) return;
+    openedFromUrl.current = true;
+    setDetailId(evento);
+  }, [searchParams]);
 
   const grid = useMemo(() => buildMonthGrid(cursor.year, cursor.month), [cursor]);
   const from = toIsoDate(grid[0]);

@@ -125,3 +125,32 @@ export function toIsoDate(d: Date): string {
 export function fromIsoDate(s: string): Date {
   return new Date(`${s}T00:00:00.000Z`);
 }
+
+export type CalendarioDigestKind = "DUE_DAY" | "REMINDER";
+
+/** Correo del día de la tarea, o recordatorio si ya pasó y sigue pendiente. */
+export function calendarioDigestKind(eventDay: string, today: string): CalendarioDigestKind | null {
+  if (eventDay > today) return null;
+  if (eventDay === today) return "DUE_DAY";
+  return "REMINDER";
+}
+
+/** Días entre la fecha de la tarea y hoy (0 si es hoy o aún no llega). */
+export function calendarioDaysPending(eventDay: string, today: string): number {
+  const start = Date.parse(`${eventDay}T00:00:00.000Z`);
+  const end = Date.parse(`${today}T00:00:00.000Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  return Math.round((end - start) / 86_400_000);
+}
+
+export function formatCalendarioDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("es-CR", {
+    timeZone: "UTC",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(d);
+}

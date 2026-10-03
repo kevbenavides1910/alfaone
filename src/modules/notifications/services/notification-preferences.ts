@@ -1,6 +1,9 @@
 import { PermissionLevel } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
-import { NOTIFICATION_EVENT_CATALOG } from "@/modules/notifications/business/event-catalog";
+import {
+  LOCKED_NOTIFICATION_CODES,
+  NOTIFICATION_EVENT_CATALOG,
+} from "@/modules/notifications/business/event-catalog";
 
 /** Siembra tipos y reglas por rol (idempotente). */
 export async function seedNotificationCatalog() {
@@ -74,7 +77,7 @@ export async function listUserPreferences(userId: string) {
       moduleKey: t.moduleKey,
       description: t.description,
       enabled: t.preferences[0]?.enabled ?? true,
-      canDisable: t.code !== "tickets.sla_warning",
+      canDisable: !LOCKED_NOTIFICATION_CODES.has(t.code),
     }));
 }
 
@@ -83,6 +86,11 @@ export async function updateUserPreferences(
   updates: { typeId: string; enabled: boolean }[],
 ) {
   for (const u of updates) {
+    const type = await prisma.notificationType.findUnique({
+      where: { id: u.typeId },
+      select: { code: true },
+    });
+    if (type && LOCKED_NOTIFICATION_CODES.has(type.code) && !u.enabled) continue;
     await prisma.notificationPreference.upsert({
       where: {
         userId_notificationTypeId: {

@@ -1250,9 +1250,14 @@ model OperationalCalendarEventAdmin {
   userId    String
   user      User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime                 @default(now())
+  /// Cuándo se avisó la asignación (campana + correo). Null = aún no se avisó.
+  assignedNotifiedAt DateTime?
+  /// Último día (Costa Rica) en que se envió el correo del día o el recordatorio.
+  lastReminderOn     DateTime?       @db.Date
 
   @@unique([eventId, userId])
   @@index([userId])
+  @@index([lastReminderOn])
   @@map("operational_calendar_event_admins")
 }
 

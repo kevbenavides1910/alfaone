@@ -216,11 +216,12 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     label: "Operaciones NAF",
     description: "Roles, programación y asistencia Forms OP (AROP*); calendario operativo por contrato/zona.",
     uiRoutePrefixes: ["/naf-operaciones"],
-    apiRoutePrefixes: ["/api/naf-operaciones"],
+    apiRoutePrefixes: ["/api/naf-operaciones", "/api/cron/calendario-operativo-avisos"],
     codePaths: [
       "src/app/(app)/naf-operaciones",
       "src/modules/naf-operaciones",
       "src/components/naf-operaciones",
+      "src/app/api/cron/calendario-operativo-avisos",
     ],
     prismaModels: ["OperationalCalendarEvent", "OperationalCalendarEventContract", "OperationalEventTypeConfig"],
   },

@@ -206,4 +206,42 @@ export const NOTIFICATION_EVENT_CATALOG: NotificationEventDef[] = [
     hrefTemplate: "/dashboard",
     roleCodes: ["ADMIN", "SUPERVISOR"],
   },
+  {
+    code: "nafOperaciones.calendario_assigned",
+    moduleKey: "nafOperaciones",
+    label: "Tarea asignada",
+    description: "Te asignaron una tarea del calendario operativo",
+    priority: "INFO",
+    icon: "user-check",
+    hrefTemplate: "/naf-operaciones/calendario?evento={entityId}",
+    roleCodes: ["ADMIN", "SUPERVISOR", "CONSULTA"],
+  },
+  {
+    code: "nafOperaciones.calendario_due",
+    moduleKey: "nafOperaciones",
+    label: "Tarea de hoy",
+    description: "Hoy corresponde una tarea del calendario operativo",
+    priority: "WARNING",
+    icon: "calendar",
+    hrefTemplate: "/naf-operaciones/calendario?evento={entityId}",
+    roleCodes: ["ADMIN", "SUPERVISOR", "CONSULTA"],
+  },
+  {
+    code: "nafOperaciones.calendario_reminder",
+    moduleKey: "nafOperaciones",
+    label: "Recordatorio de tarea",
+    description: "La tarea sigue pendiente y hay que marcarla como realizada",
+    priority: "WARNING",
+    icon: "bell",
+    hrefTemplate: "/naf-operaciones/calendario?evento={entityId}",
+    roleCodes: ["ADMIN", "SUPERVISOR", "CONSULTA"],
+  },
 ];
+
+/** Avisos de trabajo que no se pueden apagar desde preferencias. */
+export const LOCKED_NOTIFICATION_CODES = new Set([
+  "tickets.sla_warning",
+  "nafOperaciones.calendario_assigned",
+  "nafOperaciones.calendario_due",
+  "nafOperaciones.calendario_reminder",
+]);

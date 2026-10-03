@@ -64,4 +64,5 @@ export const MODULE_LABELS: Record<string, string> = {
   sig: "SIG",
   recorridos: "Recorridos",
   plataforma: "Administración",
+  nafOperaciones: "Operaciones",
 };

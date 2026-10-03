@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import { CalendarioOperativoClient } from "@/components/naf-operaciones/calendario/CalendarioOperativoClient";
 
 export default function CalendarioOperativoPage() {
-  return <CalendarioOperativoClient />;
+  return (
+    <Suspense fallback={null}>
+      <CalendarioOperativoClient />
+    </Suspense>
+  );
 }

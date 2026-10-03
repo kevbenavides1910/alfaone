@@ -58,6 +58,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 # Facturación cobro mensual: correos de recordatorio (08:00 Costa Rica = 14:00 UTC)
 0 14 * * * $RUN_USER BASE_URL=http://127.0.0.1:3000 LOG_DIR=$LOG_DIR $PROJECT_DIR/scripts/cron-facturacion-cobro-emails.sh >> $LOG_DIR/cobro-emails.log 2>&1
 
+# Calendario operativo: correo del día y recordatorio diario (07:10 Costa Rica = 13:10 UTC)
+10 13 * * * $RUN_USER BASE_URL=http://127.0.0.1:3000 LOG_DIR=$LOG_DIR $PROJECT_DIR/scripts/cron-calendario-operativo-avisos.sh >> $LOG_DIR/calendario-operativo-avisos.log 2>&1
+
 # Respaldo Expediente Digital diario 03:30 UTC (21:30 CR) — SSH pull 10.1.1.6 → disco local
 30 3 * * * $RUN_USER EXPEDIENTE_BACKUP_ENV=$EXPEDIENTE_BACKUP_ENV LOG_DIR=$LOG_DIR $PROJECT_DIR/scripts/expediente-digital-backup.sh
 
@@ -80,6 +83,7 @@ chmod +x "$PROJECT_DIR/scripts/vps-health-monitor.sh" \
   "$PROJECT_DIR/scripts/cron-fe-jobs.sh" \
   "$PROJECT_DIR/scripts/cron-fe-imap.sh" \
   "$PROJECT_DIR/scripts/cron-facturacion-cobro-emails.sh" \
+  "$PROJECT_DIR/scripts/cron-calendario-operativo-avisos.sh" \
   "$PROJECT_DIR/scripts/cron-finger-sync.sh" \
   "$PROJECT_DIR/scripts/cron/notifications-archive.sh" \
   "$PROJECT_DIR/scripts/expediente-digital-backup.sh" \

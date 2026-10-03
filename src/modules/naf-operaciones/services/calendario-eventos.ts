@@ -20,6 +20,7 @@ import type {
   CalendarioListQuery,
   CalendarioUpdateInput,
 } from "@/modules/naf-operaciones/validations/calendario.schema";
+import { notifyCalendarioAssignments } from "@/modules/naf-operaciones/services/calendario-avisos";
 
 export type CalendarioActor = { id: string; name?: string | null };
 
@@ -275,6 +276,11 @@ export async function createCalendarioEvent(
     },
     select: { id: true },
   });
+  if (status === "SCHEDULED") {
+    await notifyCalendarioAssignments(ev.id, actor).catch((error) => {
+      console.error("[calendario] aviso de asignación", error);
+    });
+  }
   return (await getCalendarioEvent(ev.id))!;
 }
 
@@ -341,6 +347,12 @@ export async function updateCalendarioEvent(
       });
     }
   });
+  const nextStatus = statusChanged ? input.status! : current.status;
+  if (nextStatus === "SCHEDULED") {
+    await notifyCalendarioAssignments(id, actor).catch((error) => {
+      console.error("[calendario] aviso de asignación", error);
+    });
+  }
   return (await getCalendarioEvent(id))!;
 }
 
@@ -370,6 +382,11 @@ export async function setCalendarioStatus(
       });
     }
   });
+  if (status === "SCHEDULED") {
+    await notifyCalendarioAssignments(id, actor).catch((error) => {
+      console.error("[calendario] aviso de asignación", error);
+    });
+  }
   return (await getCalendarioEvent(id))!;
 }
 
