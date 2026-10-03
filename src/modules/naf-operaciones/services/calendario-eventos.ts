@@ -1,13 +1,17 @@
+import { randomUUID } from "crypto";
 import type { Prisma } from "@prisma/client";
 import type { Session } from "next-auth";
 import { prisma } from "@/modules/core/db/prisma";
 import { hasPermission } from "@/lib/permissions/check";
 import {
+  calendarioOccurrenceDates,
   fromIsoDate,
+  monthBeforeIso,
   toIsoDate,
   type CalendarioEventDetail,
   type CalendarioEventStatus,
   type CalendarioEventSummary,
+  type CalendarioRecurrence,
 } from "@/modules/naf-operaciones/business/calendario-types";
 import {
   calendarioContractsWhere,
@@ -44,6 +48,7 @@ const summarySelect = {
   title: true,
   type: { select: { id: true, name: true, color: true } },
   status: true,
+  recurrence: true,
   appliesToAllContracts: true,
   zone: { select: { id: true, name: true } },
   admins: adminsSelect,
@@ -88,6 +93,7 @@ export async function listCalendarioEvents(q: CalendarioListQuery): Promise<Cale
     title: r.title,
     type: r.type,
     status: r.status,
+    recurrence: r.recurrence,
     zone: r.zone,
     appliesToAllContracts: r.appliesToAllContracts,
     contractsCount: r._count.contracts,
@@ -132,6 +138,7 @@ export async function getCalendarioEvent(id: string): Promise<CalendarioEventDet
     title: ev.title,
     type: ev.type,
     status: ev.status,
+    recurrence: ev.recurrence,
     zone: ev.zone,
     appliesToAllContracts: ev.appliesToAllContracts,
     contractsCount: contracts.length,
@@ -251,37 +258,58 @@ export async function createCalendarioEvent(
   const contractIds = await resolveContractIds(input);
   const adminIds = await resolveAdminIds(input.adminUserIds);
   const status = input.status ?? "SCHEDULED";
+  const recurrence: CalendarioRecurrence = status === "DONE" ? "NONE" : (input.recurrence ?? "NONE");
+  const dates = calendarioOccurrenceDates(input.date, recurrence);
+  const seriesId = recurrence === "NONE" ? null : randomUUID();
 
-  const ev = await prisma.operationalCalendarEvent.create({
-    data: {
-      date: fromIsoDate(input.date),
-      title: input.title,
-      typeId: input.typeId,
-      ...statusData(status, actor),
-      description: input.description || null,
-      zoneId: input.zoneId || null,
-      appliesToAllContracts: Boolean(input.allContracts),
-      createdById: actor.id,
-      createdByName: actor.name ?? null,
-      updatedById: actor.id,
-      contracts: {
-        createMany: {
-          data: contractIds.map((contractId) => ({
-            contractId,
-            completedAt: status === "DONE" ? new Date() : null,
-          })),
+  const firstId = await prisma.$transaction(async (tx) => {
+    let createdId = "";
+    for (const [index, iso] of dates.entries()) {
+      const row = await tx.operationalCalendarEvent.create({
+        data: {
+          date: fromIsoDate(iso),
+          monthBeforeOn: fromIsoDate(monthBeforeIso(iso)),
+          title: input.title,
+          typeId: input.typeId,
+          ...statusData(status, actor),
+          description: input.description || null,
+          zoneId: input.zoneId || null,
+          appliesToAllContracts: Boolean(input.allContracts),
+          recurrence,
+          seriesId,
+          createdById: actor.id,
+          createdByName: actor.name ?? null,
+          updatedById: actor.id,
+          contracts: {
+            createMany: {
+              data: contractIds.map((contractId) => ({
+                contractId,
+                completedAt: status === "DONE" ? new Date() : null,
+              })),
+            },
+          },
+          admins: {
+            create: adminIds.map((userId) => ({
+              userId,
+              // Solo la primera fecha avisa la asignación; el resto espera el mes previo y el día.
+              assignedNotifiedAt: index === 0 ? null : new Date(),
+            })),
+          },
         },
-      },
-      admins: { createMany: { data: adminIds.map((userId) => ({ userId })) } },
-    },
-    select: { id: true },
+        select: { id: true },
+      });
+      if (index === 0) createdId = row.id;
+    }
+    return createdId;
   });
+
   if (status === "SCHEDULED") {
-    await notifyCalendarioAssignments(ev.id, actor).catch((error) => {
+    await notifyCalendarioAssignments(firstId, actor).catch((error) => {
       console.error("[calendario] aviso de asignación", error);
     });
   }
-  return (await getCalendarioEvent(ev.id))!;
+  const detail = (await getCalendarioEvent(firstId))!;
+  return { ...detail, seriesCreated: dates.length };
 }
 
 export async function updateCalendarioEvent(
@@ -312,7 +340,9 @@ export async function updateCalendarioEvent(
     await tx.operationalCalendarEvent.update({
       where: { id },
       data: {
-        ...(input.date !== undefined ? { date: fromIsoDate(input.date) } : {}),
+        ...(input.date !== undefined
+          ? { date: fromIsoDate(input.date), monthBeforeOn: fromIsoDate(monthBeforeIso(input.date)) }
+          : {}),
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.typeId !== undefined ? { typeId: input.typeId } : {}),
         ...(statusChanged ? statusData(input.status!, actor) : {}),
@@ -344,6 +374,12 @@ export async function updateCalendarioEvent(
       await tx.operationalCalendarEventContract.updateMany({
         where: { eventId: id, completedAt: null },
         data: { completedAt: new Date() },
+      });
+    }
+    if (input.date !== undefined) {
+      await tx.operationalCalendarEventAdmin.updateMany({
+        where: { eventId: id },
+        data: { monthBeforeSentOn: null },
       });
     }
   });

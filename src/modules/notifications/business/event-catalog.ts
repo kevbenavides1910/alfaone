@@ -217,6 +217,16 @@ export const NOTIFICATION_EVENT_CATALOG: NotificationEventDef[] = [
     roleCodes: ["ADMIN", "SUPERVISOR", "CONSULTA"],
   },
   {
+    code: "nafOperaciones.calendario_month_before",
+    moduleKey: "nafOperaciones",
+    label: "Falta un mes para la tarea",
+    description: "Aviso un mes antes del cierre de una tarea del calendario operativo",
+    priority: "INFO",
+    icon: "calendar",
+    hrefTemplate: "/naf-operaciones/calendario?evento={entityId}",
+    roleCodes: ["ADMIN", "SUPERVISOR", "CONSULTA"],
+  },
+  {
     code: "nafOperaciones.calendario_due",
     moduleKey: "nafOperaciones",
     label: "Tarea de hoy",
@@ -242,6 +252,7 @@ export const NOTIFICATION_EVENT_CATALOG: NotificationEventDef[] = [
 export const LOCKED_NOTIFICATION_CODES = new Set([
   "tickets.sla_warning",
   "nafOperaciones.calendario_assigned",
+  "nafOperaciones.calendario_month_before",
   "nafOperaciones.calendario_due",
   "nafOperaciones.calendario_reminder",
 ]);

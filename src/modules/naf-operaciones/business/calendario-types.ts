@@ -99,6 +99,7 @@ export type CalendarioEventSummary = {
   title: string;
   type: CalendarioEventTypeRef;
   status: CalendarioEventStatus;
+  recurrence: CalendarioRecurrence;
   zone: CalendarioZoneRef | null;
   appliesToAllContracts: boolean;
   contractsCount: number;
@@ -115,6 +116,8 @@ export type CalendarioEventDetail = CalendarioEventSummary & {
   completedByName: string | null;
   contracts: CalendarioEventContract[];
   attachments: CalendarioAttachment[];
+  /** Cuántas fechas se crearon en esta guardada. Solo viene al crear una serie. */
+  seriesCreated?: number;
 };
 
 export function toIsoDate(d: Date): string {
@@ -141,6 +144,59 @@ export function calendarioDaysPending(eventDay: string, today: string): number {
   const end = Date.parse(`${today}T00:00:00.000Z`);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
   return Math.round((end - start) / 86_400_000);
+}
+
+export const CALENDARIO_RECURRENCES = ["NONE", "MONTHLY", "QUARTERLY", "SEMIANNUAL", "YEARLY"] as const;
+export type CalendarioRecurrence = (typeof CALENDARIO_RECURRENCES)[number];
+
+export const CALENDARIO_RECURRENCE_MONTHS = {
+  MONTHLY: 1,
+  QUARTERLY: 3,
+  SEMIANNUAL: 6,
+  YEARLY: 12,
+} as const;
+
+export const CALENDARIO_RECURRENCE_LABELS: Record<CalendarioRecurrence, string> = {
+  NONE: "Una vez",
+  MONTHLY: "Cada mes",
+  QUARTERLY: "Cada 3 meses",
+  SEMIANNUAL: "Cada 6 meses",
+  YEARLY: "Cada año",
+};
+
+/** Horizonte al crear la serie: desde la fecha inicial hasta 24 meses después. */
+const SERIES_HORIZON_MONTHS = 24;
+
+/** Suma meses de calendario y recorta el día si el mes destino es más corto. */
+export function addMonthsIso(iso: string, months: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return iso;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const shifted = new Date(Date.UTC(year, month + months, 1));
+  const lastDay = new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 0)).getUTCDate();
+  return toIsoDate(new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), Math.min(day, lastDay))));
+}
+
+/** Día del aviso «falta un mes» para la fecha del evento. */
+export function monthBeforeIso(eventDay: string): string {
+  return addMonthsIso(eventDay, -1);
+}
+
+/** Fechas de la serie, incluida la inicial, hasta 24 meses después. */
+export function calendarioOccurrenceDates(startIso: string, recurrence: CalendarioRecurrence): string[] {
+  if (recurrence === "NONE") return [startIso];
+  const step = CALENDARIO_RECURRENCE_MONTHS[recurrence];
+  const limit = addMonthsIso(startIso, SERIES_HORIZON_MONTHS);
+  const dates = [startIso];
+  let cursor = startIso;
+  while (dates.length < 36) {
+    cursor = addMonthsIso(cursor, step);
+    if (cursor > limit) break;
+    dates.push(cursor);
+  }
+  return dates;
 }
 
 export function formatCalendarioDay(iso: string): string {

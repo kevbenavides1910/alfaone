@@ -13,6 +13,7 @@ import { hasPermission } from "@/lib/permissions/check";
 import { cn } from "@/lib/utils/cn";
 import {
   CALENDARIO_EVENT_STATUSES,
+  CALENDARIO_RECURRENCE_LABELS,
   CALENDARIO_STATUS_BADGE,
   CALENDARIO_STATUS_LABELS,
   calendarioColorClass,
@@ -273,6 +274,9 @@ export function CalendarioOperativoClient() {
                     {ev.type.name}
                   </span>
                   <span className="font-medium">{ev.title}</span>
+                  {ev.recurrence !== "NONE" ? (
+                    <span className="text-xs text-gray-500">{CALENDARIO_RECURRENCE_LABELS[ev.recurrence]}</span>
+                  ) : null}
                   <span className="text-xs text-gray-500">{ev.zone?.name ?? "Varias zonas"}</span>
                   {ev.admins.length ? (
                     <span className="inline-flex items-center gap-1 text-xs text-gray-600">
@@ -339,6 +343,7 @@ function EventChip({ ev, onClick }: { ev: CalendarioEventSummary; onClick: () =>
       type="button"
       title={[
         ev.type.name,
+        ev.recurrence !== "NONE" ? CALENDARIO_RECURRENCE_LABELS[ev.recurrence] : null,
         ev.title,
         CALENDARIO_STATUS_LABELS[ev.status],
         `${ev.completedCount}/${ev.contractsCount} contratos`,

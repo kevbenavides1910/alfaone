@@ -11,6 +11,7 @@ const KEYS = [
   "nafOperaciones.asistencia",
   "nafOperaciones.vacantes",
   "nafOperaciones.programacion",
+  "nafOperaciones.calendario",
 ];
 
 const ROLE_LEVELS = {

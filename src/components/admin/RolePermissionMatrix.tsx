@@ -5,6 +5,7 @@ import {
   allPermissionKeys,
   type PermissionKey,
   type PermissionLevelId,
+  type PermissionScreenDef,
 } from "@/lib/permissions/registry";
 import {
   Select,
@@ -27,56 +28,99 @@ type Props = {
   disabled?: boolean;
 };
 
+function PermissionModuleBlock({
+  title,
+  moduleKey,
+  screens,
+  value,
+  onChange,
+  disabled,
+}: {
+  title: string;
+  moduleKey: string;
+  screens: [string, PermissionScreenDef][];
+  value: Record<string, PermissionLevelId>;
+  onChange: (key: PermissionKey, level: PermissionLevelId) => void;
+  disabled?: boolean;
+}) {
+  if (screens.length === 0) return null;
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <div className="bg-slate-100 px-4 py-2 font-semibold text-sm text-slate-800">{title}</div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-muted/50 text-left text-xs text-slate-500">
+            <th className="px-4 py-2 font-medium">Pantalla</th>
+            <th className="px-4 py-2 font-medium w-40">Nivel</th>
+          </tr>
+        </thead>
+        <tbody>
+          {screens.map(([screenKey, screen]) => {
+            const key = `${moduleKey}.${screenKey}` as PermissionKey;
+            const level = value[key] ?? "none";
+            return (
+              <tr key={key} className="border-b last:border-0 hover:bg-muted/50/50">
+                <td className="px-4 py-2">
+                  <div className="font-medium text-slate-800">{screen.label}</div>
+                  <div className="text-xs text-slate-400 font-mono">{key}</div>
+                </td>
+                <td className="px-4 py-2">
+                  <Select
+                    value={level}
+                    onValueChange={(v) => onChange(key, v as PermissionLevelId)}
+                    disabled={disabled}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LEVEL_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function RolePermissionMatrix({ value, onChange, disabled }: Props) {
   return (
     <div className="space-y-6">
-      {Object.entries(PERMISSION_REGISTRY).map(([moduleKey, mod]) => (
-        <div key={moduleKey} className="border rounded-lg overflow-hidden">
-          <div className="bg-slate-100 px-4 py-2 font-semibold text-sm text-slate-800">
-            {mod.label}
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50 text-left text-xs text-slate-500">
-                <th className="px-4 py-2 font-medium">Pantalla</th>
-                <th className="px-4 py-2 font-medium w-40">Nivel</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(mod.screens).map(([screenKey, screen]) => {
-                const key = `${moduleKey}.${screenKey}` as PermissionKey;
-                const level = value[key] ?? "none";
-                return (
-                  <tr key={key} className="border-b last:border-0 hover:bg-muted/50/50">
-                    <td className="px-4 py-2">
-                      <div className="font-medium text-slate-800">{screen.label}</div>
-                      <div className="text-xs text-slate-400 font-mono">{key}</div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <Select
-                        value={level}
-                        onValueChange={(v) => onChange(key, v as PermissionLevelId)}
-                        disabled={disabled}
-                      >
-                        <SelectTrigger className="h-8">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {LEVEL_OPTIONS.map((o) => (
-                            <SelectItem key={o.value} value={o.value}>
-                              {o.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ))}
+      {Object.entries(PERMISSION_REGISTRY).flatMap(([moduleKey, mod]) => {
+        const entries = Object.entries(mod.screens);
+        const inline = entries.filter(([, screen]) => !screen.rolesModuleLabel);
+        const standalone = entries.filter(([, screen]) => screen.rolesModuleLabel);
+        return [
+          <PermissionModuleBlock
+            key={moduleKey}
+            title={mod.label}
+            moduleKey={moduleKey}
+            screens={inline}
+            value={value}
+            onChange={onChange}
+            disabled={disabled}
+          />,
+          ...standalone.map(([screenKey, screen]) => (
+            <PermissionModuleBlock
+              key={`${moduleKey}.${screenKey}`}
+              title={screen.rolesModuleLabel!}
+              moduleKey={moduleKey}
+              screens={[[screenKey, screen]]}
+              value={value}
+              onChange={onChange}
+              disabled={disabled}
+            />
+          )),
+        ];
+      })}
     </div>
   );
 }

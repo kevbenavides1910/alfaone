@@ -7,6 +7,7 @@ import {
   toIsoDate,
   type CalendarioDigestKind,
 } from "@/modules/naf-operaciones/business/calendario-types";
+import { extendCalendarioSeries } from "@/modules/naf-operaciones/services/calendario-series";
 import { todayCostaRica } from "@/modules/documentos-legales/business/dates";
 import { dispatchNotificationEvent } from "@/modules/notifications/services/notification-dispatch";
 import { seedNotificationCatalog } from "@/modules/notifications/services/notification-preferences";
@@ -17,6 +18,7 @@ const APP_BASE =
   "https://alfa.alfaone.local";
 
 const TYPE_ASSIGNED = "nafOperaciones.calendario_assigned";
+const TYPE_MONTH_BEFORE = "nafOperaciones.calendario_month_before";
 const TYPE_DUE = "nafOperaciones.calendario_due";
 const TYPE_REMINDER = "nafOperaciones.calendario_reminder";
 
@@ -28,6 +30,7 @@ type NoticeEvent = {
   date: Date;
   description: string | null;
   status: string;
+  monthBeforeOn: Date | null;
   type: { name: string };
   zone: { name: string } | null;
   admins: {
@@ -35,6 +38,7 @@ type NoticeEvent = {
     userId: string;
     assignedNotifiedAt: Date | null;
     lastReminderOn: Date | null;
+    monthBeforeSentOn: Date | null;
     user: { id: string; name: string; email: string; isActive: boolean };
   }[];
 };
@@ -69,6 +73,7 @@ async function loadNoticeEvents(eventId: string): Promise<NoticeEvent[]> {
       date: true,
       description: true,
       status: true,
+      monthBeforeOn: true,
       type: { select: { name: true } },
       zone: { select: { name: true } },
       admins: {
@@ -77,6 +82,7 @@ async function loadNoticeEvents(eventId: string): Promise<NoticeEvent[]> {
           userId: true,
           assignedNotifiedAt: true,
           lastReminderOn: true,
+          monthBeforeSentOn: true,
           user: { select: { id: true, name: true, email: true, isActive: true } },
         },
       },
@@ -160,7 +166,7 @@ async function deliverAssignment(ev: NoticeEvent, admin: NoticeEvent["admins"][n
         : `Te asignaron una tarea: ${ev.title}`;
   const follow =
     kind == null
-      ? "Si no se marca como realizada, vas a recibir un recordatorio cada día."
+      ? "Un mes antes del cierre te avisamos por correo y en la campana. El día de la tarea también, y si no se marca como realizada, cada día."
       : "Vas a recibir un recordatorio cada día hasta que se marque como realizada.";
 
   const claimed = await prisma.operationalCalendarEventAdmin.updateMany({
@@ -196,6 +202,46 @@ ${detailLines(ev, eventDay)}
     });
     throw error;
   }
+}
+
+async function deliverMonthBefore(ev: NoticeEvent, admin: NoticeEvent["admins"][number], today: Date) {
+  const eventDay = toIsoDate(ev.date);
+  const subject = `Falta un mes: ${ev.title}`;
+  const lead = `Falta un mes para el cierre de esta tarea (${formatCalendarioDay(eventDay)}).`;
+  const claimed = await prisma.operationalCalendarEventAdmin.updateMany({
+    where: { id: admin.id, monthBeforeSentOn: null },
+    data: { monthBeforeSentOn: today },
+  });
+  if (claimed.count === 0) return false;
+  try {
+    await sendNotice({
+      ev,
+      user: admin.user,
+      subject,
+      title: subject,
+      body: `${ev.type.name} · cierre ${formatCalendarioDay(eventDay)}`,
+      typeCode: TYPE_MONTH_BEFORE,
+      htmlBody: `<p>${escapeHtml(lead)} El día del cierre vuelve el aviso y, si no se marca como realizada, el recordatorio diario.</p>
+<ul>
+${detailLines(ev, eventDay)}
+</ul>`,
+      text: `${lead} Tarea «${ev.title}».`,
+    });
+    return true;
+  } catch (error) {
+    await prisma.operationalCalendarEventAdmin.updateMany({
+      where: { id: admin.id, monthBeforeSentOn: today },
+      data: { monthBeforeSentOn: null },
+    });
+    throw error;
+  }
+}
+
+function monthBeforeIsDue(ev: NoticeEvent, todayIso: string, sentOn: Date | null): boolean {
+  if (sentOn) return false;
+  if (!ev.monthBeforeOn) return false;
+  const eventDay = toIsoDate(ev.date);
+  return eventDay > todayIso && toIsoDate(ev.monthBeforeOn) <= todayIso;
 }
 
 async function deliverDigest(ev: NoticeEvent, admin: NoticeEvent["admins"][number], kind: CalendarioDigestKind, today: Date) {
@@ -266,12 +312,19 @@ export async function notifyCalendarioAssignments(eventId: string, actor?: Actor
           ...(calendarioDigestKind(eventDay, todayIso) ? { lastReminderOn: today } : {}),
         },
       });
-      continue;
+    } else if (!admin.assignedNotifiedAt) {
+      try {
+        if (await deliverAssignment(ev, admin, actor)) assigned += 1;
+      } catch (error) {
+        console.error("[calendario-avisos] asignación", ev.id, admin.userId, error);
+        continue;
+      }
     }
+    if (!monthBeforeIsDue(ev, todayIso, admin.monthBeforeSentOn)) continue;
     try {
-      if (await deliverAssignment(ev, admin, actor)) assigned += 1;
+      await deliverMonthBefore(ev, admin, today);
     } catch (error) {
-      console.error("[calendario-avisos] asignación", ev.id, admin.userId, error);
+      console.error("[calendario-avisos] mes antes", ev.id, admin.userId, error);
     }
   }
   return { assigned };
@@ -283,6 +336,7 @@ function asNoticeEvent(
     userId: string;
     assignedNotifiedAt: Date | null;
     lastReminderOn: Date | null;
+    monthBeforeSentOn: Date | null;
     user: NoticeEvent["admins"][number]["user"];
     event: Omit<NoticeEvent, "admins">;
   },
@@ -292,6 +346,7 @@ function asNoticeEvent(
     userId: row.userId,
     assignedNotifiedAt: row.assignedNotifiedAt,
     lastReminderOn: row.lastReminderOn,
+    monthBeforeSentOn: row.monthBeforeSentOn,
     user: row.user,
   };
   return { ev: { ...row.event, admins: [admin] }, admin };
@@ -302,6 +357,10 @@ export async function sendCalendarioDueEmails() {
   await seedNotificationCatalog();
   const today = todayCostaRica();
   const todayIso = toIsoDate(today);
+  const seriesExtended = await extendCalendarioSeries(todayIso).catch((error) => {
+    console.error("[calendario-avisos] serie", error);
+    return 0;
+  });
   const rows = await prisma.operationalCalendarEventAdmin.findMany({
     where: {
       user: { isActive: true },
@@ -310,6 +369,10 @@ export async function sendCalendarioDueEmails() {
         { assignedNotifiedAt: null },
         { lastReminderOn: null, event: { date: { lte: today } } },
         { lastReminderOn: { lt: today }, event: { date: { lte: today } } },
+        {
+          monthBeforeSentOn: null,
+          event: { date: { gt: today }, monthBeforeOn: { lte: today } },
+        },
       ],
     },
     orderBy: [{ lastReminderOn: { sort: "asc", nulls: "first" } }, { event: { date: "asc" } }],
@@ -319,6 +382,7 @@ export async function sendCalendarioDueEmails() {
       userId: true,
       assignedNotifiedAt: true,
       lastReminderOn: true,
+      monthBeforeSentOn: true,
       user: { select: { id: true, name: true, email: true, isActive: true } },
       event: {
         select: {
@@ -327,6 +391,7 @@ export async function sendCalendarioDueEmails() {
           date: true,
           description: true,
           status: true,
+          monthBeforeOn: true,
           type: { select: { name: true } },
           zone: { select: { name: true } },
         },
@@ -335,6 +400,7 @@ export async function sendCalendarioDueEmails() {
   });
 
   let assigned = 0;
+  let monthBefore = 0;
   let due = 0;
   let reminders = 0;
   let skipped = 0;
@@ -342,12 +408,18 @@ export async function sendCalendarioDueEmails() {
   for (const row of rows) {
     const { ev, admin } = asNoticeEvent(row);
     const kind = calendarioDigestKind(toIsoDate(ev.date), todayIso);
+    let coveredToday = sameDay(admin.lastReminderOn, today);
     try {
       if (!admin.assignedNotifiedAt) {
-        if (await deliverAssignment(ev, admin)) assigned += 1;
-        continue;
+        if (await deliverAssignment(ev, admin)) {
+          assigned += 1;
+          if (kind) coveredToday = true;
+        }
       }
-      if (!kind || sameDay(admin.lastReminderOn, today)) continue;
+      if (monthBeforeIsDue(ev, todayIso, admin.monthBeforeSentOn)) {
+        if (await deliverMonthBefore(ev, admin, today)) monthBefore += 1;
+      }
+      if (!kind || coveredToday) continue;
       if (await deliverDigest(ev, admin, kind, today)) {
         if (kind === "DUE_DAY") due += 1;
         else reminders += 1;
@@ -360,10 +432,12 @@ export async function sendCalendarioDueEmails() {
 
   return {
     assigned,
+    monthBefore,
     due,
     reminders,
     skipped,
+    seriesExtended,
     queued: rows.length,
-    reason: rows.length ? ("processed" as const) : ("none_due" as const),
+    reason: rows.length || seriesExtended ? ("processed" as const) : ("none_due" as const),
   };
 }

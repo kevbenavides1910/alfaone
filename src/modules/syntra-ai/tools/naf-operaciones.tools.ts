@@ -1,7 +1,11 @@
 import { listOpAsistencia } from "@/modules/naf-operaciones/services/list-asistencia-rol";
 import { listOpRoles } from "@/modules/naf-operaciones/services/list-roles";
 import { listOpVacantes } from "@/modules/naf-operaciones/services/list-vacantes";
-import { CALENDARIO_STATUS_LABELS, toIsoDate } from "@/modules/naf-operaciones/business/calendario-types";
+import {
+  CALENDARIO_RECURRENCE_LABELS,
+  CALENDARIO_STATUS_LABELS,
+  toIsoDate,
+} from "@/modules/naf-operaciones/business/calendario-types";
 import { listCalendarioEvents } from "@/modules/naf-operaciones/services/calendario-eventos";
 import {
   listCalendarioAdminCandidates,
@@ -184,6 +188,7 @@ export function nafOperacionesTools(): SyntraTool[] {
             fecha: e.date,
             titulo: e.title,
             tipo: e.type.name,
+            periodicidad: CALENDARIO_RECURRENCE_LABELS[e.recurrence],
             estado: CALENDARIO_STATUS_LABELS[e.status],
             zona: e.zone?.name ?? "Varias / todas",
             administradores: e.admins.map((a) => a.name),

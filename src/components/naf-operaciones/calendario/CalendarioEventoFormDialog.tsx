@@ -21,10 +21,13 @@ import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import {
   CALENDARIO_EVENT_STATUSES,
+  CALENDARIO_RECURRENCE_LABELS,
+  CALENDARIO_RECURRENCES,
   CALENDARIO_STATUS_LABELS,
   type CalendarioContractOption,
   type CalendarioEventDetail,
   type CalendarioEventStatus,
+  type CalendarioRecurrence,
   type CalendarioEventTypeOption,
   type CalendarioUserRef,
   type CalendarioZoneRef,
@@ -66,6 +69,7 @@ export function CalendarioEventoFormDialog({
   const isEdit = Boolean(eventId);
 
   const [date, setDate] = useState(initialDate ?? "");
+  const [recurrence, setRecurrence] = useState<CalendarioRecurrence>("NONE");
   const [title, setTitle] = useState("");
   const [typeId, setTypeId] = useState("");
   const [originalTypeId, setOriginalTypeId] = useState("");
@@ -89,6 +93,7 @@ export function CalendarioEventoFormDialog({
     const ev = existing.data;
     if (!ev) return;
     setDate(ev.date);
+    setRecurrence(ev.recurrence);
     setTitle(ev.title);
     setTypeId(ev.type.id);
     setOriginalTypeId(ev.type.id);
@@ -168,6 +173,7 @@ export function CalendarioEventoFormDialog({
         ids.every((id) => known.current.get(id)?.zones.some((z) => z.id === zoneId));
       const payload = {
         date,
+        recurrence: isEdit ? undefined : recurrence,
         title: title.trim(),
         typeId,
         status,
@@ -188,7 +194,14 @@ export function CalendarioEventoFormDialog({
           });
     },
     onSuccess: (ev) => {
-      toast.success(isEdit ? "Evento actualizado" : `Evento creado para ${ev.contractsCount} contratos`);
+      const series = ev.seriesCreated ?? 1;
+      toast.success(
+        isEdit
+          ? "Evento actualizado"
+          : series > 1
+            ? `Se programaron ${series} fechas (${CALENDARIO_RECURRENCE_LABELS[ev.recurrence].toLowerCase()})`
+            : `Evento creado para ${ev.contractsCount} contratos`,
+      );
       qc.invalidateQueries({ queryKey: ["calendario-operativo", "eventos"] });
       qc.invalidateQueries({ queryKey: ["calendario-operativo", "evento", ev.id] });
       onSaved(ev.id);
@@ -224,6 +237,27 @@ export function CalendarioEventoFormDialog({
           <div className="space-y-1">
             <Label htmlFor="cal-date">Fecha</Label>
             <Input id="cal-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="cal-recurrence">Periodicidad</Label>
+            <select
+              id="cal-recurrence"
+              className={`${selectClass} w-full`}
+              value={recurrence}
+              disabled={isEdit}
+              onChange={(e) => setRecurrence(e.target.value as CalendarioRecurrence)}
+            >
+              {CALENDARIO_RECURRENCES.map((key) => (
+                <option key={key} value={key}>
+                  {CALENDARIO_RECURRENCE_LABELS[key]}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500">
+              {isEdit
+                ? "La periodicidad se define al crear. Esta fecha se marca por separado."
+                : "Arma las fechas de los próximos 24 meses. Un mes antes de cada cierre se avisa por correo y en la campana."}
+            </p>
           </div>
           <div className="space-y-1">
             <div className="flex items-center justify-between">

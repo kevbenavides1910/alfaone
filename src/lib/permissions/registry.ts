@@ -11,6 +11,8 @@ export type PermissionScreenDef = {
   uiRoutes: string[];
   apiPrefixes?: string[];
   actions: Partial<Record<Exclude<PermissionLevelId, "none">, string>>;
+  /** Título propio en Mantenimiento → Roles. La clave de permiso no cambia. */
+  rolesModuleLabel?: string;
 };
 
 export type PermissionModuleDef = {
@@ -495,6 +497,7 @@ export const PERMISSION_REGISTRY = {
       },
       calendario: {
         label: "Calendario operativo",
+        rolesModuleLabel: "Calendario operativo",
         uiRoutes: ["/naf-operaciones/calendario"],
         apiPrefixes: ["/api/naf-operaciones/calendario"],
         actions: {

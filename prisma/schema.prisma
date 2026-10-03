@@ -1195,6 +1195,14 @@ enum OperationalEventStatus {
   CANCELLED
 }
 
+enum OperationalCalendarRecurrence {
+  NONE
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  YEARLY
+}
+
 /// Evento del calendario operativo (ej. cambio de uniformes) en una fecha, aplicado a uno o varios contratos.
 model OperationalCalendarEvent {
   id                    String                             @id @default(cuid())
@@ -1212,6 +1220,12 @@ model OperationalCalendarEvent {
   /// Cuándo y quién marcó el evento como realizado (null mientras esté pendiente).
   completedAt           DateTime?
   completedByName       String?
+  /// Una vez, o serie cada 1, 3, 6 o 12 meses.
+  recurrence            OperationalCalendarRecurrence      @default(NONE)
+  /// Agrupa las fechas de una misma serie. Null si el evento es único.
+  seriesId              String?
+  /// Día en que se avisa que falta un mes para esta fecha.
+  monthBeforeOn         DateTime?                          @db.Date
   createdById           String?
   createdByName         String?
   updatedById           String?
@@ -1224,6 +1238,8 @@ model OperationalCalendarEvent {
   @@index([date])
   @@index([zoneId])
   @@index([typeId])
+  @@index([seriesId])
+  @@index([monthBeforeOn])
   @@map("operational_calendar_events")
 }
 
@@ -1254,6 +1270,8 @@ model OperationalCalendarEventAdmin {
   assignedNotifiedAt DateTime?
   /// Último día (Costa Rica) en que se envió el correo del día o el recordatorio.
   lastReminderOn     DateTime?       @db.Date
+  /// Día en que se envió el aviso de un mes antes del cierre.
+  monthBeforeSentOn  DateTime?       @db.Date
 
   @@unique([eventId, userId])
   @@index([userId])

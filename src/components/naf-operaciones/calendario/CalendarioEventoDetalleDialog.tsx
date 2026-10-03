@@ -30,6 +30,7 @@ import {
   CALENDARIO_EVIDENCE_EXTENSIONS,
   CALENDARIO_EVIDENCE_MAX_BYTES,
   CALENDARIO_EVIDENCE_MAX_FILES,
+  CALENDARIO_RECURRENCE_LABELS,
   CALENDARIO_STATUS_BADGE,
   CALENDARIO_STATUS_LABELS,
   calendarioColorClass,
@@ -219,6 +220,11 @@ export function CalendarioEventoDetalleDialog({ eventId, canEdit, onClose, onEdi
               <DialogTitle className={cn(ev.status === "CANCELLED" && "line-through")}>{ev.title}</DialogTitle>
               <DialogDescription className="flex flex-wrap items-center gap-2">
                 <span className="font-mono">{ev.date}</span>
+                {ev.recurrence !== "NONE" ? (
+                  <span className="rounded border border-gray-200 px-2 py-0.5 text-xs">
+                    {CALENDARIO_RECURRENCE_LABELS[ev.recurrence]}
+                  </span>
+                ) : null}
                 <span className={cn("rounded border px-2 py-0.5 text-xs", calendarioColorClass(ev.type.color))}>
                   {ev.type.name}
                 </span>

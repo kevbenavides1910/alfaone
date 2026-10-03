@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   CALENDARIO_COLOR_KEYS,
   CALENDARIO_EVENT_STATUSES,
+  CALENDARIO_RECURRENCES,
 } from "@/modules/naf-operaciones/business/calendario-types";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida (YYYY-MM-DD)");
@@ -29,6 +30,8 @@ const eventBase = z.object({
   allContracts: z.boolean().optional(),
   contractIds: z.array(z.string().min(1)).max(2000).optional(),
   adminUserIds: z.array(z.string().min(1)).max(50).optional(),
+  /** Una vez, o repetir la misma tarea cada mes, 3 meses, 6 meses o un año. */
+  recurrence: z.enum(CALENDARIO_RECURRENCES).optional(),
 });
 
 export const calendarioCreateSchema = eventBase.refine(
