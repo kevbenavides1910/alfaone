@@ -146,7 +146,7 @@ export function calendarioDaysPending(eventDay: string, today: string): number {
   return Math.round((end - start) / 86_400_000);
 }
 
-export const CALENDARIO_RECURRENCES = ["NONE", "MONTHLY", "QUARTERLY", "SEMIANNUAL", "YEARLY"] as const;
+export const CALENDARIO_RECURRENCES = ["NONE", "WEEKLY", "MONTHLY", "QUARTERLY", "SEMIANNUAL", "YEARLY"] as const;
 export type CalendarioRecurrence = (typeof CALENDARIO_RECURRENCES)[number];
 
 export const CALENDARIO_RECURRENCE_MONTHS = {
@@ -158,6 +158,7 @@ export const CALENDARIO_RECURRENCE_MONTHS = {
 
 export const CALENDARIO_RECURRENCE_LABELS: Record<CalendarioRecurrence, string> = {
   NONE: "Una vez",
+  WEEKLY: "Cada semana",
   MONTHLY: "Cada mes",
   QUARTERLY: "Cada 3 meses",
   SEMIANNUAL: "Cada 6 meses",
@@ -179,20 +180,35 @@ export function addMonthsIso(iso: string, months: number): string {
   return toIsoDate(new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), Math.min(day, lastDay))));
 }
 
+/** Suma días de calendario en UTC. */
+export function addDaysIso(iso: string, days: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return iso;
+  const shifted = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return toIsoDate(shifted);
+}
+
 /** Día del aviso «falta un mes» para la fecha del evento. */
 export function monthBeforeIso(eventDay: string): string {
   return addMonthsIso(eventDay, -1);
 }
 
+/** Siguiente fecha de una serie ya iniciada. */
+export function nextCalendarioOccurrence(iso: string, recurrence: Exclude<CalendarioRecurrence, "NONE">): string {
+  if (recurrence === "WEEKLY") return addDaysIso(iso, 7);
+  return addMonthsIso(iso, CALENDARIO_RECURRENCE_MONTHS[recurrence]);
+}
+
 /** Fechas de la serie, incluida la inicial, hasta 24 meses después. */
 export function calendarioOccurrenceDates(startIso: string, recurrence: CalendarioRecurrence): string[] {
   if (recurrence === "NONE") return [startIso];
-  const step = CALENDARIO_RECURRENCE_MONTHS[recurrence];
   const limit = addMonthsIso(startIso, SERIES_HORIZON_MONTHS);
+  const maxDates = recurrence === "WEEKLY" ? 120 : 36;
   const dates = [startIso];
   let cursor = startIso;
-  while (dates.length < 36) {
-    cursor = addMonthsIso(cursor, step);
+  while (dates.length < maxDates) {
+    cursor = nextCalendarioOccurrence(cursor, recurrence);
     if (cursor > limit) break;
     dates.push(cursor);
   }

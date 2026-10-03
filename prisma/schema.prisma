@@ -1197,6 +1197,7 @@ enum OperationalEventStatus {
 
 enum OperationalCalendarRecurrence {
   NONE
+  WEEKLY
   MONTHLY
   QUARTERLY
   SEMIANNUAL

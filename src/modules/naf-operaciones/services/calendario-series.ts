@@ -1,9 +1,9 @@
 import { prisma } from "@/modules/core/db/prisma";
 import {
   addMonthsIso,
-  CALENDARIO_RECURRENCE_MONTHS,
   fromIsoDate,
   monthBeforeIso,
+  nextCalendarioOccurrence,
   toIsoDate,
   type CalendarioRecurrence,
 } from "@/modules/naf-operaciones/business/calendario-types";
@@ -27,8 +27,7 @@ export async function extendCalendarioSeries(todayIso: string): Promise<number> 
     if (!group.seriesId || !group._max.date || group.recurrence === "NONE") continue;
     const lastIso = toIsoDate(group._max.date);
     if (lastIso >= keepUntil) continue;
-    const step = CALENDARIO_RECURRENCE_MONTHS[group.recurrence as Exclude<CalendarioRecurrence, "NONE">];
-    const next = addMonthsIso(lastIso, step);
+    const next = nextCalendarioOccurrence(lastIso, group.recurrence as Exclude<CalendarioRecurrence, "NONE">);
     if (next > cap) continue;
 
     const exists = await prisma.operationalCalendarEvent.findFirst({
