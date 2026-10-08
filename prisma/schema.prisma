@@ -6527,12 +6527,17 @@ model PaymentAttachment {
   @@map("payment_attachments")
 }
 
-/// Bitácora de cambios de un pago (fecha, monto, estado, etc.).
+/// Bitácora de cambios de un pago (fecha, monto, estado, eliminación, etc.).
 model PaymentChangeLog {
   id            String   @id @default(cuid())
-  paymentId     String
-  payment       Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  /// Campo modificado: amount | paymentDate | paid | description | notes | referenceNumber
+  /// Null cuando el pago ya fue eliminado; el texto queda en los snapshot*.
+  paymentId     String?
+  payment       Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  /// Copia del pago para que la bitácora siga legible después de eliminarlo.
+  snapshotDescription String? @db.Text
+  snapshotCompany     String?
+  snapshotSource      String?
+  /// Campo modificado: amount | paymentDate | paid | description | notes | referenceNumber | deleted
   field         String
   previousValue String?  @db.Text
   newValue      String?  @db.Text

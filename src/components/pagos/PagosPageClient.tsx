@@ -741,14 +741,20 @@ export function PagosPageClient({ initialCompany }: Props) {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error al crear pago"),
   });
 
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/pagos/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Error al eliminar pago");
+      return id;
     },
-    onSuccess: () => {
+    onSuccess: (id) => {
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
       queryClient.invalidateQueries({ queryKey: ["pagos-oc-search"] });
+      queryClient.invalidateQueries({ queryKey: ["pagos-bitacora-global"] });
+      setDeleteConfirmId(null);
+      setDetailPayment((prev) => (prev?.id === id ? null : prev));
       toast.success("Pago eliminado");
     },
     onError: () => toast.error("No se pudo eliminar el pago"),
@@ -1097,7 +1103,7 @@ export function PagosPageClient({ initialCompany }: Props) {
               byDate={allByDate}
               canEdit={canEdit}
               onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
-              onDelete={(id) => deleteMutation.mutate(id)}
+              onDelete={setDeleteConfirmId}
               onViewDetail={setDetailPayment}
               onViewDay={setDayDialog}
             />
@@ -1354,7 +1360,7 @@ export function PagosPageClient({ initialCompany }: Props) {
               onConfirmDaily={(id, paymentDate) =>
                 confirmDailyMutation.mutate({ id, paymentDate })
               }
-              onDelete={(id) => deleteMutation.mutate(id)}
+              onDelete={setDeleteConfirmId}
               onViewDetail={setDetailPayment}
               onViewDay={setDayDialog}
             />
@@ -1366,7 +1372,7 @@ export function PagosPageClient({ initialCompany }: Props) {
               calendar={dailyCalendar}
               canEdit={canEdit}
               onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
-              onDelete={(id) => deleteMutation.mutate(id)}
+              onDelete={setDeleteConfirmId}
               onViewDetail={setDetailPayment}
             />
           </TabsContent>
@@ -1436,8 +1442,41 @@ export function PagosPageClient({ initialCompany }: Props) {
         canEdit={canEdit}
         onViewDetail={setDetailPayment}
         onTogglePaid={(id, paid) => markMutation.mutate({ id, paid })}
-        onDelete={(id) => deleteMutation.mutate(id)}
+        onDelete={setDeleteConfirmId}
       />
+
+      <Dialog
+        open={deleteConfirmId != null}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) setDeleteConfirmId(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Seguro de que quieres eliminar el pago?</DialogTitle>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleteMutation.isPending}
+              onClick={() => setDeleteConfirmId(null)}
+            >
+              No
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteMutation.isPending || !deleteConfirmId}
+              onClick={() => {
+                if (deleteConfirmId) deleteMutation.mutate(deleteConfirmId);
+              }}
+            >
+              Sí
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog nuevo pago */}
       <Dialog open={showNew} onOpenChange={setShowNew}>

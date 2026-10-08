@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
 import { withPermission } from "@/lib/permissions/middleware";
 import { ok, notFound, badRequest, noContent, serverError } from "@/lib/api/response";
-import { prisma } from "@/modules/core/db/prisma";
-import { updatePaymentWithAudit } from "@/modules/pagos/services/payment-update";
+import { deletePaymentWithAudit, updatePaymentWithAudit } from "@/modules/pagos/services/payment-update";
 
 /**
  * API de un pago individual.
@@ -56,14 +55,16 @@ export const DELETE = withPermission(
   async (_req: NextRequest, ctx: { session: import("next-auth").Session; params: { id: string } }) => {
     try {
       const { id } = ctx.params;
-      const payment = await prisma.payment.findUnique({ where: { id } });
-      if (!payment) return notFound("Pago no encontrado");
-      if (payment.source !== "MANUAL") {
-        return badRequest("Solo se pueden eliminar pagos manuales");
-      }
-      await prisma.payment.delete({ where: { id } });
+      const userId = ctx.session.user?.id;
+      if (!userId) return badRequest("Sesión sin usuario");
+      await deletePaymentWithAudit(id, userId);
       return noContent();
     } catch (e) {
+      const code = e instanceof Error ? (e as Error & { code?: string }).code : undefined;
+      if (code === "NOT_FOUND") return notFound("Pago no encontrado");
+      if (code === "BAD_REQUEST") {
+        return badRequest(e instanceof Error ? e.message : "No se puede eliminar");
+      }
       return serverError("Error al eliminar el pago", e);
     }
   },

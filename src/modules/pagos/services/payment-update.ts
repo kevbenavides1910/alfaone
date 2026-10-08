@@ -49,6 +49,7 @@ const FIELD_LABELS: Record<string, string> = {
   category: "Categoría",
   subcategory: "Subcategoría",
   confirmedForDaily: "Confirmado en diario",
+  deleted: "Eliminado",
 };
 
 function formatStoredAmount(n: Prisma.Decimal | number): string {
@@ -70,12 +71,15 @@ function displayPaid(v: string | null | undefined): string {
 
 export function serializeChangeLog(row: {
   id: string;
-  paymentId: string;
+  paymentId: string | null;
   field: string;
   previousValue: string | null;
   newValue: string | null;
   createdAt: Date;
   changedBy: { name: string } | null;
+  snapshotDescription?: string | null;
+  snapshotCompany?: string | null;
+  snapshotSource?: string | null;
   payment?: { description: string; company: string | null; source: string; category?: string | null; subcategory?: string | null } | null;
 }): PaymentChangeLogDto {
   const field = row.field;
@@ -87,10 +91,10 @@ export function serializeChangeLog(row: {
   }
   return {
     id: row.id,
-    paymentId: row.paymentId,
-    paymentDescription: row.payment?.description ?? null,
-    paymentCompany: row.payment?.company ?? null,
-    paymentSource: row.payment?.source ?? null,
+    paymentId: row.paymentId ?? "",
+    paymentDescription: row.payment?.description ?? row.snapshotDescription ?? null,
+    paymentCompany: row.payment?.company ?? row.snapshotCompany ?? null,
+    paymentSource: row.payment?.source ?? row.snapshotSource ?? null,
     field,
     fieldLabel: FIELD_LABELS[field] ?? field,
     previousValue,
@@ -120,10 +124,17 @@ export async function listAllPaymentChangeLogs(opts?: {
   const take = Math.min(Math.max(opts?.take ?? 200, 1), 500);
   const companyCodes = await expandPaymentCompanyFilter(opts?.company);
   const paymentWhere = paymentCompanyWhere(companyCodes);
+  const where =
+    "company" in paymentWhere
+      ? {
+          OR: [
+            { payment: paymentWhere },
+            { paymentId: null, snapshotCompany: paymentWhere.company },
+          ],
+        }
+      : undefined;
   const rows = await prisma.paymentChangeLog.findMany({
-    where: Object.keys(paymentWhere).length
-      ? { payment: paymentWhere }
-      : undefined,
+    where,
     orderBy: { createdAt: "desc" },
     take,
     include: {
@@ -297,4 +308,51 @@ export async function updatePaymentWithAudit(
   });
 
   return serializeSinglePayment(updated);
+}
+
+/** Elimina un pago manual y deja en la bitácora quién lo borró. */
+export async function deletePaymentWithAudit(paymentId: string, userId: string): Promise<void> {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+  if (!payment) {
+    const err = new Error("Pago no encontrado");
+    (err as Error & { code: string }).code = "NOT_FOUND";
+    throw err;
+  }
+  if (payment.source !== "MANUAL") {
+    const err = new Error("Solo se pueden eliminar pagos manuales");
+    (err as Error & { code: string }).code = "BAD_REQUEST";
+    throw err;
+  }
+
+  const summary = [
+    payment.description,
+    formatStoredAmount(payment.amount),
+    formatStoredDate(payment.paymentDate),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const snapshot = {
+    snapshotDescription: payment.description,
+    snapshotCompany: payment.company,
+    snapshotSource: payment.source,
+  };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.paymentChangeLog.updateMany({
+      where: { paymentId },
+      data: snapshot,
+    });
+    await tx.paymentChangeLog.create({
+      data: {
+        paymentId,
+        field: "deleted",
+        previousValue: summary,
+        newValue: "Eliminado",
+        changedById: userId,
+        ...snapshot,
+      },
+    });
+    await tx.payment.delete({ where: { id: paymentId } });
+  });
 }
