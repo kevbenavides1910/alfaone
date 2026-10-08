@@ -1411,6 +1411,7 @@ export function PagosPageClient({ initialCompany }: Props) {
 
       <PaymentDetailDialog
         payment={detailPayment}
+        companyOptions={companyOptions}
         onClose={() => setDetailPayment(null)}
         canEdit={canEdit}
         onTogglePaid={(id, paid) => {
@@ -1952,6 +1953,7 @@ type PaymentAttachmentDto = {
 
 function PaymentDetailDialog({
   payment,
+  companyOptions,
   onClose,
   canEdit,
   onTogglePaid,
@@ -1960,6 +1962,7 @@ function PaymentDetailDialog({
   unschedulePending,
 }: {
   payment: PagoDto | null;
+  companyOptions: { value: string; label: string }[];
   onClose: () => void;
   canEdit: boolean;
   onTogglePaid: (id: string, paid: boolean) => void;
@@ -1976,6 +1979,7 @@ function PaymentDetailDialog({
   const [referenceNumber, setReferenceNumber] = useState("");
   const [category, setCategory] = useState("");
   const [subcategory, setSubcategory] = useState("");
+  const [company, setCompany] = useState("");
   const [previewAtt, setPreviewAtt] = useState<PaymentAttachmentDto | null>(null);
 
   useEffect(() => {
@@ -1987,6 +1991,7 @@ function PaymentDetailDialog({
     setReferenceNumber(payment.referenceNumber ?? "");
     setCategory(payment.category ?? "");
     setSubcategory(payment.subcategory ?? "");
+    setCompany(payment.company ?? "");
     setTab("detalle");
     setPreviewAtt(null);
   }, [payment?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2100,6 +2105,7 @@ function PaymentDetailDialog({
           referenceNumber: referenceNumber.trim(),
           category: category || null,
           subcategory: subcategory || null,
+          company: company || null,
         }),
       });
       if (!res.ok) {
@@ -2133,6 +2139,7 @@ function PaymentDetailDialog({
           amount: Number(amount),
           notes,
           description: description.trim(),
+          company: company || null,
         }),
       });
       if (!res.ok) {
@@ -2160,7 +2167,8 @@ function PaymentDetailDialog({
       p.description !== description.trim() ||
       (p.referenceNumber ?? "") !== referenceNumber.trim() ||
       (p.category ?? "") !== category ||
-      (p.subcategory ?? "") !== subcategory);
+      (p.subcategory ?? "") !== subcategory ||
+      (p.company ?? "") !== company);
 
   return (
     <Dialog open={!!p} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -2265,17 +2273,30 @@ function PaymentDetailDialog({
                       placeholder="Opcional"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground pt-1">
-                    <div>
-                      Compañía: <span className="font-medium text-foreground">{p.company ?? "—"}</span>
-                    </div>
-                    <div>
-                      Estado:{" "}
-                      <span className={p.paid ? "font-medium text-emerald-600" : "font-medium text-amber-600"}>
-                        {p.paid ? "Pagado" : "Pendiente"}
-                      </span>
-                    </div>
+                  <div className="grid gap-1.5">
+                    <Label>Compañía</Label>
+                    <select
+                      className="h-9 border rounded-md px-2 text-sm bg-background"
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                    >
+                      <option value="">Sin compañía</option>
+                      {company && !companyOptions.some((o) => o.value === company) && (
+                        <option value={company}>{company}</option>
+                      )}
+                      {companyOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    Estado:{" "}
+                    <span className={p.paid ? "font-medium text-emerald-600" : "font-medium text-amber-600"}>
+                      {p.paid ? "Pagado" : "Pendiente"}
+                    </span>
+                  </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3 text-sm bg-muted/40 rounded-lg p-4">

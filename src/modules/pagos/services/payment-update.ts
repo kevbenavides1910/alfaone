@@ -37,6 +37,8 @@ export type UpdatePaymentInput = {
   subcategory?: string | null;
   /** Confirmar gasto fijo APEX para el calendario diario. */
   confirmedForDaily?: boolean;
+  /** Código de compañía (null = sin compañía). */
+  company?: string | null;
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -49,6 +51,7 @@ const FIELD_LABELS: Record<string, string> = {
   category: "Categoría",
   subcategory: "Subcategoría",
   confirmedForDaily: "Confirmado en diario",
+  company: "Compañía",
   deleted: "Eliminado",
 };
 
@@ -185,6 +188,19 @@ export async function updatePaymentWithAudit(
       previousValue: String(payment.confirmedForDaily),
       newValue: String(input.confirmedForDaily),
     });
+  }
+
+  if (input.company !== undefined) {
+    const next = input.company?.trim() || null;
+    const prev = payment.company?.trim() || null;
+    if (next !== prev) {
+      data.company = next;
+      logs.push({
+        field: "company",
+        previousValue: prev,
+        newValue: next,
+      });
+    }
   }
 
   if (typeof input.notes === "string" && input.notes !== (payment.notes ?? "")) {
