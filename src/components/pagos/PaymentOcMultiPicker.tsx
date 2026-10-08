@@ -37,6 +37,8 @@ type PaymentOcMultiPickerProps = {
   company?: string;
   onChange: (items: PaymentOcItem[]) => void;
   disabled?: boolean;
+  /** En un pago nuevo, guardar liga los gastos y los saca de la cola. */
+  settlesOnSave?: boolean;
 };
 
 function optionOc(opt: ProveedorOcOption): string {
@@ -80,6 +82,7 @@ export function PaymentOcMultiPicker({
   company,
   onChange,
   disabled,
+  settlesOnSave = true,
 }: PaymentOcMultiPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -247,7 +250,8 @@ export function PaymentOcMultiPicker({
           ))}
           <li className="flex items-center justify-between border-t pt-1.5 text-sm font-medium">
             <span>
-              Total · {items.length} OC · ligado a proveedores
+              Total · {items.length} OC
+              {settlesOnSave ? " · ligado a proveedores" : ""}
             </span>
             <span>{formatCurrency(total)}</span>
           </li>
@@ -256,7 +260,9 @@ export function PaymentOcMultiPicker({
 
       {!items.length && !loading && (
         <p className="text-xs text-slate-400">
-          Elegí OC de la cola «Pago proveedores»; al guardar salen de la cola en un solo movimiento.
+          {settlesOnSave
+            ? "Elegí OC de la cola «Pago proveedores»; al guardar salen de la cola en un solo movimiento."
+            : "Elegí una o varias OC de la cola «Pago proveedores»."}
         </p>
       )}
     </div>

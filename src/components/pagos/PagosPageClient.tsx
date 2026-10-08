@@ -39,6 +39,7 @@ import {
   formatPaymentOcReference,
   sumPaymentOcMontos,
   type PaymentOcItem,
+  type ProveedorOcOption,
 } from "@/components/pagos/PaymentOcMultiPicker";
 import { PagosReporteMensual } from "@/components/pagos/PagosReporteMensual";
 import {
@@ -542,7 +543,7 @@ export function PagosPageClient({ initialCompany }: Props) {
       const json = await res.json();
       return (json.data ?? json) as PagoProveedorDto[];
     },
-    enabled: activeTab === "proveedores" || showNew,
+    enabled: activeTab === "proveedores" || showNew || detailPayment != null,
     retry: 1,
   });
 
@@ -1412,6 +1413,8 @@ export function PagosPageClient({ initialCompany }: Props) {
       <PaymentDetailDialog
         payment={detailPayment}
         companyOptions={companyOptions}
+        ocOptions={proveedorOcOptions}
+        ocOptionsLoading={proveedoresFetching}
         onClose={() => setDetailPayment(null)}
         canEdit={canEdit}
         onTogglePaid={(id, paid) => {
@@ -1951,9 +1954,49 @@ type PaymentAttachmentDto = {
   uploadedBy: { id: string; name: string };
 };
 
+function ocTokens(referenceNumber: string | null | undefined): string[] {
+  if (!referenceNumber?.trim()) return [];
+  return referenceNumber
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function ocsFromReference(
+  referenceNumber: string | null | undefined,
+  options: ProveedorOcOption[],
+): PaymentOcItem[] {
+  return ocTokens(referenceNumber).map((token) => {
+    const opt = options.find((o) => (o.referenceNumber ?? "").trim() === token);
+    if (opt) {
+      const expenseIds = opt.expenseIds?.length ? [...new Set(opt.expenseIds)] : [opt.id];
+      return {
+        expenseId: opt.id,
+        expenseIds,
+        noOrden: token,
+        companyCode: opt.company,
+        description: opt.description,
+        monto: opt.amount,
+        status: opt.status,
+      };
+    }
+    return {
+      expenseId: `manual:${token}`,
+      expenseIds: [],
+      noOrden: token,
+      companyCode: null,
+      description: "OC ya registrada en el pago",
+      monto: 0,
+      status: "scheduled_unpaid" as const,
+    };
+  });
+}
+
 function PaymentDetailDialog({
   payment,
   companyOptions,
+  ocOptions,
+  ocOptionsLoading,
   onClose,
   canEdit,
   onTogglePaid,
@@ -1963,6 +2006,8 @@ function PaymentDetailDialog({
 }: {
   payment: PagoDto | null;
   companyOptions: { value: string; label: string }[];
+  ocOptions: ProveedorOcOption[];
+  ocOptionsLoading?: boolean;
   onClose: () => void;
   canEdit: boolean;
   onTogglePaid: (id: string, paid: boolean) => void;
@@ -1976,7 +2021,8 @@ function PaymentDetailDialog({
   const [paymentDate, setPaymentDate] = useState("");
   const [notes, setNotes] = useState("");
   const [description, setDescription] = useState("");
-  const [referenceNumber, setReferenceNumber] = useState("");
+  const [ocs, setOcs] = useState<PaymentOcItem[]>([]);
+  const ocSeededFor = useRef<string | null>(null);
   const [category, setCategory] = useState("");
   const [subcategory, setSubcategory] = useState("");
   const [company, setCompany] = useState("");
@@ -1988,13 +2034,46 @@ function PaymentDetailDialog({
     setPaymentDate(calendarDateInputValue(payment.paymentDate));
     setNotes(payment.notes ?? "");
     setDescription(payment.description);
-    setReferenceNumber(payment.referenceNumber ?? "");
     setCategory(payment.category ?? "");
     setSubcategory(payment.subcategory ?? "");
     setCompany(payment.company ?? "");
     setTab("detalle");
     setPreviewAtt(null);
   }, [payment?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!payment) {
+      ocSeededFor.current = null;
+      return;
+    }
+    const upgrade = (current: PaymentOcItem[]) => {
+      let changed = false;
+      const next = current.map((item) => {
+        if (!item.expenseId.startsWith("manual:")) return item;
+        const opt = ocOptions.find((o) => (o.referenceNumber ?? "").trim() === item.noOrden);
+        if (!opt) return item;
+        changed = true;
+        const expenseIds = opt.expenseIds?.length ? [...new Set(opt.expenseIds)] : [opt.id];
+        return {
+          expenseId: opt.id,
+          expenseIds,
+          noOrden: item.noOrden,
+          companyCode: opt.company,
+          description: opt.description,
+          monto: opt.amount,
+          status: opt.status,
+        };
+      });
+      return changed ? next : current;
+    };
+    if (ocSeededFor.current !== payment.id) {
+      ocSeededFor.current = payment.id;
+      setOcs(upgrade(ocsFromReference(payment.referenceNumber, ocOptions)));
+      return;
+    }
+    if (ocOptions.length === 0) return;
+    setOcs((current) => upgrade(current));
+  }, [payment, ocOptions]);
 
   const subcategoryOptions = useMemo(() => subcategoriesFor(category || null), [category]);
 
@@ -2102,7 +2181,7 @@ function PaymentDetailDialog({
           paymentDate,
           notes,
           description: description.trim(),
-          referenceNumber: referenceNumber.trim(),
+          referenceNumber: formatPaymentOcReference(ocs),
           category: category || null,
           subcategory: subcategory || null,
           company: company || null,
@@ -2165,7 +2244,7 @@ function PaymentDetailDialog({
       calendarDateInputValue(p.paymentDate) !== paymentDate ||
       (p.notes ?? "") !== notes ||
       p.description !== description.trim() ||
-      (p.referenceNumber ?? "") !== referenceNumber.trim() ||
+      ocTokens(p.referenceNumber).join("\0") !== ocs.map((o) => o.noOrden).join("\0") ||
       (p.category ?? "") !== category ||
       (p.subcategory ?? "") !== subcategory ||
       (p.company ?? "") !== company);
@@ -2205,12 +2284,15 @@ function PaymentDetailDialog({
                       onChange={(e) => setDescription(e.target.value)}
                     />
                   </div>
-                  <div className="grid gap-1.5">
+                  <div className="relative z-20 grid gap-1.5">
                     <Label>Número(s) de OC</Label>
-                    <Input
-                      value={referenceNumber}
-                      onChange={(e) => setReferenceNumber(e.target.value)}
-                      placeholder="Ej. 12345, 67890"
+                    <PaymentOcMultiPicker
+                      items={ocs}
+                      options={ocOptions}
+                      loading={ocOptionsLoading}
+                      company={company || undefined}
+                      settlesOnSave={false}
+                      onChange={setOcs}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
