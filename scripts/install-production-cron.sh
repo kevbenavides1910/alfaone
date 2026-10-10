@@ -9,7 +9,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 PROJECT_DIR="${PROJECT_DIR:-/mnt/data/projects/alfa-one/code/presupuestos-alfa}"
-ODOO_BACKUP_SCRIPT="/mnt/data/projects/odoo18-alfa/scripts/odoo-backup.sh"
+ODOO_BACKUP_SCRIPT="/mnt/data/projects/odoo19-alfa/scripts/odoo-backup.sh"
 RUN_USER="${RUN_USER:-soporte-ti}"
 LOG_DIR="/var/log/alfa-one"
 BACKUP_DIR="/mnt/data/backups/postgres"
