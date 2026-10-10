@@ -18,5 +18,5 @@ fi
 docker run --rm --network presupuestos-alfa_default \
   -e ODOO_BIOMETRIC_DATABASE_URL="$ODOO_URL" \
   -v "$SCRIPT:/tmp/t.py:ro" \
-  --entrypoint bash odoo18-alfa:18.0 -lc \
+  --entrypoint bash zk-puller:19.0 -lc \
   'python3 -c "import psycopg2" 2>/dev/null || pip install -q psycopg2-binary; python3 /tmp/t.py'
