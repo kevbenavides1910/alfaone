@@ -30,6 +30,7 @@ export const STORAGE_DIRS = {
   ticketsTi: "tickets-ti",
   monitoreo: "monitoreo-uploads",
   calendarioOperativo: "calendario-operativo",
+  carteles: "contract-cartels",
   /** Exportaciones / temporales generados (futuro) */
   exports: "exports",
 } as const;
@@ -90,6 +91,12 @@ export function monitoreoUploadRoot(): string {
 
 export function calendarioOperativoUploadRoot(): string {
   return path.join(appDataRoot(), STORAGE_DIRS.calendarioOperativo);
+}
+
+export function contractCartelUploadRoot(): string {
+  const explicit = process.env.CONTRACT_CARTEL_UPLOAD_DIR?.trim();
+  if (explicit) return path.resolve(explicit);
+  return path.join(appDataRoot(), STORAGE_DIRS.carteles);
 }
 
 /** Ruta dentro del contenedor cuando se monta APP_DATA_HOST → /data */

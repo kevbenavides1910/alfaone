@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { ContractsPageHeader } from "@/components/contracts/ContractsPageHeader";
+import { ContractCartelButton } from "@/components/contracts/ContractCartelButton";
 import { CarbonStatTile } from "@/components/contracts/CarbonStatTile";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,8 @@ interface Contract {
   clientType: ClientType; hiringType: ContractHiringType;
   officersCount: number; positionsCount: number;
   status: ContractStatus; startDate: string; endDate: string;
+  cartelFileName?: string | null; cartelMimeType?: string | null;
+  cartelUploadedAt?: string | null;
   baseMonthlyBilling: number;
   monthlyBilling: number; suppliesBudgetPct: number; suppliesBudget: number;
   equivalencePct: number; notes?: string;
@@ -202,6 +205,11 @@ export default function ContractDetailPage() {
                 </div>
               )}
             </div>
+            <ContractCartelButton
+              contractId={id}
+              fileName={contract.cartelFileName}
+              canEdit={canEditContract}
+            />
             {canEditContract && (
               <Link href={`/contracts/${id}/edit`}>
                 <Button

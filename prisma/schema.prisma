@@ -405,6 +405,11 @@ model VerificationToken {
 // ─── Contracts ────────────────────────────────────────────────────────────────
 
 model Contract {
+  /// Cartel de la licitación (archivo subido desde el módulo de contratos)
+  cartelFileName     String?
+  cartelMimeType     String?
+  cartelStoragePath  String?
+  cartelUploadedAt   DateTime?
   id                   String             @id @default(cuid())
   licitacionNo         String             @unique
   company              String
