@@ -14,6 +14,10 @@ import { syncOpenFacturaEmisionesForContract } from "@/modules/presupuestos/serv
 
 type Ctx = { params: Promise<{ id: string }> };
 
+/** Consulta de concursos electrónicos de SICOP (mismo formato del enlace que ya guarda el pipeline de Ventas). */
+const SICOP_CONSULTA_URL =
+  "https://www.sicop.go.cr/moduloOferta/search/EP_SEJ_COQ600.jsp?stateSearch=Y&cartelNoType=01&cartelNoNm=";
+
 export async function GET(_req: NextRequest, { params }: Ctx) {
   const session = await getSession();
   if (!session) return unauthorized();
@@ -30,14 +34,20 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
   if (!contract) return notFound("Contrato no encontrado");
 
-  // Enlace a la licitación en SICOP: se reutiliza el del pipeline de Ventas (mismo número de licitación).
+  // Enlace a SICOP: si el pipeline de Ventas ya lo tiene guardado se usa tal cual (misma fuente que el "Ver" de
+  // Ventas); si no, se arma con el mismo formato de la consulta de concursos para el número de este contrato.
   const oportunidad = contract.licitacionNo
     ? await prisma.ventasOportunidad.findUnique({
         where: { licitacionNo: contract.licitacionNo },
         select: { enlace: true },
       })
     : null;
-  const sicopEnlace = oportunidad?.enlace ?? null;
+  const esLicitacion = /^20\d\d[A-Z]{2}-/.test(contract.licitacionNo ?? "");
+  const sicopEnlace =
+    oportunidad?.enlace ??
+    (esLicitacion
+      ? `${SICOP_CONSULTA_URL}${encodeURIComponent(contract.licitacionNo as string)}`
+      : null);
 
   const billingHistory = await prisma.billingHistory.findMany({
     where: { contractId: id },
