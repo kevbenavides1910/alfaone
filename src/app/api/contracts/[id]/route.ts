@@ -14,9 +14,9 @@ import { syncOpenFacturaEmisionesForContract } from "@/modules/presupuestos/serv
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** Consulta de concursos electrónicos de SICOP (mismo formato del enlace que ya guarda el pipeline de Ventas). */
+/** Consulta de concursos electrónicos de SICOP (mismos parámetros del formulario "número de procedimiento"). */
 const SICOP_CONSULTA_URL =
-  "https://www.sicop.go.cr/moduloOferta/search/EP_SEJ_COQ600.jsp?stateSearch=Y&cartelNoType=01&cartelNoNm=";
+  "https://www.sicop.go.cr/moduloOferta/search/EP_SEJ_COQ600.jsp?cartelNoType=01&cartelNoNm=";
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
   const session = await getSession();
