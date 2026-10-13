@@ -30,6 +30,15 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
   if (!contract) return notFound("Contrato no encontrado");
 
+  // Enlace a la licitación en SICOP: se reutiliza el del pipeline de Ventas (mismo número de licitación).
+  const oportunidad = contract.licitacionNo
+    ? await prisma.ventasOportunidad.findUnique({
+        where: { licitacionNo: contract.licitacionNo },
+        select: { enlace: true },
+      })
+    : null;
+  const sicopEnlace = oportunidad?.enlace ?? null;
+
   const billingHistory = await prisma.billingHistory.findMany({
     where: { contractId: id },
     select: { periodMonth: true, monthlyBilling: true },
@@ -49,6 +58,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
   return ok({
     ...contract,
+    sicopEnlace,
     baseMonthlyBilling: baseBilling,
     monthlyBilling: billing,
     suppliesBudgetPct: pct,

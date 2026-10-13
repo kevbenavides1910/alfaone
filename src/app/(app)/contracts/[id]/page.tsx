@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth/client-session";
 import Link from "next/link";
 import {
-  Edit, Trash2,
+  Edit, Trash2, ExternalLink,
   DollarSign, Users, Calendar, TrendingUp, TrendingDown, Minus
 } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
@@ -205,6 +205,20 @@ export default function ContractDetailPage() {
                 </div>
               )}
             </div>
+            {contract.sicopEnlace ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 rounded-sm border-[#c6c6c6] bg-white shadow-none hover:bg-[#e8e8e8]"
+                title="Ver esta licitación en SICOP"
+                onClick={() =>
+                  window.open(contract.sicopEnlace, "_blank", "noopener,noreferrer")
+                }
+              >
+                <ExternalLink className="h-4 w-4" />
+                Ver en SICOP
+              </Button>
+            ) : null}
             <ContractCartelButton
               contractId={id}
               fileName={contract.cartelFileName}
