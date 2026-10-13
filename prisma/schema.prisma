@@ -410,6 +410,8 @@ model Contract {
   cartelMimeType     String?
   cartelStoragePath  String?
   cartelUploadedAt   DateTime?
+  /// Compromisos periódicos que exige el cartel/pliego
+  contractCommitments ContractCommitment[]
   id                   String             @id @default(cuid())
   licitacionNo         String             @unique
   company              String
@@ -6755,4 +6757,23 @@ model SyntraAiChatMessage {
 
   @@index([sessionId, sequence])
   @@map("syntra_ai_chat_messages")
+}
+
+/// Compromiso periódico que exige el cartel/pliego del contrato (extraído del documento con cita y página)
+model ContractCommitment {
+  id               String   @id @default(cuid())
+  contractId       String
+  contract         Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  tema             String
+  subtipo          String?
+  obligacion       String   @db.Text
+  frecuencia       String
+  meses            Float?
+  pagina           Int?
+  documento        String?
+  citasAdicionales Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  @@index([contractId])
+  @@map("contract_commitments")
 }

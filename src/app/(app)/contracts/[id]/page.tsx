@@ -11,6 +11,7 @@ import {
 import { Topbar } from "@/components/layout/Topbar";
 import { ContractsPageHeader } from "@/components/contracts/ContractsPageHeader";
 import { ContractCartelButton } from "@/components/contracts/ContractCartelButton";
+import { CommitmentsTab } from "@/components/contracts/CommitmentsTab";
 import { CarbonStatTile } from "@/components/contracts/CarbonStatTile";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -115,6 +116,8 @@ export default function ContractDetailPage() {
   const canEditAdministrations = canEditContractTab(session, "administrations");
   const canViewClientContacts = canViewContractTab(session, "client_contacts");
   const canViewPeriods = canViewContractTab(session, "periods");
+  // Los compromisos del pliego se muestran a quien puede ver el resumen del contrato (sin permiso nuevo).
+  const canViewCommitments = canViewContractTab(session, "overview");
   const canViewExpenses = canViewContractTab(session, "expenses");
 
   const { data: companiesRes } = useCompanies();
@@ -163,6 +166,7 @@ export default function ContractDetailPage() {
     { value: "client-contacts", label: "Contacto del cliente", show: canViewClientContacts },
     { value: "periods", label: "Prórrogas", show: canViewPeriods },
     { value: "expenses", label: "Todos los gastos", show: canViewExpenses },
+    { value: "commitments", label: "Compromisos", show: canViewCommitments },
   ].filter((t) => t.show);
   const defaultTab = visibleTabs[0]?.value ?? "overview";
 
@@ -649,6 +653,12 @@ export default function ContractDetailPage() {
           {canViewExpenses && (
           <TabsContent value="expenses" className="mt-0 p-4 md:p-6">
             <ContractExpensesTab contractId={id} canManageExpenses={canEditExpenses} />
+          </TabsContent>
+          )}
+
+          {canViewCommitments && (
+          <TabsContent value="commitments" className="mt-0 p-4 md:p-6">
+            <CommitmentsTab contractId={id} />
           </TabsContent>
           )}
         </Tabs>
