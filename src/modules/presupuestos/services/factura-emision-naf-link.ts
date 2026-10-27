@@ -4,9 +4,9 @@ import { withNafOracleConnection } from "@/modules/empleados-naf/services/oracle
 import { listNafDocuments, type NafDocumentoRow } from "@/modules/naf-documentos/services/list-naf-documents";
 import { resolveEmisionSubtotals } from "@/modules/presupuestos/business/administration-billing-amount";
 import {
-  calculateInvoiceTotal,
   computeAdministrationIvaTotals,
   extractBillingLineCatalog,
+  resolveEmisionInvoiceTotal,
 } from "@/modules/presupuestos/business/billing-line-iva";
 import { resolveContractMonthlyBilling } from "@/modules/presupuestos/business/contractPeriodBilling";
 import { addDaysUtc } from "@/modules/presupuestos/import/cxc-rows";
@@ -572,14 +572,11 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
       : extractBillingLineCatalog(administrations);
 
   function emisionTotalForAdmin(adminId: string | null | undefined, baseSubtotal: number): number {
-    if (adminId) {
-      const admin = administrations.find((a) => a.id === adminId);
-      if (admin) {
-        const mixed = computeAdministrationIvaTotals(admin, billingCatalog, ivaPct);
-        if (mixed) return mixed.total;
-      }
-    }
-    return calculateInvoiceTotal(baseSubtotal, ivaPct);
+    const admin = adminId ? administrations.find((a) => a.id === adminId) : undefined;
+    const lineTotals = admin
+      ? computeAdministrationIvaTotals(admin, billingCatalog, ivaPct)
+      : null;
+    return resolveEmisionInvoiceTotal(baseSubtotal, lineTotals, ivaPct);
   }
 
   let sumSubtotal = 0;

@@ -36,7 +36,7 @@ import {
   type FacturacionSearchFilters,
 } from "@/components/facturacion/FacturacionListFilters";
 import { FacturaTimelinessBadge } from "@/components/facturacion/FacturaTimelinessBadge";
-import { getFacturaIvaAmount } from "@/components/facturacion/facturacion-amount-change";
+import { getFacturaIvaAmount, getFacturaIvaPct } from "@/components/facturacion/facturacion-amount-change";
 
 const MONTHS = [
   { value: 1, label: "Enero" },
@@ -69,13 +69,7 @@ function currentYear() {
 }
 
 function effectiveIvaPct(row: Parameters<typeof getFacturaIvaAmount>[0]): number {
-  const iva = getFacturaIvaAmount(row);
-  const sub = row.subtotalCopied;
-  if (iva != null && sub != null && sub > 0) {
-    return Math.round((iva / sub) * 10000) / 100;
-  }
-  const pct = Number(row.ivaPctCopied);
-  return Number.isFinite(pct) ? pct : 0;
+  return getFacturaIvaPct(row);
 }
 
 export default function FacturacionPage() {

@@ -27,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatCurrency, formatDate, calendarDateInputValue, formatServicePeriodDates } from "@/lib/utils/format";
 import { FACTURA_BILLING_KIND_LABELS, FACTURA_MENSUAL_STATUS_LABELS } from "@/lib/utils/constants";
 import { FacturaTimelinessBadge } from "@/components/facturacion/FacturaTimelinessBadge";
-import { getFacturaIvaAmount } from "@/components/facturacion/facturacion-amount-change";
+import { getFacturaIvaAmount, getFacturaIvaPct } from "@/components/facturacion/facturacion-amount-change";
 import {
   FacturacionNafDocPicker,
   type FacturacionNafNumbers,
@@ -521,10 +521,7 @@ export function FacturacionDetailDialog({
             totalCalculated: displayTotal,
           };
           const ivaMonto = getFacturaIvaAmount(amountRow);
-          const ivaPct =
-            ivaMonto != null && displaySubtotal != null && displaySubtotal > 0
-              ? Math.round((ivaMonto / displaySubtotal) * 10000) / 100
-              : factura.ivaPctCopied;
+          const ivaPct = getFacturaIvaPct(amountRow);
           return (
             <div className="grid grid-cols-4 gap-3 text-sm bg-slate-50 rounded-lg p-3">
               <div>

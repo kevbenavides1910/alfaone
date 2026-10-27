@@ -38,6 +38,39 @@ export function calculateInvoiceTotal(subtotal: number, ivaPct: number): number 
   return computeMixedIvaTotals([{ amount: subtotal, appliesIva: true }], ivaPct).total;
 }
 
+/**
+ * Total de una emisión. El subtotal mostrado puede incluir servicios especiales
+ * repartidos encima de las líneas. Si esas líneas llevan el IVA del contrato,
+ * el subtotal completo usa ese mismo %. Si hay líneas exentas, se conserva su
+ * IVA y el excedente (servicio especial) también lleva el % del contrato.
+ */
+export function resolveEmisionInvoiceTotal(
+  displayedSubtotal: number,
+  lineTotals: { subtotal: number; ivaAmount: number; total: number } | null,
+  ivaPct: number
+): number {
+  if (!(displayedSubtotal > 0)) return 0;
+  if (!lineTotals || lineTotals.subtotal <= 0) {
+    return calculateInvoiceTotal(displayedSubtotal, ivaPct);
+  }
+
+  const linesFullyTaxable =
+    Math.abs(lineTotals.ivaAmount - lineIvaAmount(lineTotals.subtotal, true, ivaPct)) < 0.05;
+  if (linesFullyTaxable) {
+    return calculateInvoiceTotal(displayedSubtotal, ivaPct);
+  }
+
+  const extra = roundMoney(displayedSubtotal - lineTotals.subtotal);
+  if (extra > 0.02) {
+    return roundMoney(lineTotals.total + extra + lineIvaAmount(extra, true, ivaPct));
+  }
+  if (extra < -0.02) {
+    const ratio = displayedSubtotal / lineTotals.subtotal;
+    return roundMoney(displayedSubtotal + lineTotals.ivaAmount * ratio);
+  }
+  return lineTotals.total;
+}
+
 type BillingLineCatalogRow = {
   id: string;
   monthlyAmount: { toString(): string } | number | null;

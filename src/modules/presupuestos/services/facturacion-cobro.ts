@@ -14,6 +14,7 @@ import {
   calculateInvoiceTotal,
   computeAdministrationIvaTotals,
   extractBillingLineCatalog,
+  resolveEmisionInvoiceTotal,
   resolveFacturaTotalsFromBilling,
 } from "@/modules/presupuestos/business/billing-line-iva";
 import { administrationBillingLinesSelect } from "@/modules/presupuestos/services/facturacion-includes";
@@ -1032,16 +1033,14 @@ export function serializeFacturaMensual(
     baseSubtotal: number | null
   ): { subtotal: number | null; total: number | null } {
     if (baseSubtotal == null) return { subtotal: null, total: null };
-    if (adminId) {
-      const admin = administrations.find((a) => a.id === adminId);
-      if (admin) {
-        const mixed = computeAdministrationIvaTotals(admin, billingCatalog, ivaPct);
-        if (mixed) {
-          return { subtotal: mixed.subtotal, total: mixed.total };
-        }
-      }
-    }
-    return { subtotal: baseSubtotal, total: calculateInvoiceTotal(baseSubtotal, ivaPct) };
+    const admin = adminId ? administrations.find((a) => a.id === adminId) : undefined;
+    const lineTotals = admin
+      ? computeAdministrationIvaTotals(admin, billingCatalog, ivaPct)
+      : null;
+    return {
+      subtotal: baseSubtotal,
+      total: resolveEmisionInvoiceTotal(baseSubtotal, lineTotals, ivaPct),
+    };
   }
 
   const contractVentaTotal =

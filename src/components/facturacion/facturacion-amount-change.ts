@@ -152,6 +152,21 @@ export function getFacturaIvaAmount(row: IvaAmountRow): number | null {
   return Math.round(((subtotal * row.ivaPctCopied) / 100) * 100) / 100;
 }
 
+/** % de IVA a mostrar: el del contrato cuando el monto cuadra con esa tarifa. */
+export function getFacturaIvaPct(row: IvaAmountRow): number {
+  const contractPct = Number(row.ivaPctCopied);
+  const iva = getFacturaIvaAmount(row);
+  const subtotal = getFacturaEffectiveSubtotal(row);
+  if (iva != null && subtotal != null && subtotal > 0) {
+    const derived = Math.round((iva / subtotal) * 10000) / 100;
+    if (Number.isFinite(contractPct) && Math.abs(derived - contractPct) < 0.06) {
+      return contractPct;
+    }
+    return derived;
+  }
+  return Number.isFinite(contractPct) ? contractPct : 0;
+}
+
 export type FacturacionListTotals = {
   facturaCount: number;
   subtotal: number;
