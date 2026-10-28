@@ -5,7 +5,7 @@ import { getExecutiveBusinessInsights } from "@/modules/presupuestos/services/ex
 
 /**
  * GET /api/dashboard/executive?month=YYYY-MM
- * Paneles crÌticos (facturaciÛn/CxC, pagos, tickets, disciplinario) seg˙n permisos.
+ * Paneles cr√≠ticos (facturaci√≥n/CxC, pagos, tickets, disciplinario) seg√∫n permisos.
  */
 export const GET = withPermission(async (req: NextRequest, { session }) => {
   const monthParam = req.nextUrl.searchParams.get("month");
@@ -15,7 +15,7 @@ export const GET = withPermission(async (req: NextRequest, { session }) => {
     `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
   if (!/^\d{4}-\d{2}$/.test(month)) {
-    return badRequest("Par·metro month inv·lido (use YYYY-MM)");
+    return badRequest("Par√°metro month inv√°lido (use YYYY-MM)");
   }
 
   try {

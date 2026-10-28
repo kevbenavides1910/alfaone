@@ -11,7 +11,7 @@ function parseMonth(month: string): { year: number; monthNum: number; from: Date
   const year = Number(ys);
   const monthNum = Number(ms);
   if (!year || !monthNum || monthNum < 1 || monthNum > 12) {
-    throw new Error("Mes inv·lido (use YYYY-MM)");
+    throw new Error("Mes inv√°lido (use YYYY-MM)");
   }
   return {
     year,
@@ -83,8 +83,8 @@ async function buildPagosInsights(from: Date, to: Date) {
 }
 
 /**
- * Paneles crÌticos de negocio para el Dashboard Ejecutivo.
- * Cada bloque se incluye solo si el usuario tiene permiso del mÛdulo.
+ * Paneles cr√≠ticos de negocio para el Dashboard Ejecutivo.
+ * Cada bloque se incluye solo si el usuario tiene permiso del m√≥dulo.
  */
 export async function getExecutiveBusinessInsights(session: Session, month: string) {
   const { year, monthNum, from, to } = parseMonth(month);
