@@ -34,7 +34,7 @@ export const PERMISSION_REGISTRY = {
       dashboard_ejecutivo: {
         label: "Dashboard ejecutivo",
         uiRoutes: ["/dashboard"],
-        apiPrefixes: ["/api/reports/traffic-light"],
+        apiPrefixes: ["/api/reports/traffic-light", "/api/dashboard/executive"],
         actions: { view: "Ver KPIs y semáforo" },
       },
       notifications: {

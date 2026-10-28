@@ -7,6 +7,7 @@ import { buildContractListWhere } from "@/modules/presupuestos/services/contract
 import { listExpensesForSession } from "@/modules/presupuestos/services/expenses-list";
 import { listOrdenesCompraNaf } from "@/modules/presupuestos/services/list-ordenes-compra-naf";
 import { listPendingAssignPayments } from "@/modules/presupuestos/services/pending-assign-payments";
+import { getExecutiveBusinessInsights } from "@/modules/presupuestos/services/executive-insights";
 import { fromMonthString, toMonthString } from "@/lib/utils/format";
 import { contractVigenteInMonthWhere } from "@/modules/presupuestos/business/contractPeriodBilling";
 import { nowServer } from "@/lib/utils/time";
@@ -379,6 +380,29 @@ export function presupuestosTools(): SyntraTool[] {
           contratos: results.slice(0, MAX_LIST),
           fuente: "Semáforo Alfa One",
         };
+      },
+    },
+    {
+      permission: { key: "core.dashboard_ejecutivo", level: "view" },
+      definition: toolDef(
+        "query_executive_insights",
+        "Paneles críticos del Dashboard Ejecutivo: CxC vencido, facturación del mes, cola de pagos, tickets TI y disciplinario (según permisos del usuario).",
+        {
+          type: "object",
+          properties: {
+            month: { type: "string", description: "Mes YYYY-MM (default: mes actual)." },
+          },
+          additionalProperties: false,
+        },
+      ),
+      describeCall: () => "Consultando paneles ejecutivos de negocio…",
+      handler: async (session, args) => {
+        const now = nowServer();
+        const month =
+          strArg(args, "month") ||
+          `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const data = await getExecutiveBusinessInsights(session, month);
+        return { ...data, fuente: "Dashboard ejecutivo Alfa One" };
       },
     },
   ];
