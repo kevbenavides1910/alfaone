@@ -54,6 +54,11 @@ export class FeFacturaRepository {
         totalIvaDevuelto: input.totalIvaDevuelto ?? 0,
         total: input.total,
         facturaMensualId: input.facturaMensualId,
+        claveReferencia: input.sustitucion?.claveReferencia ?? null,
+        tipoDocReferencia: input.sustitucion?.tipoDocReferencia ?? null,
+        codigoReferencia: input.sustitucion?.codigoReferencia ?? null,
+        fechaReferencia: input.sustitucion?.fechaReferencia ?? null,
+        razonReferencia: input.sustitucion?.razon ?? null,
         createdById: userId,
         updatedById: userId,
         detalles: {
@@ -183,6 +188,11 @@ export class FeFacturaRepository {
           otrosCargos: input.otrosCargos?.length ? input.otrosCargos : undefined,
           totalIvaDevuelto: input.totalIvaDevuelto ?? 0,
           total: input.total,
+          claveReferencia: input.sustitucion?.claveReferencia ?? null,
+          tipoDocReferencia: input.sustitucion?.tipoDocReferencia ?? null,
+          codigoReferencia: input.sustitucion?.codigoReferencia ?? null,
+          fechaReferencia: input.sustitucion?.fechaReferencia ?? null,
+          razonReferencia: input.sustitucion?.razon ?? null,
           estado: existing.estado === "ERROR" ? "BORRADOR" : existing.estado,
           updatedById: userId,
           detalles: {

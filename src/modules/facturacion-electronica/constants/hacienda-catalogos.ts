@@ -69,6 +69,11 @@ export const FE_CODIGO_REFERENCIA_NOTA = [
 
 export const FE_CODIGO_REFERENCIA_REP = ["17"] as const;
 
+/** Códigos de la nota 9 que van en el comprobante nuevo, no en la nota. */
+export const FE_CODIGO_SUSTITUCION = ["07", "15", "16"] as const;
+
+export const FE_TIPO_DOC_IR_SUSTITUCION = ["01", "02", "03", "04", "19"] as const;
+
 export type FeCodigoReferenciaNota = (typeof FE_CODIGO_REFERENCIA_NOTA)[number];
 
 type FeCodigoReferenciaMeta = {
@@ -160,6 +165,15 @@ export const FE_TIPOS_DOC_IR: Record<string, string> = {
   "20": "Recibo electrónico de pago",
   "99": "Otros",
 };
+
+export function tipoDocIrAlSustituir(codigo: string, tipoEmision: string | null | undefined): string {
+  if (codigo === "16") return "10";
+  if (tipoEmision === "FACTURA_ELECTRONICA_EXPORTACION") return "19";
+  if (tipoEmision === "TIQUETE_ELECTRONICO") return "04";
+  if (tipoEmision === "NOTA_DEBITO") return "02";
+  if (tipoEmision === "NOTA_CREDITO") return "03";
+  return "01";
+}
 
 export function tipoDocIrReciboDesdeComprobante(tipo: string | null | undefined): string | null {
   switch (tipo) {

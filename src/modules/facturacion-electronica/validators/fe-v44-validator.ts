@@ -150,6 +150,24 @@ export function validateFeV44Factura(params: {
     errors.push("Indique el plazo de crédito en días.");
   }
 
+  if (factura.codigoReferencia || factura.claveReferencia) {
+    if (!factura.claveReferencia || factura.claveReferencia.trim().length !== 50) {
+      errors.push("La sustitución requiere la clave de 50 caracteres del comprobante anterior.");
+    }
+    if (!factura.fechaReferencia) {
+      errors.push("La sustitución requiere la fecha del comprobante anterior.");
+    }
+    if (!factura.razonReferencia || factura.razonReferencia.trim().length < 3) {
+      errors.push("La sustitución requiere la razón (mínimo 3 caracteres).");
+    }
+    if (factura.codigoReferencia === "16" && factura.tipoDocReferencia !== "10") {
+      errors.push("Un comprobante rechazado se referencia con tipo de documento 10 y código 16.");
+    }
+    if (factura.codigoReferencia && !["07", "15", "16"].includes(factura.codigoReferencia)) {
+      errors.push("En una factura el código de referencia de sustitución debe ser 07, 15 o 16.");
+    }
+  }
+
   detalles.forEach((line, i) => {
     const cabys = (line.codigoCabys ?? "").replace(/\D/g, "");
     if (cabys.length !== 13) {

@@ -5083,6 +5083,12 @@ model FeFactura {
   contabilizadoAt    DateTime?
   /// Integración futura con facturación mensual del ERP (sin automatizar aún).
   facturaMensualId   String?
+  /// Comprobante que este documento sustituye (códigos 07, 15 o 16 de la nota 9).
+  claveReferencia    String?           @db.VarChar(50)
+  tipoDocReferencia  String?           @db.VarChar(2)
+  codigoReferencia   String?           @db.VarChar(2)
+  fechaReferencia    DateTime?
+  razonReferencia    String?           @db.VarChar(180)
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   deletedAt          DateTime?

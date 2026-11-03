@@ -25,6 +25,10 @@ type FeFacturaDetail = {
   totalImpuestos: string | number;
   total: string | number;
   observaciones?: string | null;
+  claveReferencia?: string | null;
+  codigoReferencia?: string | null;
+  tipoDocReferencia?: string | null;
+  razonReferencia?: string | null;
   cliente?: {
     id?: string;
     nombre: string;
@@ -224,11 +228,14 @@ export default function FacturaElectronicaDetailPage() {
 
       {factura.estado === "RECHAZADA" && (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Esta clave fue rechazada por Hacienda y no puede reutilizarse. Cree una{" "}
-          <Link href="/facturacion-electronica/nueva" className="font-medium underline">
-            nueva factura
-          </Link>{" "}
-          para obtener un consecutivo distinto.
+            Esta clave fue rechazada por Hacienda y no puede reutilizarse. Emita un{" "}
+            <Link
+              href={`/facturacion-electronica/nueva?sustituye=${id}&codigo=16`}
+              className="font-medium underline"
+            >
+              comprobante nuevo que la sustituye
+            </Link>{" "}
+            (código 16, tipo de documento 10).
         </p>
       )}
 
@@ -296,6 +303,11 @@ export default function FacturaElectronicaDetailPage() {
           {puedeNotas && (
             <>
               <Button variant="outline" asChild>
+                <Link href={`/facturacion-electronica/nueva?sustituye=${id}&codigo=15`}>
+                  Sustituir por error material
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
                 <Link href={`/facturacion-electronica/${id}/nota-credito`}>Nota de crédito</Link>
               </Button>
               <Button variant="outline" asChild>
@@ -334,6 +346,14 @@ export default function FacturaElectronicaDetailPage() {
             <p>
               <span className="text-muted-foreground">Consecutivo:</span>{" "}
               <span className="font-mono">{factura.comprobante.consecutivo}</span>
+            </p>
+          )}
+          {factura.claveReferencia && (
+            <p>
+              <span className="text-muted-foreground">Sustituye:</span> código {factura.codigoReferencia} · tipo{" "}
+              {factura.tipoDocReferencia}
+              <span className="mt-1 block font-mono text-xs">{factura.claveReferencia}</span>
+              {factura.razonReferencia ? <span className="block">{factura.razonReferencia}</span> : null}
             </p>
           )}
           {factura.comprobante?.claveNumerica && (

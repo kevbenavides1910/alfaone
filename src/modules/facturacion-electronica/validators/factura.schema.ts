@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FE_CODIGO_SUSTITUCION, FE_TIPO_DOC_IR_SUSTITUCION } from "../constants/hacienda-catalogos";
 
 const cabysSchema = z
   .string()
@@ -149,6 +150,20 @@ export const createFeFacturaSchema = z
     total: z.coerce.number().nonnegative(),
     detalles: z.array(detalleLineaSchema).min(1),
     facturaMensualId: z.string().cuid().optional(),
+    sustitucion: z
+      .object({
+        codigoReferencia: z.enum(FE_CODIGO_SUSTITUCION),
+        tipoDocReferencia: z.string().length(2),
+        claveReferencia: z
+          .string()
+          .trim()
+          .transform((value) => value.toUpperCase().replace(/[^0-9A-Z]/g, ""))
+          .refine((value) => value.length === 50, "La clave del comprobante sustituido debe tener 50 caracteres"),
+        fechaReferencia: z.coerce.date(),
+        razon: z.string().trim().min(3).max(180),
+      })
+      .optional()
+      .nullable(),
   })
   .superRefine((data, ctx) => {
     if (data.tipoDocumento !== "TIQUETE_ELECTRONICO" && !data.clienteId) {
@@ -184,6 +199,26 @@ export const createFeFacturaSchema = z
           code: z.ZodIssueCode.custom,
           message: "Total otros cargos debe coincidir con el detalle",
           path: ["otrosCargos"],
+        });
+      }
+    }
+    if (data.sustitucion) {
+      const { codigoReferencia, tipoDocReferencia } = data.sustitucion;
+      if (codigoReferencia === "16" && tipoDocReferencia !== "10") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Al sustituir un comprobante rechazado el tipo de documento debe ser 10",
+          path: ["sustitucion", "tipoDocReferencia"],
+        });
+      }
+      if (
+        codigoReferencia !== "16" &&
+        !(FE_TIPO_DOC_IR_SUSTITUCION as readonly string[]).includes(tipoDocReferencia)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Tipo de documento de referencia no válido para esta sustitución",
+          path: ["sustitucion", "tipoDocReferencia"],
         });
       }
     }

@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FieldHelp, LabelWithHelp, ValidationBanner } from "@/components/ui/field-help";
 import { toast } from "@/components/ui/toaster";
 import { hasPermission } from "@/lib/permissions/check";
+import { FE_TIPOS_DOC_IR, tipoDocIrAlSustituir } from "@/modules/facturacion-electronica/constants/hacienda-catalogos";
 import { codigoTarifaToPercent, isTarifaIvaSinMonto, tarifaPercentToCodigoTarifaIVA } from "@/modules/facturacion-electronica/utils/fe-tarifa-iva";
 import { FeTarifaIvaSelect } from "@/components/facturacion-electronica/FeTarifaIvaSelect";
 import {
@@ -52,6 +53,8 @@ export default function NuevaFacturaElectronicaPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("editId")?.trim() ?? "";
+  const sustituyeId = searchParams.get("sustituye")?.trim() ?? "";
+  const codigoQuery = searchParams.get("codigo")?.trim() ?? "";
   const isEditMode = Boolean(editId);
   const qc = useQueryClient();
   const { data: session } = useSession();
@@ -77,6 +80,12 @@ export default function NuevaFacturaElectronicaPage() {
   const [detallarOtrosCargos, setDetallarOtrosCargos] = useState(false);
   const [otrosCargosRows, setOtrosCargosRows] = useState<OtroCargoRow[]>([emptyOtroCargo()]);
   const [observaciones, setObservaciones] = useState("");
+  const [sustituye, setSustituye] = useState(false);
+  const [codigoSustitucion, setCodigoSustitucion] = useState<"07" | "15" | "16">("15");
+  const [tipoDocSustitucion, setTipoDocSustitucion] = useState("01");
+  const [claveSustitucion, setClaveSustitucion] = useState("");
+  const [fechaSustitucion, setFechaSustitucion] = useState("");
+  const [razonSustitucion, setRazonSustitucion] = useState("");
   const [lineas, setLineas] = useState<LineaForm[]>([emptyLine()]);
   const [showNuevoCliente, setShowNuevoCliente] = useState(false);
   const [nuevoCliente, setNuevoCliente] = useState({ ...nuevoClienteDefault });
@@ -87,6 +96,7 @@ export default function NuevaFacturaElectronicaPage() {
   const [haciendaClienteInfo, setHaciendaClienteInfo] = useState<FeContribuyenteLookup | null>(null);
 
   const [editHydrated, setEditHydrated] = useState(false);
+  const [sustituyeHydrated, setSustituyeHydrated] = useState(false);
 
   const facturaEditQ = useQuery({
     queryKey: ["fe-factura-edit", editId, companyCode],
@@ -109,6 +119,12 @@ export default function NuevaFacturaElectronicaPage() {
         medioPagoOtro?: string | null;
         plazoCredito?: number | null;
         observaciones?: string | null;
+        claveReferencia?: string | null;
+        tipoDocReferencia?: string | null;
+        codigoReferencia?: string | null;
+        fechaReferencia?: string | null;
+        razonReferencia?: string | null;
+        comprobante?: { claveNumerica?: string | null; fechaEmision?: string | null } | null;
         totalOtrosCargos?: string | number;
         totalIvaDevuelto?: string | number;
         cliente?: FeCliente | null;
@@ -175,6 +191,14 @@ export default function NuevaFacturaElectronicaPage() {
     setMedioPagoOtro(f.medioPagoOtro ?? "");
     setPlazoCredito(f.plazoCredito != null ? String(f.plazoCredito) : "");
     setObservaciones(f.observaciones ?? "");
+    if (f.codigoReferencia === "07" || f.codigoReferencia === "15" || f.codigoReferencia === "16") {
+      setSustituye(true);
+      setCodigoSustitucion(f.codigoReferencia);
+      setTipoDocSustitucion(f.tipoDocReferencia ?? tipoDocIrAlSustituir(f.codigoReferencia, f.tipoDocumento));
+      setClaveSustitucion(f.claveReferencia ?? "");
+      setFechaSustitucion(f.fechaReferencia ? String(f.fechaReferencia).slice(0, 10) : "");
+      setRazonSustitucion(f.razonReferencia ?? "");
+    }
     setTotalOtrosCargos(String(f.totalOtrosCargos ?? 0));
     setTotalIvaDevuelto(String(f.totalIvaDevuelto ?? 0));
 
@@ -215,6 +239,86 @@ export default function NuevaFacturaElectronicaPage() {
 
     setEditHydrated(true);
   }, [isEditMode, editHydrated, facturaEditQ.data]);
+
+  const facturaSustituyeQ = useQuery({
+    queryKey: ["fe-factura-sustituye", sustituyeId, companyCode],
+    enabled: Boolean(sustituyeId && companyCode && !isEditMode),
+    queryFn: async () => {
+      const r = await fetch(feApiUrl(`/api/fe/facturas/${sustituyeId}`, companyCode));
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error?.message ?? "Error al cargar el comprobante a sustituir");
+      return j.data as NonNullable<typeof facturaEditQ.data>;
+    },
+  });
+
+  useEffect(() => {
+    if (isEditMode || sustituyeHydrated || !facturaSustituyeQ.data) return;
+    const f = facturaSustituyeQ.data;
+    const codigo =
+      codigoQuery === "07" || codigoQuery === "15" || codigoQuery === "16"
+        ? codigoQuery
+        : f.estado === "RECHAZADA"
+          ? "16"
+          : "15";
+    setSustituye(true);
+    setCodigoSustitucion(codigo);
+    setTipoDocSustitucion(tipoDocIrAlSustituir(codigo, f.tipoDocumento));
+    setClaveSustitucion(f.comprobante?.claveNumerica ?? "");
+    setFechaSustitucion(String(f.comprobante?.fechaEmision ?? f.fecha).slice(0, 10));
+    setRazonSustitucion(
+      codigo === "16"
+        ? "Sustituye comprobante electrónico rechazado por Hacienda"
+        : codigo === "07"
+          ? "Sustituye comprobante electrónico anulado"
+          : "Sustituye comprobante anulado por error material"
+    );
+    setTipoDocumento(f.tipoDocumento as typeof tipoDocumento);
+    setPuntoVentaId(f.puntoVentaId);
+    setClienteId(f.clienteId ?? "");
+    setMoneda(f.moneda as typeof moneda);
+    setCondicionVenta(f.condicionVenta);
+    setCondicionVentaOtro(f.condicionVentaOtro ?? "");
+    setMedioPago(f.medioPago);
+    setMedioPagoOtro(f.medioPagoOtro ?? "");
+    setPlazoCredito(f.plazoCredito != null ? String(f.plazoCredito) : "");
+    setObservaciones(f.observaciones ?? "");
+    setTotalOtrosCargos(String(f.totalOtrosCargos ?? 0));
+    setTotalIvaDevuelto(String(f.totalIvaDevuelto ?? 0));
+    if (f.cliente) {
+      setNuevoCliente(mapDbClienteToForm(f.cliente));
+      setNuevoClienteActividadDesc(f.cliente.actividadEconomica ?? "");
+      setShowNuevoCliente(true);
+    }
+    if (f.detalles?.length) {
+      setLineas(
+        f.detalles.map((d) => ({
+          key: crypto.randomUUID(),
+          codigoCabys: (d.codigoCabys ?? "").replace(/\D/g, ""),
+          cabysDescripcion: "",
+          descripcion: d.descripcion,
+          cantidad: String(d.cantidad),
+          unidadMedida: d.unidadMedida,
+          precioUnitario: String(d.precioUnitario),
+          montoDescuento: String(d.montoDescuento ?? 0),
+          naturalezaDescuento: d.naturalezaDescuento ?? "",
+          codigoTarifaIVA: d.codigoImpuesto ?? "08",
+          tarifaImpuesto: String(d.tarifaImpuesto ?? 13),
+          exonActiva: Boolean(d.exonNumeroDocumento?.trim()),
+          exonTipoDocumento: d.exonTipoDocumento ?? "02",
+          exonNumeroDocumento: d.exonNumeroDocumento ?? "",
+          exonNombreInstitucion: d.exonNombreInstitucion ?? "",
+          exonFechaEmision: d.exonFechaEmision ? String(d.exonFechaEmision).slice(0, 10) : "",
+          exonPorcentaje: d.exonPorcentaje != null ? String(d.exonPorcentaje) : "",
+          exonMonto: d.exonMonto != null ? String(d.exonMonto) : "",
+          ivaCobradoFabrica: d.ivaCobradoFabrica ?? "",
+          impuestoAsumidoFabrica: String(d.impuestoAsumidoFabrica ?? 0),
+          partidaArancelaria: d.partidaArancelaria ?? "",
+          montoImpuestoExportacion: d.montoImpuestoExportacion != null ? String(d.montoImpuestoExportacion) : "",
+        }))
+      );
+    }
+    setSustituyeHydrated(true);
+  }, [isEditMode, sustituyeHydrated, facturaSustituyeQ.data, codigoQuery]);
 
   useEffect(() => {
     if (!showNuevoCliente || !companyCode) return;
@@ -467,6 +571,15 @@ export default function NuevaFacturaElectronicaPage() {
         mediosPago: mediosPayload?.length ? mediosPayload : undefined,
         plazoCredito: condicionVenta === "CREDITO" && plazoCredito ? Number(plazoCredito) : undefined,
         observaciones: observaciones.trim() || undefined,
+        sustitucion: sustituye
+          ? {
+              codigoReferencia: codigoSustitucion,
+              tipoDocReferencia: codigoSustitucion === "16" ? "10" : tipoDocSustitucion,
+              claveReferencia: claveSustitucion,
+              fechaReferencia: fechaSustitucion,
+              razon: razonSustitucion.trim(),
+            }
+          : null,
         subtotal: totales.subtotal,
         totalDescuentos: totales.totalDescuentos,
         totalImpuestos: totales.totalImpuestos,
@@ -588,7 +701,15 @@ export default function NuevaFacturaElectronicaPage() {
           <CardTitle className="text-base">Tipo de comprobante</CardTitle>
         </CardHeader>
         <CardContent>
-          <Select value={tipoDocumento} onValueChange={(v) => setTipoDocumento(v as typeof tipoDocumento)}>
+          <Select
+            value={tipoDocumento}
+            onValueChange={(v) => {
+              setTipoDocumento(v as typeof tipoDocumento);
+              if (sustituye && codigoSustitucion !== "16") {
+                setTipoDocSustitucion(tipoDocIrAlSustituir(codigoSustitucion, v));
+              }
+            }}
+          >
             <SelectTrigger className="max-w-md">
               <SelectValue />
             </SelectTrigger>
@@ -605,6 +726,86 @@ export default function NuevaFacturaElectronicaPage() {
               "FEE: Para exportaciones. Requiere partida arancelaria en líneas de mercancía."
             }
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Sustituye otro comprobante</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Motivo</Label>
+            <Select
+              value={sustituye ? codigoSustitucion : "none"}
+              onValueChange={(value) => {
+                if (value === "none") {
+                  setSustituye(false);
+                  return;
+                }
+                const codigo = value as "07" | "15" | "16";
+                setSustituye(true);
+                setCodigoSustitucion(codigo);
+                setTipoDocSustitucion(tipoDocIrAlSustituir(codigo, tipoDocumento));
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Este comprobante no sustituye a otro</SelectItem>
+                <SelectItem value="07">07 — Sustituye un comprobante anulado</SelectItem>
+                <SelectItem value="15">15 — Sustituye un comprobante anulado por error material</SelectItem>
+                <SelectItem value="16">16 — Sustituye un comprobante rechazado por Hacienda</SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldHelp text="El 07 va en el documento nuevo después de anular con código 01. El 15, después de anular por error material con código 13. El 16 referencia un comprobante rechazado (tipo de documento 10)." />
+          </div>
+          {sustituye && (
+            <>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Clave del comprobante anterior</Label>
+                <Input
+                  value={claveSustitucion}
+                  maxLength={50}
+                  onChange={(e) => setClaveSustitucion(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 50))}
+                  placeholder="50 caracteres"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Fecha de ese comprobante</Label>
+                <Input type="date" value={fechaSustitucion} onChange={(e) => setFechaSustitucion(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo de documento referenciado</Label>
+                <Select
+                  value={codigoSustitucion === "16" ? "10" : tipoDocSustitucion}
+                  onValueChange={setTipoDocSustitucion}
+                  disabled={codigoSustitucion === "16"}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(codigoSustitucion === "16" ? (["10"] as const) : (["01", "02", "03", "04", "19"] as const)).map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {code} — {FE_TIPOS_DOC_IR[code]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Razón</Label>
+                <Textarea
+                  value={razonSustitucion}
+                  maxLength={180}
+                  onChange={(e) => setRazonSustitucion(e.target.value)}
+                  placeholder="Por qué se emite este comprobante en lugar del anterior"
+                />
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

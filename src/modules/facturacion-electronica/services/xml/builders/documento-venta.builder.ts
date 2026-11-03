@@ -15,6 +15,7 @@ import { calcularResumen, resolveMediosPago } from "../../../utils/fe-resumen";
 import {
   appendCondicionVenta,
   appendDetalleServicio,
+  appendInformacionReferencia,
   appendEmisorReceptor,
   appendEncabezadoActividad,
   appendOtrosCargos,
@@ -109,6 +110,17 @@ export function buildDocumentoVentaXml(ctx: FeDocumentoVentaXmlContext): string 
     resumen,
     mediosPago,
   });
+
+  if (factura.claveReferencia && factura.codigoReferencia && factura.tipoDocReferencia && factura.fechaReferencia) {
+    appendInformacionReferencia({
+      root,
+      tipoDoc: factura.tipoDocReferencia,
+      numero: factura.claveReferencia,
+      fechaEmision: formatFeFechaEmisionXml(factura.fechaReferencia),
+      codigo: factura.codigoReferencia,
+      razon: factura.razonReferencia,
+    });
+  }
 
   if (factura.observaciones?.trim()) {
     root.ele("Otros").ele("OtroTexto").txt(factura.observaciones.trim().slice(0, 500));
