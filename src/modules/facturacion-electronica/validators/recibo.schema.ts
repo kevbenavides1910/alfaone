@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FE_CODIGO_REFERENCIA_REP, FE_TIPO_DOC_IR_REP } from "../constants/hacienda-catalogos";
 
 const REP_CONDICIONES = [
   "PAGO_SERVICIOS_ESTADO",
@@ -18,9 +19,13 @@ const detalleReciboSchema = z.object({
 export const createFeReciboPagoSchema = z.object({
   puntoVentaId: z.string().uuid(),
   facturaReferenciaId: z.string().uuid().optional(),
-  claveReferencia: z.string().min(1).max(50),
-  codigoReferencia: z.enum(["01", "02", "03", "04", "05", "99"]).default("01"),
-  tipoDocReferencia: z.enum(["01", "02", "03", "04", "07", "08", "09", "10"]).default("01"),
+  claveReferencia: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase().replace(/[^0-9A-Z]/g, ""))
+    .refine((value) => value.length === 50, "La clave de referencia debe tener 50 caracteres"),
+  codigoReferencia: z.enum(FE_CODIGO_REFERENCIA_REP).default("17"),
+  tipoDocReferencia: z.enum(FE_TIPO_DOC_IR_REP).default("01"),
   fechaReferencia: z.coerce.date().optional(),
   razon: z.string().optional(),
   condicionVenta: z.enum(REP_CONDICIONES),

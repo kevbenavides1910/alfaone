@@ -1,4 +1,5 @@
 import { isValidFeClave } from "../services/incoming/factura-recibida.parser";
+import { normalizeIdentificacion } from "./fe-identificacion";
 
 /** Tipos XML que corresponden a comprobantes de proveedor (no mensajes ni confirmaciones). */
 export const TIPOS_COMPROBANTE_RECIBIDO = new Set([
@@ -19,7 +20,7 @@ export type FeRecibidoValidacionRow = {
 };
 
 function digits(value: string | null | undefined) {
-  return (value ?? "").replace(/\D/g, "");
+  return normalizeIdentificacion(value ?? "");
 }
 
 export function isComprobanteRecibidoValido(

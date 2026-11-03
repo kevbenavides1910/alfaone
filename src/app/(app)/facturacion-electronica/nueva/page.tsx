@@ -219,7 +219,10 @@ export default function NuevaFacturaElectronicaPage() {
   useEffect(() => {
     if (!showNuevoCliente || !companyCode) return;
 
-    const digits = nuevoCliente.identificacion.replace(/\D/g, "");
+    const digits =
+      nuevoCliente.tipoIdentificacion === "JURIDICA"
+        ? nuevoCliente.identificacion.toUpperCase().replace(/[^0-9A-Z]/g, "")
+        : nuevoCliente.identificacion.replace(/\D/g, "");
     const idErr = validateId(nuevoCliente.tipoIdentificacion, digits);
     if (!digits || idErr) {
       setClienteLookupHint(null);

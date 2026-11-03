@@ -16,6 +16,7 @@ import {
   useFeCompany,
   withFeCompanyBody,
 } from "@/components/facturacion-electronica/fe-company-context";
+import { tipoDocIrReciboDesdeComprobante } from "@/modules/facturacion-electronica/constants/hacienda-catalogos";
 
 type FeConfigResponse = {
   configured: boolean;
@@ -33,12 +34,6 @@ type FeFacturaRef = {
   total: string | number;
   comprobante?: { claveNumerica?: string } | null;
   cliente?: { nombre: string };
-};
-
-const TIPO_DOC_REF: Record<string, string> = {
-  FACTURA_ELECTRONICA: "01",
-  TIQUETE_ELECTRONICO: "04",
-  FACTURA_ELECTRONICA_EXPORTACION: "09",
 };
 
 const REP_CONDICIONES = [
@@ -91,7 +86,8 @@ export default function NuevoReciboPagoPage() {
       setClaveReferencia(facturaQ.data.comprobante.claveNumerica);
     }
     if (facturaQ.data?.tipoDocumento) {
-      setTipoDocReferencia(TIPO_DOC_REF[facturaQ.data.tipoDocumento] ?? "01");
+      const tipoIr = tipoDocIrReciboDesdeComprobante(facturaQ.data.tipoDocumento);
+      if (tipoIr) setTipoDocReferencia(tipoIr);
     }
     if (facturaQ.data?.total && !monto) {
       setMonto(String(facturaQ.data.total));
@@ -126,13 +122,16 @@ export default function NuevoReciboPagoPage() {
   const saveM = useMutation({
     mutationFn: async () => {
       if (!puntoVentaId) throw new Error("Seleccione punto de venta");
+      if (facturaQ.data?.tipoDocumento === "FACTURA_ELECTRONICA_EXPORTACION") {
+        throw new Error("El recibo de pago no puede referenciar una factura de exportación.");
+      }
       if (!claveReferencia.trim()) throw new Error("Indique la clave del documento de referencia");
       if (totales.total <= 0) throw new Error("Indique un monto válido");
       const body = {
         puntoVentaId,
         facturaReferenciaId: facturaReferenciaId || undefined,
         claveReferencia: claveReferencia.trim(),
-        codigoReferencia: "01",
+        codigoReferencia: "17",
         tipoDocReferencia,
         condicionVenta,
         medioPago,
@@ -184,6 +183,11 @@ export default function NuevoReciboPagoPage() {
           {facturaQ.data.comprobante?.claveNumerica ?? "sin clave"}
         </p>
       )}
+      {facturaQ.data?.tipoDocumento === "FACTURA_ELECTRONICA_EXPORTACION" && (
+        <p className="text-sm text-amber-800">
+          Una factura de exportación no se referencia desde el recibo de pago. El recibo admite factura, tiquete, contingencia, comprobante rechazado u otro recibo.
+        </p>
+      )}
 
       <Card>
         <CardHeader>
@@ -206,8 +210,11 @@ export default function NuevoReciboPagoPage() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Clave documento referencia (50 dígitos)</Label>
+            <Label>Clave documento referencia (50 caracteres)</Label>
             <Input value={claveReferencia} onChange={(e) => setClaveReferencia(e.target.value)} maxLength={50} />
+            <p className="text-xs text-muted-foreground">
+              El recibo usa el código de referencia 17 (pago a comprobante electrónico). Puede referenciar factura, tiquete, contingencia, un comprobante rechazado o otro recibo.
+            </p>
           </div>
           <div className="space-y-2">
             <Label>Condición de venta (REP)</Label>

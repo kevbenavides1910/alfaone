@@ -49,7 +49,9 @@ function cedulaFromEmisor(doc: XmlDocument): string | null {
   if (!emisor) return null;
   const ident = emisor.getElementsByTagName("Identificacion").item(0);
   const numero = ident?.getElementsByTagName("Numero").item(0)?.textContent?.trim();
-  return numero ? numero.replace(/\D/g, "") : null;
+  if (!numero) return null;
+  const compact = numero.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  return /[A-Z]/.test(compact) ? compact : compact.replace(/\D/g, "");
 }
 
 function nombreFromEmisor(doc: XmlDocument): string | null {
@@ -71,8 +73,8 @@ export function parseFacturaRecibidaXml(xml: string): FeFacturaRecibidaParsed | 
   if (!isFeComprobanteXml(xml)) return null;
 
   const doc = new DOMParser().parseFromString(xml, "text/xml");
-  const clave = textOf(doc, "Clave")?.replace(/\D/g, "") ?? "";
-  if (clave.length !== 50) return null;
+  const clave = normalizeFeClave(textOf(doc, "Clave") ?? "");
+  if (!isValidFeClave(clave)) return null;
 
   const cedulaEmisor = cedulaFromEmisor(doc);
   if (!cedulaEmisor) return null;
@@ -91,19 +93,19 @@ export function parseFacturaRecibidaXml(xml: string): FeFacturaRecibidaParsed | 
   };
 }
 
-/** Clave numérica FE Costa Rica: 506 + 47 dígitos. */
+/** Clave FE Costa Rica: 50 posiciones. Puede incluir letras si la cédula jurídica es alfanumérica. */
 export function isValidFeClave(clave: string | null | undefined): clave is string {
-  const digits = clave?.replace(/\D/g, "") ?? "";
-  return /^506\d{47}$/.test(digits);
+  const value = normalizeFeClave(clave ?? "");
+  return /^506[0-9A-Z]{47}$/.test(value);
 }
 
 export function normalizeFeClave(clave: string): string {
-  return clave.replace(/\D/g, "").slice(0, 50);
+  return clave.trim().toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 50);
 }
 
-/** Intenta extraer clave FE de texto PDF (50 dígitos, prefijo 506). */
+/** Intenta extraer clave FE de texto PDF (50 posiciones, prefijo 506). */
 export function extractClaveFromText(text: string): string | null {
-  const match = text.match(/506\d{47}/);
+  const match = text.toUpperCase().match(/506[0-9A-Z]{47}/);
   return match?.[0] ?? null;
 }
 

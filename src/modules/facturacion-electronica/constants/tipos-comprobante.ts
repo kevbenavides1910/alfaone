@@ -59,6 +59,26 @@ export const FE_PDF_PREFIX: Partial<Record<FeComprobanteTipo, string>> = {
   RECIBO_ELECTRONICO_PAGO: "REP",
 };
 
+/**
+ * TipoDocIR (nota 10). No reutiliza el código del consecutivo:
+ * exportación es 19 y recibo de pago es 20 desde noviembre 2026.
+ * La factura de compra no tiene código propio en la nota 10; se mantiene 08.
+ */
 export function feTipoDocReferenciaFromComprobante(tipo: FeComprobanteTipo | null | undefined): string {
-  return FE_TIPO_COMPROBANTE_CODIGO[tipo ?? "FACTURA_ELECTRONICA"] ?? "01";
+  switch (tipo) {
+    case "NOTA_DEBITO":
+      return "02";
+    case "NOTA_CREDITO":
+      return "03";
+    case "TIQUETE_ELECTRONICO":
+      return "04";
+    case "FACTURA_ELECTRONICA_COMPRA":
+      return "08";
+    case "FACTURA_ELECTRONICA_EXPORTACION":
+      return "19";
+    case "RECIBO_ELECTRONICO_PAGO":
+      return "20";
+    default:
+      return "01";
+  }
 }

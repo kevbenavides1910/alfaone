@@ -95,8 +95,8 @@ export default function MensajesReceptorPage() {
     mutationFn: async () => {
       const body = {
         puntoVentaId,
-        claveComprobante: claveComprobante.replace(/\D/g, ""),
-        cedulaEmisor: cedulaEmisor.replace(/\D/g, ""),
+        claveComprobante: claveComprobante.toUpperCase().replace(/[^0-9A-Z]/g, ""),
+        cedulaEmisor: cedulaEmisor.toUpperCase().replace(/[^0-9A-Z]/g, ""),
         tipoMensaje,
         detalleMensaje: detalleMensaje.trim() || undefined,
         montoTotal: montoTotal ? Number(montoTotal) : undefined,

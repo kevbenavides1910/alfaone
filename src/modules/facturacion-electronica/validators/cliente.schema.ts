@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isActividadEnCatalogo, toTribuCodigo } from "../utils/hacienda-actividad";
+import { normalizeIdentificacion, validateIdentificacion } from "../utils/fe-identificacion";
 
 const feClienteFieldsSchema = z.object({
   tipoIdentificacion: z.enum(["FISICA", "JURIDICA", "DIMEX", "NITE", "EXTRANJERO"]),
@@ -31,12 +32,29 @@ function refineActividadEconomica<T extends { actividadEconomica?: string }>(dat
   }
 }
 
-export const createFeClienteSchema = feClienteFieldsSchema.superRefine(refineActividadEconomica);
+export const createFeClienteSchema = feClienteFieldsSchema
+  .transform((data) => ({
+    ...data,
+    identificacion: normalizeIdentificacion(data.identificacion, data.tipoIdentificacion),
+  }))
+  .superRefine((data, ctx) => {
+    refineActividadEconomica(data, ctx);
+    const err = validateIdentificacion(data.tipoIdentificacion, data.identificacion);
+    if (err) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: err, path: ["identificacion"] });
+    }
+  });
 
 export type CreateFeClienteInput = z.infer<typeof createFeClienteSchema>;
 
 export const updateFeClienteSchema = feClienteFieldsSchema
   .partial()
+  .transform((data) => ({
+    ...data,
+    ...(data.identificacion != null
+      ? { identificacion: normalizeIdentificacion(data.identificacion, data.tipoIdentificacion) }
+      : {}),
+  }))
   .superRefine(refineActividadEconomica)
   .refine((data) => Object.keys(data).length > 0, "Debe indicar al menos un campo para actualizar");
 

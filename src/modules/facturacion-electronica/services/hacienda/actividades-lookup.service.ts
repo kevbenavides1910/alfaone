@@ -2,6 +2,7 @@ import actividadesCatalog from "../../data/actividades-ciiu4-cr.json";
 import { FeEmpresaRepository } from "../../repositories/fe-empresa.repository";
 import { prisma } from "@/modules/core/db/prisma";
 import { FeDomainError } from "../../errors/fe-errors";
+import { normalizeIdentificacion } from "../../utils/fe-identificacion";
 
 const HACIENDA_AE_URL = "https://api.hacienda.go.cr/fe/ae";
 const CACHE_TTL_MS = 60 * 60 * 1000;
@@ -26,7 +27,7 @@ const catalogo: FeActividadItem[] = (actividadesCatalog as Array<{ codigo: strin
 );
 
 async function fetchActividadesContribuyente(identificacion: string): Promise<FeActividadItem[]> {
-  const digits = identificacion.replace(/\D/g, "");
+  const digits = normalizeIdentificacion(identificacion);
   if (digits.length < 9 || digits.length > 12) return [];
 
   const cached = contribuyenteCache.get(digits);
@@ -122,7 +123,7 @@ export async function searchActividadesEconomicas(params: {
     merged.push(...(await fetchActividadesContribuyente(empresa.cedulaJuridica)));
   }
 
-  const idCliente = params.identificacion?.replace(/\D/g, "") ?? "";
+  const idCliente = params.identificacion ? normalizeIdentificacion(params.identificacion) : "";
   if (idCliente.length >= 9) {
     merged.push(...(await fetchActividadesContribuyente(idCliente)));
   }

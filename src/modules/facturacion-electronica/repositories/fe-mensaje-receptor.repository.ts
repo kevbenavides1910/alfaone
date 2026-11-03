@@ -2,6 +2,8 @@ import type { FeFacturaEstado, Prisma, PrismaClient } from "@prisma/client";
 import { FeNotFoundError } from "../errors/fe-errors";
 import { notDeleted } from "../utils/soft-delete";
 import type { CreateFeMensajeReceptorInput } from "../validators/mensaje-receptor.schema";
+import { normalizeIdentificacion } from "../utils/fe-identificacion";
+import { normalizeFeClave } from "../services/incoming/factura-recibida.parser";
 
 const include = {
   comprobante: true,
@@ -16,8 +18,8 @@ export class FeMensajeReceptorRepository {
       data: {
         empresaId,
         puntoVentaId: input.puntoVentaId,
-        claveComprobante: input.claveComprobante,
-        cedulaEmisor: input.cedulaEmisor.replace(/\D/g, ""),
+        claveComprobante: normalizeFeClave(input.claveComprobante),
+        cedulaEmisor: normalizeIdentificacion(input.cedulaEmisor),
         tipoMensaje: input.tipoMensaje,
         detalleMensaje: input.detalleMensaje,
         montoTotalImpuesto: input.montoTotalImpuesto,
@@ -55,7 +57,8 @@ export class FeMensajeReceptorRepository {
       where: { id },
       data: {
         ...data,
-        cedulaEmisor: data.cedulaEmisor?.replace(/\D/g, ""),
+        claveComprobante: data.claveComprobante != null ? normalizeFeClave(data.claveComprobante) : undefined,
+        cedulaEmisor: data.cedulaEmisor != null ? normalizeIdentificacion(data.cedulaEmisor) : undefined,
         updatedById: userId,
       },
       include,

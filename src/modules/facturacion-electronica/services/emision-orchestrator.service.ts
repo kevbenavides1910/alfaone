@@ -19,6 +19,7 @@ import { FeXmlService } from "./xml/xml.service";
 import { feLogger } from "../utils/logger";
 import { notDeleted } from "../utils/soft-delete";
 import { resolveAtvPasswordEncForToken } from "../utils/fe-atv-usuario";
+import { normalizeIdentificacion } from "../utils/fe-identificacion";
 import { FeComprobanteEntregaService } from "./comprobante-entrega.service";
 import { buildNotaReferenciaSnapshot } from "../utils/fe-nota-referencia";
 import { validateFeV44Factura, validateFeV44FacturaCompra, validateFeV44ReciboPago } from "../validators/fe-v44-validator";
@@ -534,7 +535,9 @@ export class FeEmisionOrchestratorService {
     const retryFromError = mensaje.estado === "ERROR";
     const comprobanteId = mensaje.comprobante.id;
     let comprobante = mensaje.comprobante;
-    const receptorTipo = mensaje.cedulaEmisor.replace(/\D/g, "").length === 10 ? "JURIDICA" : "FISICA";
+    const cedulaReceptor = normalizeIdentificacion(mensaje.cedulaEmisor);
+    const receptorTipo =
+      /[A-Z]/.test(cedulaReceptor) || cedulaReceptor.length === 10 ? "JURIDICA" : "FISICA";
 
     try {
       let xmlSinFirma: string;

@@ -516,7 +516,7 @@ export default function FeConfiguracionPage() {
             <Input
               value={empresaForm.cedulaJuridica}
               disabled={!canEdit}
-              placeholder="3101123456"
+              placeholder="3101123456 o 3101A00001"
               onChange={(e) => setEmpresaForm((f) => ({ ...f, cedulaJuridica: e.target.value }))}
             />
           </Field>

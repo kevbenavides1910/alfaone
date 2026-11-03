@@ -215,7 +215,7 @@ export class FeEmpresaConfigService {
       razonSocial: input.razonSocial || company.name,
       proveedorSistemas:
         input.proveedorSistemas?.trim() ||
-        input.cedulaJuridica.replace(/\D/g, ""),
+        input.cedulaJuridica,
     };
 
     const empresa = await this.empresaRepo.upsertByCompanyCode(companyCode, payload, userId);

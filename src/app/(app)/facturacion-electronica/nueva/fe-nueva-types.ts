@@ -110,19 +110,23 @@ export const emptyLine = (): LineaForm => ({
 
 export const ID_RANGES: Record<string, { min: number; max: number; label: string }> = {
   FISICA: { min: 9, max: 9, label: "Cédula física — 9 dígitos (ej. 001120580)" },
-  JURIDICA: { min: 10, max: 10, label: "Cédula jurídica — 10 dígitos (ej. 3101598499)" },
+  JURIDICA: { min: 10, max: 10, label: "Cédula jurídica — 10 caracteres, puede incluir letras (ej. 3101A00001)" },
   DIMEX: { min: 11, max: 12, label: "DIMEX — 11 o 12 dígitos" },
   NITE: { min: 10, max: 10, label: "NITE — 10 dígitos" },
   EXTRANJERO: { min: 9, max: 20, label: "Identificación extranjera — 9 a 20 dígitos" },
 };
 
 export function validateId(tipo: string, value: string): string | null {
-  const digits = (value || "").replace(/\D/g, "");
+  const id =
+    tipo === "JURIDICA"
+      ? (value || "").toUpperCase().replace(/[^0-9A-Z]/g, "")
+      : (value || "").replace(/\D/g, "");
   const range = ID_RANGES[tipo];
   if (!range) return null;
-  if (!digits) return "Identificación requerida";
-  if (digits.length < range.min || digits.length > range.max) {
-    return `Debe tener ${range.min === range.max ? range.min : `${range.min}-${range.max}`} dígitos (actual: ${digits.length})`;
+  if (!id) return "Identificación requerida";
+  const unidad = tipo === "JURIDICA" ? "caracteres" : "dígitos";
+  if (id.length < range.min || id.length > range.max) {
+    return `Debe tener ${range.min === range.max ? range.min : `${range.min}-${range.max}`} ${unidad} (actual: ${id.length})`;
   }
   return null;
 }

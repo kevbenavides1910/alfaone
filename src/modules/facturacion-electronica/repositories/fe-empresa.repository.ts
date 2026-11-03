@@ -50,7 +50,7 @@ export class FeEmpresaRepository {
         cedulaJuridica: input.cedulaJuridica,
         tipoIdentificacion: input.tipoIdentificacion ?? "JURIDICA",
         actividadEconomica: input.actividadEconomica ?? undefined,
-        proveedorSistemas: input.proveedorSistemas ?? input.cedulaJuridica.replace(/\D/g, ""),
+        proveedorSistemas: input.proveedorSistemas ?? input.cedulaJuridica,
         exigirUbicacionReceptor: input.exigirUbicacionReceptor ?? true,
         ambiente: input.ambiente,
         atvUsuario: input.atvUsuario ?? input.cedulaJuridica,

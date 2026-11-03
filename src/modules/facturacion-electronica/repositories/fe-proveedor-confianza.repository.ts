@@ -1,12 +1,13 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { notDeleted } from "../utils/soft-delete";
 import type { CreateFeProveedorConfianzaInput } from "../validators/proveedor-confianza.schema";
+import { normalizeIdentificacion } from "../utils/fe-identificacion";
 
 export class FeProveedorConfianzaRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   create(empresaId: string, input: CreateFeProveedorConfianzaInput, userId?: string) {
-    const cedula = input.cedula.replace(/\D/g, "");
+    const cedula = normalizeIdentificacion(input.cedula);
     return this.prisma.feProveedorConfianza.create({
       data: {
         empresaId,
@@ -27,7 +28,7 @@ export class FeProveedorConfianzaRepository {
   }
 
   findActiveByCedula(empresaId: string, cedula: string) {
-    const normalized = cedula.replace(/\D/g, "");
+    const normalized = normalizeIdentificacion(cedula);
     return this.prisma.feProveedorConfianza.findFirst({
       where: {
         empresaId,

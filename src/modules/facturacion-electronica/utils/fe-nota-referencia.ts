@@ -8,7 +8,7 @@ import type {
   FeNotaReferenciaTipo,
   FeReciboPago,
 } from "@prisma/client";
-import { FE_TIPO_COMPROBANTE_CODIGO, feTipoDocReferenciaFromComprobante } from "../constants/tipos-comprobante";
+import { feTipoDocReferenciaFromComprobante } from "../constants/tipos-comprobante";
 import { FeDomainError } from "../errors/fe-errors";
 
 export type FeNotaReceptorXml = {
@@ -116,7 +116,8 @@ export function buildNotaReferenciaSnapshot(nota: NotaWithRefs): FeNotaReferenci
             : ("EXTRANJERO" as const);
     return {
       referenciaTipo: tipo,
-      tipoDocReferencia: nota.tipoDocReferencia || FE_TIPO_COMPROBANTE_CODIGO.FACTURA_ELECTRONICA_COMPRA,
+      tipoDocReferencia:
+        nota.tipoDocReferencia || feTipoDocReferenciaFromComprobante("FACTURA_ELECTRONICA_COMPRA"),
       claveReferencia: nota.claveReferencia,
       fechaReferencia: c.comprobante?.fechaEmision ?? c.fecha,
       puntoVentaId: c.puntoVentaId,
@@ -139,7 +140,8 @@ export function buildNotaReferenciaSnapshot(nota: NotaWithRefs): FeNotaReferenci
     const cliente = r.facturaReferencia?.cliente ?? null;
     return {
       referenciaTipo: tipo,
-      tipoDocReferencia: nota.tipoDocReferencia || FE_TIPO_COMPROBANTE_CODIGO.RECIBO_ELECTRONICO_PAGO,
+      tipoDocReferencia:
+        nota.tipoDocReferencia || feTipoDocReferenciaFromComprobante("RECIBO_ELECTRONICO_PAGO"),
       claveReferencia: nota.claveReferencia,
       fechaReferencia: r.comprobante?.fechaEmision ?? r.fechaReferencia ?? new Date(),
       puntoVentaId: r.puntoVentaId,
@@ -172,6 +174,7 @@ export function buildNotaReferenciaSnapshot(nota: NotaWithRefs): FeNotaReferenci
 export type FeNotaReferenciaResuelta = {
   claveReferencia: string;
   tipoDocReferencia: string;
+  totalReferencia: number;
 };
 
 export function notaEmpresaWhere(empresaId: string) {

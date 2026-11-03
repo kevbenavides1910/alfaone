@@ -11,6 +11,8 @@ import {
   isComprobanteRecibidoValido,
   motivoRecibidoInvalido,
 } from "../utils/fe-recibido-validacion";
+import { normalizeIdentificacion } from "../utils/fe-identificacion";
+import { isValidFeClave, normalizeFeClave } from "./incoming/factura-recibida.parser";
 
 const ESTADO_FINAL = new Set<FeComprobanteRecibidoEstado>([
   "ACEPTADO",
@@ -111,11 +113,11 @@ export class FeComprobanteRecibidoService {
       throw new FeDomainError("Este comprobante ya fue procesado", "FE_RECIBIDO_YA_PROCESADO", 400);
     }
 
-    const clave = (input.clave ?? recibido.clave)?.replace(/\D/g, "") ?? "";
-    const cedulaEmisor = (input.cedulaEmisor ?? recibido.cedulaEmisor)?.replace(/\D/g, "") ?? "";
+    const clave = normalizeFeClave(input.clave ?? recibido.clave ?? "");
+    const cedulaEmisor = normalizeIdentificacion(input.cedulaEmisor ?? recibido.cedulaEmisor ?? "");
 
-    if (clave.length !== 50) {
-      throw new FeDomainError("Clave de 50 dígitos requerida", "FE_CLAVE_INVALIDA", 400);
+    if (!isValidFeClave(clave)) {
+      throw new FeDomainError("Clave de 50 caracteres requerida", "FE_CLAVE_INVALIDA", 400);
     }
     if (cedulaEmisor.length < 9) {
       throw new FeDomainError("Cédula del emisor requerida", "FE_CEDULA_EMISOR_REQUERIDA", 400);

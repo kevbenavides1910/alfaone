@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { validateIdentificacion } from "../utils/fe-identificacion";
+import { normalizeIdentificacion, validateIdentificacion } from "../utils/fe-identificacion";
 import { normalizeAtvUsuarioInput } from "../utils/fe-atv-usuario";
 
 export const upsertFeEmpresaSchema = z
@@ -7,17 +7,9 @@ export const upsertFeEmpresaSchema = z
     nombreComercial: z.string().min(1).max(200),
     razonSocial: z.string().min(1).max(200),
     tipoIdentificacion: z.enum(["FISICA", "JURIDICA", "DIMEX", "NITE", "EXTRANJERO"]).default("JURIDICA"),
-    cedulaJuridica: z
-      .string()
-      .min(1)
-      .transform((v) => v.replace(/\D/g, "")),
+    cedulaJuridica: z.string().min(1).max(20),
     actividadEconomica: z.string().max(20).optional().nullable(),
-    proveedorSistemas: z
-      .string()
-      .max(20)
-      .optional()
-      .nullable()
-      .transform((v) => (v?.trim() ? v.replace(/\D/g, "") : null)),
+    proveedorSistemas: z.string().max(20).optional().nullable(),
     exigirUbicacionReceptor: z.boolean().default(true),
     ambiente: z.enum(["STAGING", "PRODUCCION"]).default("STAGING"),
     correoRemitente: z.string().email().optional().nullable(),
@@ -46,6 +38,13 @@ export const upsertFeEmpresaSchema = z
     /** Solo se actualiza si se envía (no vacío). */
     atvPasswordStg: z.string().min(1).max(200).optional(),
   })
+  .transform((data) => ({
+    ...data,
+    cedulaJuridica: normalizeIdentificacion(data.cedulaJuridica, data.tipoIdentificacion),
+    proveedorSistemas: data.proveedorSistemas?.trim()
+      ? normalizeIdentificacion(data.proveedorSistemas, "JURIDICA")
+      : null,
+  }))
   .superRefine((data, ctx) => {
     const err = validateIdentificacion(data.tipoIdentificacion, data.cedulaJuridica);
     if (err) {

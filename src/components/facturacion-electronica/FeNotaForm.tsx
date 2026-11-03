@@ -18,6 +18,10 @@ import {
   withFeCompanyBody,
 } from "@/components/facturacion-electronica/fe-company-context";
 import { lineTotals, type LineaForm } from "@/modules/facturacion-electronica/business/line-totals";
+import {
+  codigosReferenciaParaNota,
+  mensajeEfectoCodigoReferencia,
+} from "@/modules/facturacion-electronica/constants/hacienda-catalogos";
 
 type ReferenciaTipo = "FACTURA_VENTA" | "FACTURA_COMPRA" | "RECIBO_PAGO";
 
@@ -94,6 +98,8 @@ export function FeNotaForm({
 
   const [razon, setRazon] = useState("");
   const [codigoReferencia, setCodigoReferencia] = useState("01");
+  const codigosReferencia = codigosReferenciaParaNota(tipo);
+  const avisoCodigo = mensajeEfectoCodigoReferencia(codigoReferencia);
   const [enviarAlGuardar, setEnviarAlGuardar] = useState(true);
   const [lineas, setLineas] = useState<LineaForm[]>([]);
 
@@ -222,12 +228,20 @@ export function FeNotaForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="01">01 — Anula documento</SelectItem>
-                <SelectItem value="02">02 — Corrige texto</SelectItem>
-                <SelectItem value="04">04 — Referencia otro documento</SelectItem>
-                <SelectItem value="99">99 — Otros</SelectItem>
+                {codigosReferencia.map((row) => (
+                  <SelectItem key={row.codigo} value={row.codigo}>
+                    {row.codigo} — {row.descripcion}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              Catálogo de la nota 9, anexo 4.4. Los códigos 13 y 14 (error material) rigen desde noviembre 2026.
+              El 15 y el 16 van en el comprobante que sustituye; el 17 es solo del recibo de pago.
+            </p>
+            {avisoCodigo ? (
+              <p className="text-sm text-amber-800 dark:text-amber-200">{avisoCodigo}</p>
+            ) : null}
           </div>
           <div className="flex items-center gap-2 sm:col-span-2">
             <input

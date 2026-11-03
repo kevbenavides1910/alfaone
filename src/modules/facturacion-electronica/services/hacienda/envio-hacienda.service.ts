@@ -1,5 +1,7 @@
 import type { FeAmbiente } from "@prisma/client";
 import { FE_IDENTIFICACION_CODIGO } from "../../constants/hacienda-catalogos";
+import { normalizeIdentificacion } from "../../utils/fe-identificacion";
+import { normalizeFeClave } from "../incoming/factura-recibida.parser";
 import { haciendaEndpoints } from "../../constants/hacienda-endpoints";
 import { FeHaciendaError } from "../../errors/fe-errors";
 import { formatFeFechaApi } from "../../utils/fe-fecha";
@@ -49,11 +51,11 @@ export class FeEnvioHaciendaService {
   async enviarComprobante(params: FeEnvioHaciendaParams): Promise<FeEnvioHaciendaResult> {
     const endpoints = haciendaEndpoints(params.ambiente);
     const payload: Record<string, unknown> = {
-      clave: params.clave,
+      clave: normalizeFeClave(params.clave),
       fecha: formatFeFechaApi(params.fechaEmision),
       emisor: {
         tipoIdentificacion: FE_IDENTIFICACION_CODIGO[params.emisorTipo],
-        numeroIdentificacion: params.emisorIdentificacion.replace(/\D/g, ""),
+        numeroIdentificacion: normalizeIdentificacion(params.emisorIdentificacion, params.emisorTipo),
       },
       comprobanteXml: Buffer.from(params.xmlFirmado, "utf8").toString("base64"),
     };
@@ -61,7 +63,7 @@ export class FeEnvioHaciendaService {
     if (params.receptorIdentificacion && params.receptorTipo) {
       payload.receptor = {
         tipoIdentificacion: FE_IDENTIFICACION_CODIGO[params.receptorTipo],
-        numeroIdentificacion: params.receptorIdentificacion.replace(/\D/g, ""),
+        numeroIdentificacion: normalizeIdentificacion(params.receptorIdentificacion, params.receptorTipo),
       };
     }
 

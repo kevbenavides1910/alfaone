@@ -7,6 +7,7 @@ import {
 } from "../../constants/hacienda-catalogos";
 import type { FeCondicionVenta, FeMoneda } from "@prisma/client";
 import { actividadForXml } from "../../utils/hacienda-actividad";
+import { normalizeIdentificacion } from "../../utils/fe-identificacion";
 import {
   fmtDecimal,
   medioPagoCodigo,
@@ -49,7 +50,9 @@ export function appendEncabezadoActividad(params: {
   cliente?: FeCliente | null;
   proveedorSistemas: string;
 }) {
-  params.root.ele("ProveedorSistemas").txt(params.proveedorSistemas.replace(/\D/g, "").slice(0, 20));
+  params.root
+    .ele("ProveedorSistemas")
+    .txt(normalizeIdentificacion(params.proveedorSistemas, "JURIDICA").slice(0, 20));
   params.root.ele("CodigoActividadEmisor").txt(actividadForXml(params.empresa.actividadEconomica));
 
   const actReceptor = actividadForXml(params.cliente?.actividadEconomica);
@@ -76,7 +79,7 @@ export function appendEmisorReceptor(params: {
     .txt(tipoEmisor)
     .up()
     .ele("Numero")
-    .txt(empresa.cedulaJuridica.replace(/\D/g, "").slice(0, 20));
+    .txt(normalizeIdentificacion(empresa.cedulaJuridica, empresa.tipoIdentificacion ?? "JURIDICA").slice(0, 20));
   if (empresa.nombreComercial) {
     emisor.ele("NombreComercial").txt(empresa.nombreComercial.slice(0, 80));
   }
@@ -108,7 +111,7 @@ export function appendEmisorReceptor(params: {
     .txt(FE_IDENTIFICACION_CODIGO[cliente.tipoIdentificacion])
     .up()
     .ele("Numero")
-    .txt(cliente.identificacion.replace(/\D/g, ""));
+    .txt(normalizeIdentificacion(cliente.identificacion, cliente.tipoIdentificacion));
   appendUbicacion(receptor, {
     provincia: cliente.direccionProvincia,
     canton: cliente.direccionCanton,
@@ -139,7 +142,7 @@ export function appendEmisorReceptorCompra(params: {
     .txt(FE_IDENTIFICACION_CODIGO[proveedor.tipoIdentificacion])
     .up()
     .ele("Numero")
-    .txt(proveedor.identificacion.replace(/\D/g, "").slice(0, 20));
+    .txt(normalizeIdentificacion(proveedor.identificacion, proveedor.tipoIdentificacion).slice(0, 20));
   if (proveedor.otrasSenasExtranjero?.trim()) {
     emisor.ele("OtrasSenasExtranjero").txt(proveedor.otrasSenasExtranjero.trim().slice(0, 300));
   }
@@ -153,7 +156,7 @@ export function appendEmisorReceptorCompra(params: {
     .txt(tipoReceptor)
     .up()
     .ele("Numero")
-    .txt(empresa.cedulaJuridica.replace(/\D/g, "").slice(0, 20));
+    .txt(normalizeIdentificacion(empresa.cedulaJuridica, empresa.tipoIdentificacion ?? "JURIDICA").slice(0, 20));
   appendUbicacion(receptor, {
     provincia: empresa.direccionProvincia,
     canton: empresa.direccionCanton,
@@ -412,7 +415,7 @@ export function appendOtrosCargos(root: XmlNode, cargos: FeOtroCargoLinea[]) {
     const node = root.ele("OtrosCargos");
     node.ele("TipoDocumento").txt(cargo.tipoDocumento.slice(0, 2));
     if (cargo.numeroIdentidadTercero?.trim()) {
-      node.ele("NumeroIdentidadTercero").txt(cargo.numeroIdentidadTercero.replace(/\D/g, "").slice(0, 20));
+      node.ele("NumeroIdentidadTercero").txt(normalizeIdentificacion(cargo.numeroIdentidadTercero).slice(0, 20));
     }
     if (cargo.nombreTercero?.trim()) {
       node.ele("NombreTercero").txt(cargo.nombreTercero.trim().slice(0, 100));
@@ -441,12 +444,11 @@ export function appendCondicionVenta(params: {
 }
 
 export function resolveProveedorSistemas(empresa: FeEmpresa): string {
-  const explicit = empresa.proveedorSistemas?.trim().replace(/\D/g, "") ?? "";
+  const explicit = normalizeIdentificacion(empresa.proveedorSistemas ?? "", "JURIDICA");
   if (explicit) {
     return explicit.slice(0, 20);
   }
-  // Fallback: misma identificación que el nodo Emisor/Identificacion/Numero.
-  return empresa.cedulaJuridica.replace(/\D/g, "").slice(0, 20);
+  return normalizeIdentificacion(empresa.cedulaJuridica, empresa.tipoIdentificacion ?? "JURIDICA").slice(0, 20);
 }
 
 export function mapDetalleToLineaInput(line: FeFacturaDetalle) {

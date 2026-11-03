@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FE_CODIGO_REFERENCIA_NOTA } from "../constants/hacienda-catalogos";
 
 const detalleLineaSchema = z.object({
   codigo: z.string().optional(),
@@ -21,7 +22,7 @@ export const createFeNotaSchema = z
     facturaCompraReferenciaId: z.string().uuid().optional(),
     reciboPagoReferenciaId: z.string().uuid().optional(),
     razon: z.string().min(1),
-    codigoReferencia: z.enum(["01", "02", "04", "05", "99"]).default("01"),
+    codigoReferencia: z.enum(FE_CODIGO_REFERENCIA_NOTA).default("01"),
     subtotal: z.coerce.number().nonnegative(),
     totalDescuentos: z.coerce.number().nonnegative().default(0),
     totalImpuestos: z.coerce.number().nonnegative().default(0),

@@ -1,5 +1,7 @@
 import { create } from "xmlbuilder2";
 import { formatFeFechaEmisionXml } from "../../../utils/fe-fecha";
+import { normalizeIdentificacion } from "../../../utils/fe-identificacion";
+import { normalizeFeClave } from "../../incoming/factura-recibida.parser";
 
 const NS = "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/mensajeReceptor";
 
@@ -20,8 +22,8 @@ function dec(value: number | null | undefined, digits = 5) {
 export function buildMensajeReceptorXml(input: FeMensajeReceptorXmlInput): string {
   const root = create({ version: "1.0", encoding: "UTF-8" }).ele("MensajeReceptor", { xmlns: NS });
 
-  root.ele("Clave").txt(input.claveComprobanteRecibido);
-  root.ele("NumeroCedulaEmisor").txt(input.cedulaEmisor.replace(/\D/g, ""));
+  root.ele("Clave").txt(normalizeFeClave(input.claveComprobanteRecibido));
+  root.ele("NumeroCedulaEmisor").txt(normalizeIdentificacion(input.cedulaEmisor));
   root.ele("FechaEmisionMensaje").txt(formatFeFechaEmisionXml(input.fechaEmisionMensaje));
   root.ele("Mensaje").txt(input.tipoMensaje);
   if (input.detalleMensaje?.trim()) {

@@ -72,7 +72,7 @@ export function FeNuevoClienteSection({
                   <FieldHelp text={ID_RANGES[nuevoCliente.tipoIdentificacion]?.label ?? ""} />
                 </div>
                 <div className="space-y-1">
-                  <LabelWithHelp className="text-xs" required help="Número de cédula o identificación sin guiones. Al completar la longitud correcta se consulta Hacienda para autocompletar el nombre.">
+                  <LabelWithHelp className="text-xs" required help="Identificación sin guiones. La cédula jurídica puede incluir letras. Al completar la longitud correcta se consulta Hacienda para autocompletar el nombre.">
                     {nuevoCliente.tipoIdentificacion === "JURIDICA"
                       ? "Cédula jurídica"
                       : nuevoCliente.tipoIdentificacion === "FISICA"
@@ -85,9 +85,13 @@ export function FeNuevoClienteSection({
                     onChange={(e) => {
                       setClienteLookupHint(null);
                       setHaciendaClienteInfo(null);
-                      setNuevoCliente((c) => ({ ...c, identificacion: e.target.value.replace(/\D/g, "") }));
+                      const next =
+                        nuevoCliente.tipoIdentificacion === "JURIDICA"
+                          ? e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, "")
+                          : e.target.value.replace(/\D/g, "");
+                      setNuevoCliente((c) => ({ ...c, identificacion: next }));
                     }}
-                    placeholder={nuevoCliente.tipoIdentificacion === "FISICA" ? "001120580" : nuevoCliente.tipoIdentificacion === "JURIDICA" ? "3101598499" : ""}
+                    placeholder={nuevoCliente.tipoIdentificacion === "FISICA" ? "001120580" : nuevoCliente.tipoIdentificacion === "JURIDICA" ? "3101598499 o 3101A00001" : ""}
                   />
                   <FieldHelp
                     error={validateId(nuevoCliente.tipoIdentificacion, nuevoCliente.identificacion)}
@@ -96,7 +100,11 @@ export function FeNuevoClienteSection({
                       clienteLookupLoading
                         ? "Consultando Hacienda…"
                         : clienteLookupHint ??
-                          `${nuevoCliente.identificacion.replace(/\D/g, "").length} dígitos`
+                          `${
+                            nuevoCliente.tipoIdentificacion === "JURIDICA"
+                              ? nuevoCliente.identificacion.replace(/[^0-9A-Z]/gi, "").length
+                              : nuevoCliente.identificacion.replace(/\D/g, "").length
+                          } ${nuevoCliente.tipoIdentificacion === "JURIDICA" ? "caracteres" : "dígitos"}`
                     }
                   />
                 </div>

@@ -10,6 +10,7 @@ import type {
 } from "@prisma/client";
 import { FeDomainError } from "../errors/fe-errors";
 import { isActividadEnCatalogo, toTribuCodigo } from "../utils/hacienda-actividad";
+import { FE_CODIGO_REFERENCIA_REP, FE_TIPO_DOC_IR_REP } from "../constants/hacienda-catalogos";
 import { validateIdentificacion } from "../utils/fe-identificacion";
 import { calcularResumen, lineaTieneExoneracion, resolveMediosPago, resolveOtrosCargos } from "../utils/fe-resumen";
 import { mapDetalleToLineaInput, resolveProveedorSistemas } from "../services/xml/fe-xml-shared";
@@ -117,6 +118,11 @@ export function validateFeV44Factura(params: {
   const esExportacion = tipo === "FACTURA_ELECTRONICA_EXPORTACION";
 
   assertEmisorBasico(empresa, errors);
+
+  if (!esTiquete && cliente) {
+    const idErr = validateIdentificacion(cliente.tipoIdentificacion, cliente.identificacion);
+    if (idErr) errors.push(`Receptor: ${idErr}`);
+  }
 
   if (cliente?.actividadEconomica?.trim()) {
     const tribu = toTribuCodigo(cliente.actividadEconomica);
@@ -278,14 +284,17 @@ export function validateFeV44ReciboPago(params: {
   const errors: string[] = [];
   assertEmisorBasico(empresa, errors);
 
-  if (!recibo.claveReferencia?.trim()) {
-    errors.push("Clave del comprobante referenciado requerida.");
+  if (!recibo.claveReferencia?.trim() || recibo.claveReferencia.trim().length !== 50) {
+    errors.push("Clave del comprobante referenciado requerida (50 caracteres).");
   }
   if (!REP_CONDICIONES.has(recibo.condicionVenta)) {
     errors.push("Condición de venta inválida para recibo electrónico de pago.");
   }
-  if (!recibo.tipoDocReferencia?.trim() || !/^\d{2}$/.test(recibo.tipoDocReferencia)) {
-    errors.push("Tipo de documento referenciado inválido.");
+  if (!(FE_TIPO_DOC_IR_REP as readonly string[]).includes(recibo.tipoDocReferencia)) {
+    errors.push("Tipo de documento no permitido en el recibo de pago. Use 01, 04, 07, 08, 10 o 20.");
+  }
+  if (!(FE_CODIGO_REFERENCIA_REP as readonly string[]).includes(recibo.codigoReferencia)) {
+    errors.push("El recibo de pago debe usar el código de referencia 17 (pago a comprobante electrónico).");
   }
 
   detalles.forEach((line, i) => {

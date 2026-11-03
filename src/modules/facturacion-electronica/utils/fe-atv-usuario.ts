@@ -1,14 +1,15 @@
+import { normalizeIdentificacion } from "./fe-identificacion";
+
 /**
  * Usuario ATV / Tribu TicoFactura.
  * - Staging/prod Tribu: cpf-…@stag.comprobanteselectronicos.go.cr (usar tal cual)
- * - Portal ATV clásico: cédula solo dígitos
+ * - Portal ATV: cédula. La jurídica puede incluir letras.
  */
 export function normalizeAtvUsuarioInput(raw?: string | null): string | null {
   const v = raw?.trim();
   if (!v) return null;
   if (v.includes("@")) return v;
-  const digits = v.replace(/\D/g, "");
-  return digits || null;
+  return normalizeIdentificacion(v, "JURIDICA") || null;
 }
 
 export function resolveAtvUsernameForToken(empresa: {
@@ -21,9 +22,9 @@ export function resolveAtvUsernameForToken(empresa: {
   const raw = isStaging ? (empresa.atvUsuarioStg?.trim() || empresa.atvUsuario?.trim()) : empresa.atvUsuario?.trim();
   if (raw) {
     if (raw.includes("@")) return raw;
-    return raw.replace(/\D/g, "");
+    return normalizeIdentificacion(raw, "JURIDICA");
   }
-  return empresa.cedulaJuridica.replace(/\D/g, "");
+  return normalizeIdentificacion(empresa.cedulaJuridica, "JURIDICA");
 }
 
 export function resolveAtvPasswordEncForToken(empresa: {

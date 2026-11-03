@@ -1,5 +1,6 @@
 /** Tipos de comprobante que reciben consecutivo al crear un punto de venta. */
 import { feCalendarParts } from "./fe-fecha";
+import { normalizeIdentificacion } from "./fe-identificacion";
 
 export const FE_CONSECUTIVO_TIPOS = [
   "FACTURA_ELECTRONICA",
@@ -42,10 +43,11 @@ export function formatFeConsecutivo(params: {
 }
 
 /**
- * Clave numérica (50 dígitos) — estructura Hacienda v4.4.
- * país(3) + día(2) + mes(2) + año(2) + cédula(12) + consecutivo(20) + código seguridad(8) + situación(1)
+ * Clave de 50 posiciones — estructura Hacienda v4.4.
+ * país(3) + día(2) + mes(2) + año(2) + cédula(12) + consecutivo(20) + situación(1) + código seguridad(8)
  *
- * El último dígito es la situación: 1=normal, 2=contingencia, 3=sin internet.
+ * La cédula jurídica puede traer letras; esas letras quedan en la clave.
+ * La situación va antes del código de seguridad: 1=normal, 2=contingencia, 3=sin internet.
  */
 export function generateFeClaveNumerica(params: {
   fecha: Date;
@@ -53,12 +55,15 @@ export function generateFeClaveNumerica(params: {
   consecutivo: string;
   situacion?: FeClaveSituacion;
   codigoSeguridad?: string;
+  tipoIdentificacion?: string | null;
 }) {
   const { year, month, day } = feCalendarParts(params.fecha);
   const dd = String(day).padStart(2, "0");
   const mm = String(month).padStart(2, "0");
   const yy = String(year).slice(-2);
-  const cedula = params.cedulaJuridica.replace(/\D/g, "").padStart(12, "0").slice(-12);
+  const cedula = normalizeIdentificacion(params.cedulaJuridica, params.tipoIdentificacion ?? "JURIDICA")
+    .padStart(12, "0")
+    .slice(-12);
   const consecutivo = params.consecutivo.padStart(20, "0").slice(-20);
   const seguridad = (params.codigoSeguridad ?? randomSecurityCode()).padStart(8, "0").slice(-8);
   const situacion = params.situacion ?? "1";

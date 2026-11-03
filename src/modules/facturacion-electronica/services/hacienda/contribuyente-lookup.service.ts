@@ -1,4 +1,5 @@
 import { FE_IDENTIFICACION_CODIGO } from "../../constants/hacienda-catalogos";
+import { normalizeIdentificacion } from "../../utils/fe-identificacion";
 import { FeDomainError } from "../../errors/fe-errors";
 import { provinciaFromAdministracionTributaria } from "../../utils/fe-contribuyente-cliente-map";
 
@@ -46,6 +47,7 @@ const TIPO_FROM_HACIENDA: Record<string, FeContribuyenteLookup["tipoIdentificaci
 };
 
 function inferTipoFromDigits(digits: string): FeContribuyenteLookup["tipoIdentificacion"] {
+  if (/[A-Z]/.test(digits)) return "JURIDICA";
   if (digits.length === 9) return "FISICA";
   if (digits.length === 10) return "JURIDICA";
   if (digits.length >= 11) return "DIMEX";
@@ -59,7 +61,7 @@ function pickActividad(actividades: HaciendaAeResponse["actividades"]): string |
 }
 
 export async function lookupContribuyenteHacienda(identificacion: string): Promise<FeContribuyenteLookup | null> {
-  const digits = identificacion.replace(/\D/g, "");
+  const digits = normalizeIdentificacion(identificacion);
   if (digits.length < 9 || digits.length > 12) {
     throw new FeDomainError("Identificación inválida para consulta", "FE_CONTRIBUYENTE_ID_INVALIDA", 400);
   }
