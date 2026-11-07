@@ -40,7 +40,10 @@ export const calendarioCreateSchema = eventBase.refine(
 );
 export type CalendarioCreateInput = z.infer<typeof calendarioCreateSchema>;
 
-export const calendarioUpdateSchema = eventBase.partial();
+export const calendarioUpdateSchema = eventBase.partial().extend({
+  /** Copia los administradores a las fechas pendientes de la misma serie, desde esta fecha. */
+  applyAdminsToSeries: z.boolean().optional(),
+});
 export type CalendarioUpdateInput = z.infer<typeof calendarioUpdateSchema>;
 
 export const calendarioCompletionSchema = z.object({

@@ -76,6 +76,7 @@ export function CalendarioEventoFormDialog({
   const [status, setStatus] = useState<CalendarioEventStatus>("SCHEDULED");
   const [description, setDescription] = useState("");
   const [adminIds, setAdminIds] = useState<string[]>([]);
+  const [applySeries, setApplySeries] = useState(false);
   const [zoneId, setZoneId] = useState(defaultZoneId ?? "");
   const [search, setSearch] = useState("");
   const [onlySelected, setOnlySelected] = useState(false);
@@ -100,6 +101,7 @@ export function CalendarioEventoFormDialog({
     setStatus(ev.status);
     setDescription(ev.description ?? "");
     setAdminIds(ev.admins.map((a) => a.id));
+    setApplySeries(false);
     setZoneId(ev.zone?.id ?? "");
     for (const c of ev.contracts) known.current.set(c.id, c);
     setSelected(new Set(ev.contracts.map((c) => c.id)));
@@ -120,7 +122,8 @@ export function CalendarioEventoFormDialog({
       calendarioFetch<CalendarioOpciones>(
         `${CALENDARIO_API}/opciones${zoneId ? `?zoneId=${encodeURIComponent(zoneId)}` : ""}`,
       ),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const zoneContracts = useMemo(() => contractsQuery.data?.contracts ?? [], [contractsQuery.data]);
 
@@ -132,14 +135,12 @@ export function CalendarioEventoFormDialog({
     const base = onlySelected
       ? [...selected].map((id) => known.current.get(id)).filter((c): c is CalendarioContractOption => !!c)
       : zoneContracts;
-    const q = search.trim().toLowerCase();
-    if (!q) return base;
-    return base.filter(
-      (c) =>
-        c.client.toLowerCase().includes(q) ||
-        c.licitacionNo.toLowerCase().includes(q) ||
-        c.company.toLowerCase().includes(q),
-    );
+    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return base;
+    return base.filter((c) => {
+      const hay = `${c.client} ${c.licitacionNo} ${c.company} ${c.zones.map((z) => z.name).join(" ")}`.toLowerCase();
+      return tokens.every((token) => hay.includes(token));
+    });
   }, [zoneContracts, onlySelected, selected, search]);
 
   const allZoneSelected =
@@ -182,6 +183,7 @@ export function CalendarioEventoFormDialog({
         allContracts,
         contractIds: ids,
         adminUserIds: adminIds,
+        applyAdminsToSeries: isEdit && applySeries,
       };
       return isEdit
         ? calendarioFetch<CalendarioEventDetail>(`${CALENDARIO_API}/${eventId}`, {
@@ -195,9 +197,12 @@ export function CalendarioEventoFormDialog({
     },
     onSuccess: (ev) => {
       const series = ev.seriesCreated ?? 1;
+      const adminsOn = ev.seriesAdminsUpdated ?? 0;
       toast.success(
         isEdit
-          ? "Evento actualizado"
+          ? adminsOn > 1
+            ? `Evento actualizado. Administradores copiados a ${adminsOn} fechas`
+            : "Evento actualizado"
           : series > 1
             ? `Se programaron ${series} fechas (${CALENDARIO_RECURRENCE_LABELS[ev.recurrence].toLowerCase()})`
             : `Evento creado para ${ev.contractsCount} contratos`,
@@ -320,6 +325,20 @@ export function CalendarioEventoFormDialog({
             <p className="text-xs text-gray-500">
               Los asignados pueden marcar la actividad como realizada y subir evidencia aunque solo tengan permiso de ver.
             </p>
+            {isEdit && recurrence !== "NONE" ? (
+              <label className="flex items-start gap-2 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={applySeries}
+                  onChange={(e) => setApplySeries(e.target.checked)}
+                />
+                <span>
+                  Copiar estos administradores a las fechas pendientes de la serie (
+                  {CALENDARIO_RECURRENCE_LABELS[recurrence].toLowerCase()}).
+                </span>
+              </label>
+            ) : null}
           </div>
           <div className="space-y-1 sm:col-span-2">
             <Label htmlFor="cal-desc">Descripción / instrucciones</Label>
@@ -398,7 +417,7 @@ export function CalendarioEventoFormDialog({
             {contractsQuery.isLoading ? (
               <p className="p-4 text-center text-sm text-gray-500">Cargando contratos…</p>
             ) : visible.length === 0 ? (
-              <p className="p-4 text-center text-sm text-gray-500">No hay contratos vigentes con este filtro.</p>
+              <p className="p-4 text-center text-sm text-gray-500">No hay contratos con este filtro.</p>
             ) : (
               <ul className="divide-y text-sm">
                 {visible.map((c) => (
@@ -412,6 +431,19 @@ export function CalendarioEventoFormDialog({
                       />
                       <span className="min-w-0 flex-1">
                         <span className="font-medium">{c.client}</span>
+                        {c.status === "FINISHED" ? (
+                          <span className="ml-2 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                            Finalizado
+                          </span>
+                        ) : c.status === "PROLONGATION" ? (
+                          <span className="ml-2 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-800">
+                            Prórroga
+                          </span>
+                        ) : c.status === "SUSPENDED" ? (
+                          <span className="ml-2 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                            Suspendido
+                          </span>
+                        ) : null}
                         <span className="ml-2 font-mono text-xs text-gray-500">
                           {c.licitacionNo} · {c.company}
                         </span>

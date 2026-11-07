@@ -86,6 +86,7 @@ export type CalendarioContractOption = {
   licitacionNo: string;
   client: string;
   company: string;
+  status: "ACTIVE" | "PROLONGATION" | "SUSPENDED" | "FINISHED" | "CANCELLED";
   zones: CalendarioZoneRef[];
 };
 
@@ -118,6 +119,8 @@ export type CalendarioEventDetail = CalendarioEventSummary & {
   attachments: CalendarioAttachment[];
   /** Cuántas fechas se crearon en esta guardada. Solo viene al crear una serie. */
   seriesCreated?: number;
+  /** Fechas de la serie a las que se copiaron los administradores. */
+  seriesAdminsUpdated?: number;
 };
 
 export function toIsoDate(d: Date): string {

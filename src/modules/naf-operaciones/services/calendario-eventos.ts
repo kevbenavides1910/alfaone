@@ -319,7 +319,7 @@ export async function updateCalendarioEvent(
 ): Promise<CalendarioEventDetail> {
   const current = await prisma.operationalCalendarEvent.findUnique({
     where: { id },
-    select: { id: true, zoneId: true, typeId: true, status: true },
+    select: { id: true, zoneId: true, typeId: true, status: true, date: true, seriesId: true },
   });
   if (!current) throw new CalendarioError("Evento no encontrado", 404);
   if (input.zoneId !== undefined) await assertZone(input.zoneId);
@@ -335,6 +335,7 @@ export async function updateCalendarioEvent(
     : null;
   const adminIds = input.adminUserIds !== undefined ? await resolveAdminIds(input.adminUserIds, id) : null;
   const statusChanged = input.status !== undefined && input.status !== current.status;
+  let seriesAdminsUpdated = 0;
 
   await prisma.$transaction(async (tx) => {
     await tx.operationalCalendarEvent.update({
@@ -362,13 +363,35 @@ export async function updateCalendarioEvent(
       });
     }
     if (adminIds) {
-      await tx.operationalCalendarEventAdmin.deleteMany({
-        where: { eventId: id, userId: { notIn: adminIds } },
-      });
-      await tx.operationalCalendarEventAdmin.createMany({
-        data: adminIds.map((userId) => ({ eventId: id, userId })),
-        skipDuplicates: true,
-      });
+      const seriesTargets =
+        input.applyAdminsToSeries && current.seriesId
+          ? await tx.operationalCalendarEvent.findMany({
+              where: {
+                seriesId: current.seriesId,
+                status: "SCHEDULED",
+                date: { gte: current.date },
+                id: { not: id },
+              },
+              select: { id: true },
+            })
+          : [];
+      seriesAdminsUpdated = seriesTargets.length;
+      const targets = [id, ...seriesTargets.map((row) => row.id)];
+      for (const eventId of targets) {
+        await tx.operationalCalendarEventAdmin.deleteMany({
+          where: adminIds.length === 0 ? { eventId } : { eventId, userId: { notIn: adminIds } },
+        });
+        if (adminIds.length === 0) continue;
+        await tx.operationalCalendarEventAdmin.createMany({
+          data: adminIds.map((userId) => ({ eventId, userId })),
+          skipDuplicates: true,
+        });
+        if (eventId === id) continue;
+        await tx.operationalCalendarEventAdmin.updateMany({
+          where: { eventId, assignedNotifiedAt: null },
+          data: { assignedNotifiedAt: new Date() },
+        });
+      }
     }
     if (statusChanged && input.status === "DONE") {
       await tx.operationalCalendarEventContract.updateMany({
@@ -389,7 +412,8 @@ export async function updateCalendarioEvent(
       console.error("[calendario] aviso de asignación", error);
     });
   }
-  return (await getCalendarioEvent(id))!;
+  const detail = (await getCalendarioEvent(id))!;
+  return seriesAdminsUpdated > 0 ? { ...detail, seriesAdminsUpdated: seriesAdminsUpdated + 1 } : detail;
 }
 
 /** Realizada completa los contratos pendientes; Pendiente solo reabre el evento (conserva el avance por contrato). */

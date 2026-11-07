@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
+import { assignableContractStatusWhereInput } from "@/modules/presupuestos/services/assignable-contract-where";
 import {
   CALENDARIO_EXCLUDED_NAF_ZONES,
   type CalendarioContractOption,
@@ -34,6 +35,7 @@ export const contractZonesSelect = {
   licitacionNo: true,
   client: true,
   company: true,
+  status: true,
   positions: {
     where: { zoneId: { not: null }, zone: operativeZoneWhere },
     distinct: ["zoneId"],
@@ -53,15 +55,19 @@ export function mapContractOption(c: ContractWithZones): CalendarioContractOptio
     licitacionNo: c.licitacionNo,
     client: c.client,
     company: c.company,
+    status: c.status,
     zones,
   };
 }
 
-/** Contratos vigentes; con `zoneId`, solo los que tienen puestos en esa zona operativa. */
+/**
+ * Contratos asignables: activos, prórroga, suspendidos y finalizados de los últimos 6 meses.
+ * Con `zoneId`, solo los que tienen puestos en esa zona operativa.
+ */
 export function calendarioContractsWhere(zoneId?: string | null): Prisma.ContractWhereInput {
   return {
     deletedAt: null,
-    status: "ACTIVE",
+    ...assignableContractStatusWhereInput(),
     ...(zoneId ? { positions: { some: { zoneId } } } : {}),
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
@@ -15,6 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +37,7 @@ import {
   calendarioColorClass,
   type CalendarioAttachment,
   type CalendarioEventDetail,
+  type CalendarioUserRef,
   type CalendarioZoneRef,
 } from "@/modules/naf-operaciones/business/calendario-types";
 import {
@@ -44,6 +46,7 @@ import {
   calendarioUpload,
   formatFileSize,
   selectClass,
+  type CalendarioOpciones,
 } from "./calendario-api";
 
 type Props = {
@@ -61,6 +64,9 @@ export function CalendarioEventoDetalleDialog({ eventId, canEdit, onClose, onEdi
   const { data: session } = useSession();
   const [zoneFilter, setZoneFilter] = useState("");
   const [evidenceContractId, setEvidenceContractId] = useState("");
+  const [adminIds, setAdminIds] = useState<string[]>([]);
+  const [adminQuery, setAdminQuery] = useState("");
+  const [applySeries, setApplySeries] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const detailKey = ["calendario-operativo", "evento", eventId];
 
@@ -69,6 +75,36 @@ export function CalendarioEventoDetalleDialog({ eventId, canEdit, onClose, onEdi
     queryFn: () => calendarioFetch<CalendarioEventDetail>(`${CALENDARIO_API}/${eventId}`),
   });
   const ev = query.data;
+  const savedAdminKey = ev?.admins.map((a) => a.id).sort().join(",") ?? "";
+  useEffect(() => {
+    setAdminIds(savedAdminKey ? savedAdminKey.split(",") : []);
+    setApplySeries(false);
+    setAdminQuery("");
+  }, [eventId, savedAdminKey]);
+
+  const adminOptions = useQuery({
+    queryKey: ["calendario-operativo", "opciones", ""],
+    queryFn: () => calendarioFetch<CalendarioOpciones>(`${CALENDARIO_API}/opciones`),
+    enabled: canEdit,
+    staleTime: 5 * 60_000,
+  });
+  const adminPool = useMemo(() => {
+    const opts: CalendarioUserRef[] = [...(adminOptions.data?.admins ?? [])];
+    for (const admin of ev?.admins ?? []) {
+      if (!opts.some((row) => row.id === admin.id)) opts.push(admin);
+    }
+    const q = adminQuery.trim().toLowerCase();
+    const matches = q
+      ? opts.filter((row) => row.name.toLowerCase().includes(q))
+      : opts.filter((row) => adminIds.includes(row.id));
+    return matches.sort((a, b) => {
+      const selected = Number(adminIds.includes(b.id)) - Number(adminIds.includes(a.id));
+      if (selected !== 0) return selected;
+      return a.name.localeCompare(b.name, "es");
+    });
+  }, [adminOptions.data, ev?.admins, adminQuery, adminIds]);
+  const adminsDirty = savedAdminKey !== [...adminIds].sort().join(",");
+
   const userId = session?.user?.id;
   const isAssigned = Boolean(userId && ev?.admins.some((a) => a.id === userId));
   const canAct = canEdit || isAssigned;
@@ -137,6 +173,27 @@ export function CalendarioEventoDetalleDialog({ eventId, canEdit, onClose, onEdi
     onError: onError("Error al actualizar"),
   });
 
+  const saveAdmins = useMutation({
+    mutationFn: () =>
+      calendarioFetch<CalendarioEventDetail>(`${CALENDARIO_API}/${eventId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          adminUserIds: adminIds,
+          applyAdminsToSeries: applySeries,
+        }),
+      }),
+    onSuccess: (data) => {
+      onUpdated(data);
+      const count = data.seriesAdminsUpdated ?? 0;
+      toast.success(
+        count > 1
+          ? `Administradores actualizados en ${count} fechas`
+          : "Administradores actualizados",
+      );
+    },
+    onError: onError("Error al guardar administradores"),
+  });
+
   const remove = useMutation({
     mutationFn: () => calendarioFetch<void>(`${CALENDARIO_API}/${eventId}`, { method: "DELETE" }),
     onSuccess: () => {
@@ -199,6 +256,7 @@ export function CalendarioEventoDetalleDialog({ eventId, canEdit, onClose, onEdi
     setStatus.isPending ||
     cancelEvent.isPending ||
     remove.isPending ||
+    saveAdmins.isPending ||
     upload.isPending ||
     removeEvidence.isPending;
 
@@ -237,14 +295,73 @@ export function CalendarioEventoDetalleDialog({ eventId, canEdit, onClose, onEdi
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm">
+            <div className="flex flex-wrap items-start gap-3 rounded-lg border p-3 text-sm">
               <div className="flex min-w-0 flex-1 items-start gap-2">
                 <Users className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="text-xs uppercase text-gray-500">Administradores</div>
-                  <div className="font-medium">
-                    {ev.admins.length ? ev.admins.map((a) => a.name).join(", ") : "Sin asignar"}
-                  </div>
+                  {canEdit ? (
+                    <div className="mt-1 space-y-2">
+                      <Input
+                        value={adminQuery}
+                        onChange={(e) => setAdminQuery(e.target.value)}
+                        placeholder="Buscar usuario para agregar o quitar…"
+                        className="h-8"
+                      />
+                      <div className="max-h-36 space-y-1 overflow-y-auto rounded border p-2">
+                        {adminOptions.isLoading ? (
+                          <p className="text-xs text-gray-500">Cargando usuarios…</p>
+                        ) : !adminQuery.trim() && adminIds.length === 0 ? (
+                          <p className="text-xs text-gray-500">Escriba un nombre para agregar un administrador.</p>
+                        ) : adminPool.length === 0 ? (
+                          <p className="text-xs text-gray-500">Sin coincidencias</p>
+                        ) : (
+                          adminPool.map((user) => (
+                            <label key={user.id} className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={adminIds.includes(user.id)}
+                                onChange={() =>
+                                  setAdminIds((prev) =>
+                                    prev.includes(user.id)
+                                      ? prev.filter((id) => id !== user.id)
+                                      : [...prev, user.id],
+                                  )
+                                }
+                              />
+                              <span>{user.name}</span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                      {ev.recurrence !== "NONE" ? (
+                        <label className="flex items-start gap-2 text-xs text-gray-600">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={applySeries}
+                            onChange={(e) => setApplySeries(e.target.checked)}
+                          />
+                          <span>
+                            Aplicar también a las fechas pendientes de esta serie (
+                            {CALENDARIO_RECURRENCE_LABELS[ev.recurrence].toLowerCase()}).
+                          </span>
+                        </label>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy || (!adminsDirty && !applySeries)}
+                        onClick={() => saveAdmins.mutate()}
+                      >
+                        {saveAdmins.isPending ? "Guardando…" : "Guardar administradores"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="font-medium">
+                      {ev.admins.length ? ev.admins.map((a) => a.name).join(", ") : "Sin asignar"}
+                    </div>
+                  )}
                   {ev.status === "DONE" && ev.completedAt ? (
                     <div className="mt-1 text-xs text-emerald-700">
                       Realizada el {new Date(ev.completedAt).toLocaleString("es-CR")}
