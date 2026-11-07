@@ -1,2 +1,2 @@
--- Periodicidad cada 2 años del calendario operativo.
+-- Periodicidad cada 2 aÃ±os del calendario operativo.
 ALTER TYPE "OperationalCalendarRecurrence" ADD VALUE 'BIENNIAL';
