@@ -1209,6 +1209,7 @@ enum OperationalCalendarRecurrence {
   QUARTERLY
   SEMIANNUAL
   YEARLY
+  BIENNIAL
 }
 
 /// Evento del calendario operativo (ej. cambio de uniformes) en una fecha, aplicado a uno o varios contratos.

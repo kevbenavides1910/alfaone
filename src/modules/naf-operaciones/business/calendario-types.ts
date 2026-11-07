@@ -149,7 +149,7 @@ export function calendarioDaysPending(eventDay: string, today: string): number {
   return Math.round((end - start) / 86_400_000);
 }
 
-export const CALENDARIO_RECURRENCES = ["NONE", "WEEKLY", "MONTHLY", "QUARTERLY", "SEMIANNUAL", "YEARLY"] as const;
+export const CALENDARIO_RECURRENCES = ["NONE", "WEEKLY", "MONTHLY", "QUARTERLY", "SEMIANNUAL", "YEARLY", "BIENNIAL"] as const;
 export type CalendarioRecurrence = (typeof CALENDARIO_RECURRENCES)[number];
 
 export const CALENDARIO_RECURRENCE_MONTHS = {
@@ -157,6 +157,7 @@ export const CALENDARIO_RECURRENCE_MONTHS = {
   QUARTERLY: 3,
   SEMIANNUAL: 6,
   YEARLY: 12,
+  BIENNIAL: 24,
 } as const;
 
 export const CALENDARIO_RECURRENCE_LABELS: Record<CalendarioRecurrence, string> = {
@@ -166,6 +167,7 @@ export const CALENDARIO_RECURRENCE_LABELS: Record<CalendarioRecurrence, string> 
   QUARTERLY: "Cada 3 meses",
   SEMIANNUAL: "Cada 6 meses",
   YEARLY: "Cada año",
+  BIENNIAL: "Cada 2 años",
 };
 
 /** Horizonte al crear la serie: desde la fecha inicial hasta 24 meses después. */

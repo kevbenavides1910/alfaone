@@ -5,6 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, ChevronLeft, ChevronRight, Paperclip, Plus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { ModulePage } from "@/components/layout/ModulePage";
 import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
@@ -17,6 +24,7 @@ import {
   CALENDARIO_STATUS_BADGE,
   CALENDARIO_STATUS_LABELS,
   calendarioColorClass,
+  formatCalendarioDay,
   toIsoDate,
   type CalendarioEventStatus,
   type CalendarioEventSummary,
@@ -63,6 +71,7 @@ export function CalendarioOperativoClient() {
     open: false,
   });
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [overflowDay, setOverflowDay] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const openedFromUrl = useRef(false);
 
@@ -245,7 +254,16 @@ export function CalendarioOperativoClient() {
                     <EventChip key={ev.id} ev={ev} onClick={() => setDetailId(ev.id)} />
                   ))}
                   {events.length > MAX_CHIPS ? (
-                    <div className="px-1 text-[11px] text-gray-500">+{events.length - MAX_CHIPS} más</div>
+                    <button
+                      type="button"
+                      className="px-1 text-left text-[11px] font-medium text-blue-700 hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOverflowDay(iso);
+                      }}
+                    >
+                      +{events.length - MAX_CHIPS} más
+                    </button>
                   ) : null}
                 </div>
               </div>
@@ -320,6 +338,39 @@ export function CalendarioOperativoClient() {
             setDetailId(id);
           }}
         />
+      ) : null}
+
+      {overflowDay ? (
+        <Dialog open onOpenChange={(open) => !open && setOverflowDay(null)}>
+          <DialogContent className="max-h-[80vh] max-w-lg overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Eventos del día</DialogTitle>
+              <DialogDescription>{formatCalendarioDay(overflowDay)}</DialogDescription>
+            </DialogHeader>
+            <ul className="divide-y rounded border">
+              {(eventsByDay.get(overflowDay) ?? []).map((ev) => (
+                <li key={ev.id}>
+                  <button
+                    type="button"
+                    className="flex w-full flex-col items-start gap-1 px-3 py-2 text-left text-sm hover:bg-gray-50"
+                    onClick={() => {
+                      setOverflowDay(null);
+                      setDetailId(ev.id);
+                    }}
+                  >
+                    <span className={cn("rounded border px-2 py-0.5 text-xs", calendarioColorClass(ev.type.color))}>
+                      {ev.type.name}
+                    </span>
+                    <span className="font-medium">{ev.title}</span>
+                    <span className="text-xs text-gray-500">
+                      {ev.completedCount}/{ev.contractsCount} contratos · {CALENDARIO_STATUS_LABELS[ev.status]}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </DialogContent>
+        </Dialog>
       ) : null}
 
       {detailId ? (

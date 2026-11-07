@@ -30,7 +30,7 @@ const eventBase = z.object({
   allContracts: z.boolean().optional(),
   contractIds: z.array(z.string().min(1)).max(2000).optional(),
   adminUserIds: z.array(z.string().min(1)).max(50).optional(),
-  /** Una vez, o repetir la misma tarea cada mes, 3 meses, 6 meses o un año. */
+  /** Una vez, o repetir la misma tarea cada semana, mes, 3, 6 o 12 meses, o cada 2 años. */
   recurrence: z.enum(CALENDARIO_RECURRENCES).optional(),
 });
 
