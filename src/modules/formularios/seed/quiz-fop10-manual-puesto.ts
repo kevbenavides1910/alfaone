@@ -34,8 +34,7 @@ function open(text: string, points: number): QuizSeedQuestion {
  * Examen F-OP-10 v5. Clave de las cerradas según el formato vigente
  * (Ficha técnica, Funciones, Funciones del cartel, Documentos relacionados,
  * Contactos importantes) y el catálogo SIG.
- * La pregunta 11 no tiene opción correcta: el formato no fija la cantidad
- * de documentos relacionados. Queda sin calificar hasta marcarla en el editor.
+ * La pregunta 11 es D: el manual enumera 16 documentos relacionados.
  */
 export const QUIZ_FOP10_MANUAL_PUESTO = {
   code: "F-OP-10",
@@ -131,7 +130,7 @@ export const QUIZ_FOP10_MANUAL_PUESTO = {
     choice(
       "Parte III. Documentos relacionados (25 puntos). 11. ¿Cuántos documentos relacionados aparecen enumerados en el Manual del Puesto?",
       5,
-      -1,
+      3,
       ["A. 10 documentos.", "B. 12 documentos.", "C. 14 documentos.", "D. 16 documentos."]
     ),
     choice(

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,24 +53,54 @@ export default function ResponderFormularioPage() {
   const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
   const [result, setResult] = useState<SubmitResult | null>(null);
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["formulario-take", id],
     queryFn: async () => {
-      const r = await fetch(`/api/formularios/${id}?mode=take`, { credentials: "same-origin" });
+      const r = await fetch(`/api/formularios/${id}?mode=take`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
       if (!r.ok) throw new Error("Formulario no disponible");
       return r.json() as Promise<{ data: TakeForm }>;
     },
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const form = data?.data;
 
   const submitMut = useMutation({
     mutationFn: async () => {
+      const freshRes = await fetch(`/api/formularios/${id}?mode=take`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!freshRes.ok) throw new Error("Formulario no disponible");
+      const fresh = (await freshRes.json()) as { data: TakeForm };
+      const questions = fresh.data.questions;
+      const current = answersRef.current;
+      const known = new Set(questions.map((q) => q.id));
+      const marked = Object.entries(current).filter(([, answer]) => {
+        if (!answer) return false;
+        if (answer.selectedOptionIds?.length) return true;
+        if (typeof answer.trueFalse === "boolean") return true;
+        return Boolean(answer.text?.trim());
+      });
+      if (marked.length > 0 && marked.every(([questionId]) => !known.has(questionId))) {
+        setAnswers({});
+        await refetch();
+        throw new Error(
+          "El examen cambió mientras lo respondía. Recargue la página y vuelva a marcarlo."
+        );
+      }
+
       const payload = {
-        answers: (form?.questions ?? []).map((q) => ({
+        answers: questions.map((q) => ({
           questionId: q.id,
-          ...answers[q.id],
+          ...(current[q.id] ?? {}),
         })),
       };
       const r = await fetch(`/api/formularios/${id}/submit`, {
@@ -287,6 +317,7 @@ export default function ResponderFormularioPage() {
 
       <div className={cn("flex gap-2 sticky bottom-4 bg-background/95 py-2")}>
         <Button
+          type="button"
           onClick={() => submitMut.mutate()}
           disabled={submitMut.isPending}
           className="flex-1 sm:flex-none"

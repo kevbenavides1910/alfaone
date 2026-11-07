@@ -61,18 +61,6 @@ async function syncExistingForm(formId: string) {
     },
   });
 
-  if (submissionCount === 0) {
-    await prisma.formQuestion.deleteMany({ where: { formId } });
-    for (let index = 0; index < QUIZ.questions.length; index++) {
-      const q = QUIZ.questions[index] as QuizSeedQuestion;
-      await prisma.formQuestion.create({
-        data: { formId, ...questionCreateData(q, index) },
-      });
-    }
-    console.log(`Formulario sincronizado (sin envíos previos): ${QUIZ.code}`);
-    return;
-  }
-
   for (let index = 0; index < QUIZ.questions.length; index++) {
     const q = QUIZ.questions[index] as QuizSeedQuestion;
     const existing = existingQuestions[index];
