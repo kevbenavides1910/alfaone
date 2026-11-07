@@ -20,14 +20,17 @@ function gradeQuestion(
 ): boolean | null {
   switch (question.type as FormQuestionType) {
     case "SINGLE_CHOICE": {
+      const correct = question.options.filter((o) => o.isCorrect);
+      if (correct.length === 0) return null;
       const selected = answer.selectedOptionIds ?? [];
       if (selected.length !== 1) return false;
       const opt = question.options.find((o) => o.id === selected[0]);
       return opt?.isCorrect === true;
     }
     case "MULTIPLE_CHOICE": {
-      const selected = new Set(answer.selectedOptionIds ?? []);
       const correctIds = new Set(question.options.filter((o) => o.isCorrect).map((o) => o.id));
+      if (correctIds.size === 0) return null;
+      const selected = new Set(answer.selectedOptionIds ?? []);
       if (selected.size !== correctIds.size) return false;
       for (const id of correctIds) {
         if (!selected.has(id)) return false;

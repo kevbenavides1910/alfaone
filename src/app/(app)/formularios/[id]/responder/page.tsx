@@ -196,7 +196,9 @@ export default function ResponderFormularioPage() {
       <div>
         <h1 className="text-xl font-semibold">{form.title}</h1>
         <p className="text-xs font-mono text-slate-500">{form.code}</p>
-        {form.description && <p className="text-sm text-slate-600 mt-2">{form.description}</p>}
+        {form.description && (
+          <p className="text-sm text-slate-600 mt-2 whitespace-pre-line">{form.description}</p>
+        )}
         <p className="text-xs text-slate-500 mt-1">
           {form.questions.length} preguntas · Aprobación {form.passScorePercent}%
         </p>
@@ -217,7 +219,10 @@ export default function ResponderFormularioPage() {
                     </Badge>
                   )}
                 </div>
-                <p className="text-xs text-slate-400">{QUESTION_TYPE_LABELS[q.type]}</p>
+                <p className="text-xs text-slate-400">
+                  {QUESTION_TYPE_LABELS[q.type]}
+                  {q.points > 0 ? ` · ${q.points} pts` : ""}
+                </p>
 
                 {(q.type === "SINGLE_CHOICE" || q.type === "MULTIPLE_CHOICE") &&
                   q.options.map((opt) => (
