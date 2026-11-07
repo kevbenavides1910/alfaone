@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
+  Download,
   Mail,
   MailX,
   Users,
@@ -93,6 +94,58 @@ export default function DisciplinarioConvocatoriaPage() {
     setWeek(format(addDays(d, delta * 7), "yyyy-MM-dd"));
   }
 
+  // Descarga a Excel la semana visible. Se genera en el navegador con los mismos datos
+  // que pinta la pantalla (xlsx se carga solo al hacer clic, para no engordar el bundle).
+  async function exportarExcel() {
+    if (!agenda || agenda.events.length === 0) return;
+    const mod: any = await import("xlsx");
+    const XLSX = mod.utils ? mod : mod.default;
+    const dayLabel = new Map(agenda.days.map((d) => [d.date, d.label]));
+
+    const filas = [...agenda.events]
+      .sort((a, b) => `${a.fecha} ${a.hora}`.localeCompare(`${b.fecha} ${b.hora}`))
+      .map((ev) => ({
+        Fecha: format(parseISO(ev.fecha), "dd/MM/yyyy"),
+        "Día": dayLabel.get(ev.fecha) ?? "",
+        Hora: agenda.slotLabels[ev.hora] ?? ev.hora,
+        "Código": ev.codigoEmpleado,
+        Nombre: ev.nombre,
+        Zona: ev.zona ?? "",
+        Estado: ev.convocatoriaEnviadaAt ? "Enviada" : "Pendiente",
+        "Acción": ev.accion ?? "",
+      }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(filas, {
+      header: ["Fecha", "Día", "Hora", "Código", "Nombre", "Zona", "Estado", "Acción"],
+    });
+    ws["!cols"] = [
+      { wch: 12 }, { wch: 12 }, { wch: 9 }, { wch: 12 },
+      { wch: 34 }, { wch: 22 }, { wch: 11 }, { wch: 18 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, "Convocatorias");
+
+    const grilla = agenda.slots.map((slot) => {
+      const fila: Record<string, string> = { Hora: agenda.slotLabels[slot] ?? slot };
+      for (const d of agenda.days) {
+        const items = agenda.events.filter((e) => e.fecha === d.date && e.hora === slot);
+        fila[d.label] = items
+          .map((e) => `${e.nombre} (${e.codigoEmpleado})${e.convocatoriaEnviadaAt ? "" : " [pend.]"}`)
+          .join(" / ");
+      }
+      return fila;
+    });
+    const ws2 = XLSX.utils.json_to_sheet(grilla, {
+      header: ["Hora", ...agenda.days.map((d) => d.label)],
+    });
+    ws2["!cols"] = [{ wch: 9 }, ...agenda.days.map(() => ({ wch: 30 }))];
+    XLSX.utils.book_append_sheet(wb, ws2, "Grilla semanal");
+
+    const desde = format(parseISO(agenda.weekStart), "dd-MM-yyyy");
+    const hasta = format(parseISO(agenda.weekEnd), "dd-MM-yyyy");
+    XLSX.writeFile(wb, `Convocatorias_${desde}_al_${hasta}.xlsx`);
+  }
+
   return (
     <div className="p-4 sm:p-6 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -105,12 +158,26 @@ export default function DisciplinarioConvocatoriaPage() {
             Agenda semanal: quién está convocado por día y horario (tratamiento disciplinario).
           </p>
         </div>
-        <Button asChild variant="outline" size="sm" className="gap-2">
-          <Link href="/disciplinario/empleados">
-            <Users className="h-4 w-4" />
-            Tratamiento
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={exportarExcel}
+            disabled={!agenda || agenda.events.length === 0}
+            title="Descargar esta semana en Excel"
+          >
+            <Download className="h-4 w-4" />
+            Excel
+          </Button>
+          <Button asChild variant="outline" size="sm" className="gap-2">
+            <Link href="/disciplinario/empleados">
+              <Users className="h-4 w-4" />
+              Tratamiento
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card>
