@@ -3,11 +3,33 @@
 const PDF = [0x25, 0x50, 0x44, 0x46]; // %PDF
 const PNG = [0x89, 0x50, 0x4e, 0x47];
 const JPEG = [0xff, 0xd8, 0xff];
-const ZIP_XLSX = [0x50, 0x4b, 0x03, 0x04]; // xlsx/docx
+const ZIP = [0x50, 0x4b, 0x03, 0x04]; // OOXML (docx/xlsx/pptx) y zip
+
+const MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const MIME_PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
 function startsWith(buf: Uint8Array, sig: number[]): boolean {
   if (buf.length < sig.length) return false;
   return sig.every((b, i) => buf[i] === b);
+}
+
+function asBuffer(buf: Uint8Array): Buffer {
+  if (Buffer.isBuffer(buf)) return buf;
+  return Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+}
+
+/**
+ * docx, xlsx y pptx comparten la firma ZIP (PK). El nombre de cada parte
+ * va en claro en los headers del zip, así que se distingue por la parte principal.
+ * Un docx puede incrustar un xlsx: la parte principal (word/) manda.
+ */
+function detectOpenXmlMime(buf: Uint8Array): DetectedMime {
+  const raw = asBuffer(buf);
+  if (raw.includes("word/document.xml")) return MIME_DOCX;
+  if (raw.includes("ppt/presentation.xml")) return MIME_PPTX;
+  if (raw.includes("xl/workbook.xml")) return MIME_XLSX;
+  return "application/zip";
 }
 
 export type DetectedMime =
@@ -15,7 +37,10 @@ export type DetectedMime =
   | "image/png"
   | "image/jpeg"
   | "image/webp"
-  | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  | typeof MIME_DOCX
+  | typeof MIME_XLSX
+  | typeof MIME_PPTX
+  | "application/zip"
   | "text/csv"
   | "application/octet-stream";
 
@@ -24,9 +49,7 @@ export function detectMimeFromBuffer(buf: ArrayBuffer | Uint8Array): DetectedMim
   if (startsWith(u8, PDF)) return "application/pdf";
   if (startsWith(u8, PNG)) return "image/png";
   if (startsWith(u8, JPEG)) return "image/jpeg";
-  if (startsWith(u8, ZIP_XLSX)) {
-    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  }
+  if (startsWith(u8, ZIP)) return detectOpenXmlMime(u8);
   // WebP: RIFF....WEBP
   if (
     u8.length >= 12 &&
@@ -53,12 +76,9 @@ export function mimeMatchesDeclared(detected: DetectedMime, declared: string): b
   if (detected === "application/octet-stream") return true;
   if (d === detected) return true;
   if (d === "image/jpg" && detected === "image/jpeg") return true;
-  if (
-    d === "application/vnd.ms-excel" &&
-    detected === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  ) {
-    return true;
-  }
+  if (d === "application/vnd.ms-excel" && detected === MIME_XLSX) return true;
+  if (d === "application/msword" && detected === MIME_DOCX) return true;
+  if (d === "application/vnd.ms-powerpoint" && detected === MIME_PPTX) return true;
   return false;
 }
 
