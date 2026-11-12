@@ -63,6 +63,9 @@ export const PAYMENT_CATEGORIES: PaymentCategoryDef[] = [
       { key: "POLIZAS", label: "Pólizas" },
       { key: "RENTA", label: "Renta" },
       { key: "MULTAS", label: "Multas" },
+      { key: "COMISION", label: "Comisión" },
+      { key: "EMBARGO_FONDOS", label: "Embargo de fondos" },
+      { key: "IMPUESTOS_RETENIDOS_IVA", label: "Impuestos retenidos de iva" },
     ],
   },
   {
