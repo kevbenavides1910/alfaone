@@ -26,7 +26,7 @@ export const PAYMENT_CATEGORIES: PaymentCategoryDef[] = [
       { key: "CCSS", label: "CCSS / Convenio CCSS" },
       { key: "VACACIONES", label: "Vacaciones" },
       { key: "LIQUIDACIONES", label: "Liquidaciones y Acuerdos" },
-      { key: "EMBARGOS", label: "Embargos" },
+      { key: "EMBARGOS", label: "Embargos y pensiones" },
       { key: "DIETAS", label: "Dietas" },
     ],
   },
