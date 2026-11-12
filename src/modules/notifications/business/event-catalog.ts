@@ -246,6 +246,17 @@ export const NOTIFICATION_EVENT_CATALOG: NotificationEventDef[] = [
     hrefTemplate: "/naf-operaciones/calendario?evento={entityId}",
     roleCodes: ["ADMIN", "SUPERVISOR", "CONSULTA"],
   },
+  {
+    code: "facturacion.contract_changed",
+    moduleKey: "facturacion",
+    label: "Cambio en contrato",
+    description: "Alta o cambio en un contrato que debe revisar cuentas por cobrar",
+    priority: "INFO",
+    icon: "file-text",
+    permissionKey: "facturacion.cobro",
+    hrefTemplate: "/contracts/{entityId}",
+    roleCodes: ["FACTURACION"],
+  },
 ];
 
 /** Avisos de trabajo que no se pueden apagar desde preferencias. */
@@ -255,4 +266,5 @@ export const LOCKED_NOTIFICATION_CODES = new Set([
   "nafOperaciones.calendario_month_before",
   "nafOperaciones.calendario_due",
   "nafOperaciones.calendario_reminder",
+  "facturacion.contract_changed",
 ]);

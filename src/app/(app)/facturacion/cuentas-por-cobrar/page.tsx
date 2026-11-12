@@ -101,6 +101,8 @@ export type CuentaPorCobrarRow = {
     amount: number;
     sortOrder: number;
   }[];
+  specialServicesTotal?: number;
+  specialServices?: { description: string; amount: number }[];
 };
 
 const FILTER_LABELS = {
@@ -535,6 +537,11 @@ export default function CuentasPorCobrarPage() {
                         ) : !row.hasContract ? (
                           <span className="text-xs text-amber-600">Sin contrato vinculado</span>
                         ) : null}
+                        {(row.specialServicesTotal ?? 0) > 0 && (
+                          <div className="text-xs text-amber-800" title={(row.specialServices ?? []).map((service) => `${service.description}: ${service.amount}`).join("\n")}>
+                            Serv. especiales {formatCurrency(row.specialServicesTotal ?? 0)}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 max-w-52">
                         {row.billingContact ? (

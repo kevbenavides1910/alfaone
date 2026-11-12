@@ -11,6 +11,7 @@ import { requireCompanyCode } from "@/modules/core/services/companies";
 import { buildContractPrismaUpdate } from "@/modules/presupuestos/services/build-contract-prisma-update";
 import { syncContractAdministrations } from "@/modules/presupuestos/services/sync-contract-administrations";
 import { syncOpenFacturaEmisionesForContract } from "@/modules/presupuestos/services/facturacion-cobro";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -167,6 +168,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       await recalculateEquivalence();
     }
 
+    queueCxcContractNotice({
+      contractId: contract.id,
+      action: "Contrato actualizado",
+      summary: `Campos: ${Object.keys(parsed.data).join(", ") || "datos del contrato"}`,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
+
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
@@ -214,6 +223,14 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
 
   // Recalculate global equivalence after removal
   await recalculateEquivalence();
+
+  queueCxcContractNotice({
+    contractId: contract.id,
+    action: "Contrato eliminado",
+    summary: `${contract.client} · ${contract.licitacionNo}`,
+    actorUserId: session.user.id,
+    actorName: session.user.name,
+  });
 
   await prisma.auditLog.create({
     data: {

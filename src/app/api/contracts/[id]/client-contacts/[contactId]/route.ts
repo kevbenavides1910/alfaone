@@ -3,6 +3,7 @@ import { prisma } from "@/modules/core/db/prisma";
 import { getSession, canModifyContracts } from "@/lib/api/middleware";
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { clientContactUpdateSchema } from "@/modules/presupuestos/validations/contract.schema";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 
 type Ctx = { params: Promise<{ id: string; contactId: string }> };
 
@@ -47,6 +48,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       data,
     });
 
+    queueCxcContractNotice({
+      contractId,
+      action: "Contacto del cliente actualizado",
+      summary: updated.name,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
+
     return ok({
       id: updated.id,
       name: updated.name,
@@ -78,6 +87,13 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     if (!existing) return notFound();
 
     await prisma.contractClientContact.delete({ where: { id: contactId } });
+    queueCxcContractNotice({
+      contractId,
+      action: "Contacto del cliente eliminado",
+      summary: existing.name,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
     return ok({ deleted: true });
   } catch (e) {
     return serverError("Error al eliminar contacto del cliente", e);

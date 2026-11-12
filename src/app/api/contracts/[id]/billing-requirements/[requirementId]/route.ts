@@ -3,6 +3,7 @@ import { prisma } from "@/modules/core/db/prisma";
 import { getSession, canModifyContracts } from "@/lib/api/middleware";
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { billingRequirementUpdateSchema } from "@/modules/presupuestos/validations/contract.schema";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 
 type Ctx = { params: Promise<{ id: string; requirementId: string }> };
 
@@ -51,6 +52,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       });
     }
 
+    queueCxcContractNotice({
+      contractId,
+      action: "Requisito de facturación actualizado",
+      summary: updated.description,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
+
     return ok({
       id: updated.id,
       description: updated.description,
@@ -78,6 +87,13 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     if (!existing) return notFound();
 
     await prisma.contractBillingRequirement.delete({ where: { id: requirementId } });
+    queueCxcContractNotice({
+      contractId,
+      action: "Requisito de facturación eliminado",
+      summary: existing.description,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
     return ok({ deleted: true });
   } catch (e) {
     return serverError("Error al eliminar requisito de facturación", e);

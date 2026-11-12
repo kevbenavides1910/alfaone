@@ -65,4 +65,5 @@ export const MODULE_LABELS: Record<string, string> = {
   recorridos: "Recorridos",
   plataforma: "Administración",
   nafOperaciones: "Operaciones",
+  facturacion: "Facturación y cobro",
 };

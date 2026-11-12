@@ -9,6 +9,7 @@ import { buildContractListWhere } from "@/modules/presupuestos/services/contract
 import { enrichContractsListRows } from "@/modules/presupuestos/services/contracts-list-enrichment";
 import { computeContractsListPeriodTotals } from "@/modules/presupuestos/services/contracts-list-period-totals";
 import { requireCompanyCode } from "@/modules/core/services/companies";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 import {
   contractVigenteInMonthWhere,
   parseContractListPeriod,
@@ -189,6 +190,14 @@ export async function POST(req: NextRequest) {
 
     // Recalculate global equivalence (supplies-budget-based across all contracts)
     await recalculateEquivalence();
+
+    queueCxcContractNotice({
+      contractId: contract.id,
+      action: "Contrato creado",
+      summary: `${data.client} · ${data.licitacionNo}`,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
 
     // Log
     await prisma.auditLog.create({

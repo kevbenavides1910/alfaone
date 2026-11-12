@@ -288,6 +288,7 @@ export default function FacturacionPage() {
         "Monto IVA": getFacturaIvaAmount(row) ?? "",
         Total: row.totalCalculated ?? "",
         "Venta contrato": row.contractVentaSubtotal ?? "",
+        "Servicios especiales": row.emisionIndex === 0 ? (row.specialServicesTotal ?? "") : "",
         Diferencia: row.ventaFacturadoDelta ?? "",
         "Fecha esperada": formatDate(row.expectedIssueDate),
         "Fecha emisión/cierre": row.closedAt ? formatDate(row.closedAt) : "",
@@ -468,6 +469,15 @@ export default function FacturacionPage() {
                         <div className="font-medium text-slate-800">{row.clientNameCopied}</div>
                         {row.licitacionNo && (
                           <div className="text-xs text-slate-400">{row.licitacionNo}</div>
+                        )}
+                        {(row.specialServicesTotal ?? 0) > 0 && (
+                          <div className="text-xs text-amber-800">
+                            Serv. especiales {formatCurrency(row.specialServicesTotal ?? 0)}
+                            {row.ventaFacturadoDelta != null &&
+                            -row.ventaFacturadoDelta + 0.5 >= (row.specialServicesTotal ?? 0)
+                              ? " · no están en el monto"
+                              : ""}
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3">

@@ -4319,6 +4319,49 @@ model NafNominaPagoLinea {
   @@map("naf_nomina_pago_lineas")
 }
 
+/// Foto congelada de una planilla NAF (al generar archivo, preparar lote o pasar el día de pago).
+model NafNominaPlanillaCierre {
+  id           String                         @id @default(cuid())
+  noCia        String
+  codPla       String
+  fDesde       DateTime                       @db.Date
+  fHasta       DateTime                       @db.Date
+  motivo       String
+  fuente       String
+  nominaNombre String?
+  empleados    Int                            @default(0)
+  ingresos     Decimal                        @default(0) @db.Decimal(18, 2)
+  deducciones  Decimal                        @default(0) @db.Decimal(18, 2)
+  liquido      Decimal                        @default(0) @db.Decimal(18, 2)
+  frozenAt     DateTime                       @default(now())
+  frozenBy     String?
+  lineas       NafNominaPlanillaCierreLinea[]
+
+  @@unique([noCia, codPla, fDesde, fHasta])
+  @@index([fDesde, fHasta])
+  @@map("naf_nomina_planilla_cierres")
+}
+
+model NafNominaPlanillaCierreLinea {
+  id          String                  @id @default(cuid())
+  cierreId    String
+  cierre      NafNominaPlanillaCierre @relation(fields: [cierreId], references: [id], onDelete: Cascade)
+  noEmple     String
+  nombre      String?
+  cedula      String?
+  formaPago   String?
+  banco       String?
+  idCta       String?
+  numCuenta   String?
+  canal       String
+  ingresos    Decimal                 @db.Decimal(18, 2)
+  deducciones Decimal                 @db.Decimal(18, 2)
+  liquido     Decimal                 @db.Decimal(18, 2)
+
+  @@unique([cierreId, noEmple])
+  @@map("naf_nomina_planilla_cierre_lineas")
+}
+
 /// Asignación manual de nómina NAF a contratos cuando no hay asistencia en la quincena.
 model NafNominaManualAllocation {
   id          String   @id @default(cuid())

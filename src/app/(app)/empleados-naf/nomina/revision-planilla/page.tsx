@@ -11,6 +11,7 @@ import {
   FileSpreadsheet,
   Filter,
   Loader2,
+  Lock,
   Printer,
   RefreshCw,
   Search,
@@ -20,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { exportRowsToExcel, exportWorkbookToExcel } from "@/lib/utils/excel-export";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils/format";
+import { formatCurrencyPrecise, formatDate, formatDateTime } from "@/lib/utils/format";
 import { ModulePage } from "@/components/layout/ModulePage";
 import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
 import {
@@ -92,7 +93,22 @@ type RevisionRow = {
   pagadaCk: boolean;
   pagadaDav: boolean;
   pagadaBn: boolean;
+  congelada: boolean;
+  congeladaAt: string | null;
+  congeladaMotivo: string | null;
 };
+
+const CONGELADA_MOTIVO_LABEL: Record<string, string> = {
+  generada: "al marcar Generada",
+  lote: "al preparar pagos",
+  dia_pago: "al pasar el día de pago",
+};
+
+function congeladaTitle(row: Pick<RevisionRow, "congeladaAt" | "congeladaMotivo">): string {
+  const motivo = row.congeladaMotivo ? CONGELADA_MOTIVO_LABEL[row.congeladaMotivo] ?? row.congeladaMotivo : "";
+  const fecha = row.congeladaAt ? formatDateTime(row.congeladaAt) : "";
+  return `Montos y canales de pago congelados ${motivo}${fecha ? ` (${fecha})` : ""}. Ya no cambian aunque cambie la forma de pago en NAF.`;
+}
 
 type ChecklistField = "revisada" | "generada" | "pagada" | "pagadaCk" | "pagadaDav" | "pagadaBn";
 
@@ -164,6 +180,7 @@ type EmpleadosPagoReporte = {
   canalLabel: string;
   empleados: EmpleadoPago[];
   totales: { empleados: number; liquido: number };
+  congeladaAt: string | null;
 };
 
 type DetailTarget = {
@@ -273,7 +290,7 @@ function AmountButton({
       )}
       title={title}
     >
-      {formatCurrency(value)}
+      {formatCurrencyPrecise(value)}
     </button>
   );
 }
@@ -334,7 +351,7 @@ function buildEmpleadosPagoPrintHtml(reporte: EmpleadosPagoReporte) {
         <td>${escapeHtml(emp.formaPago ?? "")}</td>
         <td>${escapeHtml(emp.banco ?? "")}</td>
         <td>${escapeHtml(emp.numCuenta ?? "")}</td>
-        <td class="num">${formatCurrency(emp.liquido)}</td>
+        <td class="num">${formatCurrencyPrecise(emp.liquido)}</td>
       </tr>`,
     )
     .join("");
@@ -379,7 +396,7 @@ function buildEmpleadosPagoPrintHtml(reporte: EmpleadosPagoReporte) {
     <tfoot>
       <tr>
         <td colspan="5">TOTAL GENERAL</td>
-        <td class="num">${formatCurrency(reporte.totales.liquido)}</td>
+        <td class="num">${formatCurrencyPrecise(reporte.totales.liquido)}</td>
       </tr>
     </tfoot>
   </table>
@@ -802,6 +819,9 @@ export default function RevisionPlanillaPage() {
           };
         },
       );
+      if (payload.field === "generada") {
+        queryClient.invalidateQueries({ queryKey: ["empleados-naf-revision-detalle"] });
+      }
     },
   });
 
@@ -1371,9 +1391,9 @@ export default function RevisionPlanillaPage() {
       {(aprobarMutation.isSuccess || prepararMutation.isSuccess || marcarPagadaMutation.isSuccess) && (
         <p className="text-sm text-emerald-700">
           {prepararMutation.isSuccess
-            ? "Pagos preparados en NAF (ARPLCK) y lote listo para descargar archivos."
+            ? "Pagos preparados en NAF (PLA_PREPARA_CK + traslado). Archivo FPLCK11 listo."
             : aprobarMutation.isSuccess
-              ? "Planilla aprobada en NAF (IND_CK_ACT=S)."
+              ? "Planilla aprobada en NAF (PLA_APROBAR M→A)."
               : "Planilla marcada como pagada."}
         </p>
       )}
@@ -1397,14 +1417,14 @@ export default function RevisionPlanillaPage() {
 
       {totales && (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-          <Metric label="Ingresos" value={formatCurrency(totales.ingresos)} />
-          <Metric label="Deducciones" value={formatCurrency(totales.deducciones)} />
-          <Metric label="Líquido" value={formatCurrency(totales.liquido)} />
-          <Metric label="Davivienda" value={formatCurrency(totales.davivienda)} />
-          <Metric label="BN" value={formatCurrency(totales.bn)} />
+          <Metric label="Ingresos" value={formatCurrencyPrecise(totales.ingresos)} />
+          <Metric label="Deducciones" value={formatCurrencyPrecise(totales.deducciones)} />
+          <Metric label="Líquido" value={formatCurrencyPrecise(totales.liquido)} />
+          <Metric label="Davivienda" value={formatCurrencyPrecise(totales.davivienda)} />
+          <Metric label="BN" value={formatCurrencyPrecise(totales.bn)} />
           <Metric
             label="Dif. total"
-            value={formatCurrency(totales.diferencia)}
+            value={formatCurrencyPrecise(totales.diferencia)}
             accent={Math.abs(totales.diferencia) > 0.5 ? "text-red-600" : "text-emerald-700"}
           />
         </div>
@@ -1415,7 +1435,7 @@ export default function RevisionPlanillaPage() {
           <div className="px-4 py-3 border-b bg-slate-50 text-sm">
             <div className="font-medium">Por empresa y planilla</div>
             <div className="text-xs text-slate-500 mt-0.5">
-              Fijas: Empresa / Cód. / Planilla. Acciones NAF: Aprobar (IND_CK_ACT) → Preparar (ARPLCK) →
+              Fijas: Empresa / Cód. / Planilla. Acciones NAF: Aprobar (M→A) → Preparar (FPLCK01+traslado) →
               Check de pagado en cada columna CK/DAV/BN. Dif. = líquido − (CK + DAV + BN + otro).
             </div>
           </div>
@@ -1536,6 +1556,15 @@ export default function RevisionPlanillaPage() {
                       >
                         {row.estadoLabel ?? "Cerrada"}
                       </span>
+                      {row.congelada ? (
+                        <span
+                          className="ml-2 inline-flex items-center gap-1 rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-700"
+                          title={congeladaTitle(row)}
+                        >
+                          <Lock className="h-3 w-3" />
+                          Congelada
+                        </span>
+                      ) : null}
                     </td>
                     <td className="p-3 text-right tabular-nums">{row.empleados}</td>
                     <td className="p-3 text-right">
@@ -1622,15 +1651,15 @@ export default function RevisionPlanillaPage() {
                         </div>
                       </td>
                     ))}
-                    <td className="p-3 text-right tabular-nums">{formatCurrency(row.otro)}</td>
-                    <td className="p-3 text-right tabular-nums">{formatCurrency(row.sumaFormasPago)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatCurrencyPrecise(row.otro)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatCurrencyPrecise(row.sumaFormasPago)}</td>
                     <td
                       className={cn(
                         "p-3 text-right tabular-nums font-medium",
                         Math.abs(row.diferencia) > 0.5 ? "text-red-600" : "text-emerald-700",
                       )}
                     >
-                      {formatCurrency(row.diferencia)}
+                      {formatCurrencyPrecise(row.diferencia)}
                     </td>
                     <td className="p-2">
                       <div className="flex flex-col gap-1 min-w-[200px]">
@@ -1641,9 +1670,9 @@ export default function RevisionPlanillaPage() {
                             variant="outline"
                             className="h-7 px-2 text-xs"
                             disabled={!canEditChecklist || actionBusy || row.revisada}
-                            title="Aprobar nómina en NAF (IND_CK_ACT=S)"
+                            title="Aprobar nómina en NAF (PLA_APROBAR M→A)"
                             onClick={() => {
-                              if (!window.confirm(`¿Aprobar planilla ${row.codPla} de ${row.companyLabel} en NAF?`)) return;
+                              if (!window.confirm(`¿Aprobar planilla ${row.codPla} de ${row.companyLabel} en NAF (M→A)?`)) return;
                               aprobarMutation.mutate(row);
                             }}
                           >
@@ -1656,14 +1685,14 @@ export default function RevisionPlanillaPage() {
                             variant="outline"
                             className="h-7 px-2 text-xs"
                             disabled={!canEditChecklist || actionBusy || !row.revisada}
-                            title="Preparar cheques/transferencias (INSERT ARPLCK)"
+                            title="Preparar PLA_PREPARA_CK + traslado (PLA_PROCESO_TRASLADO)"
                             onClick={() => {
                               if (row.generada) {
-                                if (!window.confirm("Ya está generada. ¿Regenerar lote en NAF (ARPLCK)?")) return;
+                                if (!window.confirm("Ya está generada. ¿Re-ejecutar PLA_PREPARA_CK / traslado?")) return;
                                 prepararMutation.mutate({ row, replaceExisting: true });
                                 return;
                               }
-                              if (!window.confirm(`¿Preparar cheques/transferencias de ${row.codPla} en NAF?`)) return;
+                              if (!window.confirm(`¿Preparar ${row.codPla} (PLA_PREPARA_CK + traslado a tesorería)?`)) return;
                               prepararMutation.mutate({ row, replaceExisting: false });
                             }}
                           >
@@ -1752,19 +1781,19 @@ export default function RevisionPlanillaPage() {
                     </td>
                     <td className="p-3" />
                     <td className="p-3 text-right tabular-nums">{visibleTotales.empleados}</td>
-                    <td className="p-3 text-right tabular-nums">{formatCurrency(visibleTotales.ingresos)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatCurrencyPrecise(visibleTotales.ingresos)}</td>
                     <td className="p-3 text-right tabular-nums">
-                      {formatCurrency(visibleTotales.deducciones)}
+                      {formatCurrencyPrecise(visibleTotales.deducciones)}
                     </td>
-                    <td className="p-3 text-right tabular-nums">{formatCurrency(visibleTotales.liquido)}</td>
-                    <td className="p-3 text-right tabular-nums">{formatCurrency(visibleTotales.cheque)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatCurrencyPrecise(visibleTotales.liquido)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatCurrencyPrecise(visibleTotales.cheque)}</td>
                     <td className="p-3 text-right tabular-nums">
-                      {formatCurrency(visibleTotales.davivienda)}
+                      {formatCurrencyPrecise(visibleTotales.davivienda)}
                     </td>
-                    <td className="p-3 text-right tabular-nums">{formatCurrency(visibleTotales.bn)}</td>
-                    <td className="p-3 text-right tabular-nums">{formatCurrency(visibleTotales.otro)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatCurrencyPrecise(visibleTotales.bn)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatCurrencyPrecise(visibleTotales.otro)}</td>
                     <td className="p-3 text-right tabular-nums">
-                      {formatCurrency(visibleTotales.sumaFormasPago)}
+                      {formatCurrencyPrecise(visibleTotales.sumaFormasPago)}
                     </td>
                     <td
                       className={cn(
@@ -1772,7 +1801,7 @@ export default function RevisionPlanillaPage() {
                         Math.abs(visibleTotales.diferencia) > 0.5 ? "text-red-600" : "text-emerald-700",
                       )}
                     >
-                      {formatCurrency(visibleTotales.diferencia)}
+                      {formatCurrencyPrecise(visibleTotales.diferencia)}
                     </td>
                     <td className="p-3" />
                     <td className="p-3 text-center text-xs font-normal text-muted-foreground">
@@ -1820,12 +1849,12 @@ export default function RevisionPlanillaPage() {
                         <div className="text-xs text-muted-foreground">NO_CIA {row.noCia}</div>
                       </td>
                       <td className="p-3 text-right tabular-nums">{row.planillas}</td>
-                      <td className="p-3 text-right tabular-nums">{formatCurrency(row.cheque)}</td>
-                      <td className="p-3 text-right tabular-nums">{formatCurrency(row.davivienda)}</td>
-                      <td className="p-3 text-right tabular-nums">{formatCurrency(row.bn)}</td>
-                      <td className="p-3 text-right tabular-nums">{formatCurrency(row.otro)}</td>
+                      <td className="p-3 text-right tabular-nums">{formatCurrencyPrecise(row.cheque)}</td>
+                      <td className="p-3 text-right tabular-nums">{formatCurrencyPrecise(row.davivienda)}</td>
+                      <td className="p-3 text-right tabular-nums">{formatCurrencyPrecise(row.bn)}</td>
+                      <td className="p-3 text-right tabular-nums">{formatCurrencyPrecise(row.otro)}</td>
                       <td className="p-3 text-right tabular-nums font-semibold">
-                        {formatCurrency(row.totalPago)}
+                        {formatCurrencyPrecise(row.totalPago)}
                       </td>
                     </tr>
                   ))}
@@ -1835,19 +1864,19 @@ export default function RevisionPlanillaPage() {
                     <td className="p-3">Total</td>
                     <td className="p-3 text-right tabular-nums">{resumenPagoTotales.planillas}</td>
                     <td className="p-3 text-right tabular-nums">
-                      {formatCurrency(resumenPagoTotales.cheque)}
+                      {formatCurrencyPrecise(resumenPagoTotales.cheque)}
                     </td>
                     <td className="p-3 text-right tabular-nums">
-                      {formatCurrency(resumenPagoTotales.davivienda)}
+                      {formatCurrencyPrecise(resumenPagoTotales.davivienda)}
                     </td>
                     <td className="p-3 text-right tabular-nums">
-                      {formatCurrency(resumenPagoTotales.bn)}
+                      {formatCurrencyPrecise(resumenPagoTotales.bn)}
                     </td>
                     <td className="p-3 text-right tabular-nums">
-                      {formatCurrency(resumenPagoTotales.otro)}
+                      {formatCurrencyPrecise(resumenPagoTotales.otro)}
                     </td>
                     <td className="p-3 text-right tabular-nums">
-                      {formatCurrency(resumenPagoTotales.totalPago)}
+                      {formatCurrencyPrecise(resumenPagoTotales.totalPago)}
                     </td>
                   </tr>
                 </tfoot>
@@ -1906,7 +1935,7 @@ export default function RevisionPlanillaPage() {
                           <td className="py-1.5 pr-2 font-mono text-xs whitespace-nowrap">{line.codigo}</td>
                           <td className="py-1.5 pr-2">{line.descripcion}</td>
                           <td className="py-1.5 text-right tabular-nums whitespace-nowrap">
-                            {formatCurrency(line.monto)}
+                            {formatCurrencyPrecise(line.monto)}
                           </td>
                         </tr>
                       ))}
@@ -1924,7 +1953,7 @@ export default function RevisionPlanillaPage() {
                           Total ingresos
                         </td>
                         <td className="py-2 text-right tabular-nums">
-                          {formatCurrency(planillaDetalle.totales.ingresos)}
+                          {formatCurrencyPrecise(planillaDetalle.totales.ingresos)}
                         </td>
                       </tr>
                     </tfoot>
@@ -1946,7 +1975,7 @@ export default function RevisionPlanillaPage() {
                           <td className="py-1.5 pr-2 font-mono text-xs whitespace-nowrap">{line.codigo}</td>
                           <td className="py-1.5 pr-2">{line.descripcion}</td>
                           <td className="py-1.5 text-right tabular-nums whitespace-nowrap">
-                            {formatCurrency(line.monto)}
+                            {formatCurrencyPrecise(line.monto)}
                           </td>
                         </tr>
                       ))}
@@ -1964,7 +1993,7 @@ export default function RevisionPlanillaPage() {
                           Total deducciones
                         </td>
                         <td className="py-2 text-right tabular-nums">
-                          {formatCurrency(planillaDetalle.totales.deducciones)}
+                          {formatCurrencyPrecise(planillaDetalle.totales.deducciones)}
                         </td>
                       </tr>
                     </tfoot>
@@ -1975,19 +2004,19 @@ export default function RevisionPlanillaPage() {
                 <div>
                   <div className="text-xs text-muted-foreground">Total ingresos</div>
                   <div className="font-semibold tabular-nums">
-                    {formatCurrency(planillaDetalle.totales.ingresos)}
+                    {formatCurrencyPrecise(planillaDetalle.totales.ingresos)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Total deducciones</div>
                   <div className="font-semibold tabular-nums">
-                    {formatCurrency(planillaDetalle.totales.deducciones)}
+                    {formatCurrencyPrecise(planillaDetalle.totales.deducciones)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Líquido pagable</div>
                   <div className="font-semibold tabular-nums text-emerald-700">
-                    {formatCurrency(planillaDetalle.totales.liquido)}
+                    {formatCurrencyPrecise(planillaDetalle.totales.liquido)}
                   </div>
                 </div>
               </div>
@@ -2012,6 +2041,9 @@ export default function RevisionPlanillaPage() {
                 : ""}
               {appliedRango
                 ? ` · Quincena ${formatDate(appliedRango.fDesde)} – ${formatDate(appliedRango.fHasta)}`
+                : ""}
+              {pagoReporte?.congeladaAt
+                ? ` · Congelada ${formatDateTime(pagoReporte.congeladaAt)}`
                 : ""}
             </DialogDescription>
           </DialogHeader>
@@ -2086,7 +2118,7 @@ export default function RevisionPlanillaPage() {
                         {emp.numCuenta ?? "—"}
                       </td>
                       <td className="py-1.5 text-right tabular-nums whitespace-nowrap">
-                        {formatCurrency(emp.liquido)}
+                        {formatCurrencyPrecise(emp.liquido)}
                       </td>
                     </tr>
                   ))}
@@ -2104,7 +2136,7 @@ export default function RevisionPlanillaPage() {
                       TOTAL GENERAL ({pagoReporte.totales.empleados} empleados)
                     </td>
                     <td className="py-2 text-right tabular-nums">
-                      {formatCurrency(pagoReporte.totales.liquido)}
+                      {formatCurrencyPrecise(pagoReporte.totales.liquido)}
                     </td>
                   </tr>
                 </tfoot>

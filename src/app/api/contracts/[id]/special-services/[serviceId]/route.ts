@@ -3,7 +3,8 @@ import { prisma } from "@/modules/core/db/prisma";
 import { getSession, canModifyContracts } from "@/lib/api/middleware";
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { specialServiceUpdateSchema } from "@/modules/presupuestos/validations/contract.schema";
-import { syncFacturasForPeriodMonthDate } from "@/modules/presupuestos/services/facturacion-cobro";
+import { syncFacturasForPeriod, syncFacturasForPeriodMonthDate } from "@/modules/presupuestos/services/facturacion-cobro";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 
 type Ctx = { params: Promise<{ id: string; serviceId: string }> };
 
@@ -60,9 +61,20 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     });
 
     await syncFacturasForPeriodMonthDate(prisma, existing.periodMonth, session.user.id);
-    if (updated.periodMonth.getTime() !== existing.periodMonth.getTime()) {
+    if (parsed.data.periodMonth) {
+      const [year, month] = parsed.data.periodMonth.split("-").map(Number);
+      await syncFacturasForPeriod(prisma, year, month, session.user.id);
+    } else if (updated.periodMonth.getTime() !== existing.periodMonth.getTime()) {
       await syncFacturasForPeriodMonthDate(prisma, updated.periodMonth, session.user.id);
     }
+
+    queueCxcContractNotice({
+      contractId,
+      action: "Servicio especial actualizado",
+      summary: `${updated.description} · ${updated.amount}`,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
 
     return ok({
       id: updated.id,
@@ -94,6 +106,13 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
 
     await prisma.contractSpecialService.delete({ where: { id: serviceId } });
     await syncFacturasForPeriodMonthDate(prisma, existing.periodMonth, session.user.id);
+    queueCxcContractNotice({
+      contractId,
+      action: "Servicio especial eliminado",
+      summary: `${existing.description} · ${existing.amount}`,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
     return ok({ deleted: true });
   } catch (e) {
     return serverError("Error al eliminar servicio especial", e);

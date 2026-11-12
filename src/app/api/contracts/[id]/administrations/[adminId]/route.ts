@@ -4,6 +4,7 @@ import { getSession, canEditContractTab, canViewContractTab } from "@/lib/api/mi
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { contractAdministrationUpdateSchema } from "@/modules/presupuestos/validations/contract.schema";
 import { syncOpenFacturaEmisionesForContract } from "@/modules/presupuestos/services/facturacion-cobro";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 
 type Ctx = { params: Promise<{ id: string; adminId: string }> };
 
@@ -149,6 +150,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     });
 
     await syncOpenFacturaEmisionesForContract(prisma, contractId);
+
+    queueCxcContractNotice({
+      contractId,
+      action: "Administración del contrato actualizada",
+      summary: updated.name,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
 
     return ok(serializeAdmin(updated));
   } catch (e) {

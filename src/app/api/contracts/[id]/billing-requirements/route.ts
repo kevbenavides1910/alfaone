@@ -4,6 +4,7 @@ import { getSession, canModifyContracts } from "@/lib/api/middleware";
 import { ok, created, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { billingRequirementSchema } from "@/modules/presupuestos/validations/contract.schema";
 import { syncOpenFacturaRequisitosForContract } from "@/modules/presupuestos/services/facturacion-cobro";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -85,6 +86,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     });
 
     await syncOpenFacturaRequisitosForContract(prisma, contractId);
+
+    queueCxcContractNotice({
+      contractId,
+      action: "Requisito de facturación agregado",
+      summary: parsed.data.description.trim(),
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
 
     return created(serialize(row));
   } catch (e) {

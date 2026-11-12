@@ -46,6 +46,9 @@ export async function POST(req: NextRequest) {
         secuencias: result.secuencias,
       },
       insertedNaf: result.insertedNaf,
+      message: result.message,
+      prep: result.prep,
+      traslado: result.traslado,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Error al preparar pagos";
@@ -55,8 +58,12 @@ export async function POST(req: NextRequest) {
       message.includes("Falta credencial") ||
       message.includes("debe estar aprobada") ||
       message.includes("Ya existe") ||
-      message.includes("Sin cuenta origen") ||
-      message.includes("escritura")
+      message.includes("Sin cuenta") ||
+      message.includes("exige estado") ||
+      message.includes("T_CHEQUES") ||
+      message.includes("escritura") ||
+      message.includes("Calculada") ||
+      message.includes("adelanto")
     ) {
       return badRequest(message);
     }

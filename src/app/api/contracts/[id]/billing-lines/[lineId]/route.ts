@@ -3,6 +3,7 @@ import { prisma } from "@/modules/core/db/prisma";
 import { getSession, canEditContractTab, canViewContractTab } from "@/lib/api/middleware";
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { contractBillingLineUpdateSchema } from "@/modules/presupuestos/validations/contract.schema";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 
 type Ctx = { params: Promise<{ id: string; lineId: string }> };
 
@@ -54,6 +55,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       },
     });
 
+    queueCxcContractNotice({
+      contractId,
+      action: "Línea de facturación actualizada",
+      summary: updated.description,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
+
     return ok(serialize(updated));
   } catch (e) {
     return serverError("Error al actualizar línea de facturación", e);
@@ -73,6 +82,13 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     if (!existing) return notFound();
 
     await prisma.contractBillingLine.delete({ where: { id: lineId } });
+    queueCxcContractNotice({
+      contractId,
+      action: "Línea de facturación eliminada",
+      summary: existing.description,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
     return ok({ deleted: true });
   } catch (e) {
     return serverError("Error al eliminar línea de facturación", e);

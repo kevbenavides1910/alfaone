@@ -3,6 +3,7 @@ import { prisma } from "@/modules/core/db/prisma";
 import { getSession, canModifyContracts } from "@/lib/api/middleware";
 import { ok, created, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { clientContactSchema } from "@/modules/presupuestos/validations/contract.schema";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -93,6 +94,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         sortOrder,
         createdById: session.user.id,
       },
+    });
+
+    queueCxcContractNotice({
+      contractId,
+      action: "Contacto del cliente agregado",
+      summary: `${parsed.data.name.trim()} · ${parsed.data.email.trim()}`,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
     });
 
     return created(serialize(row));

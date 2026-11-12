@@ -7,6 +7,7 @@ import {
   isContractVigenteInMonth,
   resolveContractMonthlyBilling,
 } from "@/modules/presupuestos/business/contractPeriodBilling";
+import { specialServicesInMonth } from "@/modules/presupuestos/business/effectiveBilling";
 import { normalizeRequirementKey } from "@/modules/presupuestos/business/contractBillingRequirementsDefaults";
 import { computeServicePeriodForInvoice } from "@/lib/utils/format";
 import {
@@ -965,7 +966,15 @@ export function serializeFacturaMensual(
       monthlyBilling?: { toString(): string };
       billingHistory?: { periodMonth: Date; monthlyBilling: { toString(): string } }[];
       demandBilling?: { periodYear: number; periodMonth: number; monthlyBilling: { toString(): string } }[];
-      specialServices?: { periodMonth: Date; amount: { toString(): string } | number | string }[];
+      specialServices?: {
+        id?: string;
+        periodMonth: Date;
+        description?: string;
+        amount: { toString(): string } | number | string;
+        startDate?: Date;
+        endDate?: Date;
+        notes?: string | null;
+      }[];
       administrations?: {
         id: string;
         billingLines: {
@@ -1023,6 +1032,26 @@ export function serializeFacturaMensual(
       : { billing: null, baseBilling: null, specialServicesTotal: 0, amountDefined: false };
   const contractVentaSubtotal =
     contractVenta.amountDefined && contractVenta.billing != null ? contractVenta.billing : null;
+  const monthSpecialServices = specialServicesInMonth(
+    row.contract?.specialServices ?? [],
+    row.periodYear,
+    row.periodMonth
+  );
+  const specialServicesTotal = monthSpecialServices.reduce(
+    (sum, service) => sum + toNum(service.amount),
+    0
+  );
+  const liveVentaByAdmin = new Map<string, number>();
+  if (contractVentaSubtotal != null && administrations.length > 0) {
+    const liveSubs = resolveEmisionSubtotals(
+      contractVentaSubtotal,
+      administrations,
+      administrations.length
+    );
+    administrations.forEach((admin, index) => {
+      if (liveSubs[index] != null) liveVentaByAdmin.set(admin.id, liveSubs[index]!);
+    });
+  }
   const billingCatalog =
     row.contract?.billingLines && row.contract.billingLines.length > 0
       ? row.contract.billingLines
@@ -1103,6 +1132,15 @@ export function serializeFacturaMensual(
     subtotalCopied: amountDefined ? toNum(row.subtotalCopied) : null,
     ivaPctCopied: toNum(row.ivaPctCopied),
     totalCalculated: amountDefined ? toNum(row.totalCalculated) : null,
+    specialServicesTotal: Math.round(specialServicesTotal * 100) / 100,
+    specialServices: monthSpecialServices.map((service) => ({
+      id: service.id ?? "",
+      description: service.description ?? "Servicio especial",
+      amount: toNum(service.amount),
+      startDate: service.startDate?.toISOString() ?? null,
+      endDate: service.endDate?.toISOString() ?? null,
+      notes: service.notes ?? null,
+    })),
     contractVentaSubtotal,
     contractVentaTotal,
     ventaFacturadoDelta,
@@ -1177,9 +1215,18 @@ export function serializeFacturaMensual(
         hasNaf && nafTotal != null
           ? nafTotal
           : emMixed.total;
+      const liveEmSubtotal =
+        (e.contractAdministrationId
+          ? liveVentaByAdmin.get(e.contractAdministrationId)
+          : undefined) ??
+        (liveVentaByAdmin.size > 0 ? [...liveVentaByAdmin.values()][idx] : undefined) ??
+        (emisiones.length <= 1 ? contractVentaSubtotal : null);
+      const liveEmTotal =
+        liveEmSubtotal != null ? calculateInvoiceTotal(liveEmSubtotal, ivaPct) : emMixed.total;
+      const ventaCompare = hasNaf && nafSubtotal != null ? nafSubtotal : emSubtotal;
       const ventaDelta =
-        emSubtotal != null && contractEmSubtotal != null
-          ? Math.round((emSubtotal - contractEmSubtotal) * 100) / 100
+        ventaCompare != null && liveEmSubtotal != null
+          ? Math.round((ventaCompare - liveEmSubtotal) * 100) / 100
           : null;
       return {
         id: e.id,
@@ -1202,8 +1249,8 @@ export function serializeFacturaMensual(
         totalCalculated: emTotal,
         subtotalFacturadoNaf: nafSubtotal,
         totalFacturadoNaf: nafTotal,
-        contractVentaSubtotal: contractEmSubtotal,
-        contractVentaTotal: emMixed.total,
+        contractVentaSubtotal: liveEmSubtotal,
+        contractVentaTotal: liveEmTotal,
         ventaFacturadoDelta: ventaDelta,
         nafLinks,
       };

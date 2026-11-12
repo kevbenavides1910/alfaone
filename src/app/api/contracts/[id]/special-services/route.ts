@@ -3,7 +3,8 @@ import { prisma } from "@/modules/core/db/prisma";
 import { getSession, canModifyContracts } from "@/lib/api/middleware";
 import { ok, created, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { specialServiceSchema } from "@/modules/presupuestos/validations/contract.schema";
-import { syncFacturasForPeriodMonthDate } from "@/modules/presupuestos/services/facturacion-cobro";
+import { syncFacturasForPeriod } from "@/modules/presupuestos/services/facturacion-cobro";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -89,7 +90,16 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       },
     });
 
-    await syncFacturasForPeriodMonthDate(prisma, row.periodMonth, session.user.id);
+    const [year, month] = parsed.data.periodMonth.split("-").map(Number);
+    await syncFacturasForPeriod(prisma, year, month, session.user.id);
+
+    queueCxcContractNotice({
+      contractId,
+      action: "Servicio especial registrado",
+      summary: `${parsed.data.description.trim()} · ${parsed.data.periodMonth} · ${parsed.data.amount}`,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
 
     return created(serialize(row));
   } catch (e) {

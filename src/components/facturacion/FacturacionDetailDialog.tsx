@@ -78,6 +78,15 @@ export type FacturaMensualRow = {
   contractVentaTotal?: number | null;
   /** Facturado − venta contrato (subtotal). */
   ventaFacturadoDelta?: number | null;
+  specialServicesTotal?: number;
+  specialServices?: {
+    id: string;
+    description: string;
+    amount: number;
+    startDate: string | null;
+    endDate: string | null;
+    notes: string | null;
+  }[];
   clientNameCopied: string;
   companyCodeCopied: string;
   licitacionNo?: string;
@@ -555,6 +564,33 @@ export function FacturacionDetailDialog({
             </div>
           );
         })()}
+
+        {(factura.specialServices?.length ?? 0) > 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 space-y-2">
+            <p className="font-semibold">
+              Servicios especiales del mes: {formatCurrency(factura.specialServicesTotal ?? 0)}
+            </p>
+            <ul className="space-y-1">
+              {(factura.specialServices ?? []).map((service) => (
+                <li key={service.id || service.description}>
+                  {service.description}: {formatCurrency(service.amount)}
+                  {service.startDate && service.endDate
+                    ? ` (${formatDate(service.startDate)} – ${formatDate(service.endDate)})`
+                    : ""}
+                  {service.notes ? ` · ${service.notes}` : ""}
+                </li>
+              ))}
+            </ul>
+            {factura.ventaFacturadoDelta != null &&
+              (factura.specialServicesTotal ?? 0) > 0 &&
+              -factura.ventaFacturadoDelta + 0.5 >= (factura.specialServicesTotal ?? 0) && (
+              <p>
+                El monto de esta factura no incluye estos servicios especiales. La diferencia
+                contra la venta del contrato los muestra para cobrarlos o emitir el ajuste.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="rounded-lg border border-slate-200 p-4 space-y-4">
           <div>

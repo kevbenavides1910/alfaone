@@ -5,6 +5,7 @@ import { getSession, canModifyContracts } from "@/lib/api/middleware";
 import { ok, created, badRequest, unauthorized, forbidden, serverError } from "@/lib/api/response";
 import { recalculateEquivalence } from "@/modules/presupuestos/business/equivalence";
 import { periodSchema } from "@/modules/presupuestos/validations/contract.schema";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -85,6 +86,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     // Limpiar el caché de Next.js para que la interfaz se actualice de inmediato 👈
     revalidatePath(`/contracts/${id}`);
     revalidatePath(`/contracts`);
+
+    queueCxcContractNotice({
+      contractId: id,
+      action: "Prórroga de contrato",
+      summary: `Nuevo monto mensual ${newBilling}`,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
 
     return created(period);
   } catch (e) {

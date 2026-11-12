@@ -11,6 +11,7 @@ import {
   type FormaPagoCanal,
 } from "@/modules/empleados-naf/business/revision-planilla-pago";
 import { withNafOracleConnection } from "@/modules/empleados-naf/services/oracle-client";
+import { getPlanillaCierre } from "@/modules/empleados-naf/services/revision-planilla-cierre";
 
 export type RevisionPlanillaCanalPago = Extract<FormaPagoCanal, "CK" | "DAV" | "BN" | "OTRO">;
 
@@ -39,6 +40,8 @@ export type RevisionPlanillaEmpleadosPagoResult = {
     empleados: number;
     liquido: number;
   };
+  /** Presente cuando la lista sale de la foto congelada de la planilla. */
+  congeladaAt: string | null;
 };
 
 type PagoMaestro = {
@@ -178,6 +181,44 @@ export async function getRevisionPlanillaEmpleadosPorCanal(input: {
     throw new Error("Parámetros requeridos: noCia, codPla, fDesde, fHasta, canal");
   }
 
+  const cierre = await getPlanillaCierre({
+    noCia,
+    codPla,
+    fDesde: input.fDesde,
+    fHasta: input.fHasta,
+  });
+  if (cierre) {
+    const empleados: RevisionPlanillaEmpleadoPago[] = cierre.lineas
+      .filter((l) => l.canal === canal && l.liquido > 0)
+      .map((l) => ({
+        noEmple: l.noEmple,
+        nombre: l.nombre,
+        cedula: l.cedula,
+        formaPago: l.formaPago,
+        banco: l.banco,
+        numCuenta: l.numCuenta,
+        idCta: l.idCta,
+        liquido: roundMoney(l.liquido),
+      }))
+      .sort((a, b) => a.noEmple.localeCompare(b.noEmple, undefined, { numeric: true }));
+    return {
+      noCia,
+      companyLabel: await resolveCompanyLabel(noCia),
+      codPla,
+      nominaNombre: cierre.nominaNombre,
+      fDesde: input.fDesde,
+      fHasta: input.fHasta,
+      canal,
+      canalLabel: canalLabel(canal),
+      empleados,
+      totales: {
+        empleados: empleados.length,
+        liquido: roundMoney(empleados.reduce((sum, row) => sum + row.liquido, 0)),
+      },
+      congeladaAt: cierre.frozenAt.toISOString(),
+    };
+  }
+
   const metaRows = await prisma.nafNominaPeriodMeta.findMany({
     where: { noCia, codPla },
     select: {
@@ -285,5 +326,6 @@ export async function getRevisionPlanillaEmpleadosPorCanal(input: {
       empleados: empleados.length,
       liquido,
     },
+    congeladaAt: null,
   };
 }

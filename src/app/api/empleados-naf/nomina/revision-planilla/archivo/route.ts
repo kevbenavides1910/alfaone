@@ -4,6 +4,7 @@ import { hasPermission } from "@/lib/permissions/check";
 import { unauthorized, forbidden, badRequest, serverError } from "@/lib/api/response";
 import {
   generarArchivoBancoDesdeLote,
+  generarArchivoBancoNaf,
   type BancoArchivoCanal,
 } from "@/modules/empleados-naf/services/banco-pago-archivos";
 import { getLatestPagoLote } from "@/modules/empleados-naf/services/revision-planilla-pago-flujo";
@@ -27,10 +28,31 @@ export async function GET(req: NextRequest) {
     }
     const canal = canalRaw as BancoArchivoCanal;
 
+    // Preferencia Codisa/Neo: generar directo desde T_CHEQUES/ARPLCK
+    if (noCia && codPla) {
+      const file = await generarArchivoBancoNaf({
+        noCia,
+        codPla,
+        canal,
+        fDesde: fDesde || undefined,
+        fHasta: fHasta || undefined,
+      });
+      return new Response(file.body, {
+        status: 200,
+        headers: {
+          "Content-Type": file.contentType,
+          "Content-Disposition": `attachment; filename="${file.filename}"`,
+          "X-Empleados": String(file.empleados),
+          "X-Total": String(file.total),
+          "X-Neo-Fuente": file.fuente || "",
+        },
+      });
+    }
+
     let id = loteId;
     if (!id) {
       if (!noCia || !codPla || !fDesde || !fHasta) {
-        return badRequest("Indique loteId o noCia,codPla,fDesde,fHasta");
+        return badRequest("Indique noCia+codPla (recomendado) o loteId / fDesde+fHasta");
       }
       const lote = await getLatestPagoLote({ noCia, codPla, fDesde, fHasta });
       if (!lote) return badRequest("No hay lote preparado para descargar");
@@ -46,11 +68,18 @@ export async function GET(req: NextRequest) {
         "Content-Disposition": `attachment; filename="${file.filename}"`,
         "X-Empleados": String(file.empleados),
         "X-Total": String(file.total),
+        "X-Neo-Fuente": file.fuente || "",
       },
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Error al generar archivo";
-    if (message.includes("no encontrado") || message.includes("canal") || message.includes("estado")) {
+    if (
+      message.includes("no encontrado") ||
+      message.includes("canal") ||
+      message.includes("estado") ||
+      message.includes("Sin ") ||
+      message.includes("Prepare")
+    ) {
       return badRequest(message);
     }
     return serverError("Error al generar archivo bancario", e);

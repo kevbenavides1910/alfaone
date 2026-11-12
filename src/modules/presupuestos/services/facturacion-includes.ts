@@ -20,7 +20,15 @@ export const facturaListSerializeInclude = {
         select: { periodYear: true, periodMonth: true, monthlyBilling: true },
       },
       specialServices: {
-        select: { periodMonth: true, amount: true },
+        select: {
+          id: true,
+          periodMonth: true,
+          description: true,
+          amount: true,
+          startDate: true,
+          endDate: true,
+          notes: true,
+        },
       },
       billingLines: {
         select: { id: true, monthlyAmount: true, appliesIva: true },

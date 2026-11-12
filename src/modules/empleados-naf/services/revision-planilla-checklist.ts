@@ -1,5 +1,9 @@
 import { prisma } from "@/modules/core/db/prisma";
 import { normalizeSapCode } from "@/modules/empleados/business/company-sap";
+import {
+  congelarPlanilla,
+  descongelarPlanilla,
+} from "@/modules/empleados-naf/services/revision-planilla-cierre";
 
 export type RevisionChecklistFlags = {
   revisada: boolean;
@@ -225,6 +229,19 @@ export async function upsertRevisionChecklistFlag(input: {
       pagadaBn: true,
     },
   });
+
+  if (input.field === "generada") {
+    const ref = { noCia, codPla, fDesde: input.fDesde, fHasta: input.fHasta };
+    try {
+      if (input.value) {
+        await congelarPlanilla({ ...ref, motivo: "generada", userLabel: input.updatedBy ?? null });
+      } else {
+        await descongelarPlanilla(ref);
+      }
+    } catch (e) {
+      console.error("[revision-planilla] no se pudo actualizar la foto de la planilla", ref, e);
+    }
+  }
 
   return mapFlags(row);
 }

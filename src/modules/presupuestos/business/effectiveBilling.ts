@@ -31,6 +31,16 @@ export function getEffectiveMonthlyBilling(
   return bestAmount;
 }
 
+export function specialServicesInMonth<T extends { periodMonth: Date }>(
+  rows: T[],
+  periodYear: number,
+  periodMonth: number,
+): T[] {
+  if (rows.length === 0) return [];
+  const target = monthStart(new Date(periodYear, periodMonth - 1, 15)).getTime();
+  return rows.filter((row) => monthStart(new Date(row.periodMonth)).getTime() === target);
+}
+
 export function sumSpecialServicesForMonth(
   rows: { periodMonth: Date; amount: { toString(): string } | number | string }[],
   asOf: Date,

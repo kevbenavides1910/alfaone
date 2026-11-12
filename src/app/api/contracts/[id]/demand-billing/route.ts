@@ -5,6 +5,7 @@ import { getSession, canModifyContracts } from "@/lib/api/middleware";
 import { ok, created, badRequest, unauthorized, forbidden, notFound, serverError } from "@/lib/api/response";
 import { monthsInContractRange } from "@/modules/presupuestos/business/demandBilling";
 import { syncFacturasForPeriod } from "@/modules/presupuestos/services/facturacion-cobro";
+import { queueCxcContractNotice } from "@/modules/presupuestos/services/contract-cxc-notify";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -114,6 +115,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     });
 
     await syncFacturasForPeriod(prisma, periodYear, periodMonth, session.user.id);
+
+    queueCxcContractNotice({
+      contractId: id,
+      action: "Facturación por demanda actualizada",
+      summary: `${periodYear}-${String(periodMonth).padStart(2, "0")} · ${monthlyBilling}`,
+      actorUserId: session.user.id,
+      actorName: session.user.name,
+    });
 
     return created({
       ...entry,

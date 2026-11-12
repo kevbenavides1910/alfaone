@@ -1,5 +1,18 @@
+#!/usr/bin/env python3
+"""Pull ZK attendance → alfa_biometric_punch (UTC + device_time).
+
+El reloj entrega hora de pared CR. Odoo guarda check_time en UTC naive y
+device_time con la hora del reloj. Un INSERT crudo con la pared en check_time
+hace que el cuadro reste 6 h y muestre 00:48 en vez de 06:48.
+"""
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None
+
 from zk import ZK
 import psycopg2
 
@@ -9,12 +22,29 @@ DEVICES = [
     ("10.1.1.81", "Piso 02"),
     ("10.2.2.10", "Alajuela"),
 ]
+_TZ_CR = ZoneInfo("America/Costa_Rica") if ZoneInfo else None
 cutoff = datetime.now() - timedelta(days=7)
+
+
+def wall_and_utc(ts):
+    """ZK timestamp → (device_time str, check_time UTC naive)."""
+    wall = ts.replace(tzinfo=None) if getattr(ts, "tzinfo", None) else ts
+    device_time = wall.strftime("%Y-%m-%d %H:%M:%S")
+    if _TZ_CR is not None:
+        utc = (
+            wall.replace(tzinfo=_TZ_CR)
+            .astimezone(timezone.utc)
+            .replace(tzinfo=None)
+        )
+    else:
+        utc = wall + timedelta(hours=6)
+    return device_time, utc
+
+
 conn = psycopg2.connect(DSN)
 conn.autocommit = False
 cur = conn.cursor()
 
-# map ip -> device id
 cur.execute("SELECT id, ip FROM alfa_biometric_device")
 dev_by_ip = {r[1]: r[0] for r in cur.fetchall()}
 
@@ -35,18 +65,28 @@ for ip, name in DEVICES:
                 uid = int(badge)
             except Exception:
                 continue
+            device_time, check_time = wall_and_utc(a.timestamp)
             cur.execute(
                 """
                 INSERT INTO alfa_biometric_punch (
-                  att_user_id, badge, person_name, check_time, check_type,
-                  sensor_id, device_id, source, create_date, write_date
+                  att_user_id, badge, person_name, device_time, check_time,
+                  check_type, sensor_id, device_id, source,
+                  create_date, write_date
                 ) VALUES (
                   %s, %s, NULL, %s, %s,
-                  NULL, %s, 'device', (NOW() AT TIME ZONE 'UTC'), (NOW() AT TIME ZONE 'UTC')
+                  %s, NULL, %s, 'device',
+                  (NOW() AT TIME ZONE 'UTC'), (NOW() AT TIME ZONE 'UTC')
                 )
                 ON CONFLICT (att_user_id, check_time, source) DO NOTHING
                 """,
-                (uid, badge, a.timestamp, str(getattr(a, "punch", "")), did),
+                (
+                    uid,
+                    badge,
+                    device_time,
+                    check_time,
+                    str(getattr(a, "punch", "")),
+                    did,
+                ),
             )
             if cur.rowcount:
                 inserted += 1

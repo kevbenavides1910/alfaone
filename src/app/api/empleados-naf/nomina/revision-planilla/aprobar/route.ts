@@ -38,6 +38,10 @@ export async function POST(req: NextRequest) {
       message.includes("inválid") ||
       message.includes("Falta credencial") ||
       message.includes("No se actualizó") ||
+      message.includes("exige estado") ||
+      message.includes("Calculada") ||
+      message.includes("adelanto") ||
+      message.includes("prenómina") ||
       message.includes("escritura")
     ) {
       return badRequest(message);

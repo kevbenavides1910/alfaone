@@ -23,6 +23,12 @@ import {
   loadRevisionChecklistMap,
   revisionChecklistKey,
 } from "@/modules/empleados-naf/services/revision-planilla-checklist";
+import {
+  congelarPlanilla,
+  isDiaPagoVencido,
+  loadPlanillaCierres,
+  planillaCierreKey,
+} from "@/modules/empleados-naf/services/revision-planilla-cierre";
 
 export type { NafNominaEmpresaOption, NafNominaPeriodoOption, NafNominaPlanillaOption };
 
@@ -56,6 +62,11 @@ export type RevisionPlanillaRow = {
   pagadaCk: boolean;
   pagadaDav: boolean;
   pagadaBn: boolean;
+  /** Montos y canales fijos: se tomaron de la foto al generar o al pasar el día de pago. */
+  congelada: boolean;
+  congeladaAt: string | null;
+  /** generada | lote | dia_pago */
+  congeladaMotivo: string | null;
 };
 
 function planillaPagadaPorBancos(
@@ -405,10 +416,76 @@ export async function getRevisionPlanillaByDateRange(
     }
   }
 
-  const employeeKeys = [
-    ...new Set(filteredSummaries.map((s) => nafEmployeeSourceKey(s.noCia, s.noEmple))),
+  let cierres = await loadPlanillaCierres(noCias, fDesde, fHasta);
+  if (isDiaPagoVencido(fHasta)) {
+    const pendientes = new Map<string, { noCia: string; codPla: string }>();
+    for (const s of filteredSummaries) {
+      const key = planillaCierreKey(s.noCia, s.codPla);
+      if (cierres.has(key) || pendientes.has(key)) continue;
+      const estado = estadoByPlanilla.get(key);
+      if (estado === "M" || estado === "A") continue;
+      pendientes.set(key, { noCia: s.noCia, codPla: s.codPla });
+    }
+    if (pendientes.size > 0) {
+      for (const p of pendientes.values()) {
+        await congelarPlanilla({ ...p, fDesde, fHasta, motivo: "dia_pago" }).catch((e) => {
+          console.error("[revision-planilla] no se pudo congelar", p, e);
+        });
+      }
+      cierres = await loadPlanillaCierres(noCias, fDesde, fHasta);
+    }
+  }
+
+  type PagoItem = {
+    noCia: string;
+    codPla: string;
+    noEmple: string;
+    nominaNombre: string | null;
+    ingresos: number;
+    deducciones: number;
+    liquido: number;
+    canal: FormaPagoCanal | null;
+  };
+  const items: PagoItem[] = [];
+  for (const s of filteredSummaries) {
+    if (cierres.has(planillaCierreKey(s.noCia, s.codPla))) continue;
+    items.push({
+      noCia: s.noCia,
+      codPla: s.codPla,
+      noEmple: s.noEmple,
+      nominaNombre: s.nominaNombre,
+      ingresos: decimalToNumber(s.devengado),
+      deducciones: decimalToNumber(s.deducciones),
+      liquido: decimalToNumber(s.neto),
+      canal: null,
+    });
+  }
+  for (const cierre of cierres.values()) {
+    if (
+      codPlaRefSet &&
+      !codPlaRefSet.has(planillaCierreKey(cierre.noCia, cierre.codPla)) &&
+      !codPlaRefSet.has(`*|${cierre.codPla}`)
+    ) {
+      continue;
+    }
+    for (const l of cierre.lineas) {
+      items.push({
+        noCia: cierre.noCia,
+        codPla: cierre.codPla,
+        noEmple: l.noEmple,
+        nominaNombre: cierre.nominaNombre,
+        ingresos: l.ingresos,
+        deducciones: l.deducciones,
+        liquido: l.liquido,
+        canal: l.canal,
+      });
+    }
+  }
+
+  const employeeKeys = [...new Set(items.map((s) => nafEmployeeSourceKey(s.noCia, s.noEmple)))];
+  const companiesInSummaries = [
+    ...new Set(items.filter((s) => s.canal == null).map((s) => s.noCia)),
   ];
-  const companiesInSummaries = [...new Set(filteredSummaries.map((s) => s.noCia))];
   const [employees, pagoByKey, checklistByKey] = await Promise.all([
     employeeKeys.length
       ? prisma.nafEmployee.findMany({
@@ -451,18 +528,18 @@ export async function getRevisionPlanillaByDateRange(
     OTRO: new Set(),
   };
 
-  for (const summary of filteredSummaries) {
+  for (const summary of items) {
     const sourceKey = nafEmployeeSourceKey(summary.noCia, summary.noEmple);
     const employee = employeeByKey.get(sourceKey);
     const pago = pagoByKey.get(sourceKey);
-    const ingresos = decimalToNumber(summary.devengado);
-    const deducciones = decimalToNumber(summary.deducciones);
-    const liquido = decimalToNumber(summary.neto);
-    const canal = classifyFormaPagoCanal(
-      pago?.formaPago ?? employee?.formaPago,
-      pago?.banco ?? employee?.banco,
-      pago?.idCta,
-    );
+    const { ingresos, deducciones, liquido } = summary;
+    const canal =
+      summary.canal ??
+      classifyFormaPagoCanal(
+        pago?.formaPago ?? employee?.formaPago,
+        pago?.banco ?? employee?.banco,
+        pago?.idCta,
+      );
     const planillaKey = `${summary.noCia}|${summary.codPla}`;
 
     let current = agg.get(planillaKey);
@@ -515,6 +592,14 @@ export async function getRevisionPlanillaByDateRange(
 
   const desdeKey = calendarDateKey(parseDateInput(fDesde)) ?? fDesde;
   const hastaKey = calendarDateKey(parseDateInput(fHasta)) ?? fHasta;
+  const congeladaInfo = (noCia: string, codPla: string) => {
+    const cierre = cierres.get(planillaCierreKey(noCia, codPla));
+    return {
+      congelada: Boolean(cierre),
+      congeladaAt: cierre ? cierre.frozenAt.toISOString() : null,
+      congeladaMotivo: cierre?.motivo ?? null,
+    };
+  };
 
   const porPlanilla: RevisionPlanillaRow[] = Array.from(agg.values())
     .map((row) => {
@@ -553,6 +638,7 @@ export async function getRevisionPlanillaByDateRange(
         generada: flags?.generada ?? false,
         pagada: planillaPagadaPorBancos(cheque, davivienda, bn, bankFlags),
         ...bankFlags,
+        ...congeladaInfo(row.noCia, row.codPla),
       };
     });
 
@@ -600,6 +686,7 @@ export async function getRevisionPlanillaByDateRange(
       pagadaCk: flags?.pagadaCk ?? false,
       pagadaDav: flags?.pagadaDav ?? false,
       pagadaBn: flags?.pagadaBn ?? false,
+      ...congeladaInfo(meta.noCia, meta.codPla),
     });
   }
 

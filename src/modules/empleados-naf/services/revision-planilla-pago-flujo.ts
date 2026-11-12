@@ -9,15 +9,12 @@ import {
 import { isNafOracleWriteConfigured } from "@/modules/empleados-naf/services/oracle-client";
 import {
   aprobarPlanillaEnNaf,
-  deleteArplckForSecuencias,
-  formatArplckSecuencia,
-  insertArplckLines,
-  loadArplcbCuentas,
-  nextArplckSecuenciaBase,
-  resolveOrigenCuenta,
-  type ArplckLineInsert,
+  loadPagosDesdeNaf,
+  preparaCkEnNaf,
+  readArplcpSnapshot,
+  trasladarTesoreriaEnNaf,
 } from "@/modules/empleados-naf/services/revision-planilla-naf-write";
-import { withNafOracleConnection } from "@/modules/empleados-naf/services/oracle-client";
+import { congelarPlanilla } from "@/modules/empleados-naf/services/revision-planilla-cierre";
 
 function calendarDateKey(value: Date | string): string | null {
   if (!value) return null;
@@ -51,12 +48,6 @@ function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-function decimalToNumber(value: { toNumber(): number } | number | null | undefined): number {
-  if (value == null) return 0;
-  if (typeof value === "number") return value;
-  return value.toNumber();
-}
-
 function newId(): string {
   return `np_${Date.now().toString(36)}_${randomBytes(4).toString("hex")}`;
 }
@@ -67,105 +58,6 @@ function requireWriteConfigured() {
       "Falta credencial de escritura NAF. Configure NAF_ORACLE_WRITE_USER y NAF_ORACLE_WRITE_PASSWORD.",
     );
   }
-}
-
-type EmpPagoRow = {
-  noEmple: string;
-  nombre: string | null;
-  cedula: string | null;
-  formaPago: string | null;
-  idCta: string | null;
-  numCuenta: string | null;
-  liquido: number;
-  canal: FormaPagoCanal;
-};
-
-async function loadEmpleadosPagoForPlanilla(input: {
-  noCia: string;
-  codPla: string;
-  fDesde: string;
-  fHasta: string;
-}): Promise<EmpPagoRow[]> {
-  const noCia = normalizeSapCode(input.noCia.trim()) ?? input.noCia.trim();
-  const codPla = normalizeCodPla(input.codPla);
-  const desdeKey = calendarDateKey(parseDateInput(input.fDesde));
-  const hastaKey = calendarDateKey(parseDateInput(input.fHasta));
-  if (!desdeKey || !hastaKey) throw new Error("Rango de fechas inválido");
-
-  const metaRows = await prisma.nafNominaPeriodMeta.findMany({
-    where: { noCia, codPla },
-    select: { ano: true, periodo: true, fDesde: true, fHasta: true },
-  });
-  const periods = metaRows.filter(
-    (row) =>
-      row.fDesde &&
-      row.fHasta &&
-      calendarDateKey(row.fDesde) === desdeKey &&
-      calendarDateKey(row.fHasta) === hastaKey,
-  );
-  if (periods.length === 0) {
-    throw new Error("No se encontró la planilla/periodo sincronizado");
-  }
-
-  const summaries = await prisma.nafNominaSummary.findMany({
-    where: {
-      noCia,
-      codPla,
-      OR: periods.map((p) => ({ ano: p.ano, periodo: p.periodo })),
-    },
-    select: { noEmple: true, neto: true },
-  });
-
-  const maestro = await withNafOracleConnection(async (conn) => {
-    const result = await conn.execute<Record<string, unknown>>(
-      `SELECT m.NO_EMPLE, m.NOMBRE, m.FORMA_PAGO, m.ID_CTA,
-              COALESCE(d.NUM_CUENTA, m.NUM_CUENTA) AS NUM_CUENTA,
-              d.CEDULA, d.BANCO
-         FROM NAF5.ARPLME m
-         LEFT JOIN NAF5.VDATOS_EMPLEADO d
-           ON d.NO_CIA = m.NO_CIA AND d.NO_EMPLE = m.NO_EMPLE
-        WHERE m.NO_CIA = :noCia`,
-      { noCia },
-    );
-    return result.rows ?? [];
-  });
-
-  const byEmp = new Map(
-    maestro.map((row) => {
-      const noEmple = String(row.NO_EMPLE ?? "").trim();
-      return [
-        noEmple,
-        {
-          nombre: row.NOMBRE != null ? String(row.NOMBRE).trim() || null : null,
-          cedula: row.CEDULA != null ? String(row.CEDULA).trim() || null : null,
-          formaPago: row.FORMA_PAGO != null ? String(row.FORMA_PAGO).trim() || null : null,
-          idCta: row.ID_CTA != null ? String(row.ID_CTA).trim() || null : null,
-          numCuenta: row.NUM_CUENTA != null ? String(row.NUM_CUENTA).trim() || null : null,
-          banco: row.BANCO != null ? String(row.BANCO).trim() || null : null,
-        },
-      ] as const;
-    }),
-  );
-
-  const out: EmpPagoRow[] = [];
-  for (const s of summaries) {
-    const liquido = roundMoney(decimalToNumber(s.neto));
-    if (liquido <= 0) continue;
-    const noEmple = s.noEmple.trim();
-    const m = byEmp.get(noEmple);
-    const canal = classifyFormaPagoCanal(m?.formaPago, m?.banco, m?.idCta);
-    out.push({
-      noEmple,
-      nombre: m?.nombre ?? null,
-      cedula: m?.cedula ?? null,
-      formaPago: m?.formaPago ?? null,
-      idCta: m?.idCta ?? null,
-      numCuenta: m?.numCuenta ?? null,
-      liquido,
-      canal,
-    });
-  }
-  return out;
 }
 
 export async function aprobarPlanillaFlujo(input: {
@@ -183,6 +75,7 @@ export async function aprobarPlanillaFlujo(input: {
   const user = input.userLabel ?? null;
 
   const naf = await aprobarPlanillaEnNaf({ noCia, codPla, fDesde, fHasta });
+  const snap = await readArplcpSnapshot({ noCia, codPla });
   const now = new Date();
   const checklist = await prisma.nafNominaRevisionChecklist.upsert({
     where: { noCia_codPla_fDesde_fHasta: { noCia, codPla, fDesde, fHasta } },
@@ -196,14 +89,14 @@ export async function aprobarPlanillaFlujo(input: {
       pagada: false,
       aprobadaAt: now,
       aprobadaBy: user,
-      indCkActNaf: "S",
+      indCkActNaf: snap?.indCkAct ?? "N",
       updatedBy: user,
     },
     update: {
       revisada: true,
       aprobadaAt: now,
       aprobadaBy: user,
-      indCkActNaf: "S",
+      indCkActNaf: snap?.indCkAct ?? undefined,
       updatedBy: user,
     },
   });
@@ -218,6 +111,7 @@ export async function prepararPagosFlujo(input: {
   fHasta: string;
   userLabel?: string | null;
   replaceExisting?: boolean;
+  cuenta?: string | null;
 }) {
   requireWriteConfigured();
   const noCia = normalizeSapCode(input.noCia.trim()) ?? input.noCia.trim();
@@ -229,8 +123,9 @@ export async function prepararPagosFlujo(input: {
   const checklist = await prisma.nafNominaRevisionChecklist.findUnique({
     where: { noCia_codPla_fDesde_fHasta: { noCia, codPla, fDesde, fHasta } },
   });
-  if (!checklist?.revisada) {
-    throw new Error("La planilla debe estar aprobada (Revisada) antes de preparar pagos.");
+  const snap = await readArplcpSnapshot({ noCia, codPla });
+  if (!checklist?.revisada && snap?.estado !== "A" && snap?.indCkAct !== "S") {
+    throw new Error("La planilla debe estar aprobada (Revisada / estado A) antes de preparar pagos.");
   }
 
   const existing = await prisma.nafNominaPagoLote.findFirst({
@@ -243,95 +138,92 @@ export async function prepararPagosFlujo(input: {
     );
   }
 
-  if (existing && input.replaceExisting) {
-    const prevSeq = Array.isArray(existing.secuencias)
-      ? (existing.secuencias as string[])
-      : [];
-    if (prevSeq.length > 0) {
-      await deleteArplckForSecuencias({ noCia, codPla, secuencias: prevSeq });
+  // Codisa/Neo: PLA_PREPARA_CK → T_CHEQUES, luego PLA_PROCESO_TRASLADO → ARPLCK
+  const prep = await preparaCkEnNaf({
+    noCia,
+    codPla,
+    fecha: fHasta,
+  });
+  if (!prep.ok) throw new Error(prep.message);
+
+  let traslado: { ok: boolean; message: string; indCkAct: string | null; cuenta: string } | null =
+    null;
+  if (snap?.indCkAct !== "S") {
+    try {
+      traslado = await trasladarTesoreriaEnNaf({
+        noCia,
+        codPla,
+        cuenta: input.cuenta,
+      });
+    } catch (e) {
+      traslado = {
+        ok: false,
+        message: e instanceof Error ? e.message : String(e),
+        indCkAct: null,
+        cuenta: "",
+      };
     }
+  } else {
+    traslado = {
+      ok: true,
+      message: "IND_CK_ACT=S: ya trasladada.",
+      indCkAct: "S",
+      cuenta: "",
+    };
   }
 
-  const empleados = await loadEmpleadosPagoForPlanilla({
+  const pagos = await loadPagosDesdeNaf({
     noCia,
     codPla,
     fDesde: input.fDesde,
     fHasta: input.fHasta,
   });
-  if (empleados.length === 0) {
-    throw new Error("No hay empleados con líquido > 0 para preparar.");
+  if (pagos.length === 0 && !(traslado?.ok && snap?.indCkAct === "S")) {
+    throw new Error(
+      `Sin líneas en T_CHEQUES/ARPLCK tras preparar. ${prep.message}` +
+        (traslado ? ` · ${traslado.message}` : ""),
+    );
   }
-
-  const cuentas = await loadArplcbCuentas(noCia);
-  let seqBase = await nextArplckSecuenciaBase(noCia);
-  const seqBn = formatArplckSecuencia(seqBase, noCia);
-  seqBase += 1;
-  const seqDav = formatArplckSecuencia(seqBase, noCia);
-
-  const lineasPg: {
-    noEmple: string;
-    nombre: string | null;
-    cedula: string | null;
-    formaPago: string | null;
-    idCta: string | null;
-    canal: string;
-    bancoDestino: string;
-    numCuenta: string | null;
-    bancoOrigen: string;
-    ctaOrigen: string;
-    noSecuencia: string;
-    liquido: number;
-  }[] = [];
-  const arplck: ArplckLineInsert[] = [];
 
   let totalCheque = 0;
   let totalDav = 0;
   let totalBn = 0;
   let totalOtro = 0;
-
-  for (const emp of empleados) {
-    const origen = resolveOrigenCuenta(cuentas, emp.idCta, emp.formaPago);
-    const noSecuencia = emp.canal === "DAV" ? seqDav : seqBn;
-    lineasPg.push({
-      noEmple: emp.noEmple,
-      nombre: emp.nombre,
-      cedula: emp.cedula,
-      formaPago: emp.formaPago,
-      idCta: emp.idCta,
-      canal: emp.canal,
-      bancoDestino: origen.bancoDestino,
-      numCuenta: emp.numCuenta,
-      bancoOrigen: origen.bancoOrigen,
-      ctaOrigen: origen.ctaOrigen,
-      noSecuencia,
-      liquido: emp.liquido,
-    });
-    arplck.push({
-      noCia,
-      codPla,
-      noEmple: emp.noEmple,
-      banco: origen.bancoDestino,
-      noCta: origen.ctaOrigen,
-      fecha: fHasta,
-      noSecuencia,
-      monto: emp.liquido,
-    });
-    if (emp.canal === "CK") totalCheque += emp.liquido;
-    else if (emp.canal === "DAV") totalDav += emp.liquido;
-    else if (emp.canal === "BN") totalBn += emp.liquido;
-    else totalOtro += emp.liquido;
-  }
+  const lineasPg = pagos.map((p) => {
+    const canal: FormaPagoCanal = classifyFormaPagoCanal(
+      p.formaPago,
+      p.bancoDestino === "07" ? "DAVIVIENDA" : p.bancoDestino === "01" ? "NACIONAL" : null,
+      p.idCta,
+    );
+    if (canal === "CK") totalCheque += p.liquido;
+    else if (canal === "DAV") totalDav += p.liquido;
+    else if (canal === "BN") totalBn += p.liquido;
+    else totalOtro += p.liquido;
+    return {
+      noEmple: p.noEmple,
+      nombre: p.nombre,
+      cedula: p.cedula,
+      formaPago: p.formaPago,
+      idCta: p.idCta,
+      canal,
+      bancoDestino: p.bancoDestino,
+      numCuenta: p.numCuenta,
+      bancoOrigen: p.bancoDestino,
+      ctaOrigen: p.ctaOrigen,
+      noSecuencia: p.noSecuencia || "",
+      liquido: p.liquido,
+    };
+  });
 
   totalCheque = roundMoney(totalCheque);
   totalDav = roundMoney(totalDav);
   totalBn = roundMoney(totalBn);
   totalOtro = roundMoney(totalOtro);
   const totalGeneral = roundMoney(totalCheque + totalDav + totalBn + totalOtro);
-  const secuencias = [...new Set(arplck.map((l) => l.noSecuencia))];
-
-  const inserted = await insertArplckLines(arplck);
+  const secuencias = [...new Set(lineasPg.map((l) => l.noSecuencia).filter(Boolean))];
   const now = new Date();
   const loteId = newId();
+  const afterSnap = await readArplcpSnapshot({ noCia, codPla });
 
   if (existing && input.replaceExisting) {
     await prisma.nafNominaPagoLote.update({
@@ -391,15 +283,29 @@ export async function prepararPagosFlujo(input: {
         pagada: false,
         preparadaAt: now,
         preparadaBy: user,
+        indCkActNaf: afterSnap?.indCkAct ?? "N",
         updatedBy: user,
       },
       update: {
         generada: true,
         preparadaAt: now,
         preparadaBy: user,
+        indCkActNaf: afterSnap?.indCkAct ?? undefined,
         updatedBy: user,
       },
     });
+  });
+
+  await congelarPlanilla({
+    noCia,
+    codPla,
+    fDesde: input.fDesde,
+    fHasta: input.fHasta,
+    motivo: "lote",
+    userLabel: user,
+    reemplazar: true,
+  }).catch((e) => {
+    console.error("[revision-planilla] no se pudo congelar tras preparar lote", { noCia, codPla }, e);
   });
 
   const lote = await prisma.nafNominaPagoLote.findUniqueOrThrow({
@@ -407,7 +313,19 @@ export async function prepararPagosFlujo(input: {
     include: { lineas: true },
   });
 
-  return { lote, insertedNaf: inserted, secuencias };
+  const message = traslado?.ok
+    ? `${prep.message} · ${traslado.message}`
+    : `${prep.message}${traslado ? ` · Traslado pendiente: ${traslado.message}` : ""}`;
+
+  return {
+    lote,
+    insertedNaf: lineasPg.length,
+    secuencias,
+    prep,
+    traslado,
+    message,
+    ok: Boolean(prep.ok && (traslado?.ok ?? true)),
+  };
 }
 
 export async function marcarPagadaFlujo(input: {

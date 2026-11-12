@@ -1,5 +1,6 @@
 import type { CxcDocumentoStatus, Prisma, PrismaClient } from "@prisma/client";
 import { parseCalendarDateInput } from "@/modules/presupuestos/services/facturacion-cobro";
+import { specialServicesInMonth } from "@/modules/presupuestos/business/effectiveBilling";
 import { prismaDateRange } from "@/modules/presupuestos/services/list-date-filters";
 import { daysUntilDue, dueDateUrgency } from "@/lib/utils/due-date-urgency";
 import {
@@ -130,8 +131,15 @@ type CxcDocumentoWithRelations = {
     clientType?: "PUBLIC" | "PRIVATE";
     ivaPct?: { toString(): string } | number;
     clientContacts?: ClientContactRow[];
+    specialServices?: {
+      periodMonth: Date;
+      description: string;
+      amount: { toString(): string } | number;
+    }[];
   } | null;
   facturaMensual?: {
+    periodYear?: number;
+    periodMonth?: number;
     subtotalCopied?: { toString(): string } | number | null;
     ivaPctCopied?: { toString(): string } | number | null;
     totalCalculated?: { toString(): string } | number | null;
@@ -185,6 +193,20 @@ export function serializeCuentaPorCobrar(row: CxcDocumentoWithRelations) {
       amount: toAmount(r.amount) ?? 0,
       sortOrder: r.sortOrder,
     }));
+
+  const specialPeriod = {
+    year: row.facturaMensual?.periodYear ?? year,
+    month: row.facturaMensual?.periodMonth ?? month,
+  };
+  const monthSpecialServices = specialServicesInMonth(
+    row.contract?.specialServices ?? [],
+    specialPeriod.year,
+    specialPeriod.month
+  );
+  const specialServicesTotal =
+    Math.round(
+      monthSpecialServices.reduce((sum, service) => sum + (toAmount(service.amount) ?? 0), 0) * 100
+    ) / 100;
 
   const clientType = clientTypeForCxcDoc(row);
   const facturaSubtotal = toAmount(row.facturaMensual?.subtotalCopied ?? null);
@@ -264,6 +286,11 @@ export function serializeCuentaPorCobrar(row: CxcDocumentoWithRelations) {
     daysUntilExpectedPayment: expectedPaymentRef ? daysUntilDue(expectedPaymentRef) : null,
     isReajuste: row.isReajuste,
     hasContract: Boolean(row.contractId),
+    specialServicesTotal,
+    specialServices: monthSpecialServices.map((service) => ({
+      description: service.description,
+      amount: toAmount(service.amount) ?? 0,
+    })),
   };
 }
 
@@ -286,10 +313,15 @@ export const cxcDocumentInclude = {
           sortOrder: true,
         },
       },
+      specialServices: {
+        select: { periodMonth: true, description: true, amount: true },
+      },
     },
   },
   facturaMensual: {
     select: {
+      periodYear: true,
+      periodMonth: true,
       subtotalCopied: true,
       ivaPctCopied: true,
       totalCalculated: true,

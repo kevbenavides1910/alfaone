@@ -26,7 +26,7 @@ export {
   marcarPagadaFlujo,
   getLatestPagoLote,
 } from "./services/revision-planilla-pago-flujo";
-export { generarArchivoBancoDesdeLote } from "./services/banco-pago-archivos";
+export { generarArchivoBancoDesdeLote, generarArchivoBancoNaf } from "./services/banco-pago-archivos";
 export { classifyFormaPagoCanal } from "./business/revision-planilla-pago";
 export { isNafOracleWriteConfigured } from "./services/oracle-client";
 export { getNafEmployeeBySourceKey } from "./services/employee-detail";

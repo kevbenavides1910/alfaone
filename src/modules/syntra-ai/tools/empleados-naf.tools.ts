@@ -185,9 +185,12 @@ export function empleadosNafTools(): SyntraTool[] {
             DAV: row.davivienda,
             BN: row.bn,
             OTRO: row.otro,
+            congelada: row.congelada,
+            congeladaAt: row.congeladaAt,
           })),
           moneda: "CRC",
-          fuente: "Revisión de planilla Alfa One (nómina NAF + forma de pago)",
+          fuente:
+            "Revisión de planilla Alfa One (nómina NAF + forma de pago). Planillas congeladas: foto fija al generar o al pasar el día de pago.",
         };
       },
     },
