@@ -1386,6 +1386,7 @@ export function PagosPageClient({ initialCompany }: Props) {
           </TabsContent>
           <TabsContent value="reporte" className="flex-1 min-h-0 overflow-auto p-3 pt-3">
             <PagosReporteMensual
+              month={month}
               monthLabel={monthLabel}
               payments={reportePayments}
               loading={isFetching && calendar.length === 0}

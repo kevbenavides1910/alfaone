@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { exportWorkbookToExcel } from "@/lib/utils/excel-export";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import {
   roundMoney,
@@ -153,12 +155,15 @@ function AmountSplit({ paid, projected }: { paid: number; projected: number }) {
 }
 
 export function PagosReporteMensual({
+  month,
   monthLabel,
   payments,
   loading,
   onViewDetail,
   formatCompany,
 }: {
+  /** YYYY-MM, para el nombre del Excel. */
+  month: string;
   monthLabel: string;
   payments: ReportePagoItem[];
   loading?: boolean;
@@ -183,6 +188,101 @@ export function PagosReporteMensual({
   function toggleSub(catKey: string, subKey: string) {
     const id = `${catKey}::${subKey}`;
     setOpenSubs((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  function exportExcel() {
+    const categorias = groups.map((cat) => ({
+      Categoría: cat.label,
+      Subcategorías: cat.subcategories.length,
+      Pagos: cat.subcategories.reduce((s, sub) => s + sub.items.length, 0),
+      Pagado: cat.paid,
+      Proyectado: cat.projected,
+      Total: roundMoney(cat.paid + cat.projected),
+      "Avance %": spendProgressPct(cat.paid, cat.projected),
+    }));
+    const subcategorias = groups.flatMap((cat) =>
+      cat.subcategories.map((sub) => ({
+        Categoría: cat.label,
+        Subcategoría: sub.label,
+        Pagos: sub.items.length,
+        Pagado: sub.paid,
+        Proyectado: sub.projected,
+        Total: roundMoney(sub.paid + sub.projected),
+        "Avance %": spendProgressPct(sub.paid, sub.projected),
+      })),
+    );
+    const detalle = groups.flatMap((cat) =>
+      cat.subcategories.flatMap((sub) =>
+        sub.items.map((item) => ({
+          Fecha: item.paymentDate,
+          Categoría: cat.label,
+          Subcategoría: sub.label,
+          Descripción: item.description,
+          Fuente: FUENTE_SHORT[item.source] ?? item.source,
+          Compañía: item.company
+            ? formatCompany
+              ? formatCompany(item.company)
+              : item.company
+            : "",
+          OC: item.referenceNumber ?? "",
+          Estado: item.paid ? "Pagado" : "Proyectado",
+          Pagado: item.paid ? item.amount : 0,
+          Proyectado: item.paid ? 0 : item.amount,
+        })),
+      ),
+    );
+    const total = roundMoney(totals.paid + totals.projected);
+    exportWorkbookToExcel({
+      filename: `reporte-mensual-gasto-${month}`,
+      appendDateToFilename: false,
+      sheets: [
+        {
+          sheetName: "Categorías",
+          rows: categorias,
+          columnWidths: [28, 14, 10, 16, 16, 16, 12],
+          totalRow: {
+            Categoría: "TOTAL",
+            Subcategorías: groups.reduce((s, cat) => s + cat.subcategories.length, 0),
+            Pagos: payments.length,
+            Pagado: totals.paid,
+            Proyectado: totals.projected,
+            Total: total,
+            "Avance %": totals.avancePct,
+          },
+        },
+        {
+          sheetName: "Subcategorías",
+          rows: subcategorias,
+          columnWidths: [28, 32, 10, 16, 16, 16, 12],
+          totalRow: {
+            Categoría: "TOTAL",
+            Subcategoría: "",
+            Pagos: payments.length,
+            Pagado: totals.paid,
+            Proyectado: totals.projected,
+            Total: total,
+            "Avance %": totals.avancePct,
+          },
+        },
+        {
+          sheetName: "Detalle",
+          rows: detalle,
+          columnWidths: [12, 24, 28, 48, 12, 22, 16, 14, 16, 16],
+          totalRow: {
+            Fecha: "",
+            Categoría: "",
+            Subcategoría: "",
+            Descripción: "TOTAL",
+            Fuente: "",
+            Compañía: "",
+            OC: "",
+            Estado: "",
+            Pagado: totals.paid,
+            Proyectado: totals.projected,
+          },
+        },
+      ],
+    });
   }
 
   if (loading) {
@@ -216,6 +316,9 @@ export function PagosReporteMensual({
             El avance es lo pagado sobre el total del mes.
           </p>
         </div>
+        <Button type="button" variant="outline" size="sm" onClick={exportExcel}>
+          <Download className="mr-1 h-4 w-4" /> Excel
+        </Button>
       </div>
 
       <div className="rounded-md border bg-muted/30 px-3 py-2.5">
