@@ -10,6 +10,7 @@ import {
   spendProgressPct,
 } from "@/modules/pagos/business/reporte-mensual";
 import {
+  PAYMENT_CATEGORIES,
   paymentCategoryLabel,
   paymentSubcategoryLabel,
 } from "@/modules/pagos/catalog/payment-categories";
@@ -55,6 +56,15 @@ const COL_PROGRESS = "w-[7.5rem]";
 
 function buildReport(payments: ReportePagoItem[]): CategoryGroup[] {
   const byCat = new Map<string, Map<string, ReportePagoItem[]>>();
+
+  // Sembrar el catálogo completo para que subcategorías nuevas (aunque estén en ₡0) se vean.
+  for (const cat of PAYMENT_CATEGORIES) {
+    const bySub = new Map<string, ReportePagoItem[]>();
+    for (const sub of cat.subcategories) {
+      bySub.set(sub.key, []);
+    }
+    byCat.set(cat.key, bySub);
+  }
 
   for (const p of payments) {
     const catKey = p.category?.trim() || "__NONE__";
