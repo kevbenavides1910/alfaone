@@ -1,3 +1,4 @@
+import { monthlySpendSplit } from "@/modules/pagos/business/reporte-mensual";
 import { getCalendarMonth, searchPaymentsByOc } from "@/modules/pagos/services/pagos";
 import {
   listPagoProveedores,
@@ -16,7 +17,7 @@ export function pagosTools(): SyntraTool[] {
       permission: { key: "pagos.calendario", level: "view" },
       definition: toolDef(
         "query_payment_calendar",
-        "Calendario de pagos del mes: pagos APEX, manuales y gastos ya programados (con fecha asignada en Pago proveedores), con totales pagado/pendiente por día.",
+        "Calendario de pagos del mes: pagos APEX, manuales y gastos ya programados (con fecha asignada en Pago proveedores), con totales pagado/pendiente por día. El reporte mensual divide pagado (verde) y proyectado (programado en el diario y aún no pagado; APEX solo si está confirmado o ya pagado). Avance = pagado / (pagado + proyectado).",
         {
           type: "object",
           properties: {
@@ -37,6 +38,7 @@ export function pagosTools(): SyntraTool[] {
         const withPayments = days.filter((d) => d.payments.length > 0);
         const totalMes = withPayments.reduce((s, d) => s + d.total, 0);
         const totalPagado = withPayments.reduce((s, d) => s + d.totalPaid, 0);
+        const reporte = monthlySpendSplit(days.flatMap((d) => d.payments));
         return {
           month,
           resumen: {
@@ -44,6 +46,14 @@ export function pagosTools(): SyntraTool[] {
             totalMes,
             totalPagado,
             pendiente: totalMes - totalPagado,
+            reporteMensual: {
+              pagado: reporte.paid,
+              proyectado: reporte.projected,
+              total: reporte.total,
+              avancePct: reporte.avancePct,
+              pagosPagados: reporte.paidCount,
+              pagosProyectados: reporte.projectedCount,
+            },
           },
           dias: withPayments.slice(0, 31).map((d) => ({
             fecha: d.date,

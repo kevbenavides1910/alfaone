@@ -43,6 +43,10 @@ import {
 } from "@/components/pagos/PaymentOcMultiPicker";
 import { PagosReporteMensual } from "@/components/pagos/PagosReporteMensual";
 import {
+  isDailyCalendarPayment,
+  monthlySpendSplit,
+} from "@/modules/pagos/business/reporte-mensual";
+import {
   PagosProveedorDetalleDialog,
   type ProveedorDetalleTarget,
 } from "@/components/pagos/PagosProveedorDetalleDialog";
@@ -228,9 +232,7 @@ function filterCalendar(calendar: CalendarDay[], sources: PagoFuente[]): Calenda
 /** Diario / cronograma: APEX solo si ya está en verde o confirmado desde Pagos fijos. */
 function filterDailyCalendar(calendar: CalendarDay[]): CalendarDay[] {
   return calendar.map((day) => {
-    const payments = day.payments.filter(
-      (p) => p.source !== "APEX" || p.paid || Boolean(p.confirmedForDaily),
-    );
+    const payments = day.payments.filter((p) => isDailyCalendarPayment(p));
     return {
       date: day.date,
       payments,
@@ -822,7 +824,7 @@ export function PagosPageClient({ initialCompany }: Props) {
 
   const reportePayments = useMemo(
     () =>
-      calendar.flatMap((d) =>
+      dailyCalendar.flatMap((d) =>
         d.payments.map((p) => ({
           id: p.id,
           description: p.description,
@@ -834,18 +836,13 @@ export function PagosPageClient({ initialCompany }: Props) {
           category: p.category,
           subcategory: p.subcategory,
           paid: p.paid,
+          confirmedForDaily: p.confirmedForDaily,
         })),
       ),
-    [calendar],
+    [dailyCalendar],
   );
 
-  const reportePaidTotal = useMemo(
-    () =>
-      Math.round(
-        reportePayments.filter((p) => p.paid).reduce((s, p) => s + p.amount, 0) * 100,
-      ) / 100,
-    [reportePayments],
-  );
+  const reporteSplit = useMemo(() => monthlySpendSplit(reportePayments), [reportePayments]);
 
   const paymentsById = useMemo(() => {
     const map = new Map<string, PagoDto>();
@@ -996,8 +993,12 @@ export function PagosPageClient({ initialCompany }: Props) {
             )
           ) : activeTab === "reporte" ? (
             <>
-              <span className="text-muted-foreground">Pagado en el mes:</span>
-              <span className="font-semibold text-emerald-600">{formatCurrency(reportePaidTotal)}</span>
+              <span className="text-muted-foreground">Pagado:</span>
+              <span className="font-semibold text-emerald-600">{formatCurrency(reporteSplit.paid)}</span>
+              <span className="text-muted-foreground">Proyectado:</span>
+              <span className="font-semibold text-amber-600">{formatCurrency(reporteSplit.projected)}</span>
+              <span className="text-muted-foreground">Avance:</span>
+              <span className="font-semibold">{reporteSplit.avancePct}%</span>
               {isFetching && <span className="text-xs text-muted-foreground animate-pulse">cargando…</span>}
             </>
           ) : (
