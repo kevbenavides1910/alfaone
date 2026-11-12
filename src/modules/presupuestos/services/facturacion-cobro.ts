@@ -392,7 +392,7 @@ function resolvePeriodBillingForContract(
     contract.demandBilling,
     periodYear,
     periodMonth,
-    { specialServices: contract.specialServices ?? [] }
+    { specialServices: contract.specialServices ?? [], commercialFallback: true }
   );
 }
 
@@ -1007,12 +1007,6 @@ export function serializeFacturaMensual(
   const administrations = row.contract?.administrations ?? [];
   const emisiones = row.emisiones ?? [];
   const emisionSubtotalsByAdmin = new Map<string, number>();
-  if (amountDefined && contractSubtotal != null && administrations.length > 0) {
-    const subs = resolveEmisionSubtotals(contractSubtotal, administrations, administrations.length);
-    administrations.forEach((a, i) => {
-      if (subs[i] != null) emisionSubtotalsByAdmin.set(a.id, subs[i]!);
-    });
-  }
 
   const servicePeriod = resolveServicePeriodDates(row);
 
@@ -1022,16 +1016,29 @@ export function serializeFacturaMensual(
           {
             hiringType: row.contract.hiringType ?? row.hiringTypeCopied ?? "FIXED",
             monthlyBilling: row.contract.monthlyBilling ?? row.subtotalCopied,
+            billingLines: row.contract.billingLines,
+            administrations: row.contract.administrations,
           },
           row.contract.billingHistory ?? [],
           row.contract.demandBilling ?? [],
           row.periodYear,
           row.periodMonth,
-          { specialServices: row.contract.specialServices ?? [] }
+          {
+            specialServices: row.contract.specialServices ?? [],
+            commercialFallback: true,
+          }
         )
       : { billing: null, baseBilling: null, specialServicesTotal: 0, amountDefined: false };
   const contractVentaSubtotal =
     contractVenta.amountDefined && contractVenta.billing != null ? contractVenta.billing : null;
+  const displaySubtotal = amountDefined ? contractSubtotal : contractVentaSubtotal;
+  const displayDefined = displaySubtotal != null && displaySubtotal > 0;
+  if (displayDefined && administrations.length > 0) {
+    const subs = resolveEmisionSubtotals(displaySubtotal, administrations, administrations.length);
+    administrations.forEach((a, i) => {
+      if (subs[i] != null) emisionSubtotalsByAdmin.set(a.id, subs[i]!);
+    });
+  }
   const monthSpecialServices = specialServicesInMonth(
     row.contract?.specialServices ?? [],
     row.periodYear,
@@ -1117,7 +1124,7 @@ export function serializeFacturaMensual(
     closedAt: closedAtRaw?.toISOString() ?? null,
     closedOnTime,
     closeDaysLate,
-    amountDefined,
+    amountDefined: displayDefined,
     hiringTypeCopied: row.hiringTypeCopied ?? row.contract?.hiringType ?? "FIXED",
     invoiceNumber: row.invoiceNumber ?? null,
     documentNumber: row.documentNumber ?? null,
@@ -1129,9 +1136,17 @@ export function serializeFacturaMensual(
     isReajuste: row.isReajuste ?? false,
     finalNotes: row.finalNotes,
     observationLog: row.observationLog,
-    subtotalCopied: amountDefined ? toNum(row.subtotalCopied) : null,
+    subtotalCopied: displayDefined
+      ? amountDefined
+        ? toNum(row.subtotalCopied)
+        : contractVentaSubtotal
+      : null,
     ivaPctCopied: toNum(row.ivaPctCopied),
-    totalCalculated: amountDefined ? toNum(row.totalCalculated) : null,
+    totalCalculated: displayDefined
+      ? amountDefined
+        ? toNum(row.totalCalculated)
+        : contractVentaTotal
+      : null,
     specialServicesTotal: Math.round(specialServicesTotal * 100) / 100,
     specialServices: monthSpecialServices.map((service) => ({
       id: service.id ?? "",

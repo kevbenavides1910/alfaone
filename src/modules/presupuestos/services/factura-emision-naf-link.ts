@@ -542,6 +542,7 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
       {
         hiringType: contractBilling.hiringType ?? factura.hiringTypeCopied ?? "FIXED",
         monthlyBilling: contractBilling.monthlyBilling,
+        billingLines: contractBilling.billingLines,
       },
       contractBilling.billingHistory,
       contractBilling.demandBilling.map((d) => ({
@@ -551,7 +552,7 @@ async function recomputeFacturaMensualFromEmisiones(db: Db, emisionId: string): 
       })),
       factura.periodYear,
       factura.periodMonth,
-      { specialServices: contractBilling.specialServices },
+      { specialServices: contractBilling.specialServices, commercialFallback: true },
     );
     if (venta.amountDefined && venta.billing != null) {
       baselineSubtotal = venta.billing;

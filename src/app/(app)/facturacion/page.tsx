@@ -442,7 +442,7 @@ export default function FacturacionPage() {
                     defaultColumnWidths={{
                       cliente: 200,
                       administracion: 150,
-                      contratacion: 110,
+                      contratacion: 220,
                       subtotal: 110,
                       iva: 70,
                       ivaMonto: 110,
@@ -495,8 +495,11 @@ export default function FacturacionPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3">
-                        <Badge variant={row.hiringTypeCopied === "FIXED" ? "secondary" : "outline"}>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <Badge
+                          variant={row.hiringTypeCopied === "FIXED" ? "secondary" : "outline"}
+                          className="whitespace-nowrap"
+                        >
                           {HIRING_TYPE_LABELS[row.hiringTypeCopied ?? "FIXED"]}
                         </Badge>
                       </td>

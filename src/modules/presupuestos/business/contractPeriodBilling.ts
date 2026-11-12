@@ -1,3 +1,4 @@
+import { sumAdministrationBillingLines } from "@/modules/presupuestos/business/administration-billing-amount";
 import {
   getEffectiveMonthlyBilling,
   sumSpecialServicesForMonth,
@@ -14,6 +15,52 @@ export type DemandBillingRow = {
   periodMonth: number;
   monthlyBilling: { toString(): string };
 };
+
+type Money = { toString(): string } | number | null;
+
+type CommercialBillingLine = {
+  monthlyAmount: Money;
+};
+
+type CommercialAdmin = {
+  billingLines: {
+    billingLineId: string;
+    monthlyAmount: Money;
+    billingLine?: { monthlyAmount: Money } | null;
+  }[];
+};
+
+/** Desglose que comercial ya cargó en el contrato (líneas por administración o del contrato). */
+export function commercialContractSubtotal(contract: {
+  billingLines?: CommercialBillingLine[];
+  administrations?: CommercialAdmin[];
+}): number | null {
+  const admins = contract.administrations ?? [];
+  if (admins.length > 0) {
+    let sum = 0;
+    let any = false;
+    for (const admin of admins) {
+      const part = sumAdministrationBillingLines({ id: "", billingLines: admin.billingLines });
+      if (part != null && part > 0) {
+        sum += part;
+        any = true;
+      }
+    }
+    if (any) return Math.round(sum * 100) / 100;
+  }
+
+  let sum = 0;
+  let any = false;
+  for (const line of contract.billingLines ?? []) {
+    const raw = line.monthlyAmount;
+    const amount = raw == null ? null : typeof raw === "number" ? raw : parseFloat(raw.toString());
+    if (amount != null && Number.isFinite(amount) && amount > 0) {
+      sum += amount;
+      any = true;
+    }
+  }
+  return any ? Math.round(sum * 100) / 100 : null;
+}
 
 /**
  * Límites del mes calendario en UTC.
@@ -152,6 +199,8 @@ export function resolveContractMonthlyBilling(
     monthlyBilling: { toString(): string } | number;
     startDate?: Date;
     endDate?: Date;
+    billingLines?: CommercialBillingLine[];
+    administrations?: CommercialAdmin[];
   },
   billingHistory: { periodMonth: Date; monthlyBilling: { toString(): string } }[],
   demandBilling: DemandBillingRow[],
@@ -160,6 +209,8 @@ export function resolveContractMonthlyBilling(
   options?: {
     prorateByServiceDays?: boolean;
     specialServices?: SpecialServiceAmountRow[];
+    /** Si el mes no tiene monto por demanda, usar las líneas que comercial ya cargó. */
+    commercialFallback?: boolean;
   }
 ): {
   billing: number | null;
@@ -177,7 +228,10 @@ export function resolveContractMonthlyBilling(
   );
 
   if (contract.hiringType === "ON_DEMAND") {
-    const amount = getDemandBillingForPeriod(demandBilling, periodYear, periodMonth);
+    const demandAmount = getDemandBillingForPeriod(demandBilling, periodYear, periodMonth);
+    const amount =
+      demandAmount ??
+      (options?.commercialFallback ? commercialContractSubtotal(contract) : null);
     if (amount === null && specialServicesTotal <= 0) {
       return {
         billing: null,
