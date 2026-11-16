@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -17,10 +17,17 @@ import { toast } from "@/components/ui/toaster";
 import { contractCreateSchema, type ContractCreateInput } from "@/modules/presupuestos/validations/contract.schema";
 import { CLIENT_TYPE_LABELS, CONTRACT_STATUS_LABELS, HIRING_TYPE_LABELS } from "@/lib/utils/constants";
 import { useCompanies } from "@/lib/hooks/use-companies";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { canModifyContracts } from "@/modules/core/permissions";
 import { format } from "date-fns";
 import { parseNumber, parsePercent } from "@/modules/core/import/xlsx-read";
 import { RHF_EMPTY_NUMBER, rhfValueAsNumber } from "@/lib/rhf-safe-number";
+import {
+  fetchCodisaContractBundle,
+  formFieldsFromCodisaPart,
+  type CodisaAutocompletePart,
+  type CodisaLookupBundle,
+} from "@/components/contracts/codisa-autocomplete";
 
 interface PositionDraft {
   name: string;
@@ -45,6 +52,10 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
 
   // Inline positions (only for create mode)
   const [positions, setPositions] = useState<PositionDraft[]>([]);
+  const [codisaBundle, setCodisaBundle] = useState<CodisaLookupBundle | null>(null);
+  const [codisaPartIdx, setCodisaPartIdx] = useState(0);
+  const [codisaLookupState, setCodisaLookupState] = useState<"idle" | "loading" | "found" | "miss" | "error">("idle");
+  const codisaAppliedKey = useRef<string>("");
 
   const {
     register,
@@ -89,6 +100,70 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
   const suppliesPctW = watch("suppliesPct") || 0;
   const adminPct    = watch("adminPct") || 0;
   const profitPct   = watch("profitPct") || 0;
+  const licitacionNo = watch("licitacionNo") || "";
+  const company = watch("company");
+  const clientType = watch("clientType");
+  const hiringType = watch("hiringType");
+  const statusVal = watch("status");
+  const debouncedLicitacion = useDebouncedValue(licitacionNo, 450);
+
+  function applyCodisaPart(part: CodisaAutocompletePart, bundle: CodisaLookupBundle) {
+    const keepOneName =
+      bundle.resolvedVia === "alias" && bundle.oneLicitacionNo
+        ? bundle.oneLicitacionNo
+        : undefined;
+    const fields = formFieldsFromCodisaPart(part, { keepLicitacionNo: keepOneName });
+    for (const [key, value] of Object.entries(fields)) {
+      if (value === undefined || value === null || value === "") continue;
+      setValue(key as keyof ContractCreateInput, value as never, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+    codisaAppliedKey.current = `${bundle.query}|${part.noCia}|${part.noContrato}`;
+  }
+
+  // Autocomplete Codisa al crear (nombre Codisa o alias One).
+  useEffect(() => {
+    if (mode !== "create") return;
+    const q = debouncedLicitacion.trim();
+    if (q.length < 5) {
+      setCodisaBundle(null);
+      setCodisaLookupState("idle");
+      return;
+    }
+
+    let cancelled = false;
+    setCodisaLookupState("loading");
+    fetchCodisaContractBundle(q)
+      .then((bundle) => {
+        if (cancelled) return;
+        if (!bundle?.parts?.length) {
+          setCodisaBundle(null);
+          setCodisaLookupState("miss");
+          return;
+        }
+        setCodisaBundle(bundle);
+        setCodisaPartIdx(0);
+        setCodisaLookupState("found");
+        const first = bundle.parts[0];
+        const applyKey = `${bundle.query}|${first.noCia}|${first.noContrato}`;
+        if (codisaAppliedKey.current !== applyKey) {
+          applyCodisaPart(first, bundle);
+        }
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        console.error("[codisa-autocomplete]", e);
+        setCodisaBundle(null);
+        setCodisaLookupState("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply only on debounced query
+  }, [debouncedLicitacion, mode]);
 
   // Create contract then positions
   const mutation = useMutation({
@@ -205,22 +280,74 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
           <CardTitle className="text-base">Información General</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="licitacionNo">N° de Licitación *</Label>
-            <Input
-              id="licitacionNo"
-              {...register("licitacionNo")}
-              placeholder="LIC-CCSS-001-2024"
-              disabled={mode === "edit"}
-            />
+          <div className="space-y-1.5 md:col-span-2">
+            <Label htmlFor="licitacionNo">N° de Licitación / contrato Codisa *</Label>
+            <div className="relative">
+              <Input
+                id="licitacionNo"
+                {...register("licitacionNo")}
+                placeholder="Ej: 2026XE-000004-0001102501 o CORTE IDH"
+                disabled={mode === "edit"}
+              />
+              {mode === "create" && codisaLookupState === "loading" && (
+                <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-slate-400" />
+              )}
+            </div>
             {errors.licitacionNo && <p className="text-xs text-red-600">{errors.licitacionNo.message}</p>}
+            {mode === "create" && codisaLookupState === "found" && codisaBundle && (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 space-y-1.5">
+                <p>
+                  Codisa activo
+                  {codisaBundle.resolvedVia === "alias" ? " (vía alias One)" : ""}
+                  {": "}
+                  <span className="font-medium">{codisaBundle.parts[codisaPartIdx]?.noContrato}</span>
+                  {codisaBundle.parts[codisaPartIdx]?.companyCode
+                    ? ` · ${codisaBundle.parts[codisaPartIdx].companyCode}`
+                    : ""}
+                  {codisaBundle.parts[codisaPartIdx]?.extension?.matchMethod
+                    ? ` · ext ${codisaBundle.parts[codisaPartIdx].extension?.matchMethod}`
+                    : ""}
+                </p>
+                {codisaBundle.parts.length > 1 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-emerald-800">Parte Codisa (multipart)</Label>
+                    <Select
+                      value={String(codisaPartIdx)}
+                      onValueChange={(v) => {
+                        const idx = Number(v);
+                        setCodisaPartIdx(idx);
+                        const part = codisaBundle.parts[idx];
+                        if (part) applyCodisaPart(part, codisaBundle);
+                      }}
+                    >
+                      <SelectTrigger className="h-8 bg-white"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {codisaBundle.parts.map((p, i) => (
+                          <SelectItem key={`${p.noCia}-${p.noContrato}`} value={String(i)}>
+                            {p.noContrato}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
+            {mode === "create" && codisaLookupState === "miss" && debouncedLicitacion.trim().length >= 5 && (
+              <p className="text-xs text-amber-700">
+                Sin coincidencia en Codisa activos ni aliases. Podés completar el formulario a mano.
+              </p>
+            )}
+            {mode === "create" && codisaLookupState === "error" && (
+              <p className="text-xs text-red-600">No se pudo consultar Codisa. Intentá de nuevo.</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
             <Label>Empresa *</Label>
             <Select
-              defaultValue={defaultValues?.company}
-              onValueChange={(v) => setValue("company", v as never)}
+              value={company || undefined}
+              onValueChange={(v) => setValue("company", v as never, { shouldDirty: true, shouldValidate: true })}
               disabled={companiesLoading}
             >
               <SelectTrigger><SelectValue placeholder={companiesLoading ? "Cargando empresas…" : "Seleccionar empresa"} /></SelectTrigger>
@@ -242,8 +369,8 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
           <div className="space-y-1.5">
             <Label>Tipo de Cliente *</Label>
             <Select
-              defaultValue={defaultValues?.clientType ?? "PUBLIC"}
-              onValueChange={(v) => setValue("clientType", v as never)}
+              value={clientType || "PUBLIC"}
+              onValueChange={(v) => setValue("clientType", v as never, { shouldDirty: true })}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -257,8 +384,8 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
           <div className="space-y-1.5">
             <Label>Tipo de Contratación *</Label>
             <Select
-              defaultValue={defaultValues?.hiringType ?? "FIXED"}
-              onValueChange={(v) => setValue("hiringType", v as never)}
+              value={hiringType || "FIXED"}
+              onValueChange={(v) => setValue("hiringType", v as never, { shouldDirty: true })}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -272,8 +399,8 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
           <div className="space-y-1.5">
             <Label>Estado *</Label>
             <Select
-              defaultValue={defaultValues?.status ?? "ACTIVE"}
-              onValueChange={(v) => setValue("status", v as never)}
+              value={statusVal || "ACTIVE"}
+              onValueChange={(v) => setValue("status", v as never, { shouldDirty: true })}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
