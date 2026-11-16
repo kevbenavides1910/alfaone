@@ -37,6 +37,7 @@ export async function getUserPermissionContext(userId: string): Promise<{
     select: {
       roleId: true,
       role: true,
+      permissionOverrides: { select: { permissionKey: true, level: true } },
       roleEntity: {
         select: {
           id: true,
@@ -48,11 +49,15 @@ export async function getUserPermissionContext(userId: string): Promise<{
   });
   if (!user) return null;
 
+  // Los permisos por usuario se suman a los del rol (solo conceden, no revocan).
+  const overrides = buildPermissionMap(user.permissionOverrides);
+  const withOverrides = (base: PermissionMap): PermissionMap => ({ ...base, ...overrides });
+
   if (user.roleEntity) {
     return {
       roleId: user.roleEntity.id,
       roleCode: user.roleEntity.code,
-      permissions: buildPermissionMap(user.roleEntity.permissions),
+      permissions: withOverrides(buildPermissionMap(user.roleEntity.permissions)),
     };
   }
 
@@ -64,13 +69,13 @@ export async function getUserPermissionContext(userId: string): Promise<{
     return {
       roleId: fallback.id,
       roleCode: fallback.code,
-      permissions: buildPermissionMap(fallback.permissions),
+      permissions: withOverrides(buildPermissionMap(fallback.permissions)),
     };
   }
 
   return {
     roleId: null,
     roleCode: user.role,
-    permissions: {},
+    permissions: withOverrides({}),
   };
 }

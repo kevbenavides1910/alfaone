@@ -270,6 +270,7 @@ model User {
 
   accounts        Account[]
   sessions        Session[]
+  permissionOverrides UserPermission[]
   auditLogs       AuditLog[]
   expenses        Expense[]  @relation("ExpenseCreatedBy")
   paymentsCreated Payment[]  @relation("PaymentCreatedBy")
@@ -6916,4 +6917,17 @@ model MonthlyIncident {
 
   @@index([source])
   @@map("informes_mensuales_incidencias")
+}
+
+/// Permisos adicionales por usuario (override sobre los del rol).
+model UserPermission {
+  id            String          @id @default(cuid())
+  userId        String
+  permissionKey String
+  level         PermissionLevel @default(NONE)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionKey])
+  @@index([permissionKey])
+  @@map("user_permissions")
 }
