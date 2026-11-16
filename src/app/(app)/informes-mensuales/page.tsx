@@ -23,15 +23,6 @@ type MonthlyReport = {
   downloadUrl: string;
 };
 
-type AnnualIncidentSummary = {
-  title: string;
-  year: string;
-  engineer: string;
-  months: string[];
-  rows: { label: string; values: number[]; total: number }[];
-  totals: { values: number[]; total: number };
-};
-
 type IncidentDetailSummary = {
   sheetName: string;
   columns: string[];
@@ -40,7 +31,6 @@ type IncidentDetailSummary = {
 
 type IncidentSummary = {
   source: { kind: "base" | "upload"; fileName: string; period: string | null };
-  annual: AnnualIncidentSummary | null;
   detail: IncidentDetailSummary | null;
 };
 
@@ -206,10 +196,6 @@ export default function InformesMensualesPage() {
       setDeletingId(null);
     }
   };
-
-  const totalIncidents = summary?.annual?.totals.total ?? 0;
-  const typeCount = summary?.annual?.rows.length ?? 0;
-  const detailCount = summary?.detail?.rows.length ?? 0;
 
   return (
     <>
@@ -402,8 +388,8 @@ export default function InformesMensualesPage() {
               <div>
                 <CardTitle className="text-base">Resumen de incidencias</CardTitle>
                 <CardDescription>
-                  Se leen las hojas «Informe Anual» e «INFORME DEL MONTE». Se muestran todas las
-                  columnas del Excel, incluidas las que se agreguen.
+                  Se lee la hoja «INFORME DEL MONTE» del Excel. Se muestran todas las columnas,
+                  incluidas las que se agreguen.
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -439,91 +425,6 @@ export default function InformesMensualesPage() {
 
             {summary && !summaryLoading ? (
               <>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-lg border bg-muted/20 p-3">
-                    <p className="text-xs text-muted-foreground">Total de incidencias</p>
-                    <p className="text-2xl font-semibold tabular-nums">{totalIncidents}</p>
-                  </div>
-                  <div className="rounded-lg border bg-muted/20 p-3">
-                    <p className="text-xs text-muted-foreground">Tipos de incidencia</p>
-                    <p className="text-2xl font-semibold tabular-nums">{typeCount}</p>
-                  </div>
-                  <div className="rounded-lg border bg-muted/20 p-3">
-                    <p className="text-xs text-muted-foreground">Registros detallados</p>
-                    <p className="text-2xl font-semibold tabular-nums">{detailCount}</p>
-                  </div>
-                </div>
-
-                {summary.annual ? (
-                  <section>
-                    <h3 className="text-sm font-semibold">
-                      {summary.annual.title}
-                      {summary.annual.year ? ` · ${summary.annual.year}` : ""}
-                    </h3>
-                    {summary.annual.engineer ? (
-                      <p className="text-xs text-muted-foreground">{summary.annual.engineer}</p>
-                    ) : null}
-                    <div className="mt-2 overflow-x-auto rounded-lg border">
-                      <table className="min-w-full text-xs">
-                        <thead className="bg-muted/60">
-                          <tr>
-                            <th className="px-2 py-1.5 text-left font-semibold">
-                              Tipo de incidencia
-                            </th>
-                            {summary.annual.months.map((month, index) => (
-                              <th
-                                key={`${month}-${index}`}
-                                className="whitespace-nowrap px-2 py-1.5 text-right font-semibold"
-                              >
-                                {month}
-                              </th>
-                            ))}
-                            <th className="px-2 py-1.5 text-right font-semibold">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {summary.annual.rows.map((row) => (
-                            <tr key={row.label} className="hover:bg-muted/30">
-                              <td className="px-2 py-1.5 font-medium">{row.label}</td>
-                              {row.values.map((value, index) => (
-                                <td
-                                  key={`${row.label}-${index}`}
-                                  className="px-2 py-1.5 text-right tabular-nums"
-                                >
-                                  {value || "—"}
-                                </td>
-                              ))}
-                              <td className="px-2 py-1.5 text-right font-semibold tabular-nums">
-                                {row.total || "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot className="border-t bg-muted/40 font-semibold">
-                          <tr>
-                            <td className="px-2 py-1.5">Total</td>
-                            {summary.annual.totals.values.map((value, index) => (
-                              <td
-                                key={`total-${index}`}
-                                className="px-2 py-1.5 text-right tabular-nums"
-                              >
-                                {value}
-                              </td>
-                            ))}
-                            <td className="px-2 py-1.5 text-right tabular-nums">
-                              {summary.annual.totals.total}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </section>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No se encontró la hoja «Informe Anual».
-                  </p>
-                )}
-
                 {summary.detail ? (
                   <section>
                     <h3 className="text-sm font-semibold">

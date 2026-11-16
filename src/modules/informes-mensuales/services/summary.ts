@@ -2,21 +2,6 @@ import { readFile } from "fs/promises";
 import * as XLSX from "xlsx";
 import { MonthlyReportError, getMonthlyReportFile, readMonthlyReportTemplate } from "./reports";
 
-export type AnnualIncidentRow = {
-  label: string;
-  values: number[];
-  total: number;
-};
-
-export type AnnualIncidentSummary = {
-  title: string;
-  year: string;
-  engineer: string;
-  months: string[];
-  rows: AnnualIncidentRow[];
-  totals: { values: number[]; total: number };
-};
-
 export type IncidentDetailSummary = {
   sheetName: string;
   columns: string[];
@@ -29,7 +14,6 @@ export type IncidentSummaryDto = {
     fileName: string;
     period: string | null;
   };
-  annual: AnnualIncidentSummary | null;
   detail: IncidentDetailSummary | null;
 };
 
@@ -53,90 +37,6 @@ function sheetMatrix(workbook: XLSX.WorkBook, sheetName: string): SheetMatrix | 
 function findSheetName(workbook: XLSX.WorkBook, needle: string): string | null {
   const target = needle.toLowerCase();
   return workbook.SheetNames.find((name) => name.toLowerCase().includes(target)) ?? null;
-}
-
-function toNumber(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  const cleaned = String(value ?? "")
-    .replace(/\s/g, "")
-    .replace(/[^\d.,-]/g, "")
-    .replace(/\.(?=\d{3}(\D|$))/g, "")
-    .replace(",", ".");
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function parseAnnual(workbook: XLSX.WorkBook): AnnualIncidentSummary | null {
-  const sheetName = findSheetName(workbook, "informe anual");
-  if (!sheetName) return null;
-  const matrix = sheetMatrix(workbook, sheetName);
-  if (!matrix || matrix.length === 0) return null;
-
-  const headerIndex = matrix.findIndex((row) =>
-    row.some((cell) => normalize(cell).toLowerCase() === "tipo de evento"),
-  );
-  if (headerIndex < 0) return null;
-
-  const header = matrix[headerIndex].map(normalize);
-  const labelIndex = header.findIndex((cell) => cell.toLowerCase() === "tipo de evento");
-  if (labelIndex < 0) return null;
-
-  const months: string[] = [];
-  const monthIndexes: number[] = [];
-  for (let column = labelIndex + 1; column < header.length; column += 1) {
-    const value = header[column];
-    if (!value) continue;
-    if (/total|acum/i.test(value)) continue;
-    months.push(value);
-    monthIndexes.push(column);
-  }
-  if (months.length === 0) return null;
-
-  const rows: AnnualIncidentRow[] = [];
-  for (let rowIndex = headerIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
-    const label = normalize(matrix[rowIndex][labelIndex]);
-    if (!label) {
-      if (rows.length > 0) break;
-      continue;
-    }
-    if (/^total/i.test(label)) break;
-
-    const values = monthIndexes.map((column) => toNumber(matrix[rowIndex][column]));
-    rows.push({
-      label,
-      values,
-      total: values.reduce((sum, value) => sum + value, 0),
-    });
-    if (rows.length >= 60) break;
-  }
-
-  if (rows.length === 0) return null;
-
-  const totalsValues = months.map((_, index) =>
-    rows.reduce((sum, row) => sum + (row.values[index] ?? 0), 0),
-  );
-
-  const preamble = matrix
-    .slice(0, headerIndex)
-    .flat()
-    .map(normalize)
-    .filter(Boolean);
-  const yearText = preamble.find((value) => /año/i.test(value)) ?? "";
-  const year = yearText.match(/\d{4}/)?.[0] ?? preamble.find((value) => /^\d{4}$/.test(value)) ?? "";
-  const engineer = preamble.find((value) => /ingeniero/i.test(value)) ?? "";
-  const title = preamble.find((value) => /reporte|informe/i.test(value)) ?? "Reporte de incidentes";
-
-  return {
-    title,
-    year,
-    engineer,
-    months,
-    rows,
-    totals: {
-      values: totalsValues,
-      total: totalsValues.reduce((sum, value) => sum + value, 0),
-    },
-  };
 }
 
 function parseDetail(workbook: XLSX.WorkBook): IncidentDetailSummary | null {
@@ -188,7 +88,6 @@ export async function buildIncidentSummary(input: { reportId?: string }): Promis
 
   return {
     source,
-    annual: parseAnnual(workbook),
     detail: parseDetail(workbook),
   };
 }
