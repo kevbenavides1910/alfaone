@@ -1,13 +1,22 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Download, FileSpreadsheet, Loader2, Trash2, Upload } from "lucide-react";
+import { Download, FileSpreadsheet, Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/utils/format";
 
 type MonthlyReport = {
@@ -32,6 +41,20 @@ type IncidentDetailSummary = {
 type IncidentSummary = {
   source: { kind: "base" | "upload"; fileName: string; period: string | null };
   detail: IncidentDetailSummary | null;
+};
+
+type MonthlyIncident = {
+  id: string;
+  source: string;
+  data: Record<string, string>;
+  createdById: string;
+  createdByName: string;
+  createdAt: string;
+};
+
+type DisplayRow = {
+  values: string[];
+  manualId?: string;
 };
 
 const currentPeriod = () => {
@@ -76,6 +99,15 @@ export default function InformesMensualesPage() {
   const [summary, setSummary] = useState<IncidentSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [incidents, setIncidents] = useState<MonthlyIncident[]>([]);
+  const [incidentsLoading, setIncidentsLoading] = useState(true);
+  const [incidentsError, setIncidentsError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [showIncidentDialog, setShowIncidentDialog] = useState(false);
+  const [incidentForm, setIncidentForm] = useState<Record<string, string>>({});
+  const [incidentSaving, setIncidentSaving] = useState(false);
+  const [incidentError, setIncidentError] = useState<string | null>(null);
+  const [deletingIncidentId, setDeletingIncidentId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,13 +142,35 @@ export default function InformesMensualesPage() {
     }
   }, []);
 
+  const loadIncidents = useCallback(async (source: string) => {
+    setIncidentsLoading(true);
+    try {
+      const response = await fetch(
+        `/api/informes-mensuales/incidencias?source=${encodeURIComponent(source)}`,
+        { credentials: "same-origin" },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      const json = (await response.json()) as { data?: MonthlyIncident[] };
+      setIncidents(json.data ?? []);
+      setIncidentsError(null);
+    } catch (err) {
+      setIncidentsError(
+        err instanceof Error ? err.message : "No se pudieron cargar las incidencias",
+      );
+    } finally {
+      setIncidentsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
     void loadSummary(summarySource);
-  }, [loadSummary, summarySource]);
+    void loadIncidents(summarySource);
+    setFilters({});
+  }, [loadSummary, loadIncidents, summarySource]);
 
   const years = useMemo(
     () => Array.from(new Set(reports.map((report) => report.period.slice(0, 4)))).sort().reverse(),
@@ -136,6 +190,44 @@ export default function InformesMensualesPage() {
     }
     return Array.from(map.entries());
   }, [reports, yearFilter]);
+
+  const detailColumns = useMemo(() => summary?.detail?.columns ?? [], [summary]);
+
+  const detailRows = useMemo<DisplayRow[]>(() => {
+    if (!summary?.detail) return [];
+    const excelRows: DisplayRow[] = summary.detail.rows.map((values) => ({ values }));
+    const manualRows: DisplayRow[] = incidents.map((incident) => ({
+      values: summary.detail!.columns.map((column) => incident.data[column] ?? ""),
+      manualId: incident.id,
+    }));
+    return [...excelRows, ...manualRows];
+  }, [summary, incidents]);
+
+  const filterOptions = useMemo(
+    () =>
+      detailColumns.map((_, index) => {
+        const values = Array.from(
+          new Set(detailRows.map((row) => row.values[index]).filter(Boolean)),
+        );
+        return values.length > 0 && values.length <= 25
+          ? values.sort((a, b) => a.localeCompare(b, "es"))
+          : null;
+      }),
+    [detailColumns, detailRows],
+  );
+
+  const filtersActive = Object.values(filters).some((value) => value.trim().length > 0);
+
+  const filteredRows = useMemo(() => {
+    if (!filtersActive) return detailRows;
+    return detailRows.filter((row) =>
+      detailColumns.every((column, index) => {
+        const filter = filters[column]?.trim().toLowerCase();
+        if (!filter) return true;
+        return (row.values[index] ?? "").toLowerCase().includes(filter);
+      }),
+    );
+  }, [detailRows, detailColumns, filters, filtersActive]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -194,6 +286,94 @@ export default function InformesMensualesPage() {
       setError(err instanceof Error ? err.message : "No se pudo eliminar el informe");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const nextIncidentNumber = () => {
+    const year = new Date().getFullYear();
+    let max = 0;
+    for (const row of detailRows) {
+      const match = /INC-(\d+)-(\d{4})/i.exec(row.values[0] ?? "");
+      if (match) max = Math.max(max, Number(match[1]));
+    }
+    return `INC-${String(max + 1).padStart(4, "0")}-${year}`;
+  };
+
+  const openIncidentDialog = () => {
+    if (detailColumns.length === 0) return;
+    const form: Record<string, string> = {};
+    for (const column of detailColumns) form[column] = "";
+
+    const numberColumn = detailColumns[0];
+    if (numberColumn) form[numberColumn] = nextIncidentNumber();
+
+    const dateColumn = detailColumns.find((column) => /fecha/i.test(column));
+    if (dateColumn) {
+      form[dateColumn] = new Date().toLocaleDateString("es-CR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+    }
+
+    const timeColumn = detailColumns.find((column) => /hora/i.test(column));
+    if (timeColumn) {
+      form[timeColumn] = new Date().toLocaleTimeString("es-CR", { hour12: false });
+    }
+
+    const eventColumn = detailColumns.find((column) => /evento/i.test(column));
+    if (eventColumn) form[eventColumn] = "Otros";
+
+    setIncidentForm(form);
+    setIncidentError(null);
+    setShowIncidentDialog(true);
+  };
+
+  const submitIncident = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!Object.values(incidentForm).some((value) => value.trim().length > 0)) {
+      setIncidentError("Completá al menos un campo de la incidencia.");
+      return;
+    }
+
+    setIncidentSaving(true);
+    setIncidentError(null);
+    try {
+      const response = await fetch("/api/informes-mensuales/incidencias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ source: summarySource, data: incidentForm }),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+
+      setShowIncidentDialog(false);
+      setMessage("Incidencia agregada correctamente.");
+      await loadIncidents(summarySource);
+    } catch (err) {
+      setIncidentError(err instanceof Error ? err.message : "No se pudo guardar la incidencia");
+    } finally {
+      setIncidentSaving(false);
+    }
+  };
+
+  const removeIncident = async (id: string) => {
+    if (!window.confirm("¿Eliminar esta incidencia?")) return;
+
+    setDeletingIncidentId(id);
+    setIncidentsError(null);
+    try {
+      const response = await fetch(`/api/informes-mensuales/incidencias/${id}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      setMessage("Incidencia eliminada.");
+      await loadIncidents(summarySource);
+    } catch (err) {
+      setIncidentsError(err instanceof Error ? err.message : "No se pudo eliminar la incidencia");
+    } finally {
+      setDeletingIncidentId(null);
     }
   };
 
@@ -392,7 +572,7 @@ export default function InformesMensualesPage() {
                   incluidas las que se agreguen.
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Label htmlFor="summary-source" className="text-xs text-muted-foreground">
                   Fuente
                 </Label>
@@ -409,6 +589,14 @@ export default function InformesMensualesPage() {
                     </option>
                   ))}
                 </select>
+                <Button
+                  size="sm"
+                  onClick={openIncidentDialog}
+                  disabled={detailColumns.length === 0}
+                >
+                  <Plus className="h-4 w-4" />
+                  Nueva incidencia
+                </Button>
               </div>
             </div>
           </CardHeader>
@@ -423,22 +611,46 @@ export default function InformesMensualesPage() {
               </div>
             ) : null}
 
+            {incidentsError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {incidentsError}
+              </div>
+            ) : null}
+
             {summary && !summaryLoading ? (
               <>
                 {summary.detail ? (
                   <section>
-                    <h3 className="text-sm font-semibold">
-                      Detalle de incidencias ({summary.detail.rows.length})
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      Hoja «{summary.detail.sheetName}» · {summary.detail.columns.length} columnas
-                      (incluye las agregadas).
-                    </p>
-                    <div className="mt-2 max-h-[520px] overflow-auto rounded-lg border">
+                    <div className="flex flex-wrap items-end justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-semibold">
+                          Detalle de incidencias ({filteredRows.length} de {detailRows.length})
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Hoja «{summary.detail.sheetName}» · {summary.detail.columns.length}{" "}
+                          columnas (incluye las agregadas).
+                          {incidents.length > 0
+                            ? ` ${incidents.length} agregada(s) manualmente.`
+                            : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {filtersActive ? (
+                          <Button variant="ghost" size="sm" onClick={() => setFilters({})}>
+                            Limpiar filtros
+                          </Button>
+                        ) : null}
+                        {incidentsLoading ? (
+                          <span className="text-xs text-muted-foreground">Cargando…</span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="mt-2 max-h-[560px] overflow-auto rounded-lg border">
                       <table className="min-w-full text-xs">
-                        <thead className="sticky top-0 z-10 bg-muted/80">
+                        <thead className="sticky top-0 z-20 bg-muted/90">
                           <tr>
-                            {summary.detail.columns.map((column, index) => (
+                            {detailColumns.map((column, index) => (
                               <th
                                 key={`${column}-${index}`}
                                 className="whitespace-nowrap px-2 py-1.5 text-left font-semibold"
@@ -446,12 +658,60 @@ export default function InformesMensualesPage() {
                                 {column}
                               </th>
                             ))}
+                            <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+                              Acciones
+                            </th>
+                          </tr>
+                          <tr>
+                            {detailColumns.map((column, index) => (
+                              <th key={`filter-${column}-${index}`} className="px-1 py-1">
+                                {filterOptions[index] ? (
+                                  <select
+                                    value={filters[column] ?? ""}
+                                    onChange={(event) =>
+                                      setFilters((current) => ({
+                                        ...current,
+                                        [column]: event.target.value,
+                                      }))
+                                    }
+                                    className="h-7 w-full min-w-[90px] rounded border border-input bg-background px-1 text-[11px]"
+                                  >
+                                    <option value="">Todos</option>
+                                    {filterOptions[index]!.map((option) => (
+                                      <option key={option} value={option}>
+                                        {option}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    value={filters[column] ?? ""}
+                                    onChange={(event) =>
+                                      setFilters((current) => ({
+                                        ...current,
+                                        [column]: event.target.value,
+                                      }))
+                                    }
+                                    placeholder="Filtrar…"
+                                    className="h-7 w-full min-w-[90px] rounded border border-input bg-background px-1 text-[11px]"
+                                  />
+                                )}
+                              </th>
+                            ))}
+                            <th className="px-1 py-1 text-[11px] font-normal text-muted-foreground">
+                              {filtersActive ? `${filteredRows.length}/${detailRows.length}` : ""}
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
-                          {summary.detail.rows.map((row, rowIndex) => (
-                            <tr key={`row-${rowIndex}`} className="align-top hover:bg-muted/30">
-                              {row.map((value, columnIndex) => (
+                          {filteredRows.map((row, rowIndex) => (
+                            <tr
+                              key={row.manualId ?? `row-${rowIndex}`}
+                              className={`align-top hover:bg-muted/30 ${
+                                row.manualId ? "bg-amber-50/50" : ""
+                              }`}
+                            >
+                              {row.values.map((value, columnIndex) => (
                                 <td
                                   key={`cell-${rowIndex}-${columnIndex}`}
                                   className="max-w-[320px] truncate px-2 py-1.5"
@@ -460,10 +720,34 @@ export default function InformesMensualesPage() {
                                   {value || "—"}
                                 </td>
                               ))}
+                              <td className="px-2 py-1.5">
+                                {row.manualId ? (
+                                  <div className="flex items-center gap-1">
+                                    <Badge variant="secondary">Manual</Badge>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={() => void removeIncident(row.manualId!)}
+                                      disabled={deletingIncidentId === row.manualId}
+                                      aria-label="Eliminar incidencia"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                ) : null}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
+                      {filteredRows.length === 0 ? (
+                        <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+                          {detailRows.length === 0
+                            ? "No hay incidencias."
+                            : "No hay incidencias que coincidan con los filtros."}
+                        </p>
+                      ) : null}
                     </div>
                   </section>
                 ) : (
@@ -481,6 +765,71 @@ export default function InformesMensualesPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={showIncidentDialog} onOpenChange={setShowIncidentDialog}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nueva incidencia</DialogTitle>
+            <DialogDescription>
+              Completá las columnas del informe. Se guarda como incidencia manual y se agrega al
+              detalle.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={submitIncident} className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              {detailColumns.map((column, index) => {
+                const longField = /descrip|acci|plan|observ|detalle/i.test(column);
+                return (
+                  <div
+                    key={`${column}-${index}`}
+                    className={longField ? "space-y-1 md:col-span-2" : "space-y-1"}
+                  >
+                    <Label htmlFor={`incident-field-${index}`}>{column}</Label>
+                    {longField ? (
+                      <Textarea
+                        id={`incident-field-${index}`}
+                        rows={3}
+                        value={incidentForm[column] ?? ""}
+                        onChange={(event) =>
+                          setIncidentForm((current) => ({
+                            ...current,
+                            [column]: event.target.value,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <Input
+                        id={`incident-field-${index}`}
+                        value={incidentForm[column] ?? ""}
+                        onChange={(event) =>
+                          setIncidentForm((current) => ({
+                            ...current,
+                            [column]: event.target.value,
+                          }))
+                        }
+                        required={index === 0}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {incidentError ? <p className="text-sm text-red-600">{incidentError}</p> : null}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowIncidentDialog(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={incidentSaving}>
+                {incidentSaving ? "Guardando…" : "Guardar incidencia"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

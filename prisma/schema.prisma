@@ -6903,3 +6903,17 @@ model MonthlyReport {
   @@index([period])
   @@map("informes_mensuales")
 }
+
+/// Incidencia agregada manualmente al detalle del informe mensual.
+/// `data` guarda los valores por nombre de columna del Excel (columnas dinámicas).
+model MonthlyIncident {
+  id            String   @id @default(cuid())
+  source        String
+  data          Json
+  createdById   String
+  createdByName String
+  createdAt     DateTime @default(now())
+
+  @@index([source])
+  @@map("informes_mensuales_incidencias")
+}
