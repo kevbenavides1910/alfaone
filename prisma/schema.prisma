@@ -478,12 +478,71 @@ model Contract {
   administrations            ContractAdministration[]
   operationalEvents          OperationalCalendarEventContract[]
   operationalEventEvidence   OperationalCalendarEventAttachment[]
+  /// Extensiones Neo/One ligadas a claves Codisa (oficiales, IVA, etc.).
+  codisaExtensions           CodisaContractExtension[]
 
   @@index([company])
   @@index([status])
   @@index([deletedAt])
   @@index([endDate])
   @@map("contracts")
+}
+
+/// Campos de contrato que Neo/One necesitan y Codisa (NAF5.ARCOMC) no guarda.
+/// Clave Codisa: (noCia, noContrato). Se completa desde Alfa-One al reconciliar.
+model CodisaContractExtension {
+  id                     String    @id @default(cuid())
+  /// Código compañía Codisa (NO_CIA, p.ej. 01).
+  noCia                  String    @db.VarChar(2)
+  /// Número de contrato Codisa (NO_CONTRATO).
+  noContrato             String    @db.VarChar(60)
+  /// Contrato Alfa-One/Neo vinculado (si hubo match). Varias filas Codisa pueden apuntar al mismo.
+  contractId             String?
+  contract               Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  /// Código empresa Alfa (ALFA, BENA, …) resuelto desde NO_CIA.
+  companyCode            String?
+  officersCount          Int?
+  positionsCount         Int?
+  administrationsCount   Int?
+  /// % IVA 0–100 (escala One/Neo).
+  ivaPct                 Decimal?  @db.Decimal(5, 2)
+  /// Fin del periodo facturado (Codisa DIA_PERIODO_II suele ir vacío).
+  billingPeriodToDay     Int?
+  /// Cómo se concilió: exact | licitacion | alias_manual | none.
+  matchMethod            String?   @db.VarChar(30)
+  /// Origen de los valores de extensión (alfa_one | manual | inferred).
+  source                 String    @default("alfa_one") @db.VarChar(30)
+  lastReconciledAt       DateTime?
+  notes                  String?   @db.Text
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@unique([noCia, noContrato])
+  @@index([contractId])
+  @@index([noContrato])
+  @@index([companyCode])
+  @@index([lastReconciledAt])
+  @@map("codisa_contract_extensions")
+}
+
+/// Alias nombre One/Neo → contrato canónico Codisa (renovaciones con ".", multipart -P/-L, etc.).
+model CodisaContractAlias {
+  id              String   @id @default(cuid())
+  /// Identidad en One/Neo (contracts.licitacionNo).
+  licitacionNoOne String
+  /// Empresa One (opcional, p.ej. ACE).
+  companyOne      String?
+  /// Compañía Codisa (NO_CIA).
+  noCia           String   @db.VarChar(2)
+  /// Nombre canónico Codisa (NO_CONTRATO), incl. puntos de renovación.
+  noContrato      String   @db.VarChar(60)
+  aliasNote       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([licitacionNoOne, noCia, noContrato], map: "codisa_contract_aliases_one_codisa_key")
+  @@index([noContrato], map: "codisa_contract_aliases_nocontrato_idx")
+  @@map("codisa_contract_aliases")
 }
 
 /// MO NAF precomputada por contrato/mes (evita Oracle en cada apertura del reporte mensual).

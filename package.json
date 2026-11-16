@@ -47,6 +47,7 @@
     "db:delete-cxc": "tsx scripts/db/delete-cxc-from-xlsx.ts",
     "db:mark-reajustes": "tsx scripts/db/mark-reajustes-from-xlsx.ts",
     "db:import-cxc-pj": "tsx scripts/db/import-pj-facturacion-cxc.ts",
+    "db:reconcile-codisa-ext": "tsx scripts/reconcile-codisa-contract-ext.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset"
   },
