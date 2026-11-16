@@ -197,6 +197,13 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
   },
   { href: "/reports/annual", label: "Reporte Anual", icon: TrendingUp, moduleId: "reportes" },
   { href: "/reports", label: "Reporte mensual", icon: BarChart3, moduleId: "reportes" },
+  {
+    href: "/informes-mensuales",
+    label: "Informes Mensuales",
+    icon: FileSpreadsheet,
+    moduleId: "informesMensuales",
+    isActive: (p) => p.startsWith("/informes-mensuales"),
+  },
   { href: "/admin/users", label: "Usuarios", icon: Users, moduleId: "plataforma", adminOnly: true },
   {
     href: "/admin/catalogs",

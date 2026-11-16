@@ -111,6 +111,17 @@ export const HOME_MODULE_TILES: HomeModuleTile[] = [
     tile: "",
   },
   {
+    id: "informes_mensuales",
+    label: "Informes Mensuales",
+    description: "Plantilla Excel, cargas y historial por mes",
+    href: "/informes-mensuales",
+    icon: FileSpreadsheet,
+    permissionTileId: "informes_mensuales",
+    moduleId: "informesMensuales",
+    accent: "bg-white",
+    tile: "",
+  },
+  {
     id: "disciplinario",
     label: "Disciplinario",
     description: "Apercibimientos y tratamientos",

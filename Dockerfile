@@ -57,6 +57,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
+# Plantilla base de informes mensuales (se sirve por API autenticada, no desde /public)
+COPY --from=builder /app/assets/informes-mensuales ./assets/informes-mensuales
 # Prisma no siempre queda trazado en standalone; aseguramos cliente y motores
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma

@@ -154,6 +154,23 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     prismaModels: [],
   },
 
+  informesMensuales: {
+    id: "informesMensuales",
+    label: "Informes Mensuales",
+    description:
+      "Plantilla base en Excel, carga de informes completados por mes e historial de entregas.",
+    uiRoutePrefixes: ["/informes-mensuales"],
+    apiRoutePrefixes: ["/api/informes-mensuales"],
+    codePaths: [
+      "src/app/(app)/informes-mensuales",
+      "src/app/api/informes-mensuales",
+      "src/modules/informes-mensuales",
+      "src/components/informes-mensuales",
+      "assets/informes-mensuales",
+    ],
+    prismaModels: ["MonthlyReport"],
+  },
+
   inventario: {
     id: "inventario",
     label: "Inventario",
@@ -523,6 +540,7 @@ export function resolveModuleFromPath(pathname: string): AppModuleId {
     "facturacion",
     "plataforma",
     "inventario",
+    "informesMensuales",
     "reportes",
     "presupuestos",
     "core",

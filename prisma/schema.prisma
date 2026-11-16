@@ -6886,3 +6886,20 @@ model ContractCommitment {
   @@index([contractId])
   @@map("contract_commitments")
 }
+
+/// Informe mensual cargado a partir de la plantilla base (Excel/PDF/CSV).
+model MonthlyReport {
+  id             String   @id @default(cuid())
+  period         String
+  fileName       String
+  mimeType       String
+  storagePath    String
+  sizeBytes      Int
+  note           String?
+  uploadedById   String
+  uploadedByName String
+  createdAt      DateTime @default(now())
+
+  @@index([period])
+  @@map("informes_mensuales")
+}

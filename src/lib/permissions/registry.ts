@@ -349,6 +349,21 @@ export const PERMISSION_REGISTRY = {
       },
     },
   },
+  informesMensuales: {
+    label: "Informes Mensuales",
+    moduleId: "informesMensuales" as const,
+    screens: {
+      informes: {
+        label: "Informes mensuales",
+        uiRoutes: ["/informes-mensuales"],
+        apiPrefixes: ["/api/informes-mensuales"],
+        actions: {
+          view: "Ver y descargar la plantilla e informes mensuales",
+          edit: "Subir y eliminar informes mensuales",
+        },
+      },
+    },
+  },
   disciplinario: {
     label: "Disciplinario",
     moduleId: "disciplinario" as const,
@@ -1132,6 +1147,7 @@ export const HOME_MODULE_PERMISSION_GROUPS: {
   { tileId: "gastos", label: "Gastos", moduleKeys: ["gastos"] },
   { tileId: "pagos", label: "Pagos", moduleKeys: ["pagos"] },
   { tileId: "documentos_legales", label: "Control de Documentos Legales", moduleKeys: ["documentosLegales"] },
+  { tileId: "informes_mensuales", label: "Informes Mensuales", moduleKeys: ["informesMensuales"] },
   { tileId: "disciplinario", label: "Disciplinario", moduleKeys: ["disciplinario"] },
   { tileId: "empleados", label: "Empleados", moduleKeys: ["empleados"] },
   { tileId: "solicitudes_rrhh", label: "Solicitudes RRHH", moduleKeys: ["solicitudesRrhh"] },

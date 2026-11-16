@@ -9,6 +9,7 @@ export type AppModuleId =
   | "pagos"
   | "documentosLegales"
   | "reportes"
+  | "informesMensuales"
   | "inventario"
   | "disciplinario"
   | "empleados"
