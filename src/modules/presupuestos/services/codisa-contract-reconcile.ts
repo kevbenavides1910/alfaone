@@ -505,14 +505,25 @@ async function hydrateAutocomplete(
 
 export type NeoContractLookupResult = {
   query: string;
-  resolvedVia: "codisa_exact" | "codisa_licitacion" | "alias" | "none";
+  resolvedVia: "codisa_exact" | "codisa_licitacion" | "alias" | "codisa_partial" | "none";
   oneLicitacionNo: string | null;
   parts: NeoContractAutocomplete[];
+  /** Sugerencias cuando no hay match exacto (UI autocomplete). */
+  suggestions: Array<{
+    noCia: string;
+    noContrato: string;
+    companyCode: string | null;
+    cliente: string | null;
+    via: "codisa" | "alias";
+    oneLicitacionNo: string | null;
+  }>;
 };
+
+export type CodisaContractSuggestion = NeoContractLookupResult["suggestions"][number];
 
 /**
  * Lookup Neo: Codisa (Oracle, solo A) + extensión/alias (Postgres).
- * Acepta nombre Codisa o nombre One (vía `codisa_contract_aliases`).
+ * Exacto / licitación / alias; si no, sugerencias parciales (prefijo/contiene).
  */
 export async function lookupNeoContractFromCodisa(
   db: PrismaClient,
@@ -525,6 +536,7 @@ export async function lookupNeoContractFromCodisa(
     resolvedVia: "none",
     oneLicitacionNo: null,
     parts: [],
+    suggestions: [],
   };
   if (!key) return empty;
 
@@ -541,6 +553,7 @@ export async function lookupNeoContractFromCodisa(
   ]);
 
   const cia = noCia ? padCia(noCia) : null;
+  const q = normKey(key);
   const aliasIndexes = buildAliasIndexes(aliases);
   const byCodisa = new Map(
     rows.map((r) => [`${padCia(r.NO_CIA)}|${normKey(r.NO_CONTRATO)}`, r] as const),
@@ -549,13 +562,11 @@ export async function lookupNeoContractFromCodisa(
   const findCodisa = (ciaKey: string, contrato: string): CodisaContractRow | undefined =>
     byCodisa.get(`${padCia(ciaKey)}|${normKey(contrato)}`);
 
+  const scoped = rows.filter((r) => !cia || padCia(r.NO_CIA) === cia);
+
   const direct =
-    rows.find(
-      (r) =>
-        normKey(r.NO_CONTRATO) === normKey(key) &&
-        (!cia || padCia(r.NO_CIA) === cia),
-    ) ||
-    rows.find((r) => normKey(r.NO_CONTRATO) === normKey(key));
+    scoped.find((r) => normKey(r.NO_CONTRATO) === q) ||
+    rows.find((r) => normKey(r.NO_CONTRATO) === q);
 
   if (direct) {
     const part = await hydrateAutocomplete(db, direct);
@@ -564,14 +575,12 @@ export async function lookupNeoContractFromCodisa(
       resolvedVia: "codisa_exact",
       oneLicitacionNo: null,
       parts: [part],
+      suggestions: [],
     };
   }
 
-  const byLicitacion = rows.filter(
-    (r) =>
-      r.NO_LICITACION &&
-      normKey(r.NO_LICITACION) === normKey(key) &&
-      (!cia || padCia(r.NO_CIA) === cia),
+  const byLicitacion = scoped.filter(
+    (r) => r.NO_LICITACION && normKey(r.NO_LICITACION) === q,
   );
   if (byLicitacion.length) {
     const parts = await Promise.all(byLicitacion.map((r) => hydrateAutocomplete(db, r)));
@@ -580,10 +589,11 @@ export async function lookupNeoContractFromCodisa(
       resolvedVia: "codisa_licitacion",
       oneLicitacionNo: null,
       parts,
+      suggestions: [],
     };
   }
 
-  const aliasHits = (aliasIndexes.byOneKey.get(normKey(key)) || []).filter(
+  const aliasHits = (aliasIndexes.byOneKey.get(q) || []).filter(
     (a) => !cia || padCia(a.noCia) === cia,
   );
   if (aliasHits.length) {
@@ -604,11 +614,88 @@ export async function lookupNeoContractFromCodisa(
         resolvedVia: "alias",
         oneLicitacionNo: aliasHits[0].licitacionNoOne,
         parts,
+        suggestions: [],
       };
     }
   }
 
-  return empty;
+  // Parcial: prefijo / contiene en NO_CONTRATO, NO_LICITACION, CLIENTE o alias One.
+  type Scored = { score: number; suggestion: CodisaContractSuggestion; row?: CodisaContractRow };
+  const scored: Scored[] = [];
+  const pushUnique = (item: Scored) => {
+    const k2 = `${item.suggestion.noCia}|${normKey(item.suggestion.noContrato)}|${item.suggestion.via}`;
+    if (scored.some((s) => `${s.suggestion.noCia}|${normKey(s.suggestion.noContrato)}|${s.suggestion.via}` === k2)) {
+      return;
+    }
+    scored.push(item);
+  };
+
+  for (const r of scoped) {
+    const nc = normKey(r.NO_CONTRATO);
+    const nl = normKey(r.NO_LICITACION);
+    const cl = normKey(r.CLIENTE);
+    let score = 0;
+    if (nc.startsWith(q)) score = 100;
+    else if (nl.startsWith(q)) score = 90;
+    else if (nc.includes(q)) score = 70;
+    else if (nl.includes(q)) score = 60;
+    else if (cl.includes(q)) score = 40;
+    if (!score) continue;
+    pushUnique({
+      score,
+      row: r,
+      suggestion: {
+        noCia: padCia(r.NO_CIA),
+        noContrato: r.NO_CONTRATO,
+        companyCode: SAP_TO_COMPANY[padCia(r.NO_CIA)] || null,
+        cliente: r.CLIENTE,
+        via: "codisa",
+        oneLicitacionNo: null,
+      },
+    });
+  }
+
+  for (const a of aliases) {
+    if (cia && padCia(a.noCia) !== cia) continue;
+    const one = normKey(a.licitacionNoOne);
+    let score = 0;
+    if (one.startsWith(q)) score = 95;
+    else if (one.includes(q)) score = 65;
+    if (!score) continue;
+    const row = findCodisa(a.noCia, a.noContrato);
+    pushUnique({
+      score,
+      row,
+      suggestion: {
+        noCia: padCia(a.noCia),
+        noContrato: a.noContrato,
+        companyCode: SAP_TO_COMPANY[padCia(a.noCia)] || a.companyOne,
+        cliente: row?.CLIENTE ?? null,
+        via: "alias",
+        oneLicitacionNo: a.licitacionNoOne,
+      },
+    });
+  }
+
+  scored.sort((a, b) => b.score - a.score || a.suggestion.noContrato.localeCompare(b.suggestion.noContrato));
+  const top = scored.slice(0, 15);
+
+  if (top.length === 1 && top[0].row && top[0].score >= 90) {
+    const part = await hydrateAutocomplete(db, top[0].row);
+    return {
+      query: key,
+      resolvedVia: top[0].suggestion.via === "alias" ? "alias" : "codisa_partial",
+      oneLicitacionNo: top[0].suggestion.oneLicitacionNo,
+      parts: [part],
+      suggestions: top.map((t) => t.suggestion),
+    };
+  }
+
+  return {
+    ...empty,
+    resolvedVia: top.length ? "codisa_partial" : "none",
+    suggestions: top.map((t) => t.suggestion),
+  };
 }
 
 /** Autocomplete Neo (compat): primera parte del lookup Codisa + extensión. */

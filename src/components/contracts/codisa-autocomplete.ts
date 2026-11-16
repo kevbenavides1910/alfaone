@@ -41,11 +41,21 @@ export type CodisaAutocompletePart = {
   } | null;
 };
 
+export type CodisaContractSuggestion = {
+  noCia: string;
+  noContrato: string;
+  companyCode: string | null;
+  cliente: string | null;
+  via: "codisa" | "alias";
+  oneLicitacionNo: string | null;
+};
+
 export type CodisaLookupBundle = {
   query: string;
-  resolvedVia: "codisa_exact" | "codisa_licitacion" | "alias" | "none";
+  resolvedVia: "codisa_exact" | "codisa_licitacion" | "alias" | "codisa_partial" | "none";
   oneLicitacionNo: string | null;
   parts: CodisaAutocompletePart[];
+  suggestions?: CodisaContractSuggestion[];
 };
 
 const VALID_STATUS = new Set([
@@ -66,14 +76,23 @@ export async function fetchCodisaContractBundle(
   const params = new URLSearchParams({ noContrato: key, bundle: "1" });
   if (noCia?.trim()) params.set("noCia", noCia.trim());
 
-  const res = await fetch(`/api/contracts/codisa-ext?${params.toString()}`);
-  if (res.status === 404) return null;
+  const res = await fetch(`/api/contracts/codisa-ext?${params.toString()}`, {
+    credentials: "same-origin",
+  });
+  if (res.status === 404) {
+    return { query: key, resolvedVia: "none", oneLicitacionNo: null, parts: [], suggestions: [] };
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error?.message ?? `Error Codisa (${res.status})`);
   }
   const json = await res.json();
-  return (json.data ?? json) as CodisaLookupBundle;
+  const data = (json.data ?? json) as CodisaLookupBundle;
+  return {
+    ...data,
+    parts: data.parts ?? [],
+    suggestions: data.suggestions ?? [],
+  };
 }
 
 /** Campos del formulario que se rellenan desde Codisa + extensión. */

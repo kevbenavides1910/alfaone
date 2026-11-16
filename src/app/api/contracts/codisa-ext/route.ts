@@ -88,12 +88,19 @@ export async function GET(req: NextRequest) {
   try {
     if (wantBundle) {
       const bundle = await lookupNeoContractFromCodisa(prisma, noContrato, noCia);
-      if (!bundle.parts.length) return notFound("Contrato no encontrado en Codisa ni en aliases");
+      // Siempre 200: exacto (parts) o parcial (suggestions) para el autocomplete UI.
+      if (!bundle.parts.length && !bundle.suggestions.length) {
+        return notFound("Contrato no encontrado en Codisa ni en aliases");
+      }
       return ok(bundle);
     }
 
     const payload = await getNeoContractAutocomplete(prisma, noContrato, noCia);
-    if (!payload) return notFound("Contrato no encontrado en Codisa");
+    if (!payload) {
+      const bundle = await lookupNeoContractFromCodisa(prisma, noContrato, noCia);
+      if (bundle.suggestions.length) return ok({ ...bundle, form: null });
+      return notFound("Contrato no encontrado en Codisa");
+    }
     return ok(payload);
   } catch (e) {
     console.error("[codisa-ext GET]", e);

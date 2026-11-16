@@ -26,6 +26,7 @@ import {
   fetchCodisaContractBundle,
   formFieldsFromCodisaPart,
   type CodisaAutocompletePart,
+  type CodisaContractSuggestion,
   type CodisaLookupBundle,
 } from "@/components/contracts/codisa-autocomplete";
 
@@ -123,11 +124,33 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
     codisaAppliedKey.current = `${bundle.query}|${part.noCia}|${part.noContrato}`;
   }
 
-  // Autocomplete Codisa al crear (nombre Codisa o alias One).
+  async function pickCodisaSuggestion(s: CodisaContractSuggestion) {
+    setCodisaLookupState("loading");
+    try {
+      const bundle = await fetchCodisaContractBundle(s.oneLicitacionNo || s.noContrato, s.noCia);
+      if (!bundle?.parts?.length) {
+        setCodisaLookupState("miss");
+        return;
+      }
+      setCodisaBundle(bundle);
+      setCodisaPartIdx(0);
+      setCodisaLookupState("found");
+      applyCodisaPart(bundle.parts[0], {
+        ...bundle,
+        oneLicitacionNo: s.oneLicitacionNo ?? bundle.oneLicitacionNo,
+        resolvedVia: s.via === "alias" ? "alias" : bundle.resolvedVia,
+      });
+    } catch (e) {
+      console.error("[codisa-autocomplete pick]", e);
+      setCodisaLookupState("error");
+    }
+  }
+
+  // Autocomplete Codisa al crear (nombre Codisa o alias One; también parcial).
   useEffect(() => {
     if (mode !== "create") return;
     const q = debouncedLicitacion.trim();
-    if (q.length < 5) {
+    if (q.length < 3) {
       setCodisaBundle(null);
       setCodisaLookupState("idle");
       return;
@@ -138,19 +161,27 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
     fetchCodisaContractBundle(q)
       .then((bundle) => {
         if (cancelled) return;
-        if (!bundle?.parts?.length) {
+        if (!bundle) {
           setCodisaBundle(null);
           setCodisaLookupState("miss");
           return;
         }
         setCodisaBundle(bundle);
-        setCodisaPartIdx(0);
-        setCodisaLookupState("found");
-        const first = bundle.parts[0];
-        const applyKey = `${bundle.query}|${first.noCia}|${first.noContrato}`;
-        if (codisaAppliedKey.current !== applyKey) {
-          applyCodisaPart(first, bundle);
+        if (bundle.parts?.length) {
+          setCodisaPartIdx(0);
+          setCodisaLookupState("found");
+          const first = bundle.parts[0];
+          const applyKey = `${bundle.query}|${first.noCia}|${first.noContrato}`;
+          if (codisaAppliedKey.current !== applyKey) {
+            applyCodisaPart(first, bundle);
+          }
+          return;
         }
+        if (bundle.suggestions?.length) {
+          setCodisaLookupState("found");
+          return;
+        }
+        setCodisaLookupState("miss");
       })
       .catch((e) => {
         if (cancelled) return;
@@ -294,7 +325,7 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
               )}
             </div>
             {errors.licitacionNo && <p className="text-xs text-red-600">{errors.licitacionNo.message}</p>}
-            {mode === "create" && codisaLookupState === "found" && codisaBundle && (
+            {mode === "create" && codisaLookupState === "found" && codisaBundle?.parts?.length ? (
               <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 space-y-1.5">
                 <p>
                   Codisa activo
@@ -332,10 +363,42 @@ export function ContractForm({ defaultValues, mode = "create" }: Props) {
                   </div>
                 )}
               </div>
+            ) : null}
+            {mode === "create" &&
+              codisaLookupState === "found" &&
+              !codisaBundle?.parts?.length &&
+              (codisaBundle?.suggestions?.length ?? 0) > 0 && (
+              <div className="rounded-md border border-slate-200 bg-white shadow-sm max-h-56 overflow-auto">
+                <p className="px-3 py-1.5 text-[11px] uppercase tracking-wide text-slate-500 border-b">
+                  Contratos Codisa activos ({codisaBundle!.suggestions!.length})
+                </p>
+                <ul className="divide-y">
+                  {codisaBundle!.suggestions!.map((s) => (
+                    <li key={`${s.via}-${s.noCia}-${s.noContrato}-${s.oneLicitacionNo ?? ""}`}>
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                        onClick={() => pickCodisaSuggestion(s)}
+                      >
+                        <span className="font-medium text-slate-800">{s.noContrato}</span>
+                        {s.companyCode ? (
+                          <span className="text-slate-500"> · {s.companyCode}</span>
+                        ) : null}
+                        {s.via === "alias" && s.oneLicitacionNo ? (
+                          <span className="text-emerald-700"> · alias {s.oneLicitacionNo}</span>
+                        ) : null}
+                        {s.cliente ? (
+                          <span className="block text-xs text-slate-500 truncate">{s.cliente}</span>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
-            {mode === "create" && codisaLookupState === "miss" && debouncedLicitacion.trim().length >= 5 && (
+            {mode === "create" && codisaLookupState === "miss" && debouncedLicitacion.trim().length >= 3 && (
               <p className="text-xs text-amber-700">
-                Sin coincidencia en Codisa activos ni aliases. Podés completar el formulario a mano.
+                Sin coincidencia en los ~250 activos Codisa ni aliases. Completá a mano o probá otro texto.
               </p>
             )}
             {mode === "create" && codisaLookupState === "error" && (
