@@ -23,6 +23,27 @@ type MonthlyReport = {
   downloadUrl: string;
 };
 
+type AnnualIncidentSummary = {
+  title: string;
+  year: string;
+  engineer: string;
+  months: string[];
+  rows: { label: string; values: number[]; total: number }[];
+  totals: { values: number[]; total: number };
+};
+
+type IncidentDetailSummary = {
+  sheetName: string;
+  columns: string[];
+  rows: string[][];
+};
+
+type IncidentSummary = {
+  source: { kind: "base" | "upload"; fileName: string; period: string | null };
+  annual: AnnualIncidentSummary | null;
+  detail: IncidentDetailSummary | null;
+};
+
 const currentPeriod = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -61,6 +82,10 @@ export default function InformesMensualesPage() {
   const [yearFilter, setYearFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [summarySource, setSummarySource] = useState("base");
+  const [summary, setSummary] = useState<IncidentSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,9 +102,31 @@ export default function InformesMensualesPage() {
     }
   }, []);
 
+  const loadSummary = useCallback(async (source: string) => {
+    setSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const query = source === "base" ? "" : `?reportId=${encodeURIComponent(source)}`;
+      const response = await fetch(`/api/informes-mensuales/resumen${query}`, {
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      const json = (await response.json()) as { data?: IncidentSummary };
+      setSummary(json.data ?? null);
+    } catch (err) {
+      setSummaryError(err instanceof Error ? err.message : "No se pudo leer el resumen de incidencias");
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadSummary(summarySource);
+  }, [loadSummary, summarySource]);
 
   const years = useMemo(
     () => Array.from(new Set(reports.map((report) => report.period.slice(0, 4)))).sort().reverse(),
@@ -123,11 +170,13 @@ export default function InformesMensualesPage() {
         credentials: "same-origin",
       });
       if (!response.ok) throw new Error(await readError(response));
+      const json = (await response.json()) as { data?: MonthlyReport };
 
       setMessage("Informe cargado correctamente.");
       setFile(null);
       setNote("");
       setFileInputKey((key) => key + 1);
+      if (json.data?.id) setSummarySource(json.data.id);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo subir el informe");
@@ -149,6 +198,7 @@ export default function InformesMensualesPage() {
       });
       if (!response.ok) throw new Error(await readError(response));
       setMessage("Informe eliminado.");
+      if (summarySource === id) setSummarySource("base");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo eliminar el informe");
@@ -156,6 +206,10 @@ export default function InformesMensualesPage() {
       setDeletingId(null);
     }
   };
+
+  const totalIncidents = summary?.annual?.totals.total ?? 0;
+  const typeCount = summary?.annual?.rows.length ?? 0;
+  const detailCount = summary?.detail?.rows.length ?? 0;
 
   return (
     <>
@@ -339,6 +393,190 @@ export default function InformesMensualesPage() {
                 </ul>
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Resumen de incidencias</CardTitle>
+                <CardDescription>
+                  Se leen las hojas «Informe Anual» e «INFORME DEL MONTE». Se muestran todas las
+                  columnas del Excel, incluidas las que se agreguen.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="summary-source" className="text-xs text-muted-foreground">
+                  Fuente
+                </Label>
+                <select
+                  id="summary-source"
+                  value={summarySource}
+                  onChange={(event) => setSummarySource(event.target.value)}
+                  className="h-9 max-w-[320px] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  <option value="base">Plantilla base</option>
+                  {reports.map((report) => (
+                    <option key={report.id} value={report.id}>
+                      {periodLabel(report.period)} · {report.fileName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {summaryLoading ? (
+              <p className="text-sm text-muted-foreground">Leyendo el Excel…</p>
+            ) : null}
+
+            {summaryError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {summaryError}
+              </div>
+            ) : null}
+
+            {summary && !summaryLoading ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border bg-muted/20 p-3">
+                    <p className="text-xs text-muted-foreground">Total de incidencias</p>
+                    <p className="text-2xl font-semibold tabular-nums">{totalIncidents}</p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 p-3">
+                    <p className="text-xs text-muted-foreground">Tipos de incidencia</p>
+                    <p className="text-2xl font-semibold tabular-nums">{typeCount}</p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 p-3">
+                    <p className="text-xs text-muted-foreground">Registros detallados</p>
+                    <p className="text-2xl font-semibold tabular-nums">{detailCount}</p>
+                  </div>
+                </div>
+
+                {summary.annual ? (
+                  <section>
+                    <h3 className="text-sm font-semibold">
+                      {summary.annual.title}
+                      {summary.annual.year ? ` · ${summary.annual.year}` : ""}
+                    </h3>
+                    {summary.annual.engineer ? (
+                      <p className="text-xs text-muted-foreground">{summary.annual.engineer}</p>
+                    ) : null}
+                    <div className="mt-2 overflow-x-auto rounded-lg border">
+                      <table className="min-w-full text-xs">
+                        <thead className="bg-muted/60">
+                          <tr>
+                            <th className="px-2 py-1.5 text-left font-semibold">
+                              Tipo de incidencia
+                            </th>
+                            {summary.annual.months.map((month, index) => (
+                              <th
+                                key={`${month}-${index}`}
+                                className="whitespace-nowrap px-2 py-1.5 text-right font-semibold"
+                              >
+                                {month}
+                              </th>
+                            ))}
+                            <th className="px-2 py-1.5 text-right font-semibold">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {summary.annual.rows.map((row) => (
+                            <tr key={row.label} className="hover:bg-muted/30">
+                              <td className="px-2 py-1.5 font-medium">{row.label}</td>
+                              {row.values.map((value, index) => (
+                                <td
+                                  key={`${row.label}-${index}`}
+                                  className="px-2 py-1.5 text-right tabular-nums"
+                                >
+                                  {value || "—"}
+                                </td>
+                              ))}
+                              <td className="px-2 py-1.5 text-right font-semibold tabular-nums">
+                                {row.total || "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="border-t bg-muted/40 font-semibold">
+                          <tr>
+                            <td className="px-2 py-1.5">Total</td>
+                            {summary.annual.totals.values.map((value, index) => (
+                              <td
+                                key={`total-${index}`}
+                                className="px-2 py-1.5 text-right tabular-nums"
+                              >
+                                {value}
+                              </td>
+                            ))}
+                            <td className="px-2 py-1.5 text-right tabular-nums">
+                              {summary.annual.totals.total}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </section>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No se encontró la hoja «Informe Anual».
+                  </p>
+                )}
+
+                {summary.detail ? (
+                  <section>
+                    <h3 className="text-sm font-semibold">
+                      Detalle de incidencias ({summary.detail.rows.length})
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Hoja «{summary.detail.sheetName}» · {summary.detail.columns.length} columnas
+                      (incluye las agregadas).
+                    </p>
+                    <div className="mt-2 max-h-[520px] overflow-auto rounded-lg border">
+                      <table className="min-w-full text-xs">
+                        <thead className="sticky top-0 z-10 bg-muted/80">
+                          <tr>
+                            {summary.detail.columns.map((column, index) => (
+                              <th
+                                key={`${column}-${index}`}
+                                className="whitespace-nowrap px-2 py-1.5 text-left font-semibold"
+                              >
+                                {column}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {summary.detail.rows.map((row, rowIndex) => (
+                            <tr key={`row-${rowIndex}`} className="align-top hover:bg-muted/30">
+                              {row.map((value, columnIndex) => (
+                                <td
+                                  key={`cell-${rowIndex}-${columnIndex}`}
+                                  className="max-w-[320px] truncate px-2 py-1.5"
+                                  title={value}
+                                >
+                                  {value || "—"}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No se encontró la hoja «INFORME DEL MONTE».
+                  </p>
+                )}
+
+                <p className="text-[11px] text-muted-foreground">
+                  Fuente: {summary.source.fileName}
+                  {summary.source.period ? ` · ${periodLabel(summary.source.period)}` : " (plantilla base)"}
+                </p>
+              </>
+            ) : null}
           </CardContent>
         </Card>
       </div>
