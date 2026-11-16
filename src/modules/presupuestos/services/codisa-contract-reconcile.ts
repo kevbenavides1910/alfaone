@@ -7,6 +7,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { withNafOracleConnection } from "@/modules/empleados-naf/services/oracle-client";
+import { isInvalidCodisaGroupPlaceholder } from "@/modules/presupuestos/services/codisa-own-company-filter";
 
 export const SAP_TO_COMPANY: Record<string, string> = {
   "01": "ALFA",
@@ -158,7 +159,10 @@ function inferIvaFromClient(excento: string | null, alfaIva: number | null): num
   return 13;
 }
 
-/** Solo contratos activos en Codisa (ESTADO = A). */
+/**
+ * Solo contratos activos en Codisa (ESTADO = A), excluyendo placeholders
+ * entre empresas del grupo (licitación/cliente/NO_CONTRATO = empresa hermana).
+ */
 export async function fetchCodisaContractsFromOracle(): Promise<CodisaContractRow[]> {
   return withNafOracleConnection(async (conn) => {
     const result = await conn.execute(
@@ -188,28 +192,30 @@ export async function fetchCodisaContractsFromOracle(): Promise<CodisaContractRo
         WHERE c.ESTADO = 'A'`,
     );
     const rows = (result.rows || []) as Record<string, unknown>[];
-    return rows.map((r) => ({
-      NO_CIA: padCia(r.NO_CIA as string),
-      NO_CONTRATO: String(r.NO_CONTRATO || "").trim(),
-      NO_LICITACION: r.NO_LICITACION != null ? String(r.NO_LICITACION).trim() : null,
-      ESTADO: r.ESTADO != null ? String(r.ESTADO) : null,
-      TIPO_CONTRATO: r.TIPO_CONTRATO != null ? String(r.TIPO_CONTRATO) : null,
-      CLASE_CONTRATO: r.CLASE_CONTRATO != null ? String(r.CLASE_CONTRATO) : null,
-      NO_CLIENTE: r.NO_CLIENTE != null ? String(r.NO_CLIENTE) : null,
-      CLIENTE: r.CLIENTE != null ? String(r.CLIENTE) : null,
-      EXCENTO_IMP: r.EXCENTO_IMP != null ? String(r.EXCENTO_IMP) : null,
-      FECHA_INI: r.FECHA_INI != null ? String(r.FECHA_INI) : null,
-      FECHA_FIN: r.FECHA_FIN != null ? String(r.FECHA_FIN) : null,
-      MONTO_FACTURAR: toNum(r.MONTO_FACTURAR),
-      PORC_PRESUP_MANO_OBRA: toNum(r.PORC_PRESUP_MANO_OBRA),
-      PORC_PRESUP_GAST_ADM: toNum(r.PORC_PRESUP_GAST_ADM),
-      PORC_PRESUP_INSUMOS: toNum(r.PORC_PRESUP_INSUMOS),
-      PORC_PRESUP_UTILIDAD: toNum(r.PORC_PRESUP_UTILIDAD),
-      DIA_FACTURAR_I: toNum(r.DIA_FACTURAR_I),
-      DIA_PERIODO_I: toNum(r.DIA_PERIODO_I),
-      DIA_PERIODO_II: toNum(r.DIA_PERIODO_II),
-      OBSERVACIONES: r.OBSERVACIONES != null ? String(r.OBSERVACIONES) : null,
-    }));
+    return rows
+      .map((r) => ({
+        NO_CIA: padCia(r.NO_CIA as string),
+        NO_CONTRATO: String(r.NO_CONTRATO || "").trim(),
+        NO_LICITACION: r.NO_LICITACION != null ? String(r.NO_LICITACION).trim() : null,
+        ESTADO: r.ESTADO != null ? String(r.ESTADO) : null,
+        TIPO_CONTRATO: r.TIPO_CONTRATO != null ? String(r.TIPO_CONTRATO) : null,
+        CLASE_CONTRATO: r.CLASE_CONTRATO != null ? String(r.CLASE_CONTRATO) : null,
+        NO_CLIENTE: r.NO_CLIENTE != null ? String(r.NO_CLIENTE) : null,
+        CLIENTE: r.CLIENTE != null ? String(r.CLIENTE) : null,
+        EXCENTO_IMP: r.EXCENTO_IMP != null ? String(r.EXCENTO_IMP) : null,
+        FECHA_INI: r.FECHA_INI != null ? String(r.FECHA_INI) : null,
+        FECHA_FIN: r.FECHA_FIN != null ? String(r.FECHA_FIN) : null,
+        MONTO_FACTURAR: toNum(r.MONTO_FACTURAR),
+        PORC_PRESUP_MANO_OBRA: toNum(r.PORC_PRESUP_MANO_OBRA),
+        PORC_PRESUP_GAST_ADM: toNum(r.PORC_PRESUP_GAST_ADM),
+        PORC_PRESUP_INSUMOS: toNum(r.PORC_PRESUP_INSUMOS),
+        PORC_PRESUP_UTILIDAD: toNum(r.PORC_PRESUP_UTILIDAD),
+        DIA_FACTURAR_I: toNum(r.DIA_FACTURAR_I),
+        DIA_PERIODO_I: toNum(r.DIA_PERIODO_I),
+        DIA_PERIODO_II: toNum(r.DIA_PERIODO_II),
+        OBSERVACIONES: r.OBSERVACIONES != null ? String(r.OBSERVACIONES) : null,
+      }))
+      .filter((r) => !isInvalidCodisaGroupPlaceholder(r));
   });
 }
 
