@@ -8,6 +8,13 @@ export type IncidentDetailSummary = {
   rows: string[][];
 };
 
+export type FincaCatalogEntry = {
+  finca: string;
+  zona: string;
+  encargado: string;
+  ubicaciones: string[];
+};
+
 export type IncidentSummaryDto = {
   source: {
     kind: "base" | "upload";
@@ -15,6 +22,7 @@ export type IncidentSummaryDto = {
     period: string | null;
   };
   detail: IncidentDetailSummary | null;
+  fincas: FincaCatalogEntry[];
 };
 
 type SheetMatrix = unknown[][];
@@ -37,6 +45,44 @@ function sheetMatrix(workbook: XLSX.WorkBook, sheetName: string): SheetMatrix | 
 function findSheetName(workbook: XLSX.WorkBook, needle: string): string | null {
   const target = needle.toLowerCase();
   return workbook.SheetNames.find((name) => name.toLowerCase().includes(target)) ?? null;
+}
+
+function parseFincas(workbook: XLSX.WorkBook): FincaCatalogEntry[] {
+  const sheetName = findSheetName(workbook, "fincas");
+  if (!sheetName) return [];
+  const matrix = sheetMatrix(workbook, sheetName);
+  if (!matrix || matrix.length < 2) return [];
+
+  const map = new Map<string, FincaCatalogEntry>();
+
+  for (let rowIndex = 1; rowIndex < matrix.length; rowIndex += 1) {
+    const row = matrix[rowIndex];
+    const finca = normalize(row[0]);
+    if (!finca) continue;
+
+    const zona = normalize(row[1]);
+    const encargado = normalize(row[2]);
+    const ubicacion = normalize(row[3]);
+    const key = finca.toLowerCase();
+
+    const current = map.get(key) ?? { finca, zona: "", encargado: "", ubicaciones: [] };
+    if (!current.zona && zona) current.zona = zona;
+    if (!current.encargado && encargado) current.encargado = encargado;
+    if (
+      ubicacion &&
+      !current.ubicaciones.some((value) => value.toLowerCase() === ubicacion.toLowerCase())
+    ) {
+      current.ubicaciones.push(ubicacion);
+    }
+    map.set(key, current);
+  }
+
+  return Array.from(map.values())
+    .map((entry) => ({
+      ...entry,
+      ubicaciones: [...entry.ubicaciones].sort((a, b) => a.localeCompare(b, "es")),
+    }))
+    .sort((a, b) => a.finca.localeCompare(b.finca, "es"));
 }
 
 function parseDetail(workbook: XLSX.WorkBook): IncidentDetailSummary | null {
@@ -89,5 +135,6 @@ export async function buildIncidentSummary(input: { reportId?: string }): Promis
   return {
     source,
     detail: parseDetail(workbook),
+    fincas: parseFincas(workbook),
   };
 }

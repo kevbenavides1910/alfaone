@@ -38,9 +38,17 @@ type IncidentDetailSummary = {
   rows: string[][];
 };
 
+type FincaCatalogEntry = {
+  finca: string;
+  zona: string;
+  encargado: string;
+  ubicaciones: string[];
+};
+
 type IncidentSummary = {
   source: { kind: "base" | "upload"; fileName: string; period: string | null };
   detail: IncidentDetailSummary | null;
+  fincas: FincaCatalogEntry[];
 };
 
 type MonthlyIncident = {
@@ -193,6 +201,14 @@ export default function InformesMensualesPage() {
 
   const detailColumns = useMemo(() => summary?.detail?.columns ?? [], [summary]);
 
+  const fincaColumn = detailColumns.find((column) => /puesto|finca/i.test(column)) ?? null;
+  const zonaColumn = detailColumns.find((column) => /^zona$/i.test(column)) ?? null;
+  const encargadoColumn = detailColumns.find((column) => /encargado/i.test(column)) ?? null;
+  const ubicacionColumn = detailColumns.find((column) => /ubicaci[oó]n/i.test(column)) ?? null;
+  const fincas = summary?.fincas ?? [];
+  const selectedFincaName = fincaColumn ? incidentForm[fincaColumn] ?? "" : "";
+  const selectedFinca = fincas.find((entry) => entry.finca === selectedFincaName) ?? null;
+
   const detailRows = useMemo<DisplayRow[]>(() => {
     if (!summary?.detail) return [];
     const excelRows: DisplayRow[] = summary.detail.rows.map((values) => ({ values }));
@@ -287,6 +303,21 @@ export default function InformesMensualesPage() {
     } finally {
       setDeletingId(null);
     }
+  };
+
+  const handleFincaChange = (value: string) => {
+    const entry = fincas.find((item) => item.finca === value) ?? null;
+    setIncidentForm((current) => {
+      const next = { ...current };
+      if (fincaColumn) next[fincaColumn] = value;
+      if (zonaColumn) next[zonaColumn] = entry?.zona ?? "";
+      if (encargadoColumn) next[encargadoColumn] = entry?.encargado ?? "";
+      if (ubicacionColumn) {
+        next[ubicacionColumn] =
+          entry && entry.ubicaciones.length === 1 ? entry.ubicaciones[0] : "";
+      }
+      return next;
+    });
   };
 
   const nextIncidentNumber = () => {
@@ -779,13 +810,62 @@ export default function InformesMensualesPage() {
             <div className="grid gap-3 md:grid-cols-2">
               {detailColumns.map((column, index) => {
                 const longField = /descrip|acci|plan|observ|detalle/i.test(column);
+                const isFinca = column === fincaColumn;
+                const isUbicacion = column === ubicacionColumn;
+                const isZona = column === zonaColumn;
+                const isEncargado = column === encargadoColumn;
                 return (
                   <div
                     key={`${column}-${index}`}
                     className={longField ? "space-y-1 md:col-span-2" : "space-y-1"}
                   >
-                    <Label htmlFor={`incident-field-${index}`}>{column}</Label>
-                    {longField ? (
+                    <Label htmlFor={`incident-field-${index}`}>
+                      {column}
+                      {isZona || isEncargado ? (
+                        <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                          (automático)
+                        </span>
+                      ) : null}
+                    </Label>
+                    {isFinca && fincas.length > 0 ? (
+                      <select
+                        id={`incident-field-${index}`}
+                        value={incidentForm[column] ?? ""}
+                        onChange={(event) => handleFincaChange(event.target.value)}
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="">Seleccione una finca</option>
+                        {fincas.map((entry) => (
+                          <option key={entry.finca} value={entry.finca}>
+                            {entry.finca}
+                          </option>
+                        ))}
+                      </select>
+                    ) : isUbicacion && fincas.length > 0 ? (
+                      <select
+                        id={`incident-field-${index}`}
+                        value={incidentForm[column] ?? ""}
+                        onChange={(event) =>
+                          setIncidentForm((current) => ({
+                            ...current,
+                            [column]: event.target.value,
+                          }))
+                        }
+                        disabled={!selectedFinca}
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-60"
+                      >
+                        <option value="">
+                          {selectedFinca
+                            ? "Seleccione una ubicación"
+                            : "Seleccione primero la finca"}
+                        </option>
+                        {selectedFinca?.ubicaciones.map((ubicacion) => (
+                          <option key={ubicacion} value={ubicacion}>
+                            {ubicacion}
+                          </option>
+                        ))}
+                      </select>
+                    ) : longField ? (
                       <Textarea
                         id={`incident-field-${index}`}
                         rows={3}
@@ -808,6 +888,7 @@ export default function InformesMensualesPage() {
                           }))
                         }
                         required={index === 0}
+                        className={isZona || isEncargado ? "bg-muted/40" : undefined}
                       />
                     )}
                   </div>
