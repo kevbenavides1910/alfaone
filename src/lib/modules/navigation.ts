@@ -202,7 +202,16 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     label: "Informes Mensuales",
     icon: FileSpreadsheet,
     moduleId: "informesMensuales",
-    isActive: (p) => p.startsWith("/informes-mensuales"),
+    isActive: (p) =>
+      p.startsWith("/informes-mensuales") &&
+      !p.startsWith("/informes-mensuales/puestos-accidentes"),
+  },
+  {
+    href: "/informes-mensuales/puestos-accidentes",
+    label: "Puestos y Accidentes",
+    icon: AlertTriangle,
+    moduleId: "informesMensuales",
+    isActive: (p) => p.startsWith("/informes-mensuales/puestos-accidentes"),
   },
   { href: "/admin/users", label: "Usuarios", icon: Users, moduleId: "plataforma", adminOnly: true },
   {
