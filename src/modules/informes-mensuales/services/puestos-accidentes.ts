@@ -3,7 +3,7 @@ import path from "path";
 import * as XLSX from "xlsx";
 import { MonthlyReportError } from "./reports";
 import { buildIncidentSummary } from "./summary";
-import { listMonthlyIncidents } from "./incidents";
+import { PUESTOS_ACCIDENTES_SOURCE, listMonthlyIncidents } from "./incidents";
 
 const TEMPLATE_FILE = path.join(
   process.cwd(),
@@ -34,6 +34,7 @@ type ParsedIncident = {
   year: number;
   values: string[];
   order: number;
+  manual?: boolean;
 };
 
 export type PuestosAccidentesReport = {
@@ -45,7 +46,7 @@ export type PuestosAccidentesReport = {
     firstConsecutive: string | null;
     lastConsecutive: string | null;
     year: number;
-    sources: { puestos: number; accidentes: number };
+    sources: { puestos: number; accidentes: number; manual: number };
   };
 };
 
@@ -75,11 +76,12 @@ function parseDate(value: string): { date: Date; year: number } | null {
 
   const first = Number(match[1]);
   const second = Number(match[2]);
-  const year = match[3].length === 2 ? 2000 + Number(match[3]) : Number(match[3]);
+  const twoDigitYear = match[3].length === 2;
+  const year = twoDigitYear ? 2000 + Number(match[3]) : Number(match[3]);
 
-  // xlsx entrega las fechas como M/D/AA; si el primer valor es > 12, es D/M.
-  const month = first > 12 ? second : first;
-  const day = first > 12 ? first : second;
+  // xlsx entrega las fechas del archivo como M/D/AA; el formulario usa D/M/AAAA.
+  const month = twoDigitYear ? (first > 12 ? second : first) : second;
+  const day = twoDigitYear ? (first > 12 ? first : second) : first;
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
 
   return { date: new Date(year, month - 1, day), year };
@@ -232,6 +234,40 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
     }
   }
 
+  const manual = await listMonthlyIncidents(PUESTOS_ACCIDENTES_SOURCE);
+  for (const incident of manual) {
+    const data = incident.data;
+    const incidentText = normalize(data["Incidente"]);
+    if (!incidentText) continue;
+
+    const parsed =
+      parseDate(normalize(data["Fecha"])) ??
+      (() => {
+        const created = new Date(incident.createdAt);
+        return { date: created, year: created.getFullYear() };
+      })();
+
+    incidents.push({
+      date: parsed.date,
+      year: parsed.year,
+      order: order++,
+      manual: true,
+      values: [
+        formatDate(parsed.date),
+        incidentText,
+        normalize(data["Administrador"]),
+        normalize(data["Acción Inmediata"]),
+        normalize(data["Cliente"]),
+        normalize(data["Hora"]),
+        normalize(data["Zona"]),
+        normalize(data["Informe"]),
+        normalize(data["Investigación"]),
+        normalize(data["Status"]),
+        normalize(data["Fuente"]) || "Manual",
+      ],
+    });
+  }
+
   incidents.sort(
     (a, b) =>
       a.date.getTime() - b.date.getTime() ||
@@ -257,8 +293,13 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
       lastConsecutive: rows[rows.length - 1]?.[0] ?? null,
       year,
       sources: {
-        puestos: incidents.filter((incident) => incident.values[10] === "Puestos").length,
-        accidentes: incidents.filter((incident) => incident.values[10] === "Accidentes").length,
+        puestos: incidents.filter(
+          (incident) => !incident.manual && incident.values[10] === "Puestos",
+        ).length,
+        accidentes: incidents.filter(
+          (incident) => !incident.manual && incident.values[10] === "Accidentes",
+        ).length,
+        manual: incidents.filter((incident) => incident.manual).length,
       },
     },
   };

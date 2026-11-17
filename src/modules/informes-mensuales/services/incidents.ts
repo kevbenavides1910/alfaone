@@ -1,6 +1,9 @@
 import { prisma } from "@/modules/core/db/prisma";
 import { MonthlyReportError } from "./reports";
 
+/** Fuente de las incidencias manuales del reporte de Puestos y Accidentes. */
+export const PUESTOS_ACCIDENTES_SOURCE = "puestos-accidentes";
+
 export type MonthlyIncidentDto = {
   id: string;
   source: string;
@@ -86,7 +89,7 @@ export async function createMonthlyIncident(input: {
   const source = normalizeSource(input.source);
   const payload = normalizeEntries(input.data);
 
-  if (source !== "base") {
+  if (source !== "base" && source !== PUESTOS_ACCIDENTES_SOURCE) {
     const report = await prisma.monthlyReport.findUnique({
       where: { id: source },
       select: { id: true },
