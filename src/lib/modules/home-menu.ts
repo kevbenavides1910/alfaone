@@ -112,8 +112,8 @@ export const HOME_MODULE_TILES: HomeModuleTile[] = [
   },
   {
     id: "informes_mensuales",
-    label: "Informes Mensuales",
-    description: "Plantilla Excel, cargas y historial por mes",
+    label: "Incidencias",
+    description: "Plantilla, incidencias, seguimiento y evidencia",
     href: "/informes-mensuales",
     icon: FileSpreadsheet,
     permissionTileId: "informes_mensuales",

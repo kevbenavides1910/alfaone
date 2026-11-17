@@ -350,11 +350,11 @@ export const PERMISSION_REGISTRY = {
     },
   },
   informesMensuales: {
-    label: "Informes Mensuales",
+    label: "Incidencias",
     moduleId: "informesMensuales" as const,
     screens: {
       informes: {
-        label: "Informes mensuales",
+        label: "Incidencias",
         uiRoutes: ["/informes-mensuales"],
         apiPrefixes: ["/api/informes-mensuales"],
         actions: {
@@ -1147,7 +1147,7 @@ export const HOME_MODULE_PERMISSION_GROUPS: {
   { tileId: "gastos", label: "Gastos", moduleKeys: ["gastos"] },
   { tileId: "pagos", label: "Pagos", moduleKeys: ["pagos"] },
   { tileId: "documentos_legales", label: "Control de Documentos Legales", moduleKeys: ["documentosLegales"] },
-  { tileId: "informes_mensuales", label: "Informes Mensuales", moduleKeys: ["informesMensuales"] },
+  { tileId: "informes_mensuales", label: "Incidencias", moduleKeys: ["informesMensuales"] },
   { tileId: "disciplinario", label: "Disciplinario", moduleKeys: ["disciplinario"] },
   { tileId: "empleados", label: "Empleados", moduleKeys: ["empleados"] },
   { tileId: "solicitudes_rrhh", label: "Solicitudes RRHH", moduleKeys: ["solicitudesRrhh"] },

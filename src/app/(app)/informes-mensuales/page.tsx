@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
+import { PuestosAccidentesSection } from "@/components/informes-mensuales/PuestosAccidentesSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -680,10 +681,10 @@ export default function InformesMensualesPage() {
 
   return (
     <>
-      <Topbar title="Informes Mensuales" />
+      <Topbar title="Incidencias" />
       <div className="mx-auto max-w-6xl space-y-4 p-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Informes Mensuales</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Incidencias</h1>
           <p className="text-sm text-muted-foreground">
             Descargá la plantilla base, completala con la información del mes y subí el archivo.
             Cada entrega queda registrada con su período.
@@ -1153,6 +1154,10 @@ export default function InformesMensualesPage() {
             ) : null}
           </CardContent>
         </Card>
+
+        <div className="border-t pt-6">
+          <PuestosAccidentesSection />
+        </div>
       </div>
 
       <Dialog open={showIncidentDialog} onOpenChange={setShowIncidentDialog}>

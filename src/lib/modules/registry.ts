@@ -156,9 +156,9 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
 
   informesMensuales: {
     id: "informesMensuales",
-    label: "Informes Mensuales",
+    label: "Incidencias",
     description:
-      "Plantilla base en Excel, carga de informes completados por mes e historial de entregas.",
+      "Plantilla base en Excel, incidencias, seguimiento y evidencia por mes.",
     uiRoutePrefixes: ["/informes-mensuales"],
     apiRoutePrefixes: ["/api/informes-mensuales"],
     codePaths: [

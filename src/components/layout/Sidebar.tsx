@@ -42,12 +42,7 @@ const NAV_GROUPS: GroupDef[] = [
   {
     id: "reportes",
     label: "Reportes",
-    hrefs: [
-      "/reports/annual",
-      "/reports",
-      "/informes-mensuales",
-      "/informes-mensuales/puestos-accidentes",
-    ],
+    hrefs: ["/reports/annual", "/reports", "/informes-mensuales"],
   },
   {
     id: "admin",

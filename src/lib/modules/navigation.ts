@@ -199,19 +199,10 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
   { href: "/reports", label: "Reporte mensual", icon: BarChart3, moduleId: "reportes" },
   {
     href: "/informes-mensuales",
-    label: "Informes Mensuales",
+    label: "Incidencias",
     icon: FileSpreadsheet,
     moduleId: "informesMensuales",
-    isActive: (p) =>
-      p.startsWith("/informes-mensuales") &&
-      !p.startsWith("/informes-mensuales/puestos-accidentes"),
-  },
-  {
-    href: "/informes-mensuales/puestos-accidentes",
-    label: "Puestos y Accidentes",
-    icon: AlertTriangle,
-    moduleId: "informesMensuales",
-    isActive: (p) => p.startsWith("/informes-mensuales/puestos-accidentes"),
+    isActive: (p) => p.startsWith("/informes-mensuales"),
   },
   { href: "/admin/users", label: "Usuarios", icon: Users, moduleId: "plataforma", adminOnly: true },
   {
