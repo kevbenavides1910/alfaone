@@ -867,7 +867,9 @@ export default function InformesMensualesPage() {
           <CardHeader className="gap-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle className="text-base">Resumen de incidencias</CardTitle>
+                <CardTitle className="text-base">
+                  Resumen de Incidencias Operación Del Monte
+                </CardTitle>
                 <CardDescription>
                   Se lee la hoja «INFORME DEL MONTE» del Excel. Se muestran todas las columnas,
                   incluidas las que se agreguen.
