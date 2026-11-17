@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Download, FileSpreadsheet, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { Check, Download, FileSpreadsheet, Loader2, Plus, Trash2, Upload, X } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,31 @@ type IncidentSummary = {
   detail: IncidentDetailSummary | null;
   fincas: FincaCatalogEntry[];
 };
+
+type ChecklistStep = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
+const EVENT_OPTIONS = [
+  "Intrusión",
+  "Robo",
+  "Hurto",
+  "Accidente Laboral",
+  "Estallonazo",
+  "Falla Mecánica",
+  "Incendio",
+  "Seguridad Electrónica",
+  "Fuerza Mayor",
+  "Otros",
+];
+
+const isChecklistColumn = (column: string) =>
+  /acciones?.*inmediat|planes?\s*de\s*acci/i.test(column);
+
+const newStepId = () =>
+  `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
 type MonthlyIncident = {
   id: string;
@@ -113,6 +138,7 @@ export default function InformesMensualesPage() {
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [showIncidentDialog, setShowIncidentDialog] = useState(false);
   const [incidentForm, setIncidentForm] = useState<Record<string, string>>({});
+  const [checklists, setChecklists] = useState<Record<string, ChecklistStep[]>>({});
   const [incidentSaving, setIncidentSaving] = useState(false);
   const [incidentError, setIncidentError] = useState<string | null>(null);
   const [deletingIncidentId, setDeletingIncidentId] = useState<string | null>(null);
@@ -305,6 +331,39 @@ export default function InformesMensualesPage() {
     }
   };
 
+  const addChecklistStep = (column: string) => {
+    setChecklists((current) => ({
+      ...current,
+      [column]: [...(current[column] ?? []), { id: newStepId(), text: "", done: false }],
+    }));
+  };
+
+  const updateChecklistStep = (
+    column: string,
+    id: string,
+    patch: Partial<ChecklistStep>,
+  ) => {
+    setChecklists((current) => ({
+      ...current,
+      [column]: (current[column] ?? []).map((step) =>
+        step.id === id ? { ...step, ...patch } : step,
+      ),
+    }));
+  };
+
+  const removeChecklistStep = (column: string, id: string) => {
+    setChecklists((current) => ({
+      ...current,
+      [column]: (current[column] ?? []).filter((step) => step.id !== id),
+    }));
+  };
+
+  const serializeChecklist = (steps: ChecklistStep[]) =>
+    steps
+      .filter((step) => step.text.trim())
+      .map((step) => `${step.done ? "☑" : "☐"} ${step.text.trim()}`)
+      .join("\n");
+
   const handleFincaChange = (value: string) => {
     const entry = fincas.find((item) => item.finca === value) ?? null;
     setIncidentForm((current) => {
@@ -355,14 +414,30 @@ export default function InformesMensualesPage() {
     const eventColumn = detailColumns.find((column) => /evento/i.test(column));
     if (eventColumn) form[eventColumn] = "Otros";
 
+    const initialChecklists: Record<string, ChecklistStep[]> = {};
+    for (const column of detailColumns) {
+      if (isChecklistColumn(column)) {
+        initialChecklists[column] = [{ id: newStepId(), text: "", done: false }];
+      }
+    }
+
     setIncidentForm(form);
+    setChecklists(initialChecklists);
     setIncidentError(null);
     setShowIncidentDialog(true);
   };
 
   const submitIncident = async (event: FormEvent) => {
     event.preventDefault();
-    if (!Object.values(incidentForm).some((value) => value.trim().length > 0)) {
+
+    const payload: Record<string, string> = { ...incidentForm };
+    for (const column of detailColumns) {
+      if (isChecklistColumn(column)) {
+        payload[column] = serializeChecklist(checklists[column] ?? []);
+      }
+    }
+
+    if (!Object.values(payload).some((value) => value.trim().length > 0)) {
       setIncidentError("Completá al menos un campo de la incidencia.");
       return;
     }
@@ -374,7 +449,7 @@ export default function InformesMensualesPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ source: summarySource, data: incidentForm }),
+        body: JSON.stringify({ source: summarySource, data: payload }),
       });
       if (!response.ok) throw new Error(await readError(response));
 
@@ -745,10 +820,24 @@ export default function InformesMensualesPage() {
                               {row.values.map((value, columnIndex) => (
                                 <td
                                   key={`cell-${rowIndex}-${columnIndex}`}
-                                  className="max-w-[320px] truncate px-2 py-1.5"
+                                  className="max-w-[320px] px-2 py-1.5"
                                   title={value}
                                 >
-                                  {value || "—"}
+                                  {value ? (
+                                    value.includes("\n") ? (
+                                      <div className="space-y-0.5">
+                                        {value.split("\n").map((line, lineIndex) => (
+                                          <div key={lineIndex} className="truncate">
+                                            {line}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="truncate">{value}</div>
+                                    )
+                                  ) : (
+                                    "—"
+                                  )}
                                 </td>
                               ))}
                               <td className="px-2 py-1.5">
@@ -814,10 +903,13 @@ export default function InformesMensualesPage() {
                 const isUbicacion = column === ubicacionColumn;
                 const isZona = column === zonaColumn;
                 const isEncargado = column === encargadoColumn;
+                const isEvento = /^evento$/i.test(column);
+                const isChecklist = isChecklistColumn(column);
+                const fullWidth = longField || isChecklist;
                 return (
                   <div
                     key={`${column}-${index}`}
-                    className={longField ? "space-y-1 md:col-span-2" : "space-y-1"}
+                    className={fullWidth ? "space-y-1 md:col-span-2" : "space-y-1"}
                   >
                     <Label htmlFor={`incident-field-${index}`}>
                       {column}
@@ -827,7 +919,64 @@ export default function InformesMensualesPage() {
                         </span>
                       ) : null}
                     </Label>
-                    {isFinca && fincas.length > 0 ? (
+                    {isChecklist ? (
+                      <div className="rounded-lg border bg-muted/20 p-3">
+                        <p className="text-xs font-semibold">Lista de comprobación</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Agregá pasos y marcalos a medida que avanza.
+                        </p>
+                        <ul className="mt-2 space-y-2">
+                          {(checklists[column] ?? []).map((step) => (
+                            <li key={step.id} className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateChecklistStep(column, step.id, { done: !step.done })
+                                }
+                                aria-label={step.done ? "Marcar pendiente" : "Marcar completado"}
+                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
+                                  step.done
+                                    ? "border-emerald-600 bg-emerald-600 text-white"
+                                    : "border-muted-foreground/40 bg-background"
+                                }`}
+                              >
+                                {step.done ? <Check className="h-3 w-3" /> : null}
+                              </button>
+                              <Input
+                                value={step.text}
+                                onChange={(event) =>
+                                  updateChecklistStep(column, step.id, {
+                                    text: event.target.value,
+                                  })
+                                }
+                                placeholder="Describa el paso"
+                                className={`h-8 ${step.done ? "text-muted-foreground line-through" : ""}`}
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 shrink-0"
+                                onClick={() => removeChecklistStep(column, step.id)}
+                                aria-label="Eliminar paso"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={() => addChecklistStep(column)}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Agregar paso
+                        </Button>
+                      </div>
+                    ) : isFinca && fincas.length > 0 ? (
                       <select
                         id={`incident-field-${index}`}
                         value={incidentForm[column] ?? ""}
@@ -862,6 +1011,25 @@ export default function InformesMensualesPage() {
                         {selectedFinca?.ubicaciones.map((ubicacion) => (
                           <option key={ubicacion} value={ubicacion}>
                             {ubicacion}
+                          </option>
+                        ))}
+                      </select>
+                    ) : isEvento ? (
+                      <select
+                        id={`incident-field-${index}`}
+                        value={incidentForm[column] ?? ""}
+                        onChange={(event) =>
+                          setIncidentForm((current) => ({
+                            ...current,
+                            [column]: event.target.value,
+                          }))
+                        }
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="">Seleccione un evento</option>
+                        {EVENT_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
                           </option>
                         ))}
                       </select>
