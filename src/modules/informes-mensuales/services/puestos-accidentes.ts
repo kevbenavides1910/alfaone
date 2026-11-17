@@ -70,15 +70,23 @@ function findSheetName(workbook: XLSX.WorkBook, needle: string): string | null {
 }
 
 function parseDate(value: string): { date: Date; year: number } | null {
-  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value.trim());
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(value.trim());
   if (!match) return null;
 
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  const year = Number(match[3]);
+  const first = Number(match[1]);
+  const second = Number(match[2]);
+  const year = match[3].length === 2 ? 2000 + Number(match[3]) : Number(match[3]);
+
+  // xlsx entrega las fechas como M/D/AA; si el primer valor es > 12, es D/M.
+  const month = first > 12 ? second : first;
+  const day = first > 12 ? first : second;
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
 
   return { date: new Date(year, month - 1, day), year };
+}
+
+function formatDate(date: Date): string {
+  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${date.getFullYear()}`;
 }
 
 function timeMinutes(value: string): number {
@@ -154,22 +162,27 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
   const puestosSheet = findSheetName(workbook, "puestos");
   if (puestosSheet) {
     const matrix = sheetMatrix(workbook, puestosSheet);
+    let lastDate: { date: Date; year: number } | null = null;
+
     for (let rowIndex = 1; matrix && rowIndex < matrix.length; rowIndex += 1) {
       const row = matrix[rowIndex];
-      const dateText = normalize(row[1]);
-      const parsed = parseDate(dateText);
-      if (!parsed) continue;
+      // xlsx recorta la columna A vacía: los datos empiezan en el índice 0.
+      const incident = normalize(row[1]);
+      if (!incident || incident.toLowerCase() === "incidente") continue;
 
-      const incident = normalize(row[2]);
-      if (!incident) continue;
+      const parsed = parseDate(normalize(row[0]));
+      if (parsed) lastDate = parsed;
+      const currentDate = parsed ?? lastDate;
+      if (!currentDate) continue;
 
       incidents.push({
-        date: parsed.date,
-        year: parsed.year,
+        date: currentDate.date,
+        year: currentDate.year,
         order: order++,
         values: [
-          dateText,
+          formatDate(currentDate.date),
           incident,
+          normalize(row[2]),
           normalize(row[3]),
           normalize(row[4]),
           normalize(row[5]),
@@ -177,7 +190,6 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
           normalize(row[7]),
           normalize(row[8]),
           normalize(row[9]),
-          "",
           "Puestos",
         ],
       });
@@ -187,21 +199,24 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
   const accidentesSheet = findSheetName(workbook, "accident");
   if (accidentesSheet) {
     const matrix = sheetMatrix(workbook, accidentesSheet);
+    let lastDate: { date: Date; year: number } | null = null;
+
     for (let rowIndex = 1; matrix && rowIndex < matrix.length; rowIndex += 1) {
       const row = matrix[rowIndex];
-      const dateText = normalize(row[0]);
-      const parsed = parseDate(dateText);
-      if (!parsed) continue;
-
       const incident = normalize(row[1]);
-      if (!incident) continue;
+      if (!incident || incident.toLowerCase() === "incidente") continue;
+
+      const parsed = parseDate(normalize(row[0]));
+      if (parsed) lastDate = parsed;
+      const currentDate = parsed ?? lastDate;
+      if (!currentDate) continue;
 
       incidents.push({
-        date: parsed.date,
-        year: parsed.year,
+        date: currentDate.date,
+        year: currentDate.year,
         order: order++,
         values: [
-          dateText,
+          formatDate(currentDate.date),
           incident,
           "",
           normalize(row[2]),
