@@ -14,6 +14,7 @@ const TEMPLATE_FILE = path.join(
 
 export const PUESTOS_ACCIDENTES_COLUMNS = [
   "Consecutivo",
+  "Tipo de Incidencia",
   "Fecha",
   "Incidente",
   "Administrador",
@@ -182,6 +183,7 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
         year: currentDate.year,
         order: order++,
         values: [
+          "Incidencia en Puesto",
           formatDate(currentDate.date),
           incident,
           normalize(row[2]),
@@ -218,6 +220,7 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
         year: currentDate.year,
         order: order++,
         values: [
+          "Accidente de Tránsito",
           formatDate(currentDate.date),
           incident,
           "",
@@ -247,12 +250,17 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
         return { date: created, year: created.getFullYear() };
       })();
 
+    const fuente = normalize(data["Fuente"]) || "Puestos";
+    const tipo =
+      fuente === "Accidentes" ? "Accidente de Tránsito" : "Incidencia en Puesto";
+
     incidents.push({
       date: parsed.date,
       year: parsed.year,
       order: order++,
       manual: true,
       values: [
+        tipo,
         formatDate(parsed.date),
         incidentText,
         normalize(data["Administrador"]),
@@ -263,7 +271,7 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
         normalize(data["Informe"]),
         normalize(data["Investigación"]),
         normalize(data["Status"]),
-        normalize(data["Fuente"]) || "Manual",
+        fuente,
       ],
     });
   }
@@ -271,7 +279,7 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
   incidents.sort(
     (a, b) =>
       a.date.getTime() - b.date.getTime() ||
-      timeMinutes(a.values[5]) - timeMinutes(b.values[5]) ||
+      timeMinutes(a.values[6]) - timeMinutes(b.values[6]) ||
       a.order - b.order,
   );
 
@@ -294,10 +302,10 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
       year,
       sources: {
         puestos: incidents.filter(
-          (incident) => !incident.manual && incident.values[10] === "Puestos",
+          (incident) => !incident.manual && incident.values[11] === "Puestos",
         ).length,
         accidentes: incidents.filter(
-          (incident) => !incident.manual && incident.values[10] === "Accidentes",
+          (incident) => !incident.manual && incident.values[11] === "Accidentes",
         ).length,
         manual: incidents.filter((incident) => incident.manual).length,
       },
