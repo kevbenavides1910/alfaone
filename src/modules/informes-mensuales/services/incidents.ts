@@ -8,6 +8,7 @@ export type MonthlyIncidentDto = {
   createdById: string;
   createdByName: string;
   createdAt: string;
+  evidenceCount: number;
 };
 
 const MAX_COLUMNS = 40;
@@ -24,43 +25,8 @@ function normalizeSource(source: string): string {
   return value;
 }
 
-function toDto(row: {
-  id: string;
-  source: string;
-  data: unknown;
-  createdById: string;
-  createdByName: string;
-  createdAt: Date;
-}): MonthlyIncidentDto {
-  return {
-    id: row.id,
-    source: row.source,
-    data: (row.data ?? {}) as Record<string, string>,
-    createdById: row.createdById,
-    createdByName: row.createdByName,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
-export async function listMonthlyIncidents(source: string): Promise<MonthlyIncidentDto[]> {
-  const normalized = normalizeSource(source);
-  const rows = await prisma.monthlyIncident.findMany({
-    where: { source: normalized },
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
-  return rows.map(toDto);
-}
-
-export async function createMonthlyIncident(input: {
-  source: string;
-  data: Record<string, unknown>;
-  userId: string;
-  userName: string;
-}): Promise<MonthlyIncidentDto> {
-  const source = normalizeSource(input.source);
-
-  const entries = Object.entries(input.data ?? {})
+function normalizeEntries(data: Record<string, unknown>) {
+  const entries = Object.entries(data ?? {})
     .map(
       ([key, value]) =>
         [
@@ -77,6 +43,49 @@ export async function createMonthlyIncident(input: {
     throw new MonthlyReportError("La incidencia tiene demasiadas columnas");
   }
 
+  return Object.fromEntries(entries);
+}
+
+function toDto(row: {
+  id: string;
+  source: string;
+  data: unknown;
+  createdById: string;
+  createdByName: string;
+  createdAt: Date;
+  _count?: { evidences: number };
+}): MonthlyIncidentDto {
+  return {
+    id: row.id,
+    source: row.source,
+    data: (row.data ?? {}) as Record<string, string>,
+    createdById: row.createdById,
+    createdByName: row.createdByName,
+    createdAt: row.createdAt.toISOString(),
+    evidenceCount: row._count?.evidences ?? 0,
+  };
+}
+
+export async function listMonthlyIncidents(source: string): Promise<MonthlyIncidentDto[]> {
+  const normalized = normalizeSource(source);
+  const rows = await prisma.monthlyIncident.findMany({
+    where: { source: normalized },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+    include: { _count: { select: { evidences: true } } },
+  });
+  return rows.map(toDto);
+}
+
+export async function createMonthlyIncident(input: {
+  source: string;
+  data: Record<string, unknown>;
+  userId: string;
+  userName: string;
+}): Promise<MonthlyIncidentDto> {
+  const source = normalizeSource(input.source);
+  const payload = normalizeEntries(input.data);
+
   if (source !== "base") {
     const report = await prisma.monthlyReport.findUnique({
       where: { id: source },
@@ -85,8 +94,6 @@ export async function createMonthlyIncident(input: {
     if (!report) throw new MonthlyReportError("Informe no encontrado", "NOT_FOUND");
   }
 
-  const payload = Object.fromEntries(entries);
-
   const row = await prisma.monthlyIncident.create({
     data: {
       source,
@@ -94,6 +101,27 @@ export async function createMonthlyIncident(input: {
       createdById: input.userId,
       createdByName: input.userName,
     },
+  });
+
+  return toDto(row);
+}
+
+export async function updateMonthlyIncident(input: {
+  id: string;
+  data: Record<string, unknown>;
+}): Promise<MonthlyIncidentDto> {
+  const existing = await prisma.monthlyIncident.findUnique({
+    where: { id: input.id },
+    select: { id: true },
+  });
+  if (!existing) throw new MonthlyReportError("Incidencia no encontrada", "NOT_FOUND");
+
+  const payload = normalizeEntries(input.data);
+
+  const row = await prisma.monthlyIncident.update({
+    where: { id: input.id },
+    data: { data: payload },
+    include: { _count: { select: { evidences: true } } },
   });
 
   return toDto(row);

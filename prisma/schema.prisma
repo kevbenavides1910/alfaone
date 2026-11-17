@@ -6914,9 +6914,27 @@ model MonthlyIncident {
   createdById   String
   createdByName String
   createdAt     DateTime @default(now())
+  evidences     MonthlyIncidentEvidence[]
 
   @@index([source])
   @@map("informes_mensuales_incidencias")
+}
+
+/// Archivo de evidencia adjunto a una incidencia manual (PDF, Office, imágenes, etc.).
+model MonthlyIncidentEvidence {
+  id             String          @id @default(cuid())
+  incidentId     String
+  fileName       String
+  mimeType       String
+  storagePath    String
+  sizeBytes      Int
+  uploadedById   String
+  uploadedByName String
+  createdAt      DateTime        @default(now())
+  incident       MonthlyIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+  @@map("informes_mensuales_evidencias")
 }
 
 /// Permisos adicionales por usuario (override sobre los del rol).

@@ -1,7 +1,18 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Download, FileSpreadsheet, Loader2, Plus, Trash2, Upload, X } from "lucide-react";
+import {
+  Check,
+  Download,
+  FileSpreadsheet,
+  Loader2,
+  Paperclip,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,6 +87,27 @@ const isChecklistColumn = (column: string) =>
 const newStepId = () =>
   `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
+type ChecklistLine = { text: string; done: boolean };
+
+const parseChecklistText = (value: string): ChecklistLine[] =>
+  value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => ({
+      done: /^[☑☒]/.test(line),
+      text: line.replace(/^[☐☑☒]\s*/, ""),
+    }));
+
+const serializeChecklistLines = (lines: ChecklistLine[]) =>
+  lines.map((line) => `${line.done ? "☑" : "☐"} ${line.text}`).join("\n");
+
+const toChecklistSteps = (value: string): ChecklistStep[] => {
+  const lines = parseChecklistText(value);
+  if (lines.length === 0) return [{ id: newStepId(), text: "", done: false }];
+  return lines.map((line) => ({ id: newStepId(), ...line }));
+};
+
 type MonthlyIncident = {
   id: string;
   source: string;
@@ -83,6 +115,19 @@ type MonthlyIncident = {
   createdById: string;
   createdByName: string;
   createdAt: string;
+  evidenceCount: number;
+};
+
+type MonthlyIncidentEvidence = {
+  id: string;
+  incidentId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedById: string;
+  uploadedByName: string;
+  createdAt: string;
+  downloadUrl: string;
 };
 
 type DisplayRow = {
@@ -142,6 +187,14 @@ export default function InformesMensualesPage() {
   const [incidentSaving, setIncidentSaving] = useState(false);
   const [incidentError, setIncidentError] = useState<string | null>(null);
   const [deletingIncidentId, setDeletingIncidentId] = useState<string | null>(null);
+  const [editingIncidentId, setEditingIncidentId] = useState<string | null>(null);
+  const [evidenceIncident, setEvidenceIncident] = useState<MonthlyIncident | null>(null);
+  const [evidences, setEvidences] = useState<MonthlyIncidentEvidence[]>([]);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceUploading, setEvidenceUploading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [evidenceInputKey, setEvidenceInputKey] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -421,6 +474,28 @@ export default function InformesMensualesPage() {
       }
     }
 
+    setEditingIncidentId(null);
+    setIncidentForm(form);
+    setChecklists(initialChecklists);
+    setIncidentError(null);
+    setShowIncidentDialog(true);
+  };
+
+  const openEditIncident = (incident: MonthlyIncident) => {
+    if (detailColumns.length === 0) return;
+    const form: Record<string, string> = {};
+    const initialChecklists: Record<string, ChecklistStep[]> = {};
+
+    for (const column of detailColumns) {
+      const value = incident.data[column] ?? "";
+      if (isChecklistColumn(column)) {
+        initialChecklists[column] = toChecklistSteps(value);
+      } else {
+        form[column] = value;
+      }
+    }
+
+    setEditingIncidentId(incident.id);
     setIncidentForm(form);
     setChecklists(initialChecklists);
     setIncidentError(null);
@@ -445,16 +520,30 @@ export default function InformesMensualesPage() {
     setIncidentSaving(true);
     setIncidentError(null);
     try {
-      const response = await fetch("/api/informes-mensuales/incidencias", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ source: summarySource, data: payload }),
-      });
+      const response = await fetch(
+        editingIncidentId
+          ? `/api/informes-mensuales/incidencias/${editingIncidentId}`
+          : "/api/informes-mensuales/incidencias",
+        {
+          method: editingIncidentId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(
+            editingIncidentId
+              ? { data: payload }
+              : { source: summarySource, data: payload },
+          ),
+        },
+      );
       if (!response.ok) throw new Error(await readError(response));
 
       setShowIncidentDialog(false);
-      setMessage("Incidencia agregada correctamente.");
+      setEditingIncidentId(null);
+      setMessage(
+        editingIncidentId
+          ? "Incidencia actualizada correctamente."
+          : "Incidencia agregada correctamente.",
+      );
       await loadIncidents(summarySource);
     } catch (err) {
       setIncidentError(err instanceof Error ? err.message : "No se pudo guardar la incidencia");
@@ -480,6 +569,112 @@ export default function InformesMensualesPage() {
       setIncidentsError(err instanceof Error ? err.message : "No se pudo eliminar la incidencia");
     } finally {
       setDeletingIncidentId(null);
+    }
+  };
+
+  const toggleDetailChecklist = async (incidentId: string, column: string, index: number) => {
+    const incident = incidents.find((item) => item.id === incidentId);
+    if (!incident) return;
+
+    const lines = parseChecklistText(incident.data[column] ?? "");
+    if (!lines[index]) return;
+
+    const nextLines = lines.map((line, lineIndex) =>
+      lineIndex === index ? { ...line, done: !line.done } : line,
+    );
+    const nextData = { ...incident.data, [column]: serializeChecklistLines(nextLines) };
+
+    setIncidents((current) =>
+      current.map((item) => (item.id === incidentId ? { ...item, data: nextData } : item)),
+    );
+
+    try {
+      const response = await fetch(`/api/informes-mensuales/incidencias/${incidentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ data: nextData }),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+    } catch (err) {
+      setIncidentsError(
+        err instanceof Error ? err.message : "No se pudo actualizar la lista de comprobación",
+      );
+      await loadIncidents(summarySource);
+    }
+  };
+
+  const loadEvidences = useCallback(async (incidentId: string) => {
+    setEvidenceLoading(true);
+    setEvidenceError(null);
+    try {
+      const response = await fetch(
+        `/api/informes-mensuales/incidencias/${incidentId}/evidencias`,
+        { credentials: "same-origin" },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      const json = (await response.json()) as { data?: MonthlyIncidentEvidence[] };
+      setEvidences(json.data ?? []);
+    } catch (err) {
+      setEvidenceError(err instanceof Error ? err.message : "No se pudo cargar la evidencia");
+    } finally {
+      setEvidenceLoading(false);
+    }
+  }, []);
+
+  const openEvidence = (incident: MonthlyIncident) => {
+    setEvidenceIncident(incident);
+    setEvidences([]);
+    setEvidenceFiles([]);
+    setEvidenceInputKey((key) => key + 1);
+    setEvidenceError(null);
+    void loadEvidences(incident.id);
+  };
+
+  const uploadEvidence = async () => {
+    if (!evidenceIncident || evidenceFiles.length === 0) return;
+
+    setEvidenceUploading(true);
+    setEvidenceError(null);
+    try {
+      for (const item of evidenceFiles) {
+        const form = new FormData();
+        form.append("file", item);
+        const response = await fetch(
+          `/api/informes-mensuales/incidencias/${evidenceIncident.id}/evidencias`,
+          { method: "POST", body: form, credentials: "same-origin" },
+        );
+        if (!response.ok) {
+          throw new Error(`${item.name}: ${await readError(response)}`);
+        }
+      }
+
+      setEvidenceFiles([]);
+      setEvidenceInputKey((key) => key + 1);
+      await loadEvidences(evidenceIncident.id);
+      await loadIncidents(summarySource);
+    } catch (err) {
+      setEvidenceError(err instanceof Error ? err.message : "No se pudo subir la evidencia");
+    } finally {
+      setEvidenceUploading(false);
+    }
+  };
+
+  const deleteEvidence = async (evidenceId: string) => {
+    if (!evidenceIncident) return;
+    if (!window.confirm("¿Eliminar esta evidencia?")) return;
+
+    setEvidenceError(null);
+    try {
+      const response = await fetch(
+        `/api/informes-mensuales/incidencias/${evidenceIncident.id}/evidencias/${evidenceId}`,
+        { method: "DELETE", credentials: "same-origin" },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      await loadEvidences(evidenceIncident.id);
+      await loadIncidents(summarySource);
+    } catch (err) {
+      setEvidenceError(err instanceof Error ? err.message : "No se pudo eliminar la evidencia");
     }
   };
 
@@ -810,55 +1005,127 @@ export default function InformesMensualesPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y">
-                          {filteredRows.map((row, rowIndex) => (
-                            <tr
-                              key={row.manualId ?? `row-${rowIndex}`}
-                              className={`align-top hover:bg-muted/30 ${
-                                row.manualId ? "bg-amber-50/50" : ""
-                              }`}
-                            >
-                              {row.values.map((value, columnIndex) => (
-                                <td
-                                  key={`cell-${rowIndex}-${columnIndex}`}
-                                  className="max-w-[320px] px-2 py-1.5"
-                                  title={value}
-                                >
-                                  {value ? (
-                                    value.includes("\n") ? (
-                                      <div className="space-y-0.5">
-                                        {value.split("\n").map((line, lineIndex) => (
-                                          <div key={lineIndex} className="truncate">
-                                            {line}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <div className="truncate">{value}</div>
-                                    )
-                                  ) : (
-                                    "—"
-                                  )}
-                                </td>
-                              ))}
-                              <td className="px-2 py-1.5">
-                                {row.manualId ? (
-                                  <div className="flex items-center gap-1">
-                                    <Badge variant="secondary">Manual</Badge>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-6 w-6"
-                                      onClick={() => void removeIncident(row.manualId!)}
-                                      disabled={deletingIncidentId === row.manualId}
-                                      aria-label="Eliminar incidencia"
+                          {filteredRows.map((row, rowIndex) => {
+                            const incident = row.manualId
+                              ? incidents.find((item) => item.id === row.manualId) ?? null
+                              : null;
+                            return (
+                              <tr
+                                key={row.manualId ?? `row-${rowIndex}`}
+                                className={`align-top hover:bg-muted/30 ${
+                                  row.manualId ? "bg-amber-50/50" : ""
+                                }`}
+                              >
+                                {row.values.map((value, columnIndex) => {
+                                  const column = detailColumns[columnIndex] ?? "";
+                                  const manualChecklist =
+                                    Boolean(row.manualId) && isChecklistColumn(column);
+
+                                  return (
+                                    <td
+                                      key={`cell-${rowIndex}-${columnIndex}`}
+                                      className="max-w-[320px] px-2 py-1.5"
+                                      title={value}
                                     >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
-                                ) : null}
-                              </td>
-                            </tr>
-                          ))}
+                                      {manualChecklist && value ? (
+                                        <div className="space-y-0.5">
+                                          {parseChecklistText(value).map((line, lineIndex) => (
+                                            <button
+                                              key={lineIndex}
+                                              type="button"
+                                              onClick={() =>
+                                                void toggleDetailChecklist(
+                                                  row.manualId!,
+                                                  column,
+                                                  lineIndex,
+                                                )
+                                              }
+                                              className="flex w-full items-start gap-1 text-left"
+                                            >
+                                              <span
+                                                className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                                                  line.done
+                                                    ? "border-emerald-600 bg-emerald-600 text-white"
+                                                    : "border-muted-foreground/40"
+                                                }`}
+                                              >
+                                                {line.done ? (
+                                                  <Check className="h-2.5 w-2.5" />
+                                                ) : null}
+                                              </span>
+                                              <span
+                                                className={
+                                                  line.done
+                                                    ? "text-muted-foreground line-through"
+                                                    : ""
+                                                }
+                                              >
+                                                {line.text}
+                                              </span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      ) : value ? (
+                                        value.includes("\n") ? (
+                                          <div className="space-y-0.5">
+                                            {value.split("\n").map((line, lineIndex) => (
+                                              <div key={lineIndex} className="truncate">
+                                                {line}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <div className="truncate">{value}</div>
+                                        )
+                                      ) : (
+                                        "—"
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                                <td className="px-2 py-1.5">
+                                  {incident ? (
+                                    <div className="flex items-center gap-1">
+                                      <Badge variant="secondary">Manual</Badge>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={() => openEditIncident(incident)}
+                                        aria-label="Editar incidencia"
+                                      >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={() => openEvidence(incident)}
+                                        aria-label="Evidencia"
+                                      >
+                                        <Paperclip className="h-3.5 w-3.5" />
+                                        {incident.evidenceCount > 0 ? (
+                                          <span className="text-[9px]">
+                                            {incident.evidenceCount}
+                                          </span>
+                                        ) : null}
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={() => void removeIncident(incident.id)}
+                                        disabled={deletingIncidentId === incident.id}
+                                        aria-label="Eliminar incidencia"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  ) : null}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                       {filteredRows.length === 0 ? (
@@ -889,10 +1156,13 @@ export default function InformesMensualesPage() {
       <Dialog open={showIncidentDialog} onOpenChange={setShowIncidentDialog}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nueva incidencia</DialogTitle>
+            <DialogTitle>
+              {editingIncidentId ? "Editar incidencia" : "Nueva incidencia"}
+            </DialogTitle>
             <DialogDescription>
-              Completá las columnas del informe. Se guarda como incidencia manual y se agrega al
-              detalle.
+              {editingIncidentId
+                ? "Modificá los datos de la incidencia. Los cambios se guardan en el detalle."
+                : "Completá las columnas del informe. Se guarda como incidencia manual y se agrega al detalle."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submitIncident} className="space-y-3">
@@ -1073,10 +1343,120 @@ export default function InformesMensualesPage() {
                 Cancelar
               </Button>
               <Button type="submit" disabled={incidentSaving}>
-                {incidentSaving ? "Guardando…" : "Guardar incidencia"}
+                {incidentSaving
+                  ? "Guardando…"
+                  : editingIncidentId
+                    ? "Guardar cambios"
+                    : "Guardar incidencia"}
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(evidenceIncident)}
+        onOpenChange={(open) => {
+          if (!open) setEvidenceIncident(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Evidencia
+              {evidenceIncident?.data["NUMERO"]
+                ? ` · ${evidenceIncident.data["NUMERO"]}`
+                : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Adjuntá PDF, Word, Excel, PowerPoint, imágenes, CSV o TXT (máx. 25 MB por archivo).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                key={evidenceInputKey}
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.webp,.gif,.csv,.txt"
+                onChange={(event) =>
+                  setEvidenceFiles(Array.from(event.target.files ?? []))
+                }
+                className="max-w-sm"
+              />
+              <Button
+                type="button"
+                onClick={() => void uploadEvidence()}
+                disabled={evidenceUploading || evidenceFiles.length === 0}
+              >
+                {evidenceUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Subiendo…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Subir evidencia
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {evidenceFiles.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {evidenceFiles.length} archivo(s) seleccionado(s).
+              </p>
+            ) : null}
+
+            {evidenceError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {evidenceError}
+              </div>
+            ) : null}
+
+            {evidenceLoading ? (
+              <p className="text-sm text-muted-foreground">Cargando evidencia…</p>
+            ) : null}
+
+            {!evidenceLoading && evidences.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin evidencia adjunta.</p>
+            ) : null}
+
+            <ul className="divide-y rounded-lg border">
+              {evidences.map((evidence) => (
+                <li
+                  key={evidence.id}
+                  className="flex flex-wrap items-center gap-3 px-3 py-2"
+                >
+                  <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{evidence.fileName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatSize(evidence.sizeBytes)} · {evidence.uploadedByName} ·{" "}
+                      {formatDate(evidence.createdAt)}
+                    </p>
+                  </div>
+                  <Button asChild variant="outline" size="sm">
+                    <a href={evidence.downloadUrl}>
+                      <Download className="h-3.5 w-3.5" />
+                      Descargar
+                    </a>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => void deleteEvidence(evidence.id)}
+                    aria-label="Eliminar evidencia"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </DialogContent>
       </Dialog>
     </>
