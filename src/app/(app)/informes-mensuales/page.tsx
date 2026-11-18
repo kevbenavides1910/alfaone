@@ -718,6 +718,8 @@ export default function InformesMensualesPage() {
                 carga.
               </p>
               <Button asChild>
+                {/* Descarga directa de la API, no navegación a una página. */}
+                {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
                 <a href="/api/informes-mensuales/plantilla">
                   <Download className="h-4 w-4" />
                   Descargar plantilla Excel
