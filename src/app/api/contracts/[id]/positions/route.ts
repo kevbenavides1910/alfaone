@@ -27,20 +27,22 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       orderBy: [{ location: { name: "asc" } }, { name: "asc" }],
     });
 
-    const data = positions.map((p) => ({
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      locationId: p.locationId,
-      locationName: p.location.name,
-      shifts: p.shifts.map((s) => ({
-        id: s.id,
-        label: s.label,
-        hours: parseFloat(s.hours.toString()),
-        sortOrder: s.sortOrder,
-      })),
-      label: `${p.location.name} › ${p.name}`,
-    }));
+    const data = positions
+      .filter((p): p is typeof p & { location: NonNullable<typeof p.location> } => p.location != null)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        locationId: p.locationId,
+        locationName: p.location.name,
+        shifts: p.shifts.map((s) => ({
+          id: s.id,
+          label: s.label,
+          hours: parseFloat(s.hours.toString()),
+          sortOrder: s.sortOrder,
+        })),
+        label: `${p.location.name} › ${p.name}`,
+      }));
 
     return ok(data);
   } catch (e) {

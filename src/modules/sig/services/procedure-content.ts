@@ -17,6 +17,17 @@ import { parseActivitiesFromText } from "../business/parse-activities";
 import { writeAutoFlowchartFile } from "./flowchart-generator";
 export { parseActivitiesFromText } from "../business/parse-activities";
 
+/** Include tipado para versión con prosa / etapas / actividades. */
+const PROCEDURE_VERSION_CONTENT_INCLUDE = {
+  procedureBody: true,
+  procedureStages: { orderBy: { sortOrder: "asc" as const } },
+  procedureActivities: { orderBy: { sortOrder: "asc" as const } },
+} satisfies Prisma.SigDocumentVersionInclude;
+
+type ProcedureVersionWithContent = Prisma.SigDocumentVersionGetPayload<{
+  include: typeof PROCEDURE_VERSION_CONTENT_INCLUDE;
+}>;
+
 export type ProcedureActivityInput = {
   code: string;
   name: string;
@@ -318,33 +329,19 @@ export async function getSigProcedureContent(
     where: { id: documentId },
     include: {
       documentType: { select: { id: true, code: true, name: true } },
-      currentVersion: {
-        include: {
-          procedureBody: true,
-          procedureStages: { orderBy: { sortOrder: "asc" } },
-          procedureActivities: { orderBy: { sortOrder: "asc" } },
-        },
-      },
-      versions: opts?.versionId
-        ? {
-            where: { id: opts.versionId },
-            take: 1,
-            include: {
-              procedureBody: true,
-              procedureStages: { orderBy: { sortOrder: "asc" } },
-              procedureActivities: { orderBy: { sortOrder: "asc" } },
-            },
-          }
-        : false,
+      currentVersion: { include: PROCEDURE_VERSION_CONTENT_INCLUDE },
     },
   });
   if (!doc) return null;
 
-  const v =
-    opts?.versionId != null
-      ? (Array.isArray(doc.versions) ? doc.versions[0] : null)
-      : doc.currentVersion;
-  if (opts?.versionId && !v) return null;
+  let v: ProcedureVersionWithContent | null = doc.currentVersion;
+  if (opts?.versionId != null) {
+    v = await prisma.sigDocumentVersion.findFirst({
+      where: { id: opts.versionId, documentId },
+      include: PROCEDURE_VERSION_CONTENT_INCLUDE,
+    });
+    if (!v) return null;
+  }
   const stages = (v?.procedureStages ?? []).map((s) => ({
     id: s.id,
     sortOrder: s.sortOrder,
@@ -612,25 +609,19 @@ export async function bootstrapProcedureFromExtractedText(
   const doc = await prisma.sigDocument.findUnique({
     where: { id: documentId },
     include: {
-      currentVersion: {
-        include: { procedureBody: true, procedureStages: true, procedureActivities: true },
-      },
-      versions: opts?.versionId
-        ? {
-            where: { id: opts.versionId },
-            take: 1,
-            include: { procedureBody: true, procedureStages: true, procedureActivities: true },
-          }
-        : false,
+      currentVersion: { include: PROCEDURE_VERSION_CONTENT_INCLUDE },
     },
   });
   if (!doc) throw new Error("Documento no encontrado");
   if (doc.status === "OBSOLETE") throw new Error("El documento está obsoleto");
 
-  const version =
-    opts?.versionId != null
-      ? (Array.isArray(doc.versions) ? doc.versions[0] : null)
-      : doc.currentVersion;
+  let version: ProcedureVersionWithContent | null = doc.currentVersion;
+  if (opts?.versionId != null) {
+    version = await prisma.sigDocumentVersion.findFirst({
+      where: { id: opts.versionId, documentId },
+      include: PROCEDURE_VERSION_CONTENT_INCLUDE,
+    });
+  }
   if (!version) throw new Error("El documento no tiene versión");
   if (!version.extractedText?.trim()) throw new Error("No hay texto indexado del archivo para convertir");
   const hasStructured =
@@ -868,13 +859,17 @@ export async function publishProcedureContentVersion(
   const doc = await prisma.sigDocument.findUnique({
     where: { id: documentId },
     include: {
-      versions: { orderBy: { versionNumber: "desc" }, take: 1 },
+      versions: {
+        orderBy: { versionNumber: "desc" },
+        take: 1,
+        include: { procedureBody: true },
+      },
       currentVersion: { include: { procedureBody: true } },
     },
   });
   if (!doc) throw new Error("Documento no encontrado");
   if (doc.status === "OBSOLETE") throw new Error("El documento está obsoleto");
-  const base = doc.currentVersion ?? doc.versions[0];
+  const base = doc.currentVersion ?? doc.versions[0] ?? null;
   if (!base) throw new Error("El documento no tiene versión base (suba un archivo primero)");
 
   const lastNumber = doc.versions[0]?.versionNumber ?? 0;

@@ -245,7 +245,8 @@ function displayPaid(paid: boolean): string {
 }
 
 function changeEntries(current: DocumentRow, body: LegalDocumentBody, responsibleName: string): ChangeEntry[] {
-  const nextType = legalDocumentTypeLabel(body.type, body.type === "OTRO" ? clean(body.otherTypeLabel) : null);
+  // El body de alta/edición no admite OTRO (zod); otherTypeLabel solo aplica si existiera.
+  const nextType = legalDocumentTypeLabel(body.type, clean(body.otherTypeLabel));
   const prevType = legalDocumentTypeLabel(current.type, current.otherTypeLabel);
   const entries: ChangeEntry[] = [
     { field: "type", previousValue: prevType, newValue: nextType },
