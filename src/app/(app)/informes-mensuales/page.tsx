@@ -686,8 +686,7 @@ export default function InformesMensualesPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Incidencias</h1>
           <p className="text-sm text-muted-foreground">
-            Descargá la plantilla base, completala con la información del mes y subí el archivo.
-            Cada entrega queda registrada con su período.
+            Reportes de incidencias de Operación Del Monte y de Puestos y Accidentes.
           </p>
         </div>
 
@@ -702,7 +701,7 @@ export default function InformesMensualesPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="hidden">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -788,7 +787,7 @@ export default function InformesMensualesPage() {
           </Card>
         </div>
 
-        <Card>
+        <Card className="hidden">
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle className="text-base">Historial de informes</CardTitle>
