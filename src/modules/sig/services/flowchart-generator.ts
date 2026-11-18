@@ -32,13 +32,20 @@ const COL_GAP = 44;
 const CANVAS_PAD_X = 28;
 const CANVAS_PAD_Y = 24;
 const LEGEND_SWATCH = 12;
-const LEGEND_ROW_H = 18;
-const LEGEND_COL_GAP = 28;
 const LEGEND_TITLE_H = 22;
+const LEGEND_CHAR_W = 7; // aprox. system-ui 12px
+const LEGEND_MAX_CHARS = 34;
+const LEGEND_MAX_LINES = 2;
+const LEGEND_LINE_H = 14;
+const LEGEND_ITEM_GAP_X = 18;
+const LEGEND_ITEM_GAP_Y = 10;
+const LEGEND_TEXT_GAP = 8;
+const MAX_CANVAS_WIDTH = 2400;
+const OTROS_DISTINCT_THRESHOLD = 10;
 const START_END_H = 40;
 const MAX_PER_COLUMN = 4;
 const SINGLE_COLUMN_MAX_ACTIVITIES = 4;
-const LEGEND_MULTI_COL_THRESHOLD = 6;
+const OTROS_COLOR = "#94a3b8";
 
 /** Paleta estable por responsable. */
 const RESPONSIBLE_COLORS = [
@@ -108,26 +115,154 @@ function responsibleKey(value: string | null | undefined): string {
   return t ? t : "";
 }
 
-function colorForResponsible(
-  key: string,
-  paletteIndex: Map<string, number>
-): { fill: string; stroke: string } {
-  if (!key) {
-    return { fill: NEUTRAL_FILL, stroke: NEUTRAL_STROKE };
-  }
-  let idx = paletteIndex.get(key);
-  if (idx === undefined) {
-    idx = paletteIndex.size;
-    paletteIndex.set(key, idx);
-  }
-  const base = RESPONSIBLE_COLORS[idx % RESPONSIBLE_COLORS.length]!;
-  return { fill: `${base}22`, stroke: base };
-}
-
 function activityLabel(activity: FlowchartActivityInput): string {
   const name = activity.name?.trim() || "Actividad";
   const code = activity.code?.trim();
   return code ? `${code} ${name}` : name;
+}
+
+/** Etiqueta de leyenda: máx. 2 líneas de ~34 chars; el resto se trunca con …. */
+function formatLegendLabel(text: string): string[] {
+  const lines = wrapText(text, LEGEND_MAX_CHARS);
+  if (lines.length <= LEGEND_MAX_LINES) return lines;
+  const second = lines[1] ?? "";
+  const truncated =
+    second.length >= LEGEND_MAX_CHARS - 1
+      ? `${second.slice(0, LEGEND_MAX_CHARS - 1)}…`
+      : `${second.slice(0, Math.max(1, LEGEND_MAX_CHARS - 1))}…`;
+  return [lines[0] ?? "", truncated];
+}
+
+function estimateLegendTextWidth(lines: string[]): number {
+  const maxLen = Math.max(1, ...lines.map((l) => l.length));
+  return maxLen * LEGEND_CHAR_W;
+}
+
+type LegendEntry = { label: string; color: string };
+type LegendItem = {
+  label: string;
+  color: string;
+  lines: string[];
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+type ResponsibleVisuals = {
+  strokeForKey: (key: string) => string;
+  fillForKey: (key: string) => string;
+  legendEntries: LegendEntry[];
+};
+
+/**
+ * Colores por responsable + entradas de leyenda.
+ * Con >10 responsables distintos, los que aparecen una sola vez se agrupan en "Otros".
+ */
+function buildResponsibleVisuals(
+  activities: FlowchartActivityInput[]
+): ResponsibleVisuals {
+  const counts = new Map<string, number>();
+  const order: string[] = [];
+  let hasEmpty = false;
+
+  for (const a of activities) {
+    const key = responsibleKey(a.responsible);
+    if (!key) {
+      hasEmpty = true;
+      continue;
+    }
+    if (!counts.has(key)) order.push(key);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const useOtros = order.length > OTROS_DISTINCT_THRESHOLD;
+  const singletonKeys = new Set(
+    useOtros ? order.filter((k) => (counts.get(k) ?? 0) === 1) : []
+  );
+  const featuredKeys = order.filter((k) => !singletonKeys.has(k));
+
+  const paletteIndex = new Map<string, number>();
+  featuredKeys.forEach((k, i) => paletteIndex.set(k, i));
+
+  const strokeForKey = (key: string): string => {
+    if (!key) return NEUTRAL_STROKE;
+    if (singletonKeys.has(key)) return OTROS_COLOR;
+    const idx = paletteIndex.get(key) ?? 0;
+    return RESPONSIBLE_COLORS[idx % RESPONSIBLE_COLORS.length]!;
+  };
+
+  const fillForKey = (key: string): string => {
+    if (!key) return NEUTRAL_FILL;
+    if (singletonKeys.has(key)) return `${OTROS_COLOR}22`;
+    const stroke = strokeForKey(key);
+    return `${stroke}22`;
+  };
+
+  const legendEntries: LegendEntry[] = featuredKeys.map((label) => ({
+    label,
+    color: strokeForKey(label),
+  }));
+  if (singletonKeys.size > 0) {
+    legendEntries.push({ label: "Otros", color: OTROS_COLOR });
+  }
+  if (hasEmpty) {
+    legendEntries.push({ label: "Sin responsable", color: NEUTRAL_STROKE });
+  }
+
+  return { strokeForKey, fillForKey, legendEntries };
+}
+
+/** Distribuye la leyenda en filas según el ancho disponible (sin solapes). */
+function layoutLegend(
+  entries: LegendEntry[],
+  availableWidth: number
+): { height: number; items: LegendItem[]; minContentWidth: number } {
+  if (!entries.length) {
+    return { height: 0, items: [], minContentWidth: 0 };
+  }
+
+  const usable = Math.max(80, availableWidth);
+  const items: LegendItem[] = [];
+  let cursorX = 0;
+  let cursorY = 0;
+  let rowH = 0;
+  let maxX = 0;
+  let minContentWidth = 0;
+
+  for (const entry of entries) {
+    const lines = formatLegendLabel(entry.label);
+    const textW = estimateLegendTextWidth(lines);
+    const w = LEGEND_SWATCH + LEGEND_TEXT_GAP + textW;
+    const h = Math.max(LEGEND_SWATCH, lines.length * LEGEND_LINE_H);
+    minContentWidth = Math.max(minContentWidth, w);
+
+    if (cursorX > 0 && cursorX + w > usable) {
+      cursorX = 0;
+      cursorY += rowH + LEGEND_ITEM_GAP_Y;
+      rowH = 0;
+    }
+
+    items.push({
+      label: entry.label,
+      color: entry.color,
+      lines,
+      x: cursorX,
+      y: cursorY,
+      w,
+      h,
+    });
+    maxX = Math.max(maxX, cursorX + w);
+    rowH = Math.max(rowH, h);
+    cursorX += w + LEGEND_ITEM_GAP_X;
+  }
+
+  const height = LEGEND_TITLE_H + cursorY + rowH + 8;
+  return {
+    height,
+    items,
+    minContentWidth: Math.max(minContentWidth, maxX),
+  };
 }
 
 type LayoutNode = {
@@ -159,33 +294,6 @@ function chunkNodes<T>(items: T[], size: number): T[][] {
 function columnStackHeight(nodes: PreparedNode[]): number {
   if (!nodes.length) return 0;
   return nodes.reduce((sum, n) => sum + n.h, 0) + V_GAP * (nodes.length - 1);
-}
-
-function measureLegend(
-  entries: { label: string; color: string }[],
-  availableWidth: number
-): { height: number; columns: { label: string; color: string }[][]; colWidth: number } {
-  if (!entries.length) {
-    return { height: 0, columns: [], colWidth: 0 };
-  }
-
-  const useMulti = entries.length > LEGEND_MULTI_COL_THRESHOLD;
-  const colCount = useMulti ? Math.min(3, Math.ceil(entries.length / 4)) : 1;
-  const columns: { label: string; color: string }[][] = Array.from(
-    { length: colCount },
-    () => []
-  );
-  entries.forEach((e, i) => {
-    columns[i % colCount]!.push(e);
-  });
-
-  const colWidth = Math.max(
-    120,
-    Math.floor((availableWidth - LEGEND_COL_GAP * (colCount - 1)) / colCount)
-  );
-  const rows = Math.max(...columns.map((c) => c.length));
-  const height = LEGEND_TITLE_H + rows * LEGEND_ROW_H + 10;
-  return { height, columns, colWidth };
 }
 
 function connectorPath(from: LayoutNode, to: LayoutNode): string {
@@ -230,13 +338,7 @@ export function buildFlowchartSvg(activities: FlowchartActivityInput[]): string 
     (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
   );
 
-  const paletteIndex = new Map<string, number>();
-  for (const a of sorted) {
-    const key = responsibleKey(a.responsible);
-    if (key && !paletteIndex.has(key)) {
-      paletteIndex.set(key, paletteIndex.size);
-    }
-  }
+  const visuals = buildResponsibleVisuals(sorted);
 
   const prepared: PreparedNode[] = [];
 
@@ -252,7 +354,8 @@ export function buildFlowchartSvg(activities: FlowchartActivityInput[]): string 
 
   for (const activity of sorted) {
     const key = responsibleKey(activity.responsible);
-    const colors = colorForResponsible(key, paletteIndex);
+    const stroke = visuals.strokeForKey(key);
+    const fill = visuals.fillForKey(key);
     const lines = wrapText(activityLabel(activity));
     const respLine = key ? wrapText(key, MAX_LINE_CHARS) : [];
     const textH =
@@ -265,8 +368,8 @@ export function buildFlowchartSvg(activities: FlowchartActivityInput[]): string 
       w: NODE_WIDTH,
       h,
       lines: [...lines, ...(respLine.length ? ["__RESP__", ...respLine] : [])],
-      fill: colors.fill,
-      stroke: colors.stroke,
+      fill,
+      stroke,
       responsibleLabel: key || null,
     });
   }
@@ -293,29 +396,24 @@ export function buildFlowchartSvg(activities: FlowchartActivityInput[]): string 
   // Espacio extra arriba/abajo para los conectores horizontales entre columnas.
   const bridgePad = colCount > 1 ? Math.ceil(V_GAP * 0.55) : 0;
 
-  const legendEntries: { label: string; color: string }[] = [
-    ...paletteIndex.entries(),
-  ].map(([label, idx]) => ({
-    label,
-    color: RESPONSIBLE_COLORS[idx % RESPONSIBLE_COLORS.length]!,
-  }));
-  if (sorted.some((a) => !responsibleKey(a.responsible))) {
-    legendEntries.push({ label: "Sin responsable", color: NEUTRAL_STROKE });
-  }
-
   const diagramWidth =
     CANVAS_PAD_X * 2 + colCount * NODE_WIDTH + Math.max(0, colCount - 1) * COL_GAP;
 
-  const legend = measureLegend(
-    legendEntries,
-    diagramWidth - CANVAS_PAD_X * 2
+  // Ancho: al menos el del diagrama; crece si la leyenda lo exige, tope 2400.
+  const legendProbe = layoutLegend(
+    visuals.legendEntries,
+    Math.max(diagramWidth, MAX_CANVAS_WIDTH) - CANVAS_PAD_X * 2
   );
+  const width = Math.min(
+    MAX_CANVAS_WIDTH,
+    Math.max(diagramWidth, legendProbe.minContentWidth + CANVAS_PAD_X * 2)
+  );
+  const legend = layoutLegend(visuals.legendEntries, width - CANVAS_PAD_X * 2);
 
   const legendTop = CANVAS_PAD_Y;
   const contentTop = legendTop + (legend.height ? legend.height + 8 : 0) + bridgePad;
   const contentBottom = contentTop + contentHeight;
   const height = contentBottom + bridgePad + CANVAS_PAD_Y;
-  const width = diagramWidth;
 
   const nodes: LayoutNode[] = [];
 
@@ -352,23 +450,23 @@ export function buildFlowchartSvg(activities: FlowchartActivityInput[]): string 
   );
   parts.push(`<rect width="100%" height="100%" fill="#ffffff"/>`);
 
-  // Leyenda superior
-  if (legend.columns.length) {
+  // Leyenda superior (flujo en filas; altura dinámica)
+  if (legend.items.length) {
     parts.push(
       `<text x="${CANVAS_PAD_X}" y="${legendTop + 14}" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="600" fill="#334155">Responsables</text>`
     );
-    legend.columns.forEach((col, ci) => {
-      const lx = CANVAS_PAD_X + ci * (legend.colWidth + LEGEND_COL_GAP);
-      col.forEach((entry, ri) => {
-        const rowY = legendTop + LEGEND_TITLE_H + ri * LEGEND_ROW_H;
+    for (const item of legend.items) {
+      const lx = CANVAS_PAD_X + item.x;
+      const ly = legendTop + LEGEND_TITLE_H + item.y;
+      parts.push(
+        `<rect data-legend-item="1" data-x="${lx}" data-y="${ly}" data-w="${item.w}" data-h="${item.h}" x="${lx}" y="${ly}" width="${LEGEND_SWATCH}" height="${LEGEND_SWATCH}" rx="2" fill="${item.color}"/>`
+      );
+      item.lines.forEach((line, li) => {
         parts.push(
-          `<rect x="${lx}" y="${rowY}" width="${LEGEND_SWATCH}" height="${LEGEND_SWATCH}" rx="2" fill="${entry.color}"/>`
-        );
-        parts.push(
-          `<text x="${lx + LEGEND_SWATCH + 8}" y="${rowY + 11}" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#334155">${escapeXml(entry.label)}</text>`
+          `<text x="${lx + LEGEND_SWATCH + LEGEND_TEXT_GAP}" y="${ly + 11 + li * LEGEND_LINE_H}" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#334155">${escapeXml(line)}</text>`
         );
       });
-    });
+    }
   }
 
   for (let i = 0; i < nodes.length - 1; i++) {
