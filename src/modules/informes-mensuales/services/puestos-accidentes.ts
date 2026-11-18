@@ -36,11 +36,22 @@ type ParsedIncident = {
   values: string[];
   order: number;
   manual?: boolean;
+  incidentId?: string;
+  evidenceCount?: number;
+  data?: Record<string, string>;
+};
+
+export type PuestosAccidentesRowMeta = {
+  incidentId: string | null;
+  evidenceCount: number;
+  manual: boolean;
+  data?: Record<string, string>;
 };
 
 export type PuestosAccidentesReport = {
   columns: string[];
   rows: string[][];
+  rowMeta: PuestosAccidentesRowMeta[];
   meta: {
     total: number;
     baseConsecutive: number;
@@ -259,6 +270,9 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
       year: parsed.year,
       order: order++,
       manual: true,
+      incidentId: incident.id,
+      evidenceCount: incident.evidenceCount,
+      data,
       values: [
         tipo,
         formatDate(parsed.date),
@@ -294,6 +308,12 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
   return {
     columns: PUESTOS_ACCIDENTES_COLUMNS,
     rows,
+    rowMeta: incidents.map((incident) => ({
+      incidentId: incident.incidentId ?? null,
+      evidenceCount: incident.evidenceCount ?? 0,
+      manual: Boolean(incident.manual),
+      data: incident.data,
+    })),
     meta: {
       total: rows.length,
       baseConsecutive,

@@ -1,7 +1,8 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Download, Loader2, Paperclip, Plus, Trash2, Upload } from "lucide-react";
+import { formatDate } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -16,9 +17,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
+type EvidenceItem = {
+  id: string;
+  incidentId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedByName: string;
+  createdAt: string;
+  downloadUrl: string;
+};
+
+type RowMeta = {
+  incidentId: string | null;
+  evidenceCount: number;
+  manual: boolean;
+  data?: Record<string, string>;
+};
+
 type PuestosAccidentesReport = {
   columns: string[];
   rows: string[][];
+  rowMeta: RowMeta[];
   meta: {
     total: number;
     baseConsecutive: number;
@@ -38,6 +58,11 @@ async function readError(response: Response) {
   }
 }
 
+const formatSize = (bytes: number) =>
+  bytes >= 1024 * 1024
+    ? `${(bytes / 1024 / 1024).toFixed(2)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
 export function PuestosAccidentesSection() {
   const [report, setReport] = useState<PuestosAccidentesReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,6 +72,14 @@ export function PuestosAccidentesSection() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
+  const [evidenceRow, setEvidenceRow] = useState<{ id: string; label: string } | null>(null);
+  const [evidences, setEvidences] = useState<EvidenceItem[]>([]);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceUploading, setEvidenceUploading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [evidenceInputKey, setEvidenceInputKey] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,6 +105,11 @@ export function PuestosAccidentesSection() {
 
   const columns = useMemo(() => report?.columns ?? [], [report]);
   const rows = useMemo(() => report?.rows ?? [], [report]);
+  const rowMeta = useMemo(() => report?.rowMeta ?? [], [report]);
+  const allRows = useMemo(
+    () => rows.map((values, index) => ({ values, meta: rowMeta[index] })),
+    [rows, rowMeta],
+  );
 
   const filterOptions = useMemo(
     () =>
@@ -89,15 +127,15 @@ export function PuestosAccidentesSection() {
   const filtersActive = Object.values(filters).some((value) => value.trim().length > 0);
 
   const filteredRows = useMemo(() => {
-    if (!filtersActive) return rows;
-    return rows.filter((row) =>
+    if (!filtersActive) return allRows;
+    return allRows.filter((row) =>
       columns.every((column, index) => {
         const filter = filters[column]?.trim().toLowerCase();
         if (!filter) return true;
-        return (row[index] ?? "").toLowerCase().includes(filter);
+        return (row.values[index] ?? "").toLowerCase().includes(filter);
       }),
     );
-  }, [rows, columns, filters, filtersActive]);
+  }, [allRows, columns, filters, filtersActive]);
 
   const setField = (key: string, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -154,6 +192,108 @@ export function PuestosAccidentesSection() {
       setSaving(false);
     }
   };
+
+  const updateStatus = async (meta: RowMeta, status: string) => {
+    if (!meta.incidentId || !meta.data) return;
+
+    setStatusSavingId(meta.incidentId);
+    try {
+      const response = await fetch(
+        `/api/informes-mensuales/incidencias/${meta.incidentId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ data: { ...meta.data, Status: status } }),
+        },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo actualizar el estado");
+    } finally {
+      setStatusSavingId(null);
+    }
+  };
+
+  const loadEvidences = useCallback(async (incidentId: string) => {
+    setEvidenceLoading(true);
+    setEvidenceError(null);
+    try {
+      const response = await fetch(
+        `/api/informes-mensuales/incidencias/${incidentId}/evidencias`,
+        { credentials: "same-origin" },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      const json = (await response.json()) as { data?: EvidenceItem[] };
+      setEvidences(json.data ?? []);
+    } catch (err) {
+      setEvidenceError(err instanceof Error ? err.message : "No se pudo cargar la evidencia");
+    } finally {
+      setEvidenceLoading(false);
+    }
+  }, []);
+
+  const openEvidence = (meta: RowMeta) => {
+    if (!meta.incidentId) return;
+    setEvidenceRow({
+      id: meta.incidentId,
+      label: meta.data?.Incidente ?? "Incidencia",
+    });
+    setEvidences([]);
+    setEvidenceFiles([]);
+    setEvidenceInputKey((key) => key + 1);
+    setEvidenceError(null);
+    void loadEvidences(meta.incidentId);
+  };
+
+  const uploadEvidence = async () => {
+    if (!evidenceRow || evidenceFiles.length === 0) return;
+
+    setEvidenceUploading(true);
+    setEvidenceError(null);
+    try {
+      for (const item of evidenceFiles) {
+        const body = new FormData();
+        body.append("file", item);
+        const response = await fetch(
+          `/api/informes-mensuales/incidencias/${evidenceRow.id}/evidencias`,
+          { method: "POST", body, credentials: "same-origin" },
+        );
+        if (!response.ok) {
+          throw new Error(`${item.name}: ${await readError(response)}`);
+        }
+      }
+      setEvidenceFiles([]);
+      setEvidenceInputKey((key) => key + 1);
+      await loadEvidences(evidenceRow.id);
+      await load();
+    } catch (err) {
+      setEvidenceError(err instanceof Error ? err.message : "No se pudo subir la evidencia");
+    } finally {
+      setEvidenceUploading(false);
+    }
+  };
+
+  const deleteEvidence = async (evidenceId: string) => {
+    if (!evidenceRow) return;
+    if (!window.confirm("¿Eliminar esta evidencia?")) return;
+
+    setEvidenceError(null);
+    try {
+      const response = await fetch(
+        `/api/informes-mensuales/incidencias/${evidenceRow.id}/evidencias/${evidenceId}`,
+        { method: "DELETE", credentials: "same-origin" },
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      await loadEvidences(evidenceRow.id);
+      await load();
+    } catch (err) {
+      setEvidenceError(err instanceof Error ? err.message : "No se pudo eliminar la evidencia");
+    }
+  };
+
+  const statusIndex = columns.indexOf("Status");
 
   return (
     <div className="space-y-4">
@@ -260,6 +400,9 @@ export function PuestosAccidentesSection() {
                           {column}
                         </th>
                       ))}
+                      <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+                        Acciones
+                      </th>
                     </tr>
                     <tr>
                       {columns.map((column, index) => (
@@ -297,20 +440,56 @@ export function PuestosAccidentesSection() {
                           )}
                         </th>
                       ))}
+                      <th className="px-1 py-1" />
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {filteredRows.map((row, rowIndex) => (
                       <tr key={rowIndex} className="align-top hover:bg-muted/30">
-                        {row.map((value, columnIndex) => (
-                          <td
-                            key={`cell-${rowIndex}-${columnIndex}`}
-                            className="max-w-[360px] truncate px-2 py-1.5"
-                            title={value}
-                          >
-                            {value || "—"}
-                          </td>
-                        ))}
+                        {row.values.map((value, columnIndex) => {
+                          const isStatus =
+                            columnIndex === statusIndex && Boolean(row.meta?.incidentId);
+
+                          return (
+                            <td
+                              key={`cell-${rowIndex}-${columnIndex}`}
+                              className="max-w-[420px] whitespace-pre-wrap break-words px-2 py-1.5 align-top"
+                              title={value}
+                            >
+                              {isStatus ? (
+                                <select
+                                  value={/^cerr/i.test(value) ? "Cerrado" : "Abierto"}
+                                  onChange={(event) =>
+                                    void updateStatus(row.meta!, event.target.value)
+                                  }
+                                  disabled={statusSavingId === row.meta?.incidentId}
+                                  className="h-7 rounded border border-input bg-background px-1 text-[11px]"
+                                >
+                                  <option value="Abierto">Abierto</option>
+                                  <option value="Cerrado">Cerrado</option>
+                                </select>
+                              ) : (
+                                value || "—"
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="px-2 py-1.5 align-top">
+                          {row.meta?.incidentId ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => openEvidence(row.meta!)}
+                              aria-label="Evidencia"
+                            >
+                              <Paperclip className="h-3.5 w-3.5" />
+                              {row.meta.evidenceCount > 0 ? (
+                                <span className="text-[9px]">{row.meta.evidenceCount}</span>
+                              ) : null}
+                            </Button>
+                          ) : null}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -471,6 +650,107 @@ export function PuestosAccidentesSection() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(evidenceRow)}
+        onOpenChange={(open) => {
+          if (!open) setEvidenceRow(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Evidencia</DialogTitle>
+            <DialogDescription>
+              {evidenceRow ? `Incidencia: ${evidenceRow.label}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                key={evidenceInputKey}
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.webp,.gif,.csv,.txt"
+                onChange={(event) =>
+                  setEvidenceFiles(Array.from(event.target.files ?? []))
+                }
+                className="max-w-sm"
+              />
+              <Button
+                type="button"
+                onClick={() => void uploadEvidence()}
+                disabled={evidenceUploading || evidenceFiles.length === 0}
+              >
+                {evidenceUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Subiendo…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Subir evidencia
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {evidenceFiles.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {evidenceFiles.length} archivo(s) seleccionado(s).
+              </p>
+            ) : null}
+
+            {evidenceError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {evidenceError}
+              </div>
+            ) : null}
+
+            {evidenceLoading ? (
+              <p className="text-sm text-muted-foreground">Cargando evidencia…</p>
+            ) : null}
+
+            {!evidenceLoading && evidences.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin evidencia adjunta.</p>
+            ) : null}
+
+            <ul className="divide-y rounded-lg border">
+              {evidences.map((evidence) => (
+                <li
+                  key={evidence.id}
+                  className="flex flex-wrap items-center gap-3 px-3 py-2"
+                >
+                  <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{evidence.fileName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatSize(evidence.sizeBytes)} · {evidence.uploadedByName} ·{" "}
+                      {formatDate(evidence.createdAt)}
+                    </p>
+                  </div>
+                  <Button asChild variant="outline" size="sm">
+                    <a href={evidence.downloadUrl}>
+                      <Download className="h-3.5 w-3.5" />
+                      Descargar
+                    </a>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => void deleteEvidence(evidence.id)}
+                    aria-label="Eliminar evidencia"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
