@@ -5,7 +5,25 @@ import { FeGastoProveedorController } from "@/modules/facturacion-electronica/co
 import { resolveFeCompanyCode } from "@/modules/facturacion-electronica/middleware/require-fe-empresa-access";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
-import { intArg, strArg } from "./shared";
+import type { FeComprobanteTipo, FeFacturaEstado } from "@prisma/client";
+import { enumArg, intArg, strArg } from "./shared";
+
+const FE_FACTURA_ESTADOS = [
+  "BORRADOR",
+  "PENDIENTE_ENVIO",
+  "ENVIADA",
+  "ACEPTADA",
+  "ACEPTADA_PARCIALMENTE",
+  "RECHAZADA",
+  "ERROR",
+  "ANULADA",
+] as const satisfies readonly FeFacturaEstado[];
+
+const FE_COMPROBANTE_TIPOS = [
+  "FACTURA_ELECTRONICA",
+  "TIQUETE_ELECTRONICO",
+  "FACTURA_ELECTRONICA_EXPORTACION",
+] as const satisfies readonly FeComprobanteTipo[];
 
 const feController = new FeFacturaController(prisma);
 const gastoController = new FeGastoProveedorController(prisma);
@@ -34,9 +52,12 @@ export function facturacionElectronicaTools(): SyntraTool[] {
             companyCode: { type: "string" },
             estado: {
               type: "string",
-              enum: ["BORRADOR", "ENVIADO", "ACEPTADO", "RECHAZADO", "ANULADA"],
+              enum: [...FE_FACTURA_ESTADOS],
             },
-            tipoDocumento: { type: "string" },
+            tipoDocumento: {
+              type: "string",
+              enum: [...FE_COMPROBANTE_TIPOS],
+            },
             limit: { type: "integer" },
           },
           additionalProperties: false,
@@ -48,14 +69,8 @@ export function facturacionElectronicaTools(): SyntraTool[] {
         const pageSize = intArg(args, "limit", 15, 25);
         const result = await feController.list(companyCode, {
           companyCode,
-          estado: (strArg(args, "estado") || undefined) as
-            | "BORRADOR"
-            | "ENVIADO"
-            | "ACEPTADO"
-            | "RECHAZADO"
-            | "ANULADA"
-            | undefined,
-          tipoDocumento: strArg(args, "tipoDocumento") || undefined,
+          estado: enumArg(args, "estado", FE_FACTURA_ESTADOS),
+          tipoDocumento: enumArg(args, "tipoDocumento", FE_COMPROBANTE_TIPOS),
           page: 1,
           pageSize,
         });

@@ -220,6 +220,8 @@ export async function testSyntraAiConnection(overrides?: Partial<z.infer<typeof 
     modelVision: resolveModel(provider, overrides?.modelVision || current.modelVision),
     routeVisionAuto: overrides?.routeVisionAuto ?? current.routeVisionAuto,
     modelDocuments: overrides?.modelDocuments ?? current.modelDocuments,
+    agentEnabled: overrides?.agentEnabled ?? current.agentEnabled,
+    agentMaxRounds: overrides?.agentMaxRounds ?? current.agentMaxRounds,
   };
   if (!cfg.apiKey) throw new Error("Falta API key.");
   const reply = await callSyntraAiLlm(cfg, [

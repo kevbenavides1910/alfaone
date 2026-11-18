@@ -7,7 +7,24 @@ import { getSigProcedureByCodeOrId } from "@/modules/sig/services/procedure-cont
 import { listSigRevisionReminders } from "@/modules/sig/services/revision-reminders";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
-import { intArg, strArg } from "./shared";
+import type { SigIncidentStatus, SigRiskStatus } from "@prisma/client";
+import { enumArg, intArg, strArg } from "./shared";
+
+const SIG_INCIDENT_STATUSES = [
+  "REPORTED",
+  "UNDER_INVESTIGATION",
+  "ACTIONS_PENDING",
+  "CLOSED",
+  "DISMISSED",
+] as const satisfies readonly SigIncidentStatus[];
+
+const SIG_RISK_STATUSES = [
+  "IDENTIFIED",
+  "ANALYZED",
+  "TREATING",
+  "MONITORING",
+  "CLOSED",
+] as const satisfies readonly SigRiskStatus[];
 
 export function sigTools(): SyntraTool[] {
   return [
@@ -218,12 +235,7 @@ export function sigTools(): SyntraTool[] {
       handler: async (_session, args) => {
         const rows = await listSigIncidents({
           q: strArg(args, "q") || undefined,
-          status: (strArg(args, "status") || undefined) as
-            | "OPEN"
-            | "IN_PROGRESS"
-            | "CLOSED"
-            | "DISMISSED"
-            | undefined,
+          status: enumArg(args, "status", SIG_INCIDENT_STATUSES),
         });
         const limit = intArg(args, "limit", 20, 25);
         return {
@@ -282,7 +294,7 @@ export function sigTools(): SyntraTool[] {
       handler: async (_session, args) => {
         const rows = await listSigRisks({
           q: strArg(args, "q") || undefined,
-          status: (strArg(args, "status") || undefined) as "OPEN" | "MITIGATED" | "CLOSED" | undefined,
+          status: enumArg(args, "status", SIG_RISK_STATUSES),
         });
         const limit = intArg(args, "limit", 20, 25);
         return {
