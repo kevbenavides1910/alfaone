@@ -14,6 +14,7 @@ import {
   type AlfaSectionKey,
 } from "../business/procedure-sections";
 import { parseActivitiesFromText } from "../business/parse-activities";
+import { writeAutoFlowchartFile } from "./flowchart-generator";
 export { parseActivitiesFromText } from "../business/parse-activities";
 
 export type ProcedureActivityInput = {
@@ -108,7 +109,7 @@ export type ProcedureContentView = {
 };
 
 const PROCEDURE_TYPE_RE = /procedimiento|manual|instructivo|procedure|proc|instruc/i;
-const FLOWCHART_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const FLOWCHART_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"]);
 const MAX_FLOWCHART_BYTES = 15 * 1024 * 1024;
 
 export function isProcedureLikeType(type: Pick<SigDocumentType, "code" | "name">): boolean {
@@ -857,7 +858,7 @@ export async function publishProcedureContentVersion(
 
   if (input.flowchart) {
     if (!FLOWCHART_MIMES.has(input.flowchart.mimeType)) {
-      throw new Error("El diagrama debe ser PNG, JPEG, WebP o GIF");
+      throw new Error("El diagrama debe ser PNG, JPEG, WebP, GIF o SVG");
     }
     if (input.flowchart.size > MAX_FLOWCHART_BYTES) {
       throw new Error("Diagrama demasiado grande (máx. 15 MB)");
@@ -946,6 +947,19 @@ export async function publishProcedureContentVersion(
         storagePath: rel,
         fileSizeBytes: input.flowchart.size,
       };
+    } else if (!input.clearFlowchart && parsed.activities.length > 0) {
+      const auto = await writeAutoFlowchartFile(
+        documentId,
+        parsed.activities.map((a, i) => ({
+          name: a.name,
+          responsible: a.responsible ?? null,
+          sortOrder: i + 1,
+          code: a.code,
+        }))
+      );
+      if (auto) {
+        flowchartMeta = auto;
+      }
     }
 
     const baseBody = base.procedureBody;
