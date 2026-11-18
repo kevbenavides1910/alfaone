@@ -63,6 +63,11 @@ export {
   isProcedureLikeType,
 } from "./services/procedure-content";
 export {
+  buildFlowchartSvg,
+  regenerateFlowchart,
+  writeAutoFlowchartFile,
+} from "./services/flowchart-generator";
+export {
   canEditSigDocumentContent,
   assertCanEditSigDocument,
   listSigProcessEditors,

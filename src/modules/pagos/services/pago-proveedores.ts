@@ -198,6 +198,7 @@ function mapQueueRow(
     company: e.company,
     type: e.type,
     referenceNumber: e.nafOcNoOrden?.trim() || e.referenceNumber,
+    invoiceNumbers: [],
     periodMonth: toIsoMonth(e.periodMonth),
     paymentDate: resolved.paymentDate,
     notes: e.notes,

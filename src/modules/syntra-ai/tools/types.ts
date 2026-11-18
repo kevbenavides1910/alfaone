@@ -1,5 +1,5 @@
 import type { Session } from "next-auth";
-import type { PermissionLevelId } from "@/lib/permissions/registry";
+import type { PermissionKey, PermissionLevelId } from "@/lib/permissions/registry";
 
 export type ToolDefinition = {
   type: "function";
@@ -12,7 +12,7 @@ export type ToolDefinition = {
 
 export type SyntraTool = {
   definition: ToolDefinition;
-  permission: { key: string; level: Exclude<PermissionLevelId, "none"> };
+  permission: { key: PermissionKey; level: Exclude<PermissionLevelId, "none"> };
   describeCall?: (args?: Record<string, unknown>) => string;
   handler: (session: Session, args: Record<string, unknown>) => Promise<unknown>;
 };

@@ -43,7 +43,7 @@ export async function listSigConversionQualityQueue(): Promise<ConversionQuality
         },
       ],
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { textIndexedAt: "desc" }],
     take: 200,
     select: {
       id: true,

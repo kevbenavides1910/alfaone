@@ -2,7 +2,9 @@ import { listOportunidades } from "@/modules/ventas/services/oportunidades-list"
 import { listPresupuestos } from "@/modules/ventas/services/presupuestos-list";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
-import { intArg, strArg } from "./shared";
+import { VENTAS_PRESUPUESTO_ESTADOS } from "@/modules/ventas/validations/presupuesto.schema";
+import { VENTAS_OPORTUNIDAD_ESTADOS } from "@/modules/ventas/validations/oportunidad.schema";
+import { enumArg, intArg, strArg } from "./shared";
 
 export function ventasTools(): SyntraTool[] {
   return [
@@ -28,7 +30,7 @@ export function ventasTools(): SyntraTool[] {
         const result = await listPresupuestos({
           q: strArg(args, "q") || undefined,
           licitacionNo: strArg(args, "licitacionNo") || undefined,
-          estado: (strArg(args, "estado") || undefined) as "BORRADOR" | "ENVIADO" | "ADJUDICADO" | "PERDIDO" | undefined,
+          estado: enumArg(args, "estado", VENTAS_PRESUPUESTO_ESTADOS),
           page: 1,
           pageSize: limit,
         });
@@ -69,13 +71,7 @@ export function ventasTools(): SyntraTool[] {
         const result = await listOportunidades({
           q: strArg(args, "q") || undefined,
           cliente: strArg(args, "cliente") || undefined,
-          estado: (strArg(args, "estado") || undefined) as
-            | "PROSPECTO"
-            | "EN_PROCESO"
-            | "ADJUDICADA"
-            | "PERDIDA"
-            | "CANCELADA"
-            | undefined,
+          estado: enumArg(args, "estado", VENTAS_OPORTUNIDAD_ESTADOS),
           page: 1,
           pageSize: limit,
         });

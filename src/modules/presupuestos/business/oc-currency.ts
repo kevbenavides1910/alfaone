@@ -17,11 +17,11 @@ export function normalizeOcCurrency(raw: string | null | undefined): OcCurrencyC
   return null;
 }
 
-export function isForeignOcCurrency(code: OcCurrencyCode | null | undefined): boolean {
+export function isForeignOcCurrency(code: string | null | undefined): boolean {
   return code === "USD" || code === "EUR";
 }
 
-export function ocCurrencySymbol(code: OcCurrencyCode | null | undefined): string {
+export function ocCurrencySymbol(code: string | null | undefined): string {
   if (code === "USD") return "$";
   if (code === "EUR") return "€";
   return "₡";

@@ -11,13 +11,29 @@ export function isoDate(value: string | Date): string {
   return value.slice(0, 10);
 }
 
-export function strArg(args: Record<string, unknown>, key: string): string {
+export function strArg(args: Record<string, unknown> | undefined, key: string): string {
+  if (!args) return "";
   return typeof args[key] === "string" ? (args[key] as string).trim() : "";
 }
 
-export function intArg(args: Record<string, unknown>, key: string, fallback: number, max?: number): number {
+export function intArg(args: Record<string, unknown> | undefined, key: string, fallback: number, max?: number): number {
+  if (!args) return max != null ? Math.min(fallback, max) : fallback;
   const n = typeof args[key] === "number" ? args[key] : fallback;
   return max != null ? Math.min(n, max) : n;
+}
+
+/** Devuelve el valor solo si pertenece al conjunto permitido; si no, undefined. */
+export function enumArg<T extends string>(
+  args: Record<string, unknown> | undefined,
+  key: string,
+  allowed: readonly T[],
+): T | undefined {
+  const raw = strArg(args, key);
+  if (!raw) return undefined;
+  for (const option of allowed) {
+    if (option === raw) return option;
+  }
+  return undefined;
 }
 
 export async function resolveNoCias(session: Session, noCias?: string[]): Promise<string[]> {

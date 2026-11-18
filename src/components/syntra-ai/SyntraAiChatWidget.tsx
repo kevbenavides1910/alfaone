@@ -319,7 +319,7 @@ export function SyntraAiChatWidget() {
     [newSession, refreshSessions, sessionId],
   );
 
-  const useSkill = useCallback((skill: SkillRow) => {
+  const applySkill = useCallback((skill: SkillRow) => {
     setInput(
       `Usa la habilidad «${skill.name}» (${skill.description}). Sigue su procedimiento y ayúdame con lo que tengo en pantalla.`,
     );
@@ -723,7 +723,7 @@ export function SyntraAiChatWidget() {
                                 <button
                                   key={sk.id}
                                   type="button"
-                                  onClick={() => useSkill(sk)}
+                                  onClick={() => applySkill(sk)}
                                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:border-indigo-300 hover:bg-indigo-50/50"
                                 >
                                   <div className="font-medium text-slate-800">{sk.name}</div>
@@ -745,7 +745,7 @@ export function SyntraAiChatWidget() {
                                 <button
                                   key={sk.id}
                                   type="button"
-                                  onClick={() => useSkill(sk)}
+                                  onClick={() => applySkill(sk)}
                                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:border-indigo-300 hover:bg-indigo-50/50"
                                 >
                                   <div className="font-medium text-slate-800">{sk.name}</div>

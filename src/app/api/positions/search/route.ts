@@ -52,22 +52,24 @@ export async function GET(req: NextRequest) {
     });
 
     return ok(
-      positions.map((p) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        phoneLine: p.phoneLine,
-        shifts: p.shifts.map((s) => ({
-          id: s.id,
-          label: s.label,
-          hours: parseFloat(String(s.hours)),
+      positions
+        .filter((p): p is typeof p & { location: NonNullable<typeof p.location> } => p.location != null)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          phoneLine: p.phoneLine,
+          shifts: p.shifts.map((s) => ({
+            id: s.id,
+            label: s.label,
+            hours: parseFloat(String(s.hours)),
+          })),
+          location: {
+            id: p.location.id,
+            name: p.location.name,
+            contract: p.location.contract,
+          },
         })),
-        location: {
-          id: p.location.id,
-          name: p.location.name,
-          contract: p.location.contract,
-        },
-      })),
     );
   } catch (e) {
     return serverError("Error al buscar puestos", e);
