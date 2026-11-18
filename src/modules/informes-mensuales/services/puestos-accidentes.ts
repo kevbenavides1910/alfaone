@@ -1,16 +1,5 @@
-import { readFile } from "fs/promises";
-import path from "path";
-import * as XLSX from "xlsx";
-import { MonthlyReportError } from "./reports";
-import { buildIncidentSummary } from "./summary";
 import { PUESTOS_ACCIDENTES_SOURCE, listMonthlyIncidents } from "./incidents";
-
-const TEMPLATE_FILE = path.join(
-  process.cwd(),
-  "assets",
-  "informes-mensuales",
-  "Incidencias_Puestos_Accidentes.xlsx",
-);
+import { buildIncidentSummary } from "./summary";
 
 export const PUESTOS_ACCIDENTES_COLUMNS = [
   "Consecutivo",
@@ -28,24 +17,22 @@ export const PUESTOS_ACCIDENTES_COLUMNS = [
   "Fuente",
 ];
 
-type SheetMatrix = unknown[][];
+export type PuestosAccidentesRowMeta = {
+  incidentId: string | null;
+  evidenceCount: number;
+  manual: boolean;
+  data?: Record<string, string>;
+};
 
 type ParsedIncident = {
   date: Date;
   year: number;
   values: string[];
   order: number;
-  manual?: boolean;
-  incidentId?: string;
-  evidenceCount?: number;
-  data?: Record<string, string>;
-};
-
-export type PuestosAccidentesRowMeta = {
-  incidentId: string | null;
-  evidenceCount: number;
   manual: boolean;
-  data?: Record<string, string>;
+  incidentId: string;
+  evidenceCount: number;
+  data: Record<string, string>;
 };
 
 export type PuestosAccidentesReport = {
@@ -67,21 +54,6 @@ const normalize = (value: unknown) =>
     .replace(/\s+/g, " ")
     .trim();
 
-function sheetMatrix(workbook: XLSX.WorkBook, sheetName: string): SheetMatrix | null {
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) return null;
-  return XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-    header: 1,
-    raw: false,
-    defval: "",
-  }) as SheetMatrix;
-}
-
-function findSheetName(workbook: XLSX.WorkBook, needle: string): string | null {
-  const target = needle.toLowerCase();
-  return workbook.SheetNames.find((name) => name.toLowerCase().includes(target)) ?? null;
-}
-
 function parseDate(value: string): { date: Date; year: number } | null {
   const match = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(value.trim());
   if (!match) return null;
@@ -91,7 +63,7 @@ function parseDate(value: string): { date: Date; year: number } | null {
   const twoDigitYear = match[3].length === 2;
   const year = twoDigitYear ? 2000 + Number(match[3]) : Number(match[3]);
 
-  // xlsx entrega las fechas del archivo como M/D/AA; el formulario usa D/M/AAAA.
+  // Las fechas importadas se guardan como D/M/AAAA.
   const month = twoDigitYear ? (first > 12 ? second : first) : second;
   const day = twoDigitYear ? (first > 12 ? first : second) : first;
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
@@ -153,142 +125,51 @@ async function maxDelMonteConsecutive(year: number): Promise<number> {
 }
 
 export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesReport> {
-  let buffer: Buffer;
-  try {
-    buffer = await readFile(TEMPLATE_FILE);
-  } catch {
-    throw new MonthlyReportError(
-      "El archivo de incidencias de puestos y accidentes no está disponible",
-      "NOT_FOUND",
-    );
-  }
+  const storedRows = await listMonthlyIncidents(PUESTOS_ACCIDENTES_SOURCE);
 
-  let workbook: XLSX.WorkBook;
-  try {
-    workbook = XLSX.read(buffer, { type: "buffer" });
-  } catch {
-    throw new MonthlyReportError("No se pudo leer el archivo Excel de incidencias");
-  }
+  const incidents: ParsedIncident[] = storedRows
+    .map((incident, index) => {
+      const data = incident.data;
+      const incidentText = normalize(data["Incidente"]);
+      if (!incidentText) return null;
 
-  const incidents: ParsedIncident[] = [];
-  let order = 0;
+      const parsed =
+        parseDate(normalize(data["Fecha"])) ??
+        (() => {
+          const created = new Date(incident.createdAt);
+          return { date: created, year: created.getFullYear() };
+        })();
 
-  const puestosSheet = findSheetName(workbook, "puestos");
-  if (puestosSheet) {
-    const matrix = sheetMatrix(workbook, puestosSheet);
-    let lastDate: { date: Date; year: number } | null = null;
+      const fuente = normalize(data["Fuente"]) || "Puestos";
+      const tipo =
+        normalize(data["Tipo de Incidencia"]) ||
+        (fuente === "Accidentes" ? "Accidente de Tránsito" : "Incidencia en Puesto");
 
-    for (let rowIndex = 1; matrix && rowIndex < matrix.length; rowIndex += 1) {
-      const row = matrix[rowIndex];
-      // xlsx recorta la columna A vacía: los datos empiezan en el índice 0.
-      const incident = normalize(row[1]);
-      if (!incident || incident.toLowerCase() === "incidente") continue;
-
-      const parsed = parseDate(normalize(row[0]));
-      if (parsed) lastDate = parsed;
-      const currentDate = parsed ?? lastDate;
-      if (!currentDate) continue;
-
-      incidents.push({
-        date: currentDate.date,
-        year: currentDate.year,
-        order: order++,
+      return {
+        date: parsed.date,
+        year: parsed.year,
+        order: index,
+        manual: normalize(data["__imported"]) !== "true",
+        incidentId: incident.id,
+        evidenceCount: incident.evidenceCount,
+        data,
         values: [
-          "Incidencia en Puesto",
-          formatDate(currentDate.date),
-          incident,
-          normalize(row[2]),
-          normalize(row[3]),
-          normalize(row[4]),
-          normalize(row[5]),
-          normalize(row[6]),
-          normalize(row[7]),
-          normalize(row[8]),
-          normalize(row[9]),
-          "Puestos",
+          tipo,
+          formatDate(parsed.date),
+          incidentText,
+          normalize(data["Administrador"]),
+          normalize(data["Acción Inmediata"]),
+          normalize(data["Cliente"]),
+          normalize(data["Hora"]),
+          normalize(data["Zona"]),
+          normalize(data["Informe"]),
+          normalize(data["Investigación"]),
+          normalize(data["Status"]),
+          fuente,
         ],
-      });
-    }
-  }
-
-  const accidentesSheet = findSheetName(workbook, "accident");
-  if (accidentesSheet) {
-    const matrix = sheetMatrix(workbook, accidentesSheet);
-    let lastDate: { date: Date; year: number } | null = null;
-
-    for (let rowIndex = 1; matrix && rowIndex < matrix.length; rowIndex += 1) {
-      const row = matrix[rowIndex];
-      const incident = normalize(row[1]);
-      if (!incident || incident.toLowerCase() === "incidente") continue;
-
-      const parsed = parseDate(normalize(row[0]));
-      if (parsed) lastDate = parsed;
-      const currentDate = parsed ?? lastDate;
-      if (!currentDate) continue;
-
-      incidents.push({
-        date: currentDate.date,
-        year: currentDate.year,
-        order: order++,
-        values: [
-          "Accidente de Tránsito",
-          formatDate(currentDate.date),
-          incident,
-          "",
-          normalize(row[2]),
-          normalize(row[3]),
-          normalize(row[4]),
-          normalize(row[5]),
-          normalize(row[6]),
-          normalize(row[7]),
-          normalize(row[8]),
-          "Accidentes",
-        ],
-      });
-    }
-  }
-
-  const manual = await listMonthlyIncidents(PUESTOS_ACCIDENTES_SOURCE);
-  for (const incident of manual) {
-    const data = incident.data;
-    const incidentText = normalize(data["Incidente"]);
-    if (!incidentText) continue;
-
-    const parsed =
-      parseDate(normalize(data["Fecha"])) ??
-      (() => {
-        const created = new Date(incident.createdAt);
-        return { date: created, year: created.getFullYear() };
-      })();
-
-    const fuente = normalize(data["Fuente"]) || "Puestos";
-    const tipo =
-      fuente === "Accidentes" ? "Accidente de Tránsito" : "Incidencia en Puesto";
-
-    incidents.push({
-      date: parsed.date,
-      year: parsed.year,
-      order: order++,
-      manual: true,
-      incidentId: incident.id,
-      evidenceCount: incident.evidenceCount,
-      data,
-      values: [
-        tipo,
-        formatDate(parsed.date),
-        incidentText,
-        normalize(data["Administrador"]),
-        normalize(data["Acción Inmediata"]),
-        normalize(data["Cliente"]),
-        normalize(data["Hora"]),
-        normalize(data["Zona"]),
-        normalize(data["Informe"]),
-        normalize(data["Investigación"]),
-        normalize(data["Status"]),
-        fuente,
-      ],
-    });
-  }
+      };
+    })
+    .filter((incident): incident is ParsedIncident => incident !== null);
 
   incidents.sort(
     (a, b) =>
@@ -309,9 +190,9 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
     columns: PUESTOS_ACCIDENTES_COLUMNS,
     rows,
     rowMeta: incidents.map((incident) => ({
-      incidentId: incident.incidentId ?? null,
-      evidenceCount: incident.evidenceCount ?? 0,
-      manual: Boolean(incident.manual),
+      incidentId: incident.incidentId,
+      evidenceCount: incident.evidenceCount,
+      manual: incident.manual,
       data: incident.data,
     })),
     meta: {
