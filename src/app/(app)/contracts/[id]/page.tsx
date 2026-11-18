@@ -46,6 +46,8 @@ interface Contract {
   status: ContractStatus; startDate: string; endDate: string;
   cartelFileName?: string | null; cartelMimeType?: string | null;
   cartelUploadedAt?: string | null;
+  /** Enlace SICOP calculado en GET /api/contracts/[id] (no es columna Prisma). */
+  sicopEnlace?: string | null;
   baseMonthlyBilling: number;
   monthlyBilling: number; suppliesBudgetPct: number; suppliesBudget: number;
   equivalencePct: number; notes?: string;
@@ -215,9 +217,10 @@ export default function ContractDetailPage() {
                 size="sm"
                 className="gap-1.5 rounded-sm border-[#c6c6c6] bg-white shadow-none hover:bg-[#e8e8e8]"
                 title="Ver esta licitación en SICOP"
-                onClick={() =>
-                  window.open(contract.sicopEnlace, "_blank", "noopener,noreferrer")
-                }
+                onClick={() => {
+                  const enlace = contract.sicopEnlace;
+                  if (enlace) window.open(enlace, "_blank", "noopener,noreferrer");
+                }}
               >
                 <ExternalLink className="h-4 w-4" />
                 Ver en SICOP

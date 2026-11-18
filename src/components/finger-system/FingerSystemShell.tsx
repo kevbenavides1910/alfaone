@@ -6,7 +6,6 @@ import { hasPermission } from "@/lib/permissions/check";
 import type { PermissionKey } from "@/lib/permissions/registry";
 import { Topbar } from "@/components/layout/Topbar";
 import { ModuleSubnav } from "@/components/layout/ModuleSubnav";
-import { Fingerprint } from "lucide-react";
 import { FINGER_BRAND } from "@/modules/finger-system/config/finger.config.client";
 import { useFingerCompany } from "@/components/finger-system/finger-company-context";
 import {
@@ -91,11 +90,7 @@ export function FingerSystemShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <Topbar
-        title={FINGER_BRAND.name}
-        subtitle="Biométrico · relojes ZK y padrón Odoo"
-        icon={<Fingerprint className="h-5 w-5" />}
-      />
+      <Topbar title={FINGER_BRAND.name} />
       {visibleTabs.length > 0 ? (
         <ModuleSubnav
           ariaLabel="Secciones Finger System"

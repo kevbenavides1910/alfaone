@@ -92,11 +92,17 @@ export default function SigRequisitoDetailPage() {
       return [] as Array<{ id: string; code: string; name: string }>;
     },
   });
-  const processes = Array.isArray(processesRaw)
-    ? processesRaw
-    : Array.isArray((processesRaw as { data?: unknown } | undefined)?.data)
-      ? ((processesRaw as { data: Array<{ id: string; code: string; name: string }> }).data)
-      : [];
+  const processes: Array<{ id: string; code: string; name: string }> = (() => {
+    if (Array.isArray(processesRaw)) return processesRaw;
+    if (
+      processesRaw &&
+      typeof processesRaw === "object" &&
+      Array.isArray((processesRaw as { data?: unknown }).data)
+    ) {
+      return (processesRaw as { data: Array<{ id: string; code: string; name: string }> }).data;
+    }
+    return [];
+  })();
 
   const { data: documentsRaw } = useQuery({
     queryKey: ["sig-docs-link"],
