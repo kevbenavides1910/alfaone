@@ -142,8 +142,7 @@ export async function buildPuestosAccidentesReport(): Promise<PuestosAccidentesR
 
       const fuente = normalize(data["Fuente"]) || "Puestos";
       const tipo =
-        normalize(data["Tipo de Incidencia"]) ||
-        (fuente === "Accidentes" ? "Accidente de Tránsito" : "Incidencia en Puesto");
+        fuente === "Accidentes" ? "Accidente de Tránsito" : "Incidencia en Puesto";
 
       return {
         date: parsed.date,

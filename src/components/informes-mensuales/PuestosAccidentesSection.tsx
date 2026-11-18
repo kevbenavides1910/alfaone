@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Paperclip, Plus, Trash2, Upload } from "lucide-react";
+import { Download, Loader2, Paperclip, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { formatDate } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,6 +69,7 @@ export function PuestosAccidentesSection() {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [showDialog, setShowDialog] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -142,6 +143,7 @@ export function PuestosAccidentesSection() {
 
   const openDialog = () => {
     const now = new Date();
+    setEditingId(null);
     setForm({
       Fecha: now.toLocaleDateString("es-CR", {
         day: "2-digit",
@@ -167,6 +169,28 @@ export function PuestosAccidentesSection() {
     setShowDialog(true);
   };
 
+  const openEdit = (row: { values: string[]; meta?: RowMeta }) => {
+    if (!row.meta?.incidentId) return;
+
+    const data = row.meta.data ?? {};
+    setEditingId(row.meta.incidentId);
+    setForm({
+      Fecha: data["Fecha"] ?? "",
+      Incidente: data["Incidente"] ?? "",
+      Administrador: data["Administrador"] ?? "",
+      "Acción Inmediata": data["Acción Inmediata"] ?? "",
+      Cliente: data["Cliente"] ?? "",
+      Hora: data["Hora"] ?? "",
+      Zona: data["Zona"] ?? "",
+      Informe: data["Informe"] ?? "No",
+      Investigación: data["Investigación"] ?? "No",
+      Status: data["Status"] ?? "Abierto",
+      Fuente: data["Fuente"] ?? "Puestos",
+    });
+    setFormError(null);
+    setShowDialog(true);
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!form.Incidente?.trim()) {
@@ -177,14 +201,24 @@ export function PuestosAccidentesSection() {
     setSaving(true);
     setFormError(null);
     try {
-      const response = await fetch("/api/informes-mensuales/incidencias", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ source: "puestos-accidentes", data: form }),
-      });
+      const response = await fetch(
+        editingId
+          ? `/api/informes-mensuales/incidencias/${editingId}`
+          : "/api/informes-mensuales/incidencias",
+        {
+          method: editingId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(
+            editingId
+              ? { data: form }
+              : { source: "puestos-accidentes", data: form },
+          ),
+        },
+      );
       if (!response.ok) throw new Error(await readError(response));
       setShowDialog(false);
+      setEditingId(null);
       await load();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "No se pudo guardar la incidencia");
@@ -392,6 +426,9 @@ export function PuestosAccidentesSection() {
                 <table className="min-w-full text-xs">
                   <thead className="sticky top-0 z-20 bg-muted/90">
                     <tr>
+                      <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+                        Editar
+                      </th>
                       {columns.map((column, index) => (
                         <th
                           key={`${column}-${index}`}
@@ -405,6 +442,7 @@ export function PuestosAccidentesSection() {
                       </th>
                     </tr>
                     <tr>
+                      <th className="px-1 py-1" />
                       {columns.map((column, index) => (
                         <th key={`filter-${column}-${index}`} className="px-1 py-1">
                           {filterOptions[index] ? (
@@ -446,6 +484,19 @@ export function PuestosAccidentesSection() {
                   <tbody className="divide-y">
                     {filteredRows.map((row, rowIndex) => (
                       <tr key={rowIndex} className="align-top hover:bg-muted/30">
+                        <td className="px-2 py-1.5 align-top">
+                          {row.meta?.incidentId ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => openEdit(row)}
+                              aria-label="Editar incidencia"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : null}
+                        </td>
                         {row.values.map((value, columnIndex) => {
                           const isStatus =
                             columnIndex === statusIndex && Boolean(row.meta?.incidentId);
@@ -509,9 +560,13 @@ export function PuestosAccidentesSection() {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nueva incidencia</DialogTitle>
+            <DialogTitle>
+              {editingId ? "Editar incidencia" : "Nueva incidencia"}
+            </DialogTitle>
             <DialogDescription>
-              Se agrega al reporte de Puestos y Accidentes y se incluye en el consecutivo.
+              {editingId
+                ? "Modificá los datos de la incidencia. Los cambios se guardan en el reporte."
+                : "Se agrega al reporte de Puestos y Accidentes y se incluye en el consecutivo."}
             </DialogDescription>
           </DialogHeader>
 
@@ -646,7 +701,11 @@ export function PuestosAccidentesSection() {
                 Cancelar
               </Button>
               <Button type="submit" disabled={saving}>
-                {saving ? "Guardando…" : "Guardar incidencia"}
+                {saving
+                  ? "Guardando…"
+                  : editingId
+                    ? "Guardar cambios"
+                    : "Guardar incidencia"}
               </Button>
             </DialogFooter>
           </form>

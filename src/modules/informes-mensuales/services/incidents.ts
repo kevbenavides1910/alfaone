@@ -115,11 +115,16 @@ export async function updateMonthlyIncident(input: {
 }): Promise<MonthlyIncidentDto> {
   const existing = await prisma.monthlyIncident.findUnique({
     where: { id: input.id },
-    select: { id: true },
+    select: { id: true, data: true },
   });
   if (!existing) throw new MonthlyReportError("Incidencia no encontrada", "NOT_FOUND");
 
-  const payload = normalizeEntries(input.data);
+  // Se conservan las claves internas (__rowKey, __imported, etc.) que no vienen del formulario.
+  const currentData =
+    existing.data && typeof existing.data === "object" && !Array.isArray(existing.data)
+      ? (existing.data as Record<string, unknown>)
+      : {};
+  const payload = normalizeEntries({ ...currentData, ...input.data });
 
   const row = await prisma.monthlyIncident.update({
     where: { id: input.id },

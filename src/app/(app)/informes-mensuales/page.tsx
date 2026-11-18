@@ -954,6 +954,9 @@ export default function InformesMensualesPage() {
                       <table className="min-w-full text-xs">
                         <thead className="sticky top-0 z-20 bg-muted/90">
                           <tr>
+                            <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+                              Editar
+                            </th>
                             {detailColumns.map((column, index) => (
                               <th
                                 key={`${column}-${index}`}
@@ -967,6 +970,7 @@ export default function InformesMensualesPage() {
                             </th>
                           </tr>
                           <tr>
+                            <th className="px-1 py-1" />
                             {detailColumns.map((column, index) => (
                               <th key={`filter-${column}-${index}`} className="px-1 py-1">
                                 {filterOptions[index] ? (
@@ -1019,6 +1023,19 @@ export default function InformesMensualesPage() {
                                   row.manualId ? "bg-amber-50/50" : ""
                                 }`}
                               >
+                                <td className="px-2 py-1.5">
+                                  {incident ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={() => openEditIncident(incident)}
+                                      aria-label="Editar incidencia"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                  ) : null}
+                                </td>
                                 {row.values.map((value, columnIndex) => {
                                   const column = detailColumns[columnIndex] ?? "";
                                   const manualChecklist =
@@ -1090,15 +1107,6 @@ export default function InformesMensualesPage() {
                                   {incident ? (
                                     <div className="flex items-center gap-1">
                                       <Badge variant="secondary">Manual</Badge>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6"
-                                        onClick={() => openEditIncident(incident)}
-                                        aria-label="Editar incidencia"
-                                      >
-                                        <Pencil className="h-3.5 w-3.5" />
-                                      </Button>
                                       <Button
                                         variant="ghost"
                                         size="icon"
