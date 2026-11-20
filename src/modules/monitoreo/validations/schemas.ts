@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { validateEntrega } from "@/modules/monitoreo/business/entrega-puesto";
 
 export const alarmCodeSchema = z.object({
   alarmNumber: z.coerce.number().int().positive(),
@@ -90,6 +91,28 @@ export const eventoSchema = z.object({
     )
     .optional(),
 });
+
+export const entregaCheckSchema = z.object({
+  group: z.string().min(1).max(120),
+  label: z.string().min(1).max(300),
+  status: z.enum(["OK", "FALLA", "NA"]),
+});
+
+export const entregaPuestoSchema = z
+  .object({
+    fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida"),
+    hora: z.string().regex(/^\d{2}:\d{2}$/, "Hora inválida"),
+    saliente: z.string().trim().min(1).max(200),
+    entrante: z.string().trim().min(1).max(200),
+    observaciones: z.string().trim().max(8000).optional().default(""),
+    checks: z.array(entregaCheckSchema).min(1),
+    sourceId: z.string().trim().min(1).max(80).optional(),
+    createdAt: z.string().max(40).optional(),
+  })
+  .superRefine((val, ctx) => {
+    const err = validateEntrega(val);
+    if (err) ctx.addIssue({ code: "custom", message: err, path: ["checks"] });
+  });
 
 export const pilaLlenadoSchema = z.object({
   finca: z.string().min(1).max(200),

@@ -370,6 +370,7 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
       "BandecoActivacion",
       "BandecoAperturaCierre",
       "BandecoEvento",
+      "BandecoEntregaPuesto",
     ],
   },
 

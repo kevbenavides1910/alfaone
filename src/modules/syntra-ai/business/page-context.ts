@@ -31,6 +31,11 @@ const PATH_LABELS: Array<{ prefix: string; label: string; toolHint?: string }> =
   { prefix: "/naf-operaciones/calendario", label: "Calendario operativo", toolHint: "list_operational_calendar_events" },
   { prefix: "/naf-operaciones", label: "NAF Operaciones", toolHint: "list_op_roles, list_op_asistencia, list_op_vacantes" },
   { prefix: "/recorridos", label: "Recorridos", toolHint: "query_patrol_compliance" },
+  {
+    prefix: "/monitoreo/entrega-puesto",
+    label: "Monitoreo / Entrega de puesto",
+    toolHint: "list_monitoreo_entregas_puesto",
+  },
   { prefix: "/monitoreo", label: "Monitoreo", toolHint: "list_monitoreo_activaciones, lookup_monitoreo_alarm" },
   { prefix: "/formularios", label: "Formularios", toolHint: "list_forms, list_form_submissions" },
   { prefix: "/notificaciones", label: "Notificaciones", toolHint: "list_inbox_notifications" },

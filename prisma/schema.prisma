@@ -4164,6 +4164,26 @@ model BandecoEvento {
   @@map("bandeco_eventos")
 }
 
+/// Checklist de entrega y recepción de puesto (cambio de turno).
+model BandecoEntregaPuesto {
+  id            String   @id @default(cuid())
+  fecha         DateTime @db.Date
+  hora          String
+  saliente      String
+  entrante      String
+  observaciones String?  @db.Text
+  checks        Json
+  /// Id del respaldo JSON del formulario HTML (importación idempotente).
+  sourceId      String?  @unique
+  createdById   String?
+  createdByName String
+  createdAt     DateTime @default(now())
+
+  @@index([fecha])
+  @@index([createdAt])
+  @@map("bandeco_entrega_puestos")
+}
+
 // ─── Módulo Empleados NAF (réplica local Oracle NAF5.EMPLEADOS_NEW) ───────────
 
 /// Ejecución de sincronización desde Oracle NAF.

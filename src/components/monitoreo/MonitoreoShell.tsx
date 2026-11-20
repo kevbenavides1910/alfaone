@@ -27,6 +27,7 @@ const TABS: Tab[] = [
   { href: "/monitoreo/eventos", label: "Eventos", permission: "monitoreo.operacion" },
   { href: "/monitoreo/pilas", label: "Pilas", permission: "monitoreo.operacion" },
   { href: "/monitoreo/informe-semanal", label: "Informe semanal", permission: "monitoreo.registros" },
+  { href: "/monitoreo/entrega-puesto", label: "Entrega de puesto", permission: "monitoreo.operacion" },
   { href: "/monitoreo/mantenimientos", label: "Mantenimientos", permission: "monitoreo.mantenimientos" },
 ];
 

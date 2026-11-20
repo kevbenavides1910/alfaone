@@ -996,6 +996,7 @@ export const PERMISSION_REGISTRY = {
           "/monitoreo/aperturas-cierres",
           "/monitoreo/eventos",
           "/monitoreo/pilas",
+          "/monitoreo/entrega-puesto",
         ],
         apiPrefixes: [
           "/api/monitoreo/activaciones",
@@ -1003,6 +1004,7 @@ export const PERMISSION_REGISTRY = {
           "/api/monitoreo/eventos",
           "/api/monitoreo/pilas-llenado",
           "/api/monitoreo/imagenes",
+          "/api/monitoreo/entrega-puesto",
         ],
         actions: { view: "Ver operaciones", edit: "Registrar operaciones" },
       },

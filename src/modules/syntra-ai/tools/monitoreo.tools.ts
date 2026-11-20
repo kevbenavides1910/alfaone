@@ -1,5 +1,6 @@
 import { listActivaciones } from "@/modules/monitoreo/services/activaciones";
 import { consultarCodigoAlarma } from "@/modules/monitoreo/services/consulta";
+import { listEntregasPuesto } from "@/modules/monitoreo/services/entrega-puesto";
 import type { SyntraTool } from "./types";
 import { toolDef } from "./types";
 import { intArg, strArg } from "./shared";
@@ -68,6 +69,42 @@ export function monitoreoTools(): SyntraTool[] {
         if (!n || Number.isNaN(n)) return { error: "Indique alarmNumber." };
         const result = await consultarCodigoAlarma(n);
         return { alarma: result, fuente: "Monitoreo — consulta" };
+      },
+    },
+    {
+      permission: { key: "monitoreo.operacion", level: "view" },
+      definition: toolDef(
+        "list_monitoreo_entregas_puesto",
+        "Entregas de puesto del centro de monitoreo: operador que entrega, quien recibe, fallas y observaciones.",
+        {
+          type: "object",
+          properties: {
+            fDesde: { type: "string", description: "Fecha desde YYYY-MM-DD." },
+            fHasta: { type: "string", description: "Fecha hasta YYYY-MM-DD." },
+            limit: { type: "integer" },
+          },
+          additionalProperties: false,
+        },
+      ),
+      describeCall: () => "Consultando entregas de puesto…",
+      handler: async (_session, args) => {
+        const rows = await listEntregasPuesto({
+          limit: intArg(args, "limit", 25, 50),
+          desde: strArg(args, "fDesde") || undefined,
+          hasta: strArg(args, "fHasta") || undefined,
+        });
+        return {
+          entregas: rows.map((r) => ({
+            fecha: r.fecha,
+            hora: r.hora,
+            entrega: r.saliente,
+            recibe: r.entrante,
+            resultado: r.resultado,
+            observaciones: r.observaciones,
+          })),
+          total: rows.length,
+          fuente: "Monitoreo — entrega de puesto",
+        };
       },
     },
   ];
