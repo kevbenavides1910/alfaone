@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, FileSpreadsheet, Printer, Upload } from "lucide-react";
+import { ClipboardCheck, FileSpreadsheet, FileText, Loader2, Printer, Upload } from "lucide-react";
 import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,6 +77,8 @@ export default function EntregaPuestoPage() {
   const [statuses, setStatuses] = useState<string[]>(() => ITEMS.map(() => ""));
   const [notice, setNotice] = useState("");
   const [viewing, setViewing] = useState(false);
+  const [recordId, setRecordId] = useState<string | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ id: string; title: string } | null>(null);
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
 
   const { data, isLoading } = useQuery<{ data: EntregaRow[] }>({
@@ -100,8 +103,65 @@ export default function EntregaPuestoPage() {
     setObservaciones("");
     setStatuses(ITEMS.map(() => ""));
     setViewing(false);
+    setRecordId(null);
     setNotice("Formulario nuevo listo.");
   }
+
+  function openPdf(row: Pick<EntregaRow, "id" | "fecha" | "hora" | "saliente" | "entrante">) {
+    setPdfPreview({
+      id: row.id,
+      title: `${row.fecha} ${row.hora} · ${row.saliente} entrega a ${row.entrante}`,
+    });
+  }
+
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pdfPreview) {
+      setPdfBlobUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setPdfError(null);
+      setPdfLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setPdfLoading(true);
+    setPdfError(null);
+    setPdfBlobUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/monitoreo/entrega-puesto/${pdfPreview.id}/pdf`, { credentials: "same-origin" });
+        if (!res.ok) throw new Error("No se pudo cargar el PDF");
+        const blob = await res.blob();
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        setPdfBlobUrl(objectUrl);
+      } catch (e) {
+        if (!cancelled) setPdfError(e instanceof Error ? e.message : "No se pudo cargar el PDF");
+      } finally {
+        if (!cancelled) setPdfLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [pdfPreview]);
 
   const save = useMutation({
     mutationFn: async (payload: {
@@ -122,10 +182,11 @@ export default function EntregaPuestoPage() {
       if (!r.ok) throw new Error(json.error?.message ?? "No se pudo guardar");
       return json;
     },
-    onSuccess: () => {
+    onSuccess: (json: { data?: { id?: string } }) => {
       toast.success("Entrega guardada");
       setNotice("Entrega guardada. Quedó en el historial del centro de monitoreo.");
       setViewing(false);
+      if (json.data?.id) setRecordId(json.data.id);
       void qc.invalidateQueries({ queryKey: ["monitoreo-entrega-puesto"] });
     },
     onError: (e: Error) => {
@@ -163,6 +224,7 @@ export default function EntregaPuestoPage() {
       }),
     );
     setViewing(true);
+    setRecordId(row.id);
     setNotice("Registro histórico cargado para consulta. Guardar creará una entrega nueva.");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -364,9 +426,18 @@ export default function EntregaPuestoPage() {
             >
               Guardar entrega
             </Button>
-            <Button variant="outline" onClick={() => window.print()}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (recordId) {
+                  openPdf({ id: recordId, fecha, hora, saliente, entrante });
+                  return;
+                }
+                window.print();
+              }}
+            >
               <Printer className="h-4 w-4" />
-              Imprimir / guardar PDF
+              {recordId ? "Ver PDF" : "Imprimir / guardar PDF"}
             </Button>
             <Button variant="outline" onClick={resetForm}>
               Nuevo formulario
@@ -422,7 +493,7 @@ export default function EntregaPuestoPage() {
                 <thead className="sticky top-0 z-10 bg-card">
                   <TableColumnFilterHead
                     tableId="monitoreo-entrega-puesto"
-                    defaultColumnWidths={{ fecha: 160, entrega: 180, recibe: 180, resultado: 200, acciones: 160 }}
+                    defaultColumnWidths={{ fecha: 160, entrega: 180, recibe: 180, resultado: 180, acciones: 250 }}
                     columns={columnDefs}
                     rows={rows}
                     filters={columnFilters}
@@ -438,8 +509,13 @@ export default function EntregaPuestoPage() {
                       <td className="px-3 py-2">{r.saliente}</td>
                       <td className="px-3 py-2">{r.entrante}</td>
                       <td className="px-3 py-2">{r.resultado}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <Button variant="outline" size="sm" className="mr-2" onClick={() => loadRow(r)}>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-1.5">
+                        <Button variant="outline" size="sm" onClick={() => openPdf(r)}>
+                          <FileText className="h-3.5 w-3.5" />
+                          PDF
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => loadRow(r)}>
                           Ver
                         </Button>
                         {canEdit ? (
@@ -456,6 +532,7 @@ export default function EntregaPuestoPage() {
                             Eliminar
                           </Button>
                         ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -466,6 +543,29 @@ export default function EntregaPuestoPage() {
         </CardContent>
       </Card>
       {viewing ? <span className="sr-only">Consulta de registro histórico</span> : null}
+
+      <Dialog open={pdfPreview != null} onOpenChange={(open) => { if (!open) setPdfPreview(null); }}>
+        <DialogContent className="flex h-[88vh] w-[95vw] max-w-4xl flex-col gap-3 p-4">
+          <DialogHeader className="pr-8">
+            <DialogTitle>Entrega de puesto</DialogTitle>
+            <DialogDescription>{pdfPreview?.title}</DialogDescription>
+          </DialogHeader>
+          <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border bg-slate-100">
+            {pdfLoading ? (
+              <div className="flex h-full items-center justify-center gap-2 text-sm text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando PDF…
+              </div>
+            ) : pdfError ? (
+              <div className="flex h-full items-center justify-center p-6 text-sm text-red-600">{pdfError}</div>
+            ) : pdfBlobUrl ? (
+              <object data={pdfBlobUrl} type="application/pdf" title="PDF de entrega de puesto" className="h-full w-full bg-white">
+                <iframe title="PDF de entrega de puesto" src={pdfBlobUrl} className="h-full w-full bg-white" />
+              </object>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -131,6 +131,11 @@ export async function crearEntregaPuesto(input: {
   return { row: toEntregaDto(row), duplicated: false as const };
 }
 
+export async function getEntregaPuesto(id: string) {
+  const row = await prisma.bandecoEntregaPuesto.findUnique({ where: { id } });
+  return row ? toEntregaDto(row) : null;
+}
+
 export async function eliminarEntregaPuesto(id: string) {
   const existing = await prisma.bandecoEntregaPuesto.findUnique({ where: { id }, select: { id: true } });
   if (!existing) return false;

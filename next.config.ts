@@ -51,9 +51,10 @@ const nextConfig: NextConfig = {
       { source: "/api/empleados/contratos/photorec/file", headers: pdfEmbedHeaders },
       { source: "/api/empleados/contratos/reconstruccion/file", headers: pdfEmbedHeaders },
       { source: "/api/sig/standards/:id/pdf", headers: pdfEmbedHeaders },
+      { source: "/api/monitoreo/entrega-puesto/:id/pdf", headers: pdfEmbedHeaders },
       {
         source:
-          "/:path((?!api/expediente-digital/.+/file$)(?!api/empleados/contratos/photorec/file$)(?!api/empleados/contratos/reconstruccion/file$)(?!api/sig/standards/.+/pdf$).*)*",
+          "/:path((?!api/expediente-digital/.+/file$)(?!api/empleados/contratos/photorec/file$)(?!api/empleados/contratos/reconstruccion/file$)(?!api/sig/standards/.+/pdf$)(?!api/monitoreo/entrega-puesto/.+/pdf$).*)*",
         headers: securityHeaders,
       },
     ];
