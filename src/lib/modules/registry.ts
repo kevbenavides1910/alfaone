@@ -477,6 +477,20 @@ export const APP_MODULES: Record<AppModuleId, AppModuleMeta> = {
     prismaModels: ["HrDocumentRequestSettings", "HrDocumentRequestSession"],
   },
 
+  planTrabajoMensual: {
+    id: "planTrabajoMensual",
+    label: "Plan de Trabajo Mensual",
+    description: "Programación mensual de actividades por puesto y responsable.",
+    uiRoutePrefixes: ["/plan-trabajo-mensual"],
+    apiRoutePrefixes: ["/api/plan-trabajo-mensual"],
+    codePaths: [
+      "src/app/(app)/plan-trabajo-mensual",
+      "src/app/api/plan-trabajo-mensual",
+      "src/components/plan-trabajo-mensual",
+    ],
+    prismaModels: [],
+  },
+
   syntraAi: {
     id: "syntraAi",
     label: "Asistente Syntra IA",

@@ -28,6 +28,7 @@ import {
   Scale,
   Fingerprint,
   CalendarDays,
+  CalendarRange,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
 
@@ -159,6 +160,13 @@ export const SIDEBAR_NAV_ITEMS: SidebarNavItem[] = [
     icon: CalendarDays,
     moduleId: "nafOperaciones",
     isActive: (p) => p.startsWith("/naf-operaciones/calendario"),
+  },
+  {
+    href: "/plan-trabajo-mensual",
+    label: "Plan de Trabajo Mensual",
+    icon: CalendarRange,
+    moduleId: "planTrabajoMensual",
+    isActive: (p) => p.startsWith("/plan-trabajo-mensual"),
   },
   {
     href: "/expediente-digital",

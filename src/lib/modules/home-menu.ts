@@ -22,6 +22,7 @@ import {
   CreditCard,
   Scale,
   CalendarDays,
+  CalendarRange,
 } from "lucide-react";
 import type { AppModuleId } from "./types";
 import type { PermissionKey } from "@/lib/permissions/registry";
@@ -170,6 +171,16 @@ export const HOME_MODULE_TILES: HomeModuleTile[] = [
     icon: CalendarDays,
     permissionTileId: "naf_operaciones",
     requiredPermission: "nafOperaciones.calendario",
+    accent: "bg-white",
+    tile: "",
+  },
+  {
+    id: "plan_trabajo_mensual",
+    label: "Plan de Trabajo Mensual",
+    description: "Programación mensual por puesto y responsable",
+    href: "/plan-trabajo-mensual",
+    icon: CalendarRange,
+    permissionTileId: "plan_trabajo_mensual",
     accent: "bg-white",
     tile: "",
   },

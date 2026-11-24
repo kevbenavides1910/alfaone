@@ -1026,6 +1026,21 @@ export const PERMISSION_REGISTRY = {
       },
     },
   },
+  planTrabajoMensual: {
+    label: "Plan de Trabajo Mensual",
+    moduleId: "planTrabajoMensual" as const,
+    screens: {
+      plan: {
+        label: "Plan de trabajo mensual",
+        uiRoutes: ["/plan-trabajo-mensual"],
+        apiPrefixes: ["/api/plan-trabajo-mensual"],
+        actions: {
+          view: "Ver el plan de trabajo mensual",
+          edit: "Crear y editar el plan mensual",
+        },
+      },
+    },
+  },
   plataforma: {
     label: "Mantenimiento",
     moduleId: "plataforma" as const,
@@ -1168,6 +1183,11 @@ export const HOME_MODULE_PERMISSION_GROUPS: {
   { tileId: "expediente_digital", label: "Expediente digital", moduleKeys: ["expedienteDigital"] },
   { tileId: "naf_operaciones", label: "Operaciones NAF", moduleKeys: ["nafOperaciones"] },
   { tileId: "monitoreo", label: "Monitoreo", moduleKeys: ["monitoreo"] },
+  {
+    tileId: "plan_trabajo_mensual",
+    label: "Plan de Trabajo Mensual",
+    moduleKeys: ["planTrabajoMensual"],
+  },
   { tileId: "recorridos", label: "Recorrido de marcas", moduleKeys: ["recorridos"] },
   { tileId: "mantenimiento", label: "Mantenimiento", moduleKeys: ["plataforma"] },
 ];

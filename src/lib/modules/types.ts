@@ -23,6 +23,7 @@ export type AppModuleId =
   | "expedienteDigital"
   | "solicitudesRrhh"
   | "fingerSystem"
+  | "planTrabajoMensual"
   | "plataforma"
   | "syntraAi";
 
