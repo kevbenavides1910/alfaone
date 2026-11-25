@@ -82,15 +82,27 @@ export function CambiarResponsableDialog({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error?.message ?? "Error al reasignar apercibimiento");
-      return json;
+      return (json.data ?? json) as {
+        emailSent?: boolean;
+        reason?: string;
+        error?: string;
+        emailTo?: string | null;
+      };
     },
     onSuccess: (data) => {
-      const msg = data.emailSent
-        ? "Apercibimiento reasignado y correo enviado al nuevo empleado"
-        : data.reason === "sin_correo"
-          ? "Apercibimiento reasignado (el nuevo empleado no tiene correo registrado)"
-          : "Apercibimiento reasignado (no se pudo enviar el correo)";
-      toast.success(msg);
+      if (data?.emailSent) {
+        toast.success(
+          "Apercibimiento reasignado y correo enviado al oficial",
+          data.emailTo ? `Destino: ${data.emailTo}` : undefined,
+        );
+      } else if (data?.reason === "sin_correo") {
+        toast.error("Apercibimiento reasignado, pero el oficial no tiene correo registrado");
+      } else {
+        toast.error(
+          "Apercibimiento reasignado, pero el correo no se envió",
+          data?.error || undefined,
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["disciplinary-list"] });
       queryClient.invalidateQueries({ queryKey: ["disciplinary-resumen"] });
       queryClient.invalidateQueries({ queryKey: ["disciplinary-detail"] });

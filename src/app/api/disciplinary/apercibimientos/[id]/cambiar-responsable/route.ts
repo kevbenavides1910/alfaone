@@ -95,7 +95,7 @@ export async function POST(
     const emailTo = newMaster.email?.trim();
 
     if (!emailTo) {
-      return ok({ updated: true, emailSent: false, reason: "sin_correo" });
+      return ok({ updated: true, emailSent: false, reason: "sin_correo", emailTo: null });
     }
 
     const zd = mergeDefaultsForZoneTexts(
@@ -172,13 +172,21 @@ export async function POST(
         where: { id },
         data: { correoEnviadoA: emailTo },
       });
-      return ok({ updated: true, emailSent: true });
+      return ok({ updated: true, emailSent: true, emailTo });
     } catch (e) {
+      const message = e instanceof Error ? e.message : "Error SMTP";
+      console.error("[disciplinary] reasignar: correo no enviado", {
+        id,
+        numero: apercibimiento.numero,
+        to: emailTo,
+        error: message,
+      });
       return ok({
         updated: true,
         emailSent: false,
         reason: "smtp_error",
-        error: e instanceof Error ? e.message : "Error SMTP",
+        error: message,
+        emailTo,
       });
     }
   } catch (e) {
