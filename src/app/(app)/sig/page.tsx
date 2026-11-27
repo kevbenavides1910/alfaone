@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { TableColumnFilterHead, type TableColumnFilterDef } from "@/components/ui/table-column-filters";
-import { filterRowsByColumnFilters } from "@/lib/table/column-filters";
+import { useEffect, useMemo, useState } from "react";
+import {
+  hasActiveColumnFilters,
+  TableColumnFilterHead,
+  type TableColumnFilterDef,
+} from "@/components/ui/table-column-filters";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Download, Eye, FileText, Pencil, Plus, Search } from "lucide-react";
 import { Topbar } from "@/components/layout/Topbar";
@@ -15,15 +18,18 @@ import { Badge } from "@/components/ui/badge";
 import { useSession } from "@/lib/auth/client-session";
 import { hasPermission } from "@/lib/permissions/check";
 import { formatDate } from "@/lib/utils/format";
+import { SIG_DOCUMENT_STATUS_LABELS } from "@/modules/sig/business/document-labels";
 
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "Borrador",
-  PENDING_APPROVAL: "Pendiente",
-  APPROVED: "Aprobado",
-  REJECTED: "Rechazado",
-  SUPERSEDED: "Superseded",
-  OBSOLETE: "Obsoleto",
-};
+const STATUS_LABELS = SIG_DOCUMENT_STATUS_LABELS;
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(id);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 interface DocumentRow {
   id: string;
@@ -98,16 +104,43 @@ export default function SigBibliotecaPage() {
     },
   });
 
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const debouncedColumnFilters = useDebouncedValue(columnFilters, 300);
+  const columnFiltersKey = JSON.stringify(debouncedColumnFilters);
+  const [filtersPageKey, setFiltersPageKey] = useState(columnFiltersKey);
+  if (columnFiltersKey !== filtersPageKey) {
+    setFiltersPageKey(columnFiltersKey);
+    setPage(1);
+  }
+  const effectivePage = columnFiltersKey !== filtersPageKey ? 1 : page;
+
   const listUrl = useMemo(() => {
     const sp = new URLSearchParams();
-    sp.set("page", String(page));
+    sp.set("page", String(effectivePage));
     sp.set("pageSize", "25");
     if (q.trim()) sp.set("q", q.trim());
     if (documentTypeId) sp.set("documentTypeId", documentTypeId);
     if (processId) sp.set("processId", processId);
     if (status) sp.set("status", status);
+    const cf = debouncedColumnFilters;
+    if (cf.codigo?.trim()) sp.set("code", cf.codigo.trim());
+    if (cf.titulo?.trim()) sp.set("title", cf.titulo.trim());
+    if (cf.tipo?.trim()) {
+      sp.set("typeName", cf.tipo);
+      sp.set("typeExact", "1");
+    }
+    if (cf.proceso?.trim()) {
+      sp.set("processName", cf.proceso);
+      sp.set("processExact", "1");
+    }
+    if (cf.version?.trim()) sp.set("version", cf.version.trim());
+    if (cf.ultima?.trim()) sp.set("revision", cf.ultima.trim());
+    if (cf.estado?.trim()) {
+      sp.set("statusLabel", cf.estado);
+      sp.set("statusExact", "1");
+    }
     return `/api/sig/documents?${sp}`;
-  }, [q, page, documentTypeId, processId, status]);
+  }, [q, effectivePage, documentTypeId, processId, status, debouncedColumnFilters]);
 
   const { data: listData, isLoading } = useQuery({
     queryKey: ["sig-documents", listUrl],
@@ -130,33 +163,71 @@ export default function SigBibliotecaPage() {
   const rows = listData?.data.rows ?? [];
   const totalPages = listData?.data.totalPages ?? 1;
   const reminders = remindersData?.data ?? [];
-  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+
+  const typeOptions = useMemo(
+    () => types.map((t) => ({ value: t.name, label: t.name })),
+    [types]
+  );
+  const processOptions = useMemo(
+    () => processes.map((p) => ({ value: p.name, label: p.name })),
+    [processes]
+  );
+  const statusOptions = useMemo(
+    () => Object.values(STATUS_LABELS).map((label) => ({ value: label, label })),
+    []
+  );
 
   const documentColumnDefs = useMemo((): TableColumnFilterDef<DocumentRow>[] => [
-    { key: "codigo", label: "Código", headerClassName: "px-3 py-2", getValue: (r) => r.code },
-    { key: "titulo", label: "Título", headerClassName: "px-3 py-2", getValue: (r) => r.title },
-    { key: "tipo", label: "Tipo", headerClassName: "px-3 py-2", getValue: (r) => r.documentType.name },
-    { key: "proceso", label: "Proceso", headerClassName: "px-3 py-2", getValue: (r) => r.process?.name ?? "" },
-    { key: "version", label: "Versión", headerClassName: "px-3 py-2", getValue: (r) => r.currentVersion?.versionLabel ?? "" },
-    { key: "ultima", label: "Última revisión", headerClassName: "px-3 py-2", getValue: (r) => r.currentVersion ? formatDate(r.currentVersion.revisionDate) : "" },
-    { key: "estado", label: "Estado", headerClassName: "px-3 py-2", getValue: (r) => STATUS_LABELS[r.status] ?? r.status },
+    { key: "codigo", label: "Código", headerClassName: "px-3 py-2", mode: "search", getValue: (r) => r.code },
+    { key: "titulo", label: "Título", headerClassName: "px-3 py-2", mode: "search", getValue: (r) => r.title },
+    {
+      key: "tipo",
+      label: "Tipo",
+      headerClassName: "px-3 py-2",
+      mode: "select",
+      options: typeOptions,
+      getValue: (r) => r.documentType.name,
+    },
+    {
+      key: "proceso",
+      label: "Proceso",
+      headerClassName: "px-3 py-2",
+      mode: "select",
+      options: processOptions,
+      getValue: (r) => r.process?.name ?? "",
+    },
+    { key: "version", label: "Versión", headerClassName: "px-3 py-2", mode: "search", getValue: (r) => r.currentVersion?.versionLabel ?? "" },
+    {
+      key: "ultima",
+      label: "Última revisión",
+      headerClassName: "px-3 py-2",
+      mode: "search",
+      placeholder: "dd/mm/aaaa",
+      getValue: (r) => (r.currentVersion ? formatDate(r.currentVersion.revisionDate) : ""),
+    },
+    {
+      key: "estado",
+      label: "Estado",
+      headerClassName: "px-3 py-2",
+      mode: "select",
+      options: statusOptions,
+      getValue: (r) => STATUS_LABELS[r.status] ?? r.status,
+    },
     { key: "acciones", label: "Acciones", headerClassName: "px-3 py-2 text-right", align: "right", filterable: false, getValue: () => "" },
-  ], []);
-
-  const displayedRows = useMemo(
-    () => filterRowsByColumnFilters(rows, columnFilters, documentColumnDefs),
-    [rows, columnFilters, documentColumnDefs]
-  );
+  ], [typeOptions, processOptions, statusOptions]);
 
   const resetFilters = () => {
     setDocumentTypeId("");
     setProcessId("");
     setStatus("");
     setQ("");
+    setColumnFilters({});
     setPage(1);
   };
 
-  const hasActiveFilters = Boolean(documentTypeId || processId || status || q.trim());
+  const hasActiveFilters = Boolean(
+    documentTypeId || processId || status || q.trim() || hasActiveColumnFilters(columnFilters)
+  );
 
   return (
     <>
@@ -313,14 +384,14 @@ export default function SigBibliotecaPage() {
                     </td>
                   </tr>
                 )}
-                {!isLoading && displayedRows.length === 0 && (
+                {!isLoading && rows.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
                       No hay documentos con los filtros seleccionados
                     </td>
                   </tr>
                 )}
-                {displayedRows.map((row) => {
+                {rows.map((row) => {
                   const v = row.currentVersion;
                   const detailHref = `/sig/documentos/${row.id}#procedimiento`;
                   return (
@@ -400,16 +471,16 @@ export default function SigBibliotecaPage() {
 
         {totalPages > 1 && (
           <div className="flex justify-center gap-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+            <Button variant="outline" size="sm" disabled={effectivePage <= 1} onClick={() => setPage((p) => p - 1)}>
               Anterior
             </Button>
             <span className="text-sm self-center">
-              Página {page} de {totalPages}
+              Página {effectivePage} de {totalPages}
             </span>
             <Button
               variant="outline"
               size="sm"
-              disabled={page >= totalPages}
+              disabled={effectivePage >= totalPages}
               onClick={() => setPage((p) => p + 1)}
             >
               Siguiente

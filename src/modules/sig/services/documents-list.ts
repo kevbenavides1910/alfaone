@@ -1,5 +1,7 @@
-import type { Prisma, SigDocumentStatus } from "@prisma/client";
+import { Prisma, type SigDocumentStatus } from "@prisma/client";
 import { prisma } from "@/modules/core/db/prisma";
+import { parseColumnMultiFilter } from "@/lib/table/column-filters";
+import { SIG_DOCUMENT_STATUS_LABELS } from "@/modules/sig/business/document-labels";
 
 export type SigDocumentsListFilters = {
   q?: string;
@@ -9,9 +11,25 @@ export type SigDocumentsListFilters = {
   company?: string;
   page?: number;
   pageSize?: number;
+  /** Texto de columnas: se aplican al listado completo, antes de paginar. */
+  code?: string;
+  title?: string;
+  typeName?: string;
+  /** true = coincidencia exacta del nombre (select). false = contiene. */
+  typeNameExact?: boolean;
+  processName?: string;
+  processNameExact?: boolean;
+  version?: string;
+  /** Fragmento de la fecha visible dd/MM/yyyy. */
+  revision?: string;
+  statusLabel?: string;
+  statusLabelExact?: boolean;
 };
 
 const userSelect = { id: true, name: true, email: true } as const;
+
+/** Prisma rechaza `in: []`. Un id imposible deja el listado vacío. */
+const NO_MATCH: Prisma.SigDocumentWhereInput = { id: "__no_match__" };
 
 function buildSnippet(text: string, q: string, radius = 70): string {
   const lower = text.toLowerCase();
@@ -38,20 +56,59 @@ export async function listSigDocuments(filters: SigDocumentsListFilters) {
   if (filters.processId) where.processId = filters.processId;
   if (filters.status) where.status = filters.status;
   if (filters.company) where.company = filters.company;
+
+  const and: Prisma.SigDocumentWhereInput[] = [];
   if (q) {
-    where.OR = [
-      { code: { contains: q, mode: "insensitive" } },
-      { title: { contains: q, mode: "insensitive" } },
-      {
-        versions: {
-          some: {
-            textIndexStatus: "DONE",
-            extractedText: { contains: q, mode: "insensitive" },
+    and.push({
+      OR: [
+        { code: { contains: q, mode: "insensitive" } },
+        { title: { contains: q, mode: "insensitive" } },
+        {
+          versions: {
+            some: {
+              textIndexStatus: "DONE",
+              extractedText: { contains: q, mode: "insensitive" },
+            },
           },
         },
-      },
-    ];
+      ],
+    });
   }
+
+  const code = filters.code?.trim();
+  if (code) and.push({ code: { contains: code, mode: "insensitive" } });
+
+  const title = filters.title?.trim();
+  if (title) and.push({ title: { contains: title, mode: "insensitive" } });
+
+  const typeClause = relationNameClause("documentType", filters.typeName, filters.typeNameExact === true);
+  if (typeClause) and.push(typeClause);
+
+  const processClause = relationNameClause(
+    "process",
+    filters.processName,
+    filters.processNameExact === true
+  );
+  if (processClause) and.push(processClause);
+
+  const version = filters.version?.trim();
+  if (version) {
+    and.push({
+      currentVersion: {
+        is: { versionLabel: { contains: version, mode: "insensitive" } },
+      },
+    });
+  }
+
+  const statusClause = statusLabelClause(filters.statusLabel, filters.statusLabelExact === true);
+  if (statusClause) and.push(statusClause);
+
+  const revisionIds = await documentIdsByRevisionText(filters.revision);
+  if (revisionIds) {
+    and.push(revisionIds.length === 0 ? NO_MATCH : { id: { in: revisionIds } });
+  }
+
+  if (and.length > 0) where.AND = and;
 
   const [total, rows] = await Promise.all([
     prisma.sigDocument.count({ where }),
@@ -186,4 +243,67 @@ export async function listPendingSigApprovals(approverUserId: string, page = 1, 
   ]);
 
   return { total, page, pageSize: take, totalPages: Math.ceil(total / take) || 1, rows };
+}
+
+function relationNameClause(
+  relation: "documentType" | "process",
+  raw: string | undefined,
+  exact: boolean
+): Prisma.SigDocumentWhereInput | null {
+  const terms = parseColumnMultiFilter(raw ?? "");
+  if (terms.length === 0) return null;
+  const useExact = exact || terms.length > 1;
+  if (!useExact) {
+    const contains = { contains: terms[0], mode: "insensitive" as const };
+    return relation === "documentType"
+      ? { documentType: { name: contains } }
+      : { process: { is: { name: contains } } };
+  }
+  return {
+    OR: terms.map((name) => {
+      const equals = { equals: name, mode: "insensitive" as const };
+      return relation === "documentType"
+        ? { documentType: { name: equals } }
+        : { process: { is: { name: equals } } };
+    }),
+  };
+}
+
+function statusLabelClause(
+  raw: string | undefined,
+  exact: boolean
+): Prisma.SigDocumentWhereInput | null {
+  const terms = parseColumnMultiFilter(raw ?? "");
+  if (terms.length === 0) return null;
+  const useExact = exact || terms.length > 1;
+  const matched = new Set<SigDocumentStatus>();
+  for (const term of terms) {
+    const needle = term.toLowerCase();
+    for (const [key, label] of Object.entries(SIG_DOCUMENT_STATUS_LABELS)) {
+      const labelText = label.toLowerCase();
+      const keyText = key.toLowerCase();
+      const hit = useExact
+        ? labelText === needle || keyText === needle
+        : labelText.includes(needle) || keyText.includes(needle);
+      if (hit) matched.add(key as SigDocumentStatus);
+    }
+  }
+  if (matched.size === 0) return NO_MATCH;
+  return { status: { in: [...matched] } };
+}
+
+/** null = sin filtro. [] = el texto no coincide con ninguna fecha visible. */
+async function documentIdsByRevisionText(raw: string | undefined): Promise<string[] | null> {
+  const trimmed = raw?.trim() ?? "";
+  if (!trimmed) return null;
+  const safe = trimmed.replace(/-/g, "/").replace(/[%_\\]/g, "");
+  if (!safe) return [];
+  const pattern = `%${safe}%`;
+  const rows = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+    SELECT d.id
+    FROM sig_documents d
+    INNER JOIN sig_document_versions v ON v.id = d."currentVersionId"
+    WHERE to_char(v."revisionDate", 'DD/MM/YYYY') ILIKE ${pattern}
+  `);
+  return rows.map((row) => row.id);
 }

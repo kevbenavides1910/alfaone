@@ -26,17 +26,31 @@ export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
     const statusRaw = sp.get("status");
+    const text = (key: string) => {
+      const value = sp.get(key)?.trim();
+      return value ? value : undefined;
+    };
     const result = await listSigDocuments({
-      q: sp.get("q") ?? undefined,
-      documentTypeId: sp.get("documentTypeId") ?? undefined,
-      processId: sp.get("processId") ?? undefined,
-      company: sp.get("company") ?? undefined,
+      q: text("q"),
+      documentTypeId: text("documentTypeId"),
+      processId: text("processId"),
+      company: text("company"),
       status:
         statusRaw && Object.values(SigDocumentStatus).includes(statusRaw as SigDocumentStatus)
           ? (statusRaw as SigDocumentStatus)
           : undefined,
       page: sp.get("page") ? Number(sp.get("page")) : 1,
       pageSize: sp.get("pageSize") ? Number(sp.get("pageSize")) : 25,
+      code: text("code"),
+      title: text("title"),
+      typeName: text("typeName"),
+      typeNameExact: sp.get("typeExact") === "1",
+      processName: text("processName"),
+      processNameExact: sp.get("processExact") === "1",
+      version: text("version"),
+      revision: text("revision"),
+      statusLabel: text("statusLabel"),
+      statusLabelExact: sp.get("statusExact") === "1",
     });
 
     return ok({
